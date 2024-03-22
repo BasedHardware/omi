@@ -3,7 +3,7 @@ import wave
 import struct
 
 # Serial port configuration
-serial_port = '/dev/ttyUSB0'  # Change this to your serial port
+serial_port = '/dev/tty.usbmodem1101'  # Change this to your serial port
 baud_rate = 9600
 
 # WAV file configuration
