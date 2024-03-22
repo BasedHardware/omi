@@ -34,3 +34,6 @@ def process_audio_file(audio_file_path):
     transcription = transcribe_audio(audio_file_path)
     points = key_points_extraction(transcription)
     return points
+
+points = process_audio_file("convo.wav")
+print(points)
