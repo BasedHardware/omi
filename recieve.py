@@ -2,7 +2,7 @@ import asyncio
 from bleak import BleakClient, BleakScanner
 import wave
 
-device_name = "AudioRecorder1"  # The name of your BLE device
+device_name = "AudioRecorder"  # The name of your BLE device
 uuid = "19B10001-E8F2-537E-4F6C-D104768A1214"  # Audio characteristic UUID
 sample_rate = 16000  # Must match the Arduino code
 channels = 1  # Mono audio
