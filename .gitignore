@@ -1,1 +1,5 @@
 .env
+__pycache__/
+libraries/
+myenv/
+.DS_Store

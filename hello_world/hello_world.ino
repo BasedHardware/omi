@@ -7,7 +7,6 @@ BLECharacteristic audioCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BL
 const int sampleRate = 16000;
 const int recordDuration = 5; // Recording duration in seconds
 const int bufferSize = 256;
-
 bool isRecording = false;
 bool isConnected = false;
 
@@ -24,8 +23,8 @@ void setup() {
   BLE.setAdvertisedService(audioService);
   audioService.addCharacteristic(audioCharacteristic);
   BLE.addService(audioService);
-
   BLE.advertise();
+
   Serial.println("BLE Audio Recorder");
 
   PDM.onReceive(onPDMdata);
@@ -40,24 +39,16 @@ void setup() {
 
 void loop() {
   BLEDevice central = BLE.central();
-
-  if (central && !isConnected) {
-    Serial.print("Connected to central: ");
-    Serial.println(central.address());
-    isConnected = true;
-    Serial.println("Type 's' to start recording");
-  }
-
-  if (isConnected) {
-    if (isRecording) {
-      recordAudio(central);
+  if (central) {
+    if (!isConnected) {
+      Serial.print("Connected to central: ");
+      Serial.println(central.address());
+      isConnected = true;
+      isRecording = true; // Start recording automatically
     }
 
-    if (Serial.available()) {
-      char input = Serial.read();
-      if (input == 's') {
-        isRecording = true;
-      }
+    if (isRecording) {
+      recordAudio(central);
     }
 
     if (!central.connected()) {
@@ -84,10 +75,8 @@ void recordAudio(BLEDevice central) {
   }
 
   Serial.println(binaryString.c_str());
-
   // Send the binary string over BLE
   audioCharacteristic.writeValue(binaryString.c_str());
-
   Serial.println("Recording finished.");
   isRecording = false;
 }
