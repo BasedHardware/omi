@@ -6,6 +6,8 @@ import argparse
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import webbrowser
+import time
 
 
 load_dotenv("/Users/admin/All/audio/.env")
@@ -62,6 +64,24 @@ def process_audio_file(audio_file_path):
     points = key_points_extraction(transcription)
     return points
 
+def open_topics(text):
+    # Base URL for a search engine, Google in this case
+    base_url = "https://www.google.com/search?q="
+
+    topics = [
+        "Elon Musk",
+        "Steve Jobs",
+        "Tim Apple",
+        "Michael"
+    ]
+
+    # Open a new browser tab for each topic
+    for topic in topics:
+        # Encode the topic to be URL friendly
+        search_url = base_url + topic.replace(" ", "+")
+        webbrowser.open_new_tab(search_url)
+        # Optional: a small pause between opening each tab to reduce load on the system
+        time.sleep(1)
 
 def main(args):
     i = 1
@@ -103,8 +123,8 @@ def main(args):
 
             filename = args.filename + str(i) + ".wav"
             write_wav_data(raw_sound, filename)
-            # key_points = process_audio_file(filename)
-            # print(key_points)
+            key_points = process_audio_file(filename)
+            open_topics(key_points)
             i += 1
 
         except KeyboardInterrupt:
