@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv('OPENAI_KEY'))
+client = OpenAI(api_key="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")
 
 def transcribe_audio(audio_file_path):
     with open(audio_file_path, 'rb') as audio_file:
@@ -30,8 +30,7 @@ def key_points_extraction(transcription):
 
     return response.choices[0].message.content
 
-
-audio_file_path = "convo.wav"
-transcription = transcribe_audio(audio_file_path)
-points = key_points_extraction(transcription)
-print(points)
+def process_audio_file(audio_file_path):
+    transcription = transcribe_audio(audio_file_path)
+    points = key_points_extraction(transcription)
+    return points
