@@ -1,14 +1,20 @@
-import os, sys
+import sys
 import serial
 import wave, struct
 import logging
 import argparse
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
 
+
+load_dotenv("/Users/admin/All/audio/.env")
+client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 logging.basicConfig(level=logging.INFO)
 
-commands = [b"", b"rec_ok", b"init_ok", b"fi"]
 
-sampleRate = 16000 # hertz
+commands = [b"", b"rec_ok", b"init_ok", b"fi"]
+sampleRate = 8000 # hertz
 duration = 10 # seconds
 
 
@@ -24,6 +30,37 @@ def write_wav_data(raw_sound, filename):
         data = struct.pack('<h', value)
         obj.writeframesraw(data)
     obj.close()
+
+
+def transcribe_audio(audio_file_path):
+    with open(audio_file_path, 'rb') as audio_file:
+        transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
+
+    return transcription.text
+
+
+def key_points_extraction(transcription):
+    response = client.chat.completions.create(
+        model="gpt-4",
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a highly skilled AI, adept at extracting and summarizing key information from discussions. Your primary task from the following text is to pinpoint and catalog all proper nouns, including names of people, organizations, and notable subjects, such as 'Steve Mann', 'Founders Fund', and 'Tracy's blog'. This list should encompass the most pivotal entities mentioned, providing a clear snapshot of the individuals, groups, and key topics that are central to the dialogue. Your aim is to compile a concise inventory that enables quick insight into the network of connections and main subjects addressed during the conversation."
+            },
+            {
+                "role": "user",
+                "content": transcription
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+def process_audio_file(audio_file_path):
+    transcription = transcribe_audio(audio_file_path)
+    points = key_points_extraction(transcription)
+    return points
 
 
 def main(args):
@@ -66,12 +103,13 @@ def main(args):
 
             filename = args.filename + str(i) + ".wav"
             write_wav_data(raw_sound, filename)
+            # key_points = process_audio_file(filename)
+            # print(key_points)
             i += 1
 
         except KeyboardInterrupt:
             logging.info('Exiting script')            
             break
-
 
 
 if __name__ == '__main__':
