@@ -1,62 +1,42 @@
-import asyncio
-from bleak import BleakClient, BleakScanner
+import serial
 import wave
+import struct
 
-device_name = "AudioRecorder"  # The name of your BLE device
-uuid = "19B10001-E8F2-537E-4F6C-D104768A1214"  # Audio characteristic UUID
-sample_rate = 16000  # Must match the Arduino code
-channels = 1  # Mono audio
-sampwidth = 2  # Sample width in bytes, matches short in Arduino
+# Serial port configuration
+serial_port = '/dev/ttyUSB0'  # Change this to your serial port
+baud_rate = 9600
 
-async def handle_notification(sender, data):
-    # This function will be called on receiving data from the BLE device.
-    # Convert binary string back to bytes
-    data_bytes = bytearray(int(b, 2) for b in data.decode().split(','))
-    frames.append(data_bytes)
+# WAV file configuration
+wav_filename = 'output.wav'
+audio_channels = 1
+sample_width = 2  # 2 bytes for 16-bit samples
+frame_rate = 16000  # Same as your Arduino's sample rate
+record_seconds = 5  # Duration of recording
 
-async def main():
-    while True:
-        device = await find_device(device_name)
-        if device:
-            break
-        else:
-            print(f"Device {device_name} not found")
+# Open serial port
+ser = serial.Serial(serial_port, baud_rate)
 
-    async with BleakClient(device.address) as client:
-        # Connect to the device
-        await client.connect()
-        print(f"Connected to {device_name}")
+# Open a WAV file for writing
+wav_file = wave.open(wav_filename, 'w')
+wav_file.setnchannels(audio_channels)
+wav_file.setsampwidth(sample_width)
+wav_file.setframerate(frame_rate)
 
-        # Start notification listener
-        await client.start_notify(uuid, handle_notification)
+print("Recording...")
 
-        # Wait for data to be collected
-        print("Collecting audio data...")
-        await asyncio.sleep(5)  # Adjust as needed based on recording duration
+# Read data from serial and write to WAV file
+try:
+    bytes_to_read = frame_rate * sample_width * audio_channels * record_seconds
+    data = ser.read(bytes_to_read)
+    
+    # Assuming the Arduino is sending little-endian data; adjust if necessary
+    for i in range(0, len(data), sample_width):
+        sample = struct.unpack('<h', data[i:i+sample_width])[0]
+        wav_file.writeframesraw(struct.pack('<h', sample))
 
-        # Stop notification listener
-        await client.stop_notify(uuid)
-        print("Stopped listening for notifications.")
+finally:
+    # Clean up
+    ser.close()
+    wav_file.close()
 
-        # Save received data as WAV file
-        save_wav("output.wav", frames)
-        print("Audio data saved as output.wav")
-
-async def find_device(name):
-    devices = await BleakScanner.discover()
-    for device in devices:
-        if device.name == name:
-            return device
-    return None
-
-def save_wav(filename, frames):
-    with wave.open(filename, 'wb') as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sampwidth)
-        wf.setframerate(sample_rate)
-        for frame in frames:
-            wf.writeframes(frame)
-
-frames = []  # List to hold received audio frames
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
+print("Recording finished. WAV file is saved.")
