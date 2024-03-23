@@ -3,3 +3,7 @@ __pycache__/
 libraries/
 myenv/
 .DS_Store
+axel_adam/*.txt
+axel_adam/*.wav
+
+*.zip
