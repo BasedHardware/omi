@@ -3,11 +3,11 @@
 
 // Settings
 #define DEBUG 1 // Enable pin pulse during ISR
-#define SAMPLES 16000 * 3
-#define CHUNK_SIZE 256
+#define SAMPLES 16000
+#define CHUNK_SIZE 122
 
 mic_config_t mic_config{
-    .channel_cnt = 2,
+    .channel_cnt = 1,
     .sampling_rate = 16000,
     .buf_size = SAMPLES,
     .debug_pin = LED_BUILTIN // Toggles each DAC ISR (if DEBUG is set to 1)
@@ -70,7 +70,7 @@ void loop()
     Serial.print("Connected to central: ");
     Serial.println(central.address());
     isConnected = true;
-    Serial.println("Type 's' to start recording");
+    Serial.println("Type 'rec' to start recording");
   }
 
   String resp = Serial.readString();
@@ -92,13 +92,27 @@ void loop()
     Serial.print("Sending ");
     Serial.print(chunkCount);
     Serial.println(" chunks via BLE");
+
+    // Create an index number
+    uint16_t index = 0;
+
     for (int chunk = 0; chunk < chunkCount; chunk++)
     {
       int startIndex = chunk * CHUNK_SIZE;
       int endIndex = min(startIndex + CHUNK_SIZE, SAMPLES);
       int chunkSize = (endIndex - startIndex) * sizeof(int16_t); // Updated size calculation
-      audioCharacteristic.writeValue(&recording_buf[startIndex], chunkSize);
+
+      // Create a buffer of 200 values with repeat values of the index number
+      uint16_t chunkData[CHUNK_SIZE * 2];
+
+      for (int i = 0; i < CHUNK_SIZE; i++)
+      {
+        chunkData[i] = index;
+      }
+
+      audioCharacteristic.writeValue(&chunkData, CHUNK_SIZE * 2);
       delay(50);
+      ++index;
     }
     // Send a specific value to indicate the end of audio data transmission
     uint8_t endSignal = 0xFF; // Example: Use 0xFF as the end signal value
