@@ -28,6 +28,8 @@ async def main():
     if not audio_recorder:
         print("AudioRecorder not found")
         return
+    def handle_ble_disconnect(client):
+        print("Disconnected from AudioRecorder")
 
     def filter_audio_data(audio_data):
         audio_data = np.frombuffer(audio_data, dtype=np.uint16)
@@ -37,17 +39,19 @@ async def main():
     
     def export_audio_data(filtered_audio_data, file_extension):
         filename = datetime.now().strftime("%H-%M-%S-%f") + file_extension
-        with open(filename, "w" if file_extension == ".txt" else "wb") as file:
-            if file_extension == ".txt":
+        print(filename)
+        if file_extension == ".txt":
+            with open(filename, "w") as file:
                 file.write(str(list(filtered_audio_data)))
-            else:
-                with wave.open(file, "wb") as wav_file:
-                    wav_file.setnchannels(CHANNELS)
-                    wav_file.setsampwidth(SAMPLE_WIDTH)
-                    wav_file.setframerate(SAMPLE_RATE)
-                    wav_file.writeframes(filtered_audio_data)
+        else:
+            # Directly use the filename with wave.open for .wav files
+            with wave.open(filename, "wb") as wav_file:
+                wav_file.setnchannels(CHANNELS)
+                wav_file.setsampwidth(SAMPLE_WIDTH)
+                wav_file.setframerate(SAMPLE_RATE)
+                wav_file.writeframes(filtered_audio_data.tobytes())  # Ensure data is in bytes format
 
-    async with BleakClient(audio_recorder.address, services=[SERVICE_UUID]) as client:
+    async with BleakClient(audio_recorder.address, services=[SERVICE_UUID], disconnect_callback=handle_ble_disconnect) as client:
         print("Connected to AudioRecorder")
         services = await client.get_services()
         audio_service = services.get_service(SERVICE_UUID)
@@ -61,16 +65,18 @@ async def main():
             audio_data.extend(data)
             if data == [end_signal]:
                 print(f"End signal received after {len(audio_data)} bytes")
-                filtered_audio_data = filter_audio_data(audio_data)
-                export_audio_data(filtered_audio_data, ".wav")
-                export_audio_data(filtered_audio_data, ".txt")
-                audio_data.clear()
+            
 
         await client.start_notify(audio_characteristic.uuid, handle_audio_data)
         print("Recording audio...")
-        await asyncio.sleep(10)  # Wait for 10 seconds
+        await asyncio.sleep(60)  # Wait for 10 seconds
         await client.stop_notify(audio_characteristic.uuid)
         print("Recording stopped")
+    
+    filtered_audio_data = filter_audio_data(audio_data)
+    export_audio_data(filtered_audio_data, ".wav")
+    export_audio_data(filtered_audio_data, ".txt")
+    audio_data.clear()
 
 asyncio.run(main())
 
