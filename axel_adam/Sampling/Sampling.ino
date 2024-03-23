@@ -105,14 +105,11 @@ void loop()
       // Create a buffer of 200 values with repeat values of the index number
       uint16_t chunkData[CHUNK_SIZE * 2];
 
-      for (int i = 0; i < CHUNK_SIZE; i++)
-      {
-        chunkData[i] = index;
-      }
+      audioCharacteristic.writeValue(&recording_buf[startIndex], chunkSize);
 
-      audioCharacteristic.writeValue(&chunkData, CHUNK_SIZE * 2);
+      // audioCharacteristic.writeValue(&chunkData, CHUNK_SIZE * 2);
       delay(50);
-      ++index;
+      // ++index;
     }
     // Send a specific value to indicate the end of audio data transmission
     uint8_t endSignal = 0xFF; // Example: Use 0xFF as the end signal value
