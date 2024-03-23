@@ -5,6 +5,8 @@ import wave
 from datetime import datetime
 import numpy as np
 
+from scipy.signal import butter, lfilter
+
 # SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 # CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -20,35 +22,47 @@ async def main():
     devices = await bleak.discover(timeout=5.0)
     audio_recorder = None
     for device in devices:
-        print(device.name, device.address)
-        if device.name == "Arduino":
+        if device.name:
+            print(device.name, device.address)
+        if device.address == "8901A373-2BC5-AEDB-077B-C2786C3F3C43":
             audio_recorder = device
             break
-
+    
     if audio_recorder:
-
-        def export_audio_data(audio_data):
+        def filter_audio_data(audio_data):
+            audio_data = np.frombuffer(audio_data, dtype=np.uint16)
+            audio_data -= 32768
+            audio_data = audio_data.astype(np.int16)
+            audio_data -= 32768
+            range = max(0,np.max(audio_data)) - min(0,np.min(audio_data))
+            scaling_factor = 2*32768 / range
+            audio_data = (audio_data * scaling_factor).astype(np.int16)
+            return audio_data
+        
+        def export_audio_data(filtered_audio_data):
             # Create a txt file of the data exported as numbers in a list
             # Name it base on current time in HH:MM:SS:MS format
             filename = datetime.now().strftime("%H-%M-%S-%f") + ".txt"
 
-            long_audio_data = np.frombuffer(audio_data, dtype=np.int16)
-
+            # long_audio_data = np.frombuffer(audio_data, dtype=np.uint16)
+            # long_audio_data = uint16_to_pcm_s16le(long_audio_data)
             with open(filename, "w") as txt_file:
-                txt_file.write(str(list(long_audio_data)))
+                txt_file.write(str(list(filtered_audio_data)))
 
-        def process_audio_data(audio_data):
+        def process_audio_data(filtered_audio_data):
             # Create a WAV file and write the audio data
             # Name it base on current time in HH:MM:SS:MS format
             filename = datetime.now().strftime("%H-%M-%S-%f") + ".wav"
 
-            long_audio_data = np.frombuffer(audio_data, dtype=np.int16)
+            # long_audio_data = np.frombuffer(audio_data, dtype=np.int16)
+            # long_audio_data = uint16_to_pcm_s16le(long_audio_data)
+            # long_audio_data = lfilter(*butter(4, 0.1, 'low'), long_audio_data)
 
             with wave.open(filename, "wb") as wav_file:
                 wav_file.setnchannels(CHANNELS)
                 wav_file.setsampwidth(SAMPLE_WIDTH)
                 wav_file.setframerate(SAMPLE_RATE)
-                wav_file.writeframes(long_audio_data)
+                wav_file.writeframes(filtered_audio_data)
 
         async with BleakClient(audio_recorder.address) as client:
             print("Connected to AudioRecorder")
@@ -85,9 +99,9 @@ async def main():
 
             await client.stop_notify(audio_characteristic.uuid)
             print("Recording stopped")
-
-        process_audio_data(audio_data)
-        export_audio_data(audio_data)
+        filtered_audio_data = filter_audio_data(audio_data)
+        process_audio_data(filtered_audio_data)
+        export_audio_data(filtered_audio_data)
     else:
         print("AudioRecorder not found")
 
