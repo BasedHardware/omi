@@ -3,25 +3,27 @@
 
 // Settings
 #define DEBUG 1      // Enable pin pulse during ISR
-#define SAMPLES 4000// Changed to 8000
+#define SAMPLES 4000 // Changed to 4000
 #define CHUNK_SIZE 200
+#define BUFFER_SIZE (SAMPLES * 4) // Doubled the buffer size to accommodate continuous recording
 
 mic_config_t mic_config{
     .channel_cnt = 1,
     .sampling_rate = 16000,  // Keep the sampling rate at 16000
-    .buf_size = SAMPLES * 4, // Doubled the buffer size to accommodate 16kHz data
+    .buf_size = 16000,       // Use the larger buffer size
     .debug_pin = LED_BUILTIN // Toggles each DAC ISR (if DEBUG is set to 1)
 };
 
 NRF52840_ADC_Class Mic(&mic_config);
 
-uint16_t recording_buf[SAMPLES];
-volatile uint8_t recording = 0;
+uint16_t recording_buf[BUFFER_SIZE];
+volatile uint32_t recording_idx = 0;
+volatile uint32_t read_idx = 0;
+volatile bool recording = false;
 bool isConnected = false;
-volatile static bool record_ready = false;
 
 BLEService audioService("19B10000-E8F2-537E-4F6C-D104768A1214");
-BLECharacteristic audioCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify, SAMPLES * sizeof(int16_t)); // Updated size
+BLECharacteristic audioCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify, CHUNK_SIZE * sizeof(int16_t));
 
 void setup()
 {
@@ -66,6 +68,7 @@ void setup()
 void loop()
 {
   BLEDevice central = BLE.central();
+
   if (central && !isConnected)
   {
     Serial.print("Connected to central: ");
@@ -74,65 +77,50 @@ void loop()
     Serial.println("Type 'rec' to start recording");
   }
 
-  String resp = Serial.readString();
-
-  if (resp == "init\n" && !recording)
+  if (Serial.available())
   {
-    Serial.println("init_ok");
-  }
-
-  if (resp == "rec\n" && !recording)
-  {
-    recording = 1;
-    record_ready = false;
-  }
-
-  if (record_ready)
-  {
-    int chunkCount = (SAMPLES + CHUNK_SIZE - 1) / CHUNK_SIZE;
-    Serial.print("Sending ");
-    Serial.print(chunkCount);
-    Serial.println(" chunks via BLE");
-
-    // Create an index number
-    uint16_t index = 0;
-
-    for (int chunk = 0; chunk < chunkCount; chunk++)
+    String resp = Serial.readStringUntil('\n');
+    if (resp == "rec")
     {
-      int startIndex = chunk * CHUNK_SIZE;
-      int endIndex = min(startIndex + CHUNK_SIZE, SAMPLES);
-      int chunkSize = (endIndex - startIndex) * sizeof(int16_t); // Updated size calculation
-
-      audioCharacteristic.writeValue(&recording_buf[startIndex], chunkSize);
-
-      delay(50);
+      recording = true;
+      Serial.println("Recording started");
     }
-    // Send a specific value to indicate the end of audio data transmission
-    uint8_t endSignal = 0xFF; // Example: Use 0xFF as the end signal value
-    // audioCharacteristic.writeValue(&endSignal, 1);
-    Serial.println("Done");
-    record_ready = false;
-    recording = false;
+    else if (resp == "stop")
+    {
+      recording = false;
+      Serial.println("Recording stopped");
+    }
+  }
+
+  if (recording)
+  {
+    uint32_t available_samples = (recording_idx + BUFFER_SIZE - read_idx) % BUFFER_SIZE;
+    if (available_samples >= CHUNK_SIZE)
+    {
+      Serial.print("Sending ");
+      Serial.print(available_samples);
+      Serial.println(" samples");
+
+      uint16_t chunk[CHUNK_SIZE];
+      for (int i = 0; i < CHUNK_SIZE; i++)
+      {
+        chunk[i] = recording_buf[(read_idx + i) % BUFFER_SIZE];
+      }
+      audioCharacteristic.writeValue(chunk, sizeof(chunk));
+      read_idx = (read_idx + CHUNK_SIZE) % BUFFER_SIZE;
+      delay(20);
+    }
   }
 }
 
 static void audio_rec_callback(uint16_t *buf, uint32_t buf_len)
 {
-  static uint32_t idx = 0;
   if (recording)
   {
-    // Copy samples from DMA buffer to inference buffer
-    // Downsample by skipping every other sample to reduce the sample rate to 8kHz
-    for (uint32_t i = 0; i < buf_len; i += 4) // Changed to i += 2 to skip every other sample
+    for (uint32_t i = 0; i < buf_len; i += 4)
     {
-      recording_buf[idx++] = buf[i];
-      if (idx >= SAMPLES)
-      {
-        idx = 0;
-        recording = 0;
-        record_ready = true;
-        break;
-      }
+      recording_buf[recording_idx] = buf[i];
+      recording_idx = (recording_idx + 1) % BUFFER_SIZE;
     }
   }
 }
