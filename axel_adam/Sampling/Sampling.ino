@@ -2,19 +2,20 @@
 #include <mic.h>
 
 // Settings
-#define DEBUG 1 // Enable pin pulse during ISR
-#define SAMPLES 16000
+#define DEBUG 1      // Enable pin pulse during ISR
+#define SAMPLES 8000 // Changed to 8000
 #define CHUNK_SIZE 122
 
 mic_config_t mic_config{
     .channel_cnt = 1,
-    .sampling_rate = 16000,
-    .buf_size = SAMPLES,
+    .sampling_rate = 16000,  // Keep the sampling rate at 16000
+    .buf_size = SAMPLES * 2, // Doubled the buffer size to accommodate 16kHz data
     .debug_pin = LED_BUILTIN // Toggles each DAC ISR (if DEBUG is set to 1)
 };
 
 NRF52840_ADC_Class Mic(&mic_config);
-uint16_t recording_buf[SAMPLES]; // Changed to int16_t
+
+uint16_t recording_buf[SAMPLES];
 volatile uint8_t recording = 0;
 bool isConnected = false;
 volatile static bool record_ready = false;
@@ -98,14 +99,19 @@ void loop()
 
     for (int chunk = 0; chunk < chunkCount; chunk++)
     {
+      // Serial.println(chunk);
+
       int startIndex = chunk * CHUNK_SIZE;
       int endIndex = min(startIndex + CHUNK_SIZE, SAMPLES);
       int chunkSize = (endIndex - startIndex) * sizeof(int16_t); // Updated size calculation
 
-      // Create a buffer of 200 values with repeat values of the index number
-      uint16_t chunkData[CHUNK_SIZE * 2];
-
       audioCharacteristic.writeValue(&recording_buf[startIndex], chunkSize);
+
+      // Serial.print("Sending chunk");
+      // Serial.print(chunk);
+      // Serial.print(" with ");
+      // Serial.print(chunkSize);
+      // Serial.println(" bytes");
 
       // audioCharacteristic.writeValue(&chunkData, CHUNK_SIZE * 2);
       delay(50);
@@ -123,14 +129,13 @@ void loop()
 static void audio_rec_callback(uint16_t *buf, uint32_t buf_len)
 {
   static uint32_t idx = 0;
-
   if (recording)
   {
     // Copy samples from DMA buffer to inference buffer
-    for (uint32_t i = 0; i < buf_len; i++)
+    // Downsample by skipping every other sample to reduce the sample rate to 8kHz
+    for (uint32_t i = 0; i < buf_len; i += 2) // Changed to i += 2 to skip every other sample
     {
       recording_buf[idx++] = buf[i];
-
       if (idx >= SAMPLES)
       {
         idx = 0;
