@@ -25,10 +25,11 @@ Generates text based on the provided prompt and model.
 
 Endpoint: POST https://api.mistral.co/completions
 
-Example Request Body:
 ```
+## Example Request Body:
 {
   "model": "mistral-large-latest",
   "prompt": "Summarize the latest conversations that you received into insightful summaries.",
   "max_tokens": 50
 }
+```
