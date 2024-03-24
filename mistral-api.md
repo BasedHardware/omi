@@ -27,6 +27,7 @@ Endpoint: POST https://api.mistral.co/completions
 
 ```
 ## Example Request Body:
+```python
 {
   "model": "mistral-large-latest",
   "prompt": "Summarize the latest conversations that you received into insightful summaries.",
