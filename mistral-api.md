@@ -1,5 +1,5 @@
 # Using the Mistral API
-You can use the Mistral API with your own Authorization bearer key that you can get from: https://console.mistral.ai/api-keys/
+You can use the Mistral API with your own Authorization bearer key that you can get from: https://console.mistral.ai/api-keys/.
 We recommend that you use Mistral Large for Friend as it is the best model available in the .
 
 
