@@ -11,8 +11,6 @@ Assembled          |  Dissembled
 
 Our vision is to make wearable AI accessible to everyone, to use and to build on. Our mission is to provide the tools and support, so that you can focus on what matters.
 
-Be a part of the revolution! **Friend** is here to stay, at the forefront of AI hardware innovation.
-
 <!-- ## Features
 
 - **Real-Time AI Audio Processing**: Leverage powerful on-device AI capabilities for real-time audio analysis.
@@ -21,13 +19,13 @@ Be a part of the revolution! **Friend** is here to stay, at the forefront of AI 
 - **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear. -->
 
 ## Structure
-There are 2 different apps in these repositories located in different branches. Our goal is to merge them into one big project. 
+There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project. 
 
-[Standalone Branch](https://github.com/BasedHardware/friend/tree/Standalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people
+- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people. Folder "AppStandalone"
 
-[AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) Wearable-connected version of the app that requires the "Friend necklace" to use it
+- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) Wearable-connected version of the app that requires the "Friend necklace" to use it.  Folder "AppWithWearable"
 
-[Main Branch] Branch that contains firmware for SeeedStudio XIAO NRF52840 Sense Board
+- [Main Branch] Branch that contains firmware, hardware, designs and both apps
 
 ## Getting Started 
 
@@ -35,8 +33,8 @@ Follow these steps to get started with your Friend:
 
 1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
 2. Choose which version of the app you want to install (see Structure). 
-Don't have the device? go to ```cd AppStandalone```
-Have the device/NRF Board? go to ```cd AppWithWearable```
+- Don't have the device? run ```cd AppStandalone``` in terminal
+- Have the device/NRF Board? run ```cd AppWithWearable``` in terminal
 4. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
 5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
@@ -82,7 +80,10 @@ Also select Port (should be smth that containts USB...)
 
 ## Contributing
 [Join our Discord!](https://discord.gg/kEXXsnb5b3)
-We welcome contributions from the community! If you're interested in improving Friend, to learn how you can get involved in Discord!
+We welcome contributions from the community! If you're interested in improving Friend, our current biggest goal is to launch both apps together (AppStandalone with AppWithWearable).
+- Standalone App brings great prompts and rich structure
+- AppWithWearable brings simple bluetooth connecting functionality
+
 
 ## Support
 
