@@ -54,6 +54,31 @@ Slider switch | $7 for 30+ units [on Amazon](https://www.amazon.com/Tnuocke-Vert
 
 3D-print design of the case is located [here](https://github.com/BasedHardware/friend/tree/main/3d-printing%20designs)
 
+### Install Firmware
+1. [Download Arduino](https://www.arduino.cc/en/software)
+2. Run ```cd src/BluetoothDeviceDriver ``` in your home repository and Open Arduino .ini file, go to "Settings" and paste these 2 links in additional Boards Manager URLs
+
+
+```
+https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
+```
+   ![IMAGE 2024-03-24 19:44:35](https://github.com/BasedHardware/friend/assets/43514161/f08cf422-8d30-4ffa-b61c-0e8ee4a0e685)
+3. Go to Boards Manager and download these 2 Boards 
+
+![IMAGE 2024-03-24 19:46:49](https://github.com/BasedHardware/friend/assets/43514161/9c85a0c4-ee73-42ba-a75b-3f8fafa81cbe)
+
+4. Connect NRF52840 board via USB cable to your computer
+5. Go to Tools > Board > 
+![IMAGE 2024-03-24 19:50:42](https://github.com/BasedHardware/friend/assets/43514161/065e794f-6e20-4f91-a6bf-1b43a5a3614e)
+and select "Seeed nRF52 mbed-enabled Boards (you need board that has Sense) 
+
+Also select Port (should be smth that containts USB...) 
+![IMAGE 2024-03-24 19:55:07](https://github.com/BasedHardware/friend/assets/43514161/0719de62-b58f-4ceb-85e2-d288916375c9)
+
+6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic)
+
+
 ## Contributing
 [Join our Discord!](https://discord.gg/kEXXsnb5b3)
 We welcome contributions from the community! If you're interested in improving Friend, to learn how you can get involved in Discord!
