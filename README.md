@@ -9,14 +9,12 @@ Assembled          |  Dissembled
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://opensource.org/license/agpl-v3)
 
-Our vision is to make wearable AI accessible to everyone, to use and to build on. Our mission is to provide the tools and support, so that you can focus on what matters.
-
-<!-- ## Features
-
+Friend is an AI wearable device that records everything you say, gives you proactive feedback and advice. 
+Features:
 - **Real-Time AI Audio Processing**: Leverage powerful on-device AI capabilities for real-time audio analysis.
 - **Low-powered Bluetooth**: Capture audio for 24h+ on a small button battery
 - **Open-Source Software**: Access and contribute to the pin's software stack, designed with openness and community collaboration in mind.
-- **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear. -->
+- **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear. 
 
 ## Structure
 There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project. 
