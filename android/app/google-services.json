@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "909648207363",
+    "project_id": "voice-76xd7x",
+    "storage_bucket": "voice-76xd7x.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909648207363:android:b438df983835a3f5447836",
+        "android_client_info": {
+          "package_name": "com.mycompany.hiringfriends"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJ4psu7gwX4HlQVZHl-HWHwoNhaOlD3WE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
