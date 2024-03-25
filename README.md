@@ -1,6 +1,11 @@
-# Friend: Long-Lasting Open-Source AI Wearable
+# Friend: Open-Source AI Wearable with 24h+ on single charge
 
-![IMG_0516](https://github.com/BasedHardware/friend/assets/43514161/f333cecb-cab8-481e-ae9b-37b9b742e2c1)
+Assembled          |  Dissembled
+:-------------------------:|:-------------------------:
+![CleanShot 2024-03-06 at 17 19 58](https://github.com/BasedHardware/friend/assets/43514161/f333cecb-cab8-481e-ae9b-37b9b742e2c1)| <img src="https://github.com/BasedHardware/friend/assets/43514161/af939aca-1257-4f67-8118-e1a91f2d4949" alt="drawing" width="1200"/>
+
+
+
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://opensource.org/license/agpl-v3)
 
@@ -17,8 +22,11 @@ Be a part of the revolution! **Friend** is here to stay, at the forefront of AI 
 
 ## Structure
 There are 2 different apps in these repositories located in different branches. Our goal is to merge them into one big project. 
+
 [Standalone Branch](https://github.com/BasedHardware/friend/tree/standalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people
+
 [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/appwithwearable) Wearable-connected version of the app that requires the "Friend necklace" to use it
+
 [Main Branch] Branch that contains firmware for SeeedStudio XIAO NRF52840 Sense Board
 
 ## Getting Started 
@@ -26,9 +34,11 @@ There are 2 different apps in these repositories located in different branches. 
 Follow these steps to get started with your Friend:
 
 Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
+
 Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
 
 iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+
 Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 
 then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
