@@ -85,7 +85,7 @@ Also select Port (should be smth that containts USB...)
 
 ## Contributing
 [Join our Discord!](https://discord.gg/kEXXsnb5b3)
-We welcome contributions from the community! If you're interested in improving Friend, our current biggest goal is to launch both apps together (AppStandalone with AppWithWearable).
+We welcome contributions from the community! If you're interested in improving Friend, our current biggest goal is to combine both apps together (AppStandalone with AppWithWearable).
 - Standalone App brings great prompts and rich structure
 - AppWithWearable brings simple bluetooth connecting functionality
 
