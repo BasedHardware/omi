@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "125067220975",
+    "project_id": "mistral-sllz6f",
+    "storage_bucket": "mistral-sllz6f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:125067220975:android:bd624c0f79cc506e3f881a",
+        "android_client_info": {
+          "package_name": "com.lumina.ios"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVg_HcZMVeukmnPp_RuFCv7j6qMqPcf8k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
