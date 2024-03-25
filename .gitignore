@@ -4,9 +4,7 @@ libraries/
 myenv/
 venv/
 .DS_Store
-axel_adam/*.txt
-axel_adam/*.wav
-
+dump/
 *.zip
 *.txt
 *.wav
