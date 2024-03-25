@@ -42,7 +42,9 @@ iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then
 Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 
 then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
-When everything is installed, run ```flutter run ```, this should open Xcode and run your app. 
+
+When everything is installed, run ```flutter run ```, this should run your app on a selected device
+
 
 ### Hardware Buying Guide
 
@@ -77,6 +79,7 @@ Also select Port (should be smth that containts USB...)
 ![IMAGE 2024-03-24 19:55:07](https://github.com/BasedHardware/friend/assets/43514161/0719de62-b58f-4ceb-85e2-d288916375c9)
 
 6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic)
+7. Click "Upload" and then open Serial Monitor to see logs
 
 
 ## Contributing
