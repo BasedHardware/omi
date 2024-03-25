@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'dart:convert';
 import 'package:http/http.dart' as http; // Fixed the import
+import "../../env/env.dart";
 
 // Global variable defined here
 String responseString = "";
@@ -38,8 +39,7 @@ Future streamApiResponse(
   final url = 'https://api.openai.com/v1/chat/completions';
   final headers = {
     'Content-Type': 'application/json',
-    'Authorization':
-        'Bearer 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',
+    'Authorization': 'Bearer ${Env.openAIApiKey}',
   };
 
   // Create Request

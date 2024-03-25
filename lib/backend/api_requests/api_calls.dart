@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import 'api_manager.dart';
+import '../../env/env.dart';
 
 export 'api_manager.dart' show ApiCallResponse;
 
@@ -27,8 +28,7 @@ class StructuredMemoryCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -69,8 +69,7 @@ class ChatGPTFeedbackCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -116,8 +115,7 @@ class TestCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -151,8 +149,7 @@ class ChatGPTWhisperCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'multipart/form-data',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {
         'file': file,
@@ -195,8 +192,7 @@ class VoiceCommandRespondCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -236,8 +232,7 @@ class DailyMemoriesCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -277,8 +272,7 @@ class SummariesCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -319,8 +313,7 @@ class IsFeeedbackUsefulCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -361,8 +354,7 @@ class BoolTestCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -397,8 +389,7 @@ class SendFullPromptCall {
       apiUrl: 'https://api.openai.com/v1/chat/completions',
       callType: ApiCallType.POST,
       headers: {
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -498,8 +489,7 @@ class VectorizeCall {
       callType: ApiCallType.POST,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization':
-            'Bearer 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',
+        'Authorization': 'Bearer ${Env.openAIApiKey}',
       },
       params: {},
       body: ffApiRequestBody,
@@ -550,7 +540,7 @@ class CreateVectorPineconeCall {
           'https://index-i7j24t4.svc.gcp-starter.pinecone.io/vectors/upsert',
       callType: ApiCallType.POST,
       headers: {
-        'Api-Key': 'e0879ae1-5d5b-4b70-bab4-3cf5b2b4c41b',
+        'Api-Key': Env.pineconeApiKey,
         'Content-Type': 'application/json',
       },
       params: {},
@@ -588,7 +578,7 @@ class QueryVectorsCall {
       apiUrl: 'https://index-i7j24t4.svc.gcp-starter.pinecone.io/query',
       callType: ApiCallType.POST,
       headers: {
-        'Api-Key': 'e0879ae1-5d5b-4b70-bab4-3cf5b2b4c41b',
+        'Api-Key': Env.pineconeApiKey,
         'Content-Type': 'application/json',
       },
       params: {},
