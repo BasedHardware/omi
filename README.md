@@ -25,7 +25,7 @@ There are 2 different apps in these repositories located in different branches. 
 
 [Standalone Branch](https://github.com/BasedHardware/friend/tree/standalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people
 
-[AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/appwithwearable) Wearable-connected version of the app that requires the "Friend necklace" to use it
+[AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) Wearable-connected version of the app that requires the "Friend necklace" to use it
 
 [Main Branch] Branch that contains firmware for SeeedStudio XIAO NRF52840 Sense Board
 
