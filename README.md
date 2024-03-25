@@ -30,6 +30,9 @@ There are 2 different apps in these repositories located in different branches a
 Follow these steps to get started with your Friend:
 
 1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
+No-Code Alternative: 
+- Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
+- Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/share/mistral-sllz6f)
 2. Choose which version of the app you want to install (see Structure). 
 - Don't have the device? run ```cd AppStandalone``` in terminal
 - Have the device/NRF Board? run ```cd AppWithWearable``` in terminal
