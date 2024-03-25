@@ -1,4 +1,3 @@
-import '/components/item_permission_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/permissions_util.dart';
@@ -47,15 +46,103 @@ class _PermissionsListWidgetState extends State<PermissionsListWidget> {
         shrinkWrap: true,
         scrollDirection: Axis.vertical,
         children: [
-          wrapWithModel(
-            model: _model.itemPermissionModel,
-            updateCallback: () => setState(() {}),
-            child: ItemPermissionWidget(
-              text: 'We need notifications to send feedback and reminders',
-              icon: Icon(
-                Icons.notifications_active_sharp,
-                color: FlutterFlowTheme.of(context).secondary,
-                size: 24.0,
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 8.0, 8.0),
+            child: InkWell(
+              splashColor: Colors.transparent,
+              focusColor: Colors.transparent,
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              onTap: () async {
+                logFirebaseEvent('PERMISSIONS_LIST_Container_o7wmcjef_ON_T');
+                logFirebaseEvent('Container_request_permissions');
+                await requestPermission(notificationsPermission);
+                logFirebaseEvent('Container_set_form_field');
+                setState(() {
+                  _model.checkboxValue = true;
+                });
+                logFirebaseEvent('Container_update_app_state');
+                _model.updatePage(() {});
+              },
+              child: Container(
+                width: 100.0,
+                decoration: BoxDecoration(
+                  color: FlutterFlowTheme.of(context).primary,
+                ),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(16.0, 8.0, 8.0, 8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 36.0,
+                        height: 36.0,
+                        decoration: BoxDecoration(
+                          color: FlutterFlowTheme.of(context).primary,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: const AlignmentDirectional(0.0, 0.0),
+                        child: const Stack(
+                          children: [
+                            Icon(
+                              Icons.notifications_active,
+                              color: Color(0xFFF7F4F4),
+                              size: 24.0,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                              12.0, 0.0, 0.0, 0.0),
+                          child: Text(
+                            'We need notifications to send feedback and reminders',
+                            style: FlutterFlowTheme.of(context)
+                                .bodyMedium
+                                .override(
+                                  fontFamily: FlutterFlowTheme.of(context)
+                                      .bodyMediumFamily,
+                                  fontWeight: FontWeight.bold,
+                                  useGoogleFonts: GoogleFonts.asMap()
+                                      .containsKey(FlutterFlowTheme.of(context)
+                                          .bodyMediumFamily),
+                                ),
+                          ),
+                        ),
+                      ),
+                      Theme(
+                        data: ThemeData(
+                          checkboxTheme: const CheckboxThemeData(
+                            shape: CircleBorder(),
+                          ),
+                          unselectedWidgetColor:
+                              FlutterFlowTheme.of(context).secondary,
+                        ),
+                        child: Checkbox(
+                          value: _model.checkboxValue ??= false,
+                          onChanged: (newValue) async {
+                            setState(() => _model.checkboxValue = newValue!);
+                            if (newValue!) {
+                              logFirebaseEvent(
+                                  'PERMISSIONS_LIST_Checkbox_p3ts53ka_ON_TO');
+                              logFirebaseEvent('Checkbox_request_permissions');
+                              await requestPermission(notificationsPermission);
+                              logFirebaseEvent('Checkbox_set_form_field');
+                              setState(() {
+                                _model.checkboxValue = true;
+                              });
+                              logFirebaseEvent('Checkbox_update_app_state');
+                              _model.updatePage(() {});
+                            }
+                          },
+                          activeColor: FlutterFlowTheme.of(context).primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

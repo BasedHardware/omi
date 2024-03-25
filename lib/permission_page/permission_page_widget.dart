@@ -242,8 +242,10 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                   mainAxisSize: MainAxisSize.max,
                   children: [
                     if (valueOrDefault<bool>(
-                      _model.permissionsListModel.itemPermissionModel
-                              .checkboxValue! &&
+                      valueOrDefault<bool>(
+                            _model.permissionsListModel.checkboxValue,
+                            true,
+                          ) &&
                           valueOrDefault<bool>(
                             _model.permissionsListModel.checkbox2Value,
                             true,
@@ -257,8 +259,10 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                           onPressed: () async {
                             logFirebaseEvent(
                                 'PERMISSION_PAGE_PAGE_NEXT_BTN_ON_TAP');
-                            if (_model.permissionsListModel.itemPermissionModel
-                                    .checkboxValue! &&
+                            if (valueOrDefault<bool>(
+                                  _model.permissionsListModel.checkboxValue,
+                                  true,
+                                ) &&
                                 valueOrDefault<bool>(
                                   _model.permissionsListModel.checkbox2Value,
                                   true,
