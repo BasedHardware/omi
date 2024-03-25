@@ -1,4 +1,4 @@
-# Sama
+# Friend
 
 A new Flutter project.
 
