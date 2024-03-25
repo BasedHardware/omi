@@ -19,9 +19,9 @@ Features:
 ## Structure
 There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project. 
 
-- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people. Folder "AppStandalone"
+- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone) or Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people. 
 
-- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) Wearable-connected version of the app that requires the "Friend necklace" to use it.  Folder "AppWithWearable"
+- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) or Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.  
 
 - [Main Branch] Branch that contains firmware, hardware, designs and both apps
 
