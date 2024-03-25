@@ -53,7 +53,7 @@ Follow these steps to get started with your Friend:
 
 No-Code Alternative: 
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
-- Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/share/mistral-sllz6f)
+- Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/project/friend-share-19bk3d)
 
 
 ### Install Firmware
