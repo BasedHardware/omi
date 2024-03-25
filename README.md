@@ -23,7 +23,7 @@ Be a part of the revolution! **Friend** is here to stay, at the forefront of AI 
 ## Structure
 There are 2 different apps in these repositories located in different branches. Our goal is to merge them into one big project. 
 
-[Standalone Branch](https://github.com/BasedHardware/friend/tree/standalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people
+[Standalone Branch](https://github.com/BasedHardware/friend/tree/Standalone): Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people
 
 [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) Wearable-connected version of the app that requires the "Friend necklace" to use it
 
@@ -34,8 +34,9 @@ There are 2 different apps in these repositories located in different branches. 
 Follow these steps to get started with your Friend:
 
 1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
-2. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-3. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+2. Choose 
+3. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
+4. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 5. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
 6. When everything is installed, run ```flutter run ```, this should run your app on a selected device
