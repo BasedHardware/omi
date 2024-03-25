@@ -26,8 +26,9 @@ There are 2 different apps in these repositories located in different branches a
 - [Main Branch] Branch that contains firmware, hardware, designs and both apps
 
 ## Getting Started 
-
 Follow these steps to get started with your Friend:
+### Install the app
+
 
 1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
 No-Code Alternative: 
