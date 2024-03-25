@@ -50,7 +50,7 @@ Follow these steps to get started with your Friend:
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
 7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
-8. Install your environment variables
+8. Install your environment variables in .env.template file
 
 No-Code Alternative: 
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
