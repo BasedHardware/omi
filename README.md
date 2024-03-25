@@ -33,17 +33,12 @@ There are 2 different apps in these repositories located in different branches. 
 
 Follow these steps to get started with your Friend:
 
-Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
-
-Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-
-iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
-
-Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
-
-then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
-
-When everything is installed, run ```flutter run ```, this should run your app on a selected device
+1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
+2. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
+3. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+   Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
+5. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
+6. When everything is installed, run ```flutter run ```, this should run your app on a selected device
 
 
 ### Hardware Buying Guide
