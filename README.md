@@ -82,6 +82,34 @@ Also select Port (should be smth that containts USB...)
 6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic)
 7. Click "Upload" and then open Serial Monitor to see logs
 
+### Assemble the device
+
+Step 0. Make sure you have bought everything from the buying guide above
+
+
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" width="300">
+
+Step 1: You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
+
+Step 2: 
+Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
+
+
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" width="300">
+
+Step 3: 
+Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch, however it's not an ideal design. If you will figure out a better solution, please contribute!
+
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" width="300">
+
+Step 4: Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the USB-port side, you'll find 2 small round holes. This is where the thread should go through. 
+
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" width="200">
+
+
+Congratulations! you now have a fully working and assembled device!
+
+
 
 ## Contributing
 [Join our Discord!](https://discord.gg/kEXXsnb5b3)
