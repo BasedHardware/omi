@@ -1,0 +1,3 @@
+[submodule "src/BLE_Audio_Stream_NRF52840"]
+	path = src/BLE_Audio_Stream_NRF52840
+	url = https://github.com/aapatni/BLE_Audio_Stream_NRF52840

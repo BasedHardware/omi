@@ -1,0 +1,10 @@
+.env
+__pycache__/
+libraries/
+myenv/
+venv/
+.DS_Store
+dump/
+*.zip
+*.txt
+*.wav
