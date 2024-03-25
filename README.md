@@ -34,12 +34,14 @@ There are 2 different apps in these repositories located in different branches. 
 Follow these steps to get started with your Friend:
 
 1. Clone the repo ``` git clone https://github.com/BasedHardware/friend.git ```
-2. Choose 
-3. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-4. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+2. Choose which version of the app you want to install (see Structure). 
+Don't have the device? go to ```cd AppStandalone```
+Have the device/NRF Board? go to ```cd AppWithWearable```
+4. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
+5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
-5. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
-6. When everything is installed, run ```flutter run ```, this should run your app on a selected device
+6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
+7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
 
 
 ### Hardware Buying Guide
