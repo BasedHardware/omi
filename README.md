@@ -46,7 +46,7 @@ Follow these steps to get started with your Friend:
 - Don't have the device? run ```cd AppStandalone``` in terminal
 - Have the device/NRF Board? run ```cd AppWithWearable``` in terminal
 4. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier. 
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
 7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
