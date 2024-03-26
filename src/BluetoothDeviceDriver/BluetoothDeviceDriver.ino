@@ -27,6 +27,9 @@ BLECharacteristic audioCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BL
 
 void setup()
 {
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
   Serial.begin(115200);
   while (!Serial)
   {
@@ -44,18 +47,23 @@ void setup()
   if (!Mic.begin())
   {
     Serial.println("Mic initialization failed");
+    digitalWrite(LED_BUILTIN, HIGH);
     while (1)
       ;
   }
   Serial.println("Mic initialization done.");
+  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_GREEN, HIGH);
 
   if (!BLE.begin())
   {
     Serial.println("Starting Bluetooth® Low Energy module failed!");
+    digitalWrite(LED_BUILTIN, HIGH);
     while (1)
       ;
   }
-
+  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_GREEN, HIGH);
   BLE.setLocalName("AudioRecorder");
   BLE.setAdvertisedService(audioService);
   audioService.addCharacteristic(audioCharacteristic);
@@ -83,11 +91,15 @@ void loop()
     if (resp == "rec")
     {
       recording = true;
+      digitalWrite(LED_BUILTIN, LOW);
+      digitalWrite(LED_BLUE, HIGH);
       Serial.println("Recording started");
     }
     else if (resp == "stop")
     {
       recording = false;
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_BLUE, LOW);
       Serial.println("Recording stopped");
     }
   }
