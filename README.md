@@ -50,7 +50,11 @@ Follow these steps to get started with your Friend:
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
 6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
 7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
-8. Install your environment variables in .env.template file
+8. Install your environment variables
+- For AppWithWearable, open file api_calls.dart located in  ``` AppWithWearable/lib/backend/api_requests  ``` Find "Whisper" and instead of <key>, provide your own api-key for openai whisper for transcriptions to work
+
+![CleanShot 2024-03-25 at 21 58 42](https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319)
+- For AppStandalone, update variables in in .env.template file
 
 No-Code Alternative: 
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
