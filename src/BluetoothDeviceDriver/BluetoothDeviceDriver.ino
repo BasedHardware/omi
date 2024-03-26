@@ -56,7 +56,7 @@ void setup()
       ;
   }
 
-  BLE.setLocalName("AudioRecorder");
+  BLE.setLocalName("Arduino");
   BLE.setAdvertisedService(audioService);
   audioService.addCharacteristic(audioCharacteristic);
   BLE.addService(audioService);

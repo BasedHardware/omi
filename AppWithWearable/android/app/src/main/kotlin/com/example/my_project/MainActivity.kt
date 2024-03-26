@@ -1,4 +1,4 @@
-package com.lumina.ios
+package com.friend.ios
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -73,7 +73,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                       padding:
                           EdgeInsetsDirectional.fromSTEB(0.0, 20.0, 0.0, 0.0),
                       child: Text(
-                        'Lumina',
+                        'Friend',
                         style: FlutterFlowTheme.of(context).bodyMedium.override(
                               fontFamily: 'SF Pro Display',
                               fontSize: 24.0,
@@ -109,20 +109,19 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                         highlightColor: Colors.transparent,
                         onDoubleTap: () async {
                           logFirebaseEvent(
-                              'WELCOME_LOGIN_WITH_EMAIL_BTN_ON_DOUBLE_T');
+                              'WELCOME_PAGE_LOG_IN_BTN_ON_DOUBLE_TAP');
                           logFirebaseEvent('Button_navigate_to');
 
                           context.pushNamed('login');
                         },
                         child: FFButtonWidget(
                           onPressed: () async {
-                            logFirebaseEvent(
-                                'WELCOME_PAGE_LOGIN_WITH_EMAIL_BTN_ON_TAP');
+                            logFirebaseEvent('WELCOME_PAGE_LOG_IN_BTN_ON_TAP');
                             logFirebaseEvent('Button_navigate_to');
 
-                            context.pushNamed('login');
+                            context.pushNamed('PermissionPage');
                           },
-                          text: 'Login with email',
+                          text: 'Log in',
                           options: FFButtonOptions(
                             height: 60.0,
                             padding: EdgeInsetsDirectional.fromSTEB(

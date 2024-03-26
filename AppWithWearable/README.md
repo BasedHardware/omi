@@ -1,4 +1,4 @@
-# lumina
+# Friend Private
 
 A new Flutter project.
 
