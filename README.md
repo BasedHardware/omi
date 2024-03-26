@@ -46,15 +46,16 @@ Follow these steps to get started with your Friend:
 - Don't have the device? run ```cd AppStandalone``` in terminal
 - Have the device/NRF Board? run ```cd AppWithWearable``` in terminal
 4. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier. 
-   Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
-6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
-7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
-8. Install your environment variables
+5. Install your environment variables
 - For AppWithWearable, open file api_calls.dart located in  ``` AppWithWearable/lib/backend/api_requests  ``` Find "Whisper" and instead of <key>, provide your own api-key for openai whisper for transcriptions to work
 
 ![CleanShot 2024-03-25 at 21 58 42](https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319)
 - For AppStandalone, update variables in in .env.template file
+
+6. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier. 
+   Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
+7. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
+8. When everything is installed, run ```flutter run ```, this should run your app on a selected device
 
 No-Code Alternative: 
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
