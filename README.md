@@ -80,7 +80,8 @@ Also select Port (should be smth that containts USB...)
 ![IMAGE 2024-03-24 19:55:07](https://github.com/BasedHardware/friend/assets/43514161/0719de62-b58f-4ceb-85e2-d288916375c9)
 
 6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic)
-7. Click "Upload" and then open Serial Monitor to see logs
+7. Install Arduino BLE library standard library can be found in Arduino's menu
+8. Click "Upload" and then open Serial Monitor to see logs
 
 ### Assemble the device
 
