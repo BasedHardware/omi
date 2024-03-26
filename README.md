@@ -88,6 +88,9 @@ Also select Port (should be smth that containts USB...)
 7. Install Arduino BLE library standard library can be found in Arduino's menu
 8. Click "Upload" and then open Serial Monitor to see logs
 
+**How to test audio receiving on your computer**: 
+from home directory, go to "src" folder, then in terminal run ``` python local_laptop_client.py ``` - this script will list audio devices and IDs. Copy your device's ID and paste in same file on this line  ``` DEVICE_ID = "564A72F4-4552-8CE8-719D-8D5CB2E5D43D"``` (instead of 564A72F4-4552-8CE8-719D-8D5CB2E5D43D)
+
 ### Assemble the device
 
 Step 0. Make sure you have bought everything from the buying guide above
