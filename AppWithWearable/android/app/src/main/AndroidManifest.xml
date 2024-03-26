@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.lumina.ios"
+    package="com.friend.ios"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
 
@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="BLUETOOTH_ADMIN"/>
     <application
-        android:label="Sama"
+        android:label="Friend in Wearable"
         tools:replace="android:label"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
@@ -47,7 +47,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="lumina" android:host="lumina.com" />
+                <data android:scheme="friendprivate" android:host="friendprivate.com" />
             </intent-filter>
 
         </activity>

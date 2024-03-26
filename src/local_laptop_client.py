@@ -8,7 +8,7 @@ import time
 import os
 from scipy.signal import stft, istft
 
-DEVICE_ID = "FB41CA19-EC23-4769-38CA-DF822989BACB" # NOTE: You will have to update this ID with your devices bluetooth id
+DEVICE_ID = "564A72F4-4552-8CE8-719D-8D5CB2E5D43D" # NOTE: You will have to update this ID with your devices bluetooth id
 SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 
