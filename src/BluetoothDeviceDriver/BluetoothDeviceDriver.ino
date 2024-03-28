@@ -31,9 +31,11 @@ void setup()
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   Serial.begin(115200);
-  while (!Serial)
+  
+  unsigned long startMillis = millis();
+  while (!Serial && millis() - startMillis < 500)
   {
-    delay(10);
+    delay(10); // Short delay to prevent hanging in a tight loop
   }
 
 #if defined(WIO_TERMINAL)
