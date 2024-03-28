@@ -1,6 +1,6 @@
 import asyncio
 import bleak
-from bleak import BleakClient
+from bleak import BleakClient, BleakScanner
 import wave
 from datetime import datetime
 import numpy as np
@@ -19,7 +19,7 @@ CAPTURE_TIME = 30  # Time to capture audio in seconds
 
 async def main():
     print("Discovering AudioRecorder...")
-    devices = await bleak.discover(timeout=2.0)
+    devices = await BleakScanner.discover(timeout=2.0)
     audio_recorder = None
     for device in devices:
         if device.name:
