@@ -54,6 +54,7 @@ Follow these steps to get started with your Friend:
 
 6. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier. 
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
+Don't run in web/simulator: Bluetooth will not work
 7. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
 8. When everything is installed, run ```flutter run ```, this should run your app on a selected device
 
