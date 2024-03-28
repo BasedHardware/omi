@@ -72,6 +72,10 @@ void setup()
   BLE.addService(audioService);
   BLE.advertise();
 
+  // Print device address
+  Serial.print("Device Address: ");
+  Serial.println(BLE.address());
+    
   Serial.println("BLE Audio Recorder");
 }
 
