@@ -62,9 +62,11 @@ void setup()
     while (1)
       ;
   }
+
   digitalWrite(LED_BUILTIN, LOW);
   digitalWrite(LED_GREEN, HIGH);
   BLE.setLocalName("AudioRecorder");
+
   BLE.setAdvertisedService(audioService);
   audioService.addCharacteristic(audioCharacteristic);
   BLE.addService(audioService);

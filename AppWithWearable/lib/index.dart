@@ -2,7 +2,7 @@
 export '/onboarding/welcome/welcome_widget.dart' show WelcomeWidget;
 export '/onboarding/permission_page/permission_page_widget.dart'
     show PermissionPageWidget;
-export '/pages/ble/connect_device/connect_device_widget.dart'
+export '/pages/connect_device/connect_device_widget.dart'
     show ConnectDeviceWidget;
 export '/pages/ble/connecting/connecting_widget.dart' show ConnectingWidget;
 export '/onboarding/login/login_widget.dart' show LoginWidget;

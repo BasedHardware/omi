@@ -1,9 +1,9 @@
-name: friend
-description: ai wearable receive BLE
+name: friend_private
+description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `pub publish`. This is preferred for private packages.
-publish_to: "none" # Remove this line if you wish to publish to pub.dev
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -104,6 +104,7 @@ dependencies:
   webview_flutter_platform_interface: 2.10.0
   webview_flutter_wkwebview: 3.12.0
 
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.0
@@ -117,12 +118,13 @@ dev_dependencies:
   flutter_launcher_icons: 0.13.1
   flutter_lints: 3.0.0
   image: 4.0.17
-  integration_test:
+  integration_test: 
     sdk: flutter
   lints: 3.0.0
 
   flutter_test:
     sdk: flutter
+
 
 flutter_launcher_icons:
   android: true
@@ -130,13 +132,15 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   web:
     generate: true
-  image_path: "assets/images/app_launcher_icon.png"
+  image_path: 'assets/images/app_launcher_icon.png'
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter.
 flutter:
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
@@ -152,7 +156,7 @@ flutter:
     - assets/rive_animations/
     - assets/pdfs/
   fonts:
-    - family: "SF Pro Display"
+    - family: 'SF Pro Display'
       fonts:
         - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
           weight: 100
@@ -174,6 +178,7 @@ flutter:
           weight: 900
           style: italic
 
+  
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 
@@ -199,3 +204,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
+
