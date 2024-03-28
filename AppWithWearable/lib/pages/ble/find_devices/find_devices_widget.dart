@@ -214,119 +214,111 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
-                                                InkWell(
-                                                  splashColor:
-                                                      Colors.transparent,
-                                                  focusColor:
-                                                      Colors.transparent,
-                                                  hoverColor:
-                                                      Colors.transparent,
-                                                  highlightColor:
-                                                      Colors.transparent,
-                                                  onDoubleTap: () async {
+                                                FFButtonWidget(
+                                                  onPressed: () async {
                                                     logFirebaseEvent(
-                                                        'FIND_DEVICES_SCAN_DEVICES_BTN_ON_DOUBLE_');
+                                                        'FIND_DEVICES_SCAN_DEVICES_BTN_ON_TAP');
                                                     logFirebaseEvent(
-                                                        'Button_navigate_to');
-
-                                                    context.pushNamed('login');
-                                                  },
-                                                  child: FFButtonWidget(
-                                                    onPressed: () async {
-                                                      logFirebaseEvent(
-                                                          'FIND_DEVICES_SCAN_DEVICES_BTN_ON_TAP');
-                                                      logFirebaseEvent(
-                                                          'Button_custom_action');
-                                                      _model.devicesScanCopy =
-                                                          await actions
-                                                              .ble0findDevices();
-                                                      logFirebaseEvent(
-                                                          'Button_update_page_state');
-                                                      setState(() {
-                                                        _model.foundDevices = _model
-                                                            .devicesScanCopy!
-                                                            .toList()
-                                                            .cast<
-                                                                BTDeviceStruct>();
-                                                      });
-                                                      logFirebaseEvent(
-                                                          'Button_show_snack_bar');
-                                                      ScaffoldMessenger.of(
-                                                              context)
-                                                          .showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'Devices scanned',
-                                                            style: TextStyle(
-                                                              color: FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .primary,
-                                                            ),
+                                                        'Button_custom_action');
+                                                    _model.devicesScanCopy =
+                                                        await actions
+                                                            .ble0findDevices();
+                                                    logFirebaseEvent(
+                                                        'Button_show_snack_bar');
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Please wait few seconds',
+                                                          style: TextStyle(
+                                                            color: FlutterFlowTheme
+                                                                    .of(context)
+                                                                .primary,
                                                           ),
-                                                          duration: Duration(
-                                                              milliseconds:
-                                                                  4000),
-                                                          backgroundColor:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .secondary,
                                                         ),
-                                                      );
+                                                        duration: Duration(
+                                                            milliseconds: 4000),
+                                                        backgroundColor:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .secondary,
+                                                      ),
+                                                    );
+                                                    logFirebaseEvent(
+                                                        'Button_update_page_state');
+                                                    _model.foundDevices = _model
+                                                        .devicesScanCopy!
+                                                        .toList()
+                                                        .cast<BTDeviceStruct>();
+                                                    logFirebaseEvent(
+                                                        'Button_show_snack_bar');
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Devices scanned',
+                                                          style: TextStyle(
+                                                            color: FlutterFlowTheme
+                                                                    .of(context)
+                                                                .primary,
+                                                          ),
+                                                        ),
+                                                        duration: Duration(
+                                                            milliseconds: 4000),
+                                                        backgroundColor:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .secondary,
+                                                      ),
+                                                    );
 
-                                                      setState(() {});
-                                                    },
-                                                    text: 'Scan Devices',
-                                                    options: FFButtonOptions(
-                                                      height: 60.0,
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  40.0,
-                                                                  0.0,
-                                                                  40.0,
-                                                                  0.0),
-                                                      iconPadding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  0.0,
-                                                                  0.0,
-                                                                  0.0,
-                                                                  0.0),
+                                                    setState(() {});
+                                                  },
+                                                  text: 'Scan Devices',
+                                                  options: FFButtonOptions(
+                                                    height: 60.0,
+                                                    padding:
+                                                        EdgeInsetsDirectional
+                                                            .fromSTEB(40.0, 0.0,
+                                                                40.0, 0.0),
+                                                    iconPadding:
+                                                        EdgeInsetsDirectional
+                                                            .fromSTEB(0.0, 0.0,
+                                                                0.0, 0.0),
+                                                    color: FlutterFlowTheme.of(
+                                                            context)
+                                                        .secondary,
+                                                    textStyle: FlutterFlowTheme
+                                                            .of(context)
+                                                        .titleSmall
+                                                        .override(
+                                                          fontFamily:
+                                                              'SF Pro Display',
+                                                          color: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .primary,
+                                                          fontSize: 18.0,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          useGoogleFonts:
+                                                              GoogleFonts
+                                                                      .asMap()
+                                                                  .containsKey(
+                                                                      'SF Pro Display'),
+                                                        ),
+                                                    elevation: 3.0,
+                                                    borderSide: BorderSide(
                                                       color:
                                                           FlutterFlowTheme.of(
                                                                   context)
                                                               .secondary,
-                                                      textStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .titleSmall
-                                                              .override(
-                                                                fontFamily:
-                                                                    'SF Pro Display',
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .primary,
-                                                                fontSize: 18.0,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                useGoogleFonts: GoogleFonts
-                                                                        .asMap()
-                                                                    .containsKey(
-                                                                        'SF Pro Display'),
-                                                              ),
-                                                      elevation: 3.0,
-                                                      borderSide: BorderSide(
-                                                        color:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .secondary,
-                                                        width: 1.0,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              30.0),
+                                                      width: 1.0,
                                                     ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            30.0),
                                                   ),
                                                 ),
                                               ],
