@@ -31,10 +31,6 @@ void setup()
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   Serial.begin(115200);
-  while (!Serial)
-  {
-    delay(10);
-  }
 
 #if defined(WIO_TERMINAL)
   pinMode(WIO_KEY_A, INPUT_PULLUP);
