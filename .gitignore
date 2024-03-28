@@ -8,3 +8,62 @@ dump/
 *.zip
 *.txt
 *.wav
+
+# General
+.idea/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Android specific
+**/android/**/build/
+**/android/.gradle
+**/android/**/local.properties
+
+# iOS specific
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/Flutter/Flutter.framework
+**/ios/**/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/.generated/
+**/ios/Runner.xcworkspace
+
+# macOS specific
+**/macos/**/Pods/
+**/macos/**/.symlinks/
+**/macos/**/Flutter/Flutter.framework
+**/macos/**/Flutter/Flutter.podspec
+**/macos/Flutter/Generated.xcconfig
+**/macos/.generated/
+**/macos/Runner.xcworkspace
+
+# Linux specific
+**/linux/.dart_tool/
+**/linux/flutter/
+**/linux/GeneratedPluginRegistrant.*
+
+# Windows specific
+**/windows/flutter/
+**/windows/.dart_tool/
+**/windows/GeneratedPluginRegistrant.*
+
+# Web specific
+**/web/**/build/
+**/web/.dart_tool/
+
+# Version control
+.git/
+.gitignore
+
+# Miscellaneous
+*.lock
+*.log
+*.swo
+*.swp
+*.tmp
+hs_err_pid*
