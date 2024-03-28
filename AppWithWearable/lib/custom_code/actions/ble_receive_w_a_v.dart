@@ -6,7 +6,7 @@ import '/backend/supabase/supabase.dart';
 import '/actions/actions.dart' as action_blocks;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/custom_code/actions/index.dart'; // Imports other custom actions
+import 'index.dart'; // Imports other custom actions
 import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import 'package:flutter/material.dart';
 // Begin custom action code
@@ -23,26 +23,18 @@ const int channelCount = 1;
 const int sampleWidth = 2; // 2 bytes for 16-bit samples
 const int chunkSize = 200;
 
-/*List<int> filterAudioData(List<int> audioData) {
+List<int> filterAudioData(List<int> audioData) {
   // Calculate the scaling factor
-
-  //
-
-  //int maxVal = audioData.reduce((curr, next) => curr > next ? curr : next);
-  //int minVal = audioData.reduce((curr, next) => curr < next ? curr : next);
-  //double scalingFactor = 2 * 32768 / (max(0, maxVal) - min(0, minVal));
-
-  // for each item in the list subtract 32
-
-  double afterSubtraction =
+  int maxVal = audioData.reduce((curr, next) => curr > next ? curr : next);
+  int minVal = audioData.reduce((curr, next) => curr < next ? curr : next);
+  double scalingFactor = 2 * 32768 / (max(0, maxVal) - min(0, minVal));
 
   // Apply the scaling factor
   List<int> scaledAudioData =
       audioData.map((e) => (e * scalingFactor).toInt()).toList();
 
   return scaledAudioData;
-  }
-*/
+}
 
 Future<FFUploadedFile?> bleReceiveWAV(
     BTDeviceStruct btDevice, int recordDuration) async {
@@ -79,7 +71,7 @@ Future<FFUploadedFile?> bleReceiveWAV(
 
             print(
                 'Received ------ ${value.length ~/ 2} samples, total: ${wavData.length}/$samplesToRead');
-            if (wavData.length >= samplesToRead && !completer.isCompleted) {
+            if (wavData.length >= samplesToRead) {
               print('Received desired amount of data');
               characteristic.setNotifyValue(false);
               completer.complete(createWavFile(wavData));
@@ -93,7 +85,7 @@ Future<FFUploadedFile?> bleReceiveWAV(
           await Future.delayed(Duration(seconds: waitSeconds));
 
           // If the desired amount of data is not received within the duration,
-          // return null if the completer is not already completed
+          // return null
           if (!completer.isCompleted) {
             print('Recording duration reached without receiving enough data');
             await characteristic.setNotifyValue(false);
@@ -105,21 +97,20 @@ Future<FFUploadedFile?> bleReceiveWAV(
       }
     }
     print('Desired characteristic not found');
-    if (!completer.isCompleted) {
-      completer.complete(null);
-    }
+    completer.complete(null);
   } catch (e) {
     print('Error receiving data: $e');
-    if (!completer.isCompleted) {
-      completer.completeError(e);
-    }
-  } finally {}
+    completer.completeError(e);
+  } finally {
+    print('Disconnecting from device');
+    await device.disconnect();
+  }
 
   return completer.future;
 }
 
 FFUploadedFile createWavFile(List<int> audioData) {
-  // audioData = filterAudioData(audioData);
+  audioData = filterAudioData(audioData);
   final byteData = ByteData(2 * audioData.length);
   for (int i = 0; i < audioData.length; i++) {
     byteData.setUint16(i * 2, audioData[i], Endian.little);

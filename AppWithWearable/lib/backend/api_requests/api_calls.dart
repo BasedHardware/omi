@@ -130,7 +130,7 @@ class WhisperDCall {
       apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
       callType: ApiCallType.POST,
       headers: {
-        'Authorization': 'Bearer ${key}',
+        'Authorization': 'Bearer <key>',
         'Content-Type': 'multipart/form-data',
       },
       params: {

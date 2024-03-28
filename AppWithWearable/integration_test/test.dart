@@ -2,17 +2,17 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:lumina/flutter_flow/flutter_flow_icon_button.dart';
-import 'package:lumina/flutter_flow/flutter_flow_widgets.dart';
-import 'package:lumina/index.dart';
-import 'package:lumina/main.dart';
-import 'package:lumina/flutter_flow/flutter_flow_util.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_icon_button.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
+import 'package:friend_private/index.dart';
+import 'package:friend_private/main.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 
 import 'package:provider/provider.dart';
-import 'package:lumina/backend/firebase/firebase_config.dart';
-import 'package:lumina/auth/firebase_auth/auth_util.dart';
+import 'package:friend_private/backend/firebase/firebase_config.dart';
+import 'package:friend_private/auth/firebase_auth/auth_util.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lumina/backend/supabase/supabase.dart';
+import 'package:friend_private/backend/supabase/supabase.dart';
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

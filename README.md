@@ -19,7 +19,7 @@ Features:
 ## Structure
 There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project. 
 
-- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone) or Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it. Try example [here](https://apps.apple.com/us/app/comind-real-world-notetaker/id6474986074) used by thousands of people. 
+- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone) or Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it. 
 
 - [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) or Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.  
 
@@ -46,11 +46,16 @@ Follow these steps to get started with your Friend:
 - Don't have the device? run ```cd AppStandalone``` in terminal
 - Have the device/NRF Board? run ```cd AppWithWearable``` in terminal
 4. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder
+5. Install your environment variables
+- For AppWithWearable, open file api_calls.dart located in  ``` AppWithWearable/lib/backend/api_requests  ``` Find "Whisper" and instead of "key", provide your own api-key for openai whisper for transcriptions to work
+
+![CleanShot 2024-03-25 at 21 58 42](https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319)
+- For AppStandalone, update variables in in .env.template file
+
+6. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier. 
    Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
-6. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
-7. When everything is installed, run ```flutter run ```, this should run your app on a selected device
-8. Install your environment variables in .env.template file
+7. then run ```flutter clean ``` then ``` flutter pub get ``` then ``` pod install ```
+8. When everything is installed, run ```flutter run ```, this should run your app on a selected device
 
 No-Code Alternative: 
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
@@ -80,7 +85,12 @@ Also select Port (should be smth that containts USB...)
 ![IMAGE 2024-03-24 19:55:07](https://github.com/BasedHardware/friend/assets/43514161/0719de62-b58f-4ceb-85e2-d288916375c9)
 
 6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic)
-7. Click "Upload" and then open Serial Monitor to see logs
+7. Install Arduino BLE library standard library can be found in Arduino's menu
+8. Click "Upload" and then open Serial Monitor to see logs
+
+**How to test audio receiving on your computer**: 
+from home directory, go to "src" folder, then in terminal run ``` python local_laptop_client.py ``` - this script will list audio devices and IDs. Copy your device's ID and paste in same file on this line  ``` DEVICE_ID = "564A72F4-4552-8CE8-719D-8D5CB2E5D43D"``` (instead of 564A72F4-4552-8CE8-719D-8D5CB2E5D43D)
+then run the file again with ``` python local_laptop_client.py ``` (or python3) 
 
 ### Assemble the device
 
