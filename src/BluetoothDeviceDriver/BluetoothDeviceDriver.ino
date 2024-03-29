@@ -132,7 +132,9 @@ void loop() {
   if (recording) {
     uint32_t available_samples = (recording_idx + BUFFER_SIZE - read_idx) % BUFFER_SIZE;
     if (available_samples >= CHUNK_SIZE) {
+#ifdef DEBUG
       Serial.println("Sending " + String(available_samples) + " samples");
+#endif
       uint16_t chunk[CHUNK_SIZE];
       for (int i = 0; i < CHUNK_SIZE; i++) {
         chunk[i] = recording_buf[(read_idx + i) % BUFFER_SIZE];
