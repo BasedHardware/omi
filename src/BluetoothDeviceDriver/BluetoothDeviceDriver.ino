@@ -33,6 +33,7 @@ BLECharacteristic audioCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BL
 
 void setup() {
   pinMode(int2Pin, INPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(LEDR, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
