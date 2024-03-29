@@ -106,7 +106,7 @@ void loop() {
   }
 
   if (tapCount > prevTapCount) {
-    Serial.println("\Double tapped!");
+    Serial.println("Double tapped!");
     setLedRGB(false, true, false);
 
     recording = true;
