@@ -107,22 +107,29 @@ void loop() {
 
   if (tapCount > prevTapCount) {
     Serial.println("Double tapped!");
-    setLedRGB(false, true, false);
 
-    recording = true;
-    setLedRGB(true, false, true);
-    Serial.println("Recording started");
+    if (!recording) {
+      // Start recording
+      recording = true;
+      setLedRGB(true, false, true);
+      Serial.println("Recording started");
+    } else {
+      // Stop recording
+      recording = false;
+      setLedRGB(false, true, false);
+      Serial.println("Recording stopped");
+    }
   }
 
   prevTapCount = tapCount;
 
   if (Serial.available()) {
     String resp = Serial.readStringUntil('\n');
-    if (resp == "rec") {
+    if (resp == "rec" && !recording) {
       recording = true;
       setLedRGB(false, false, true);
       Serial.println("Recording started");
-    } else if (resp == "stop") {
+    } else if (resp == "stop" && recording) {
       recording = false;
       setLedRGB(false, true, false);
       Serial.println("Recording stopped");
