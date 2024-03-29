@@ -104,7 +104,8 @@ Step 1: You need to design the case using 3D printer. Find .stl file [here](http
 Step 2: 
 Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
 
-<img src="https://share.cleanshot.com/66DLWBFC" width="300">
+![CleanShot 2024-03-28 at 17 01 53](https://github.com/BasedHardware/Friend/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419)
+
 <img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" width="300">
 
 Step 3: 
