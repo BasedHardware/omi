@@ -23,14 +23,14 @@ graph TD
 A[Device] -- Streams Audio --> B[Phone App]
 B -- Saves Audio --> C[Phone Storage]
 C -- After X mins --> D[Send Audio to Whisper API]
-D -- Returns Transcript --> E[Whisper API]
-E -- Saves Transcript --> B
+D -- Returns Transcript --> B[Phone App]
+B -- Saves Transcript --> F[Phone Storage]
 
-style A fill:#FF6B6B, stroke:#FF4136, stroke-width:2px, color:#FFFFFF
-style B fill:#4ECDC4, stroke:#1ABC9C, stroke-width:2px, color:#FFFFFF
-style C fill:#FFE66D, stroke:#FFCC00, stroke-width:2px, color:#1F2020
-style D fill:#A0E7A0, stroke:#2ECC40, stroke-width:2px, color:#1F2020
-style E fill:#FF9F9F, stroke:#FF6B6B, stroke-width:2px, color:#FFFFFF
+style A fill:#1F2020, stroke:#FF4136, stroke-width:2px, color:#FFFFFF
+style B fill:#1F2020, stroke:#1ABC9C, stroke-width:2px, color:#FFFFFF
+style C fill:#1F2020, stroke:#FFCC00, stroke-width:2px, color:#1F2020
+style D fill:#1F2020, stroke:#2ECC40, stroke-width:2px, color:#1F2020
+style F fill:#1F2020, stroke:#FF6B6B, stroke-width:2px, color:#FFFFFF
 
 linkStyle 0 stroke:#FF4136, stroke-width:2px
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px
