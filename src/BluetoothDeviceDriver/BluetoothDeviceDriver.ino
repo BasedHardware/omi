@@ -1,5 +1,5 @@
 #include <mic.h>
-#include <LSM6DS3.h>
+#include <LSM6DS3.h> // make sure to use the library "Seeed arduino LSM6DS3"
 #include <ArduinoBLE.h>
 
 // Settings
