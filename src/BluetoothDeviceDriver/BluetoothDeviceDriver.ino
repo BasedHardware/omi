@@ -157,12 +157,8 @@ static void audio_rec_callback(uint16_t *buf, uint32_t buf_len) {
 }
 
 void setupDoubleTap() {
-  uint8_t error = 0;
-  uint8_t dataToWrite = 0;
-
   // Double Tap Config
-  gyro.writeRegister(LSM6DS3_ACC_GYRO_CTRL1_XL, 0x60);  //* Acc = 416Hz (High-Performance mode)// Turn on the accelerometer
-  // ODR_XL = 416 Hz, FS_XL = 2g
+  gyro.writeRegister(LSM6DS3_ACC_GYRO_CTRL1_XL, 0x60);     //* Acc = 416Hz (High-Performance mode)// Turn on the accelerometer
   gyro.writeRegister(LSM6DS3_ACC_GYRO_TAP_CFG1, 0x8E);     // INTERRUPTS_ENABLE, SLOPE_FDS// Enable interrupts and tap detection on X, Y, Z-axis
   gyro.writeRegister(LSM6DS3_ACC_GYRO_TAP_THS_6D, 0x85);   // Set tap threshold 8C
   gyro.writeRegister(LSM6DS3_ACC_GYRO_INT_DUR2, 0x7F);     // Set Duration, Quiet and Shock time windows 7F
@@ -175,7 +171,7 @@ void tapCallback() {
 }
 
 void setLedRGB(bool red, bool green, bool blue) {
-  digitalWrite(LEDB, blue ? LOW : HIGH);  // Blue ON when blue is true
-  digitalWrite(LEDG, green ? LOW : HIGH); // Green ON when green is true
-  digitalWrite(LEDR, red ? LOW : HIGH);   // Red ON when red is true
+  digitalWrite(LEDB, blue ? LOW : HIGH);   // Blue ON when blue is true
+  digitalWrite(LEDG, green ? LOW : HIGH);  // Green ON when green is true
+  digitalWrite(LEDR, red ? LOW : HIGH);    // Red ON when red is true
 }
