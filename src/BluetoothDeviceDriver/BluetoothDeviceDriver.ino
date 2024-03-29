@@ -175,19 +175,7 @@ void tapCallback() {
 }
 
 void setLedRGB(bool red, bool green, bool blue) {
-  if (!blue) {
-    digitalWrite(LEDB, HIGH);
-  } else {
-    digitalWrite(LEDB, LOW);
-  }
-  if (!green) {
-    digitalWrite(LEDG, HIGH);
-  } else {
-    digitalWrite(LEDG, LOW);
-  }
-  if (!red) {
-    digitalWrite(LEDR, HIGH);
-  } else {
-    digitalWrite(LEDR, LOW);
-  }
+  digitalWrite(LEDB, blue ? LOW : HIGH);  // Blue ON when blue is true
+  digitalWrite(LEDG, green ? LOW : HIGH); // Green ON when green is true
+  digitalWrite(LEDR, red ? LOW : HIGH);   // Red ON when red is true
 }
