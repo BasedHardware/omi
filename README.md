@@ -16,6 +16,15 @@ Features:
 - **Open-Source Software**: Access and contribute to the pin's software stack, designed with openness and community collaboration in mind.
 - **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear. 
 
+**How it works**
+
+- Device is connected to phone
+- Device streams audio constantly to phone app
+- Audio is saved to phone
+- After x mins Phone sends Audio to whisper API
+- Whisper returns transcript
+- Phone saves transcript
+
 ## Structure
 There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project. 
 
