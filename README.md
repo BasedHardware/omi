@@ -26,11 +26,11 @@ C -- After X mins --> D[Send Audio to Whisper API]
 D -- Returns Transcript --> B[Phone App]
 B -- Saves Transcript --> F[Phone Storage]
 
-style A fill:#FFFFFF, stroke:#FF4136, stroke-width:2px, color:#FFFFFF
-style B fill:#FFFFFF, stroke:#1ABC9C, stroke-width:2px, color:#FFFFFF
-style C fill:#FFFFFF, stroke:#FFCC00, stroke-width:2px, color:#1F2020
-style D fill:#FFFFFF, stroke:#2ECC40, stroke-width:2px, color:#1F2020
-style F fill:#FFFFFF, stroke:#FF6B6B, stroke-width:2px, color:#FFFFFF
+style A fill:#000000, stroke:#FF4136, stroke-width:2px, color:#FFFFFF
+style B fill:#000000, stroke:#1ABC9C, stroke-width:2px, color:#FFFFFF
+style C fill:#000000, stroke:#FFCC00, stroke-width:2px, color:#1F2020
+style D fill:#000000, stroke:#2ECC40, stroke-width:2px, color:#1F2020
+style F fill:#000000, stroke:#FF6B6B, stroke-width:2px, color:#FFFFFF
 
 linkStyle 0 stroke:#FF4136, stroke-width:2px
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px
