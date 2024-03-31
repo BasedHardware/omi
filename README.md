@@ -2,7 +2,8 @@
 
 |                                                             Assembled                                                             |                                                             Disassembled                                                             |
 | :-------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------: |
-| ![CleanShot 2024-03-06 at 17 19 58](https://github.com/BasedHardware/friend/assets/43514161/f333cecb-cab8-481e-ae9b-37b9b742e2c1) | <img src="https://github.com/BasedHardware/friend/assets/43514161/af939aca-1257-4f67-8118-e1a91f2d4949" alt="drawing" width="1200"/> |
+| <img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" width="450">                | <img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" width="450">                   |
+
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://opensource.org/license/agpl-v3)
