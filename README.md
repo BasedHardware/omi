@@ -2,7 +2,8 @@
 
 |                                                             Assembled                                                             |                                                             Disassembled                                                             |
 | :-------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------: |
-| ![CleanShot 2024-03-06 at 17 19 58](https://github.com/BasedHardware/friend/assets/43514161/f333cecb-cab8-481e-ae9b-37b9b742e2c1) | <img src="https://github.com/BasedHardware/friend/assets/43514161/af939aca-1257-4f67-8118-e1a91f2d4949" alt="drawing" width="1200"/> |
+| <img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" width="450">                | <img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" width="450">                   |
+
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://opensource.org/license/agpl-v3)
@@ -26,11 +27,14 @@ C -- After X mins --> D[Send Audio to Whisper API]
 D -- Returns Transcript --> B[Phone App]
 B -- Saves Transcript --> F[Phone Storage]
 
-style A fill:#000000, stroke:#FF4136, stroke-width:2px, color:#FFFFFF
-style B fill:#000000, stroke:#1ABC9C, stroke-width:2px, color:#FFFFFF
-style C fill:#000000, stroke:#FFCC00, stroke-width:2px, color:#1F2020
-style D fill:#000000, stroke:#2ECC40, stroke-width:2px, color:#1F2020
-style F fill:#000000, stroke:#FF6B6B, stroke-width:2px, color:#FFFFFF
+classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
+classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
+
+classDef lightModeLinks stroke:#333333;
+classDef darkModeLinks stroke:#FFFFFF;
+
+class A,B,C,D,F lightMode
+class A,B,C,D,F darkMode
 
 linkStyle 0 stroke:#FF4136, stroke-width:2px
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px
