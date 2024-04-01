@@ -131,12 +131,44 @@ class WhisperDCall {
       callType: ApiCallType.POST,
       headers: {
         'Authorization':
-            'Bearer <add_key>',
+            'Bearer <add_key_here>',
         'Content-Type': 'multipart/form-data',
       },
       params: {
         'file': file,
         'model': "whisper-1",
+      },
+      bodyType: BodyType.MULTIPART,
+      returnBody: true,
+      encodeBodyUtf8: false,
+      decodeUtf8: false,
+      cache: false,
+      alwaysAllowBody: false,
+    );
+  }
+
+  static dynamic text(dynamic response) => getJsonField(
+        response,
+        r'''$.text''',
+      );
+}
+
+class WhisperLargeCall {
+  static Future<ApiCallResponse> call({
+    FFUploadedFile? file,
+    String? key = '',
+  }) async {
+    return ApiManager.instance.makeApiCall(
+      callName: 'Whisper large',
+      apiUrl:
+          'https://api-inference.huggingface.co/models/openai/whisper-large',
+      callType: ApiCallType.POST,
+      headers: {
+        'Authorization': 'Bearer <HF_KEY>',
+        'Content-Type': 'multipart/form-data',
+      },
+      params: {
+        'data-binary': file,
       },
       bodyType: BodyType.MULTIPART,
       returnBody: true,

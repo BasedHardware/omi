@@ -26,7 +26,6 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
     super.initState();
     _model = createModel(context, () => WelcomeModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'welcome'});
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
@@ -77,6 +76,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                         style: FlutterFlowTheme.of(context).bodyMedium.override(
                               fontFamily: 'SF Pro Display',
                               fontSize: 24.0,
+                              letterSpacing: 0.0,
                               fontWeight: FontWeight.bold,
                               useGoogleFonts: GoogleFonts.asMap()
                                   .containsKey('SF Pro Display'),
@@ -92,6 +92,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                               fontFamily: 'SF Pro Display',
                               color: Color(0xCCF7F4F4),
                               fontSize: 20.0,
+                              letterSpacing: 0.0,
                               fontWeight: FontWeight.w500,
                               useGoogleFonts: GoogleFonts.asMap()
                                   .containsKey('SF Pro Display'),
@@ -108,20 +109,13 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                         hoverColor: Colors.transparent,
                         highlightColor: Colors.transparent,
                         onDoubleTap: () async {
-                          logFirebaseEvent(
-                              'WELCOME_PAGE_LOG_IN_BTN_ON_DOUBLE_TAP');
-                          logFirebaseEvent('Button_navigate_to');
-
-                          context.pushNamed('login');
+                          context.goNamed('PermissionPage');
                         },
                         child: FFButtonWidget(
                           onPressed: () async {
-                            logFirebaseEvent('WELCOME_PAGE_LOG_IN_BTN_ON_TAP');
-                            logFirebaseEvent('Button_navigate_to');
-
                             context.pushNamed('PermissionPage');
                           },
-                          text: 'Log in',
+                          text: 'Get Started',
                           options: FFButtonOptions(
                             height: 60.0,
                             padding: EdgeInsetsDirectional.fromSTEB(
@@ -135,6 +129,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                                   fontFamily: 'SF Pro Display',
                                   color: FlutterFlowTheme.of(context).primary,
                                   fontSize: 20.0,
+                                  letterSpacing: 0.0,
                                   fontWeight: FontWeight.bold,
                                   useGoogleFonts: GoogleFonts.asMap()
                                       .containsKey('SF Pro Display'),
@@ -158,8 +153,6 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                         hoverColor: Colors.transparent,
                         highlightColor: Colors.transparent,
                         onTap: () async {
-                          logFirebaseEvent('WELCOME_PAGE_Text_wr8spryx_ON_TAP');
-                          logFirebaseEvent('Text_launch_u_r_l');
                           await launchURL(
                               'https://samaprivacypolicy.notion.site/samaprivacypolicy/Sama-AI-Privacy-Policy-bfbbee90f18d4b8b9a0111d2d62cca54');
                         },
@@ -170,6 +163,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                               FlutterFlowTheme.of(context).bodyMedium.override(
                                     fontFamily: 'SF Pro Display',
                                     fontSize: 12.0,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.w500,
                                     decoration: TextDecoration.underline,
                                     useGoogleFonts: GoogleFonts.asMap()
@@ -188,8 +182,6 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                         hoverColor: Colors.transparent,
                         highlightColor: Colors.transparent,
                         onTap: () async {
-                          logFirebaseEvent('WELCOME_PAGE_Text_wvypzkmi_ON_TAP');
-                          logFirebaseEvent('Text_launch_u_r_l');
                           await launchURL(
                               'https://coda.io/d/_dNtSv1z5gNh/END-USER-LICENSE-AGREEMENT_suK7N');
                         },
@@ -200,6 +192,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> {
                               FlutterFlowTheme.of(context).bodyMedium.override(
                                     fontFamily: 'SF Pro Display',
                                     fontSize: 12.0,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.w500,
                                     decoration: TextDecoration.underline,
                                     useGoogleFonts: GoogleFonts.asMap()

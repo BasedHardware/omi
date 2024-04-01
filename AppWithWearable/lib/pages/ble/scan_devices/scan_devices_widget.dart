@@ -25,7 +25,6 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
     super.initState();
     _model = createModel(context, () => ScanDevicesModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'scanDevices'});
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
@@ -77,6 +76,7 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
                                 fontFamily: FlutterFlowTheme.of(context)
                                     .headlineLargeFamily,
                                 fontSize: 24.0,
+                                letterSpacing: 0.0,
                                 fontWeight: FontWeight.w500,
                                 useGoogleFonts: GoogleFonts.asMap().containsKey(
                                     FlutterFlowTheme.of(context)
@@ -89,10 +89,6 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
                         EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 12.0),
                     child: FFButtonWidget(
                       onPressed: () async {
-                        logFirebaseEvent(
-                            'SCAN_DEVICES_SCAN_FOR_DEVICES_BTN_ON_TAP');
-                        logFirebaseEvent('Button_navigate_to');
-
                         context.pushNamed('findDevices');
                       },
                       text: 'Scan for devices',
@@ -108,6 +104,7 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
                                   fontFamily: 'SF Pro Display',
                                   color: FlutterFlowTheme.of(context).primary,
                                   fontSize: 16.0,
+                                  letterSpacing: 0.0,
                                   fontWeight: FontWeight.bold,
                                   useGoogleFonts: GoogleFonts.asMap()
                                       .containsKey('SF Pro Display'),
@@ -131,6 +128,7 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
                                 fontFamily: FlutterFlowTheme.of(context)
                                     .headlineLargeFamily,
                                 fontSize: 14.0,
+                                letterSpacing: 0.0,
                                 fontWeight: FontWeight.w500,
                                 useGoogleFonts: GoogleFonts.asMap().containsKey(
                                     FlutterFlowTheme.of(context)

@@ -5,7 +5,6 @@ export '/onboarding/permission_page/permission_page_widget.dart'
 export '/pages/connect_device/connect_device_widget.dart'
     show ConnectDeviceWidget;
 export '/pages/ble/connecting/connecting_widget.dart' show ConnectingWidget;
-export '/onboarding/login/login_widget.dart' show LoginWidget;
 export '/pages/ble/find_devices/find_devices_widget.dart'
     show FindDevicesWidget;
 export '/home_page/home_page_widget.dart' show HomePageWidget;

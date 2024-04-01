@@ -35,24 +35,17 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     super.initState();
     _model = createModel(context, () => ConnectDeviceModel());
 
-    logFirebaseEvent('screen_view',
-        parameters: {'screen_name': 'connectDevice'});
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('CONNECT_DEVICE_connectDevice_ON_INIT_STA');
-      logFirebaseEvent('connectDevice_update_page_state');
       setState(() {
         _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btdevice)?.rssi;
       });
-      logFirebaseEvent('connectDevice_start_periodic_action');
       _model.rssiUpdateTimer = InstantTimer.periodic(
         duration: Duration(milliseconds: 2000),
         callback: (timer) async {
-          logFirebaseEvent('connectDevice_custom_action');
           _model.updatedRssi = await actions.ble0getRssi(
             BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
           );
-          logFirebaseEvent('connectDevice_update_page_state');
           setState(() {
             _model.currentRssi = _model.updatedRssi;
           });
@@ -116,6 +109,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                                 fontFamily: FlutterFlowTheme.of(context)
                                     .headlineLargeFamily,
                                 fontSize: 24.0,
+                                letterSpacing: 0.0,
                                 fontWeight: FontWeight.bold,
                                 useGoogleFonts: GoogleFonts.asMap().containsKey(
                                     FlutterFlowTheme.of(context)
@@ -134,7 +128,17 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                                     ?.name,
                                 '-',
                               ),
-                              style: FlutterFlowTheme.of(context).titleSmall,
+                              style: FlutterFlowTheme.of(context)
+                                  .titleSmall
+                                  .override(
+                                    fontFamily: FlutterFlowTheme.of(context)
+                                        .titleSmallFamily,
+                                    letterSpacing: 0.0,
+                                    useGoogleFonts: GoogleFonts.asMap()
+                                        .containsKey(
+                                            FlutterFlowTheme.of(context)
+                                                .titleSmallFamily),
+                                  ),
                             ),
                           ),
                           Align(
@@ -145,7 +149,17 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                                     ?.id,
                                 '-',
                               ),
-                              style: FlutterFlowTheme.of(context).titleSmall,
+                              style: FlutterFlowTheme.of(context)
+                                  .titleSmall
+                                  .override(
+                                    fontFamily: FlutterFlowTheme.of(context)
+                                        .titleSmallFamily,
+                                    letterSpacing: 0.0,
+                                    useGoogleFonts: GoogleFonts.asMap()
+                                        .containsKey(
+                                            FlutterFlowTheme.of(context)
+                                                .titleSmallFamily),
+                                  ),
                             ),
                           ),
                         ].divide(SizedBox(height: 8.0)),

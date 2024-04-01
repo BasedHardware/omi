@@ -58,22 +58,18 @@ class _ItemPermissionWidgetState extends State<ItemPermissionWidget> {
         hoverColor: Colors.transparent,
         highlightColor: Colors.transparent,
         onTap: () async {
-          logFirebaseEvent('ITEM_PERMISSION_Container_ipvd5pv6_ON_TA');
           if (widget.permission == Permission.bluetooth) {
-            logFirebaseEvent('Container_request_permissions');
             await requestPermission(bluetoothPermission);
             if (!(await getPermissionStatus(bluetoothPermission))) {
               return;
             }
           } else if (widget.permission == Permission.notifs) {
-            logFirebaseEvent('Container_request_permissions');
             await requestPermission(notificationsPermission);
             if (!(await getPermissionStatus(notificationsPermission))) {
               return;
             }
           }
 
-          logFirebaseEvent('Container_update_component_state');
           setState(() {
             _model.isOn = true;
           });
@@ -120,6 +116,7 @@ class _ItemPermissionWidgetState extends State<ItemPermissionWidget> {
                       style: FlutterFlowTheme.of(context).bodyMedium.override(
                             fontFamily:
                                 FlutterFlowTheme.of(context).bodyMediumFamily,
+                            letterSpacing: 0.0,
                             fontWeight: FontWeight.bold,
                             useGoogleFonts: GoogleFonts.asMap().containsKey(
                                 FlutterFlowTheme.of(context).bodyMediumFamily),

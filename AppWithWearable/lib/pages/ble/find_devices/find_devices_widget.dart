@@ -1,4 +1,3 @@
-import '/backend/backend.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_animations.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -63,34 +62,26 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
     super.initState();
     _model = createModel(context, () => FindDevicesModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'findDevices'});
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('FIND_DEVICES_findDevices_ON_INIT_STATE');
       if (await getPermissionStatus(bluetoothPermission)) {
-        logFirebaseEvent('findDevices_update_page_state');
         setState(() {
           _model.isFetchingDevices = true;
           _model.isFetchingConnectedDevices = true;
         });
-        logFirebaseEvent('findDevices_custom_action');
         _model.fetchedConnectedDevices =
             await actions.ble0getConnectedDevices();
-        logFirebaseEvent('findDevices_update_page_state');
         setState(() {
           _model.isFetchingConnectedDevices = false;
           _model.connectedDevices =
               _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
         });
-        logFirebaseEvent('findDevices_custom_action');
         _model.devices = await actions.ble0findDevices();
-        logFirebaseEvent('findDevices_update_page_state');
         setState(() {
           _model.connectedDevices =
               _model.devices!.toList().cast<BTDeviceStruct>();
           _model.isFetchingDevices = false;
         });
-        logFirebaseEvent('findDevices_show_snack_bar');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -104,7 +95,6 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
           ),
         );
       } else {
-        logFirebaseEvent('findDevices_alert_dialog');
         await showDialog(
           context: context,
           builder: (alertDialogContext) {
@@ -186,6 +176,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                     fontFamily: FlutterFlowTheme.of(context)
                                         .displaySmallFamily,
                                     fontSize: 24.0,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
                                     useGoogleFonts: GoogleFonts.asMap()
                                         .containsKey(
@@ -216,63 +207,13 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                               children: [
                                                 FFButtonWidget(
                                                   onPressed: () async {
-                                                    logFirebaseEvent(
-                                                        'FIND_DEVICES_SCAN_DEVICES_BTN_ON_TAP');
-                                                    logFirebaseEvent(
-                                                        'Button_custom_action');
                                                     _model.devicesScanCopy =
                                                         await actions
                                                             .ble0findDevices();
-                                                    logFirebaseEvent(
-                                                        'Button_show_snack_bar');
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Please wait few seconds',
-                                                          style: TextStyle(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .primary,
-                                                          ),
-                                                        ),
-                                                        duration: Duration(
-                                                            milliseconds: 4000),
-                                                        backgroundColor:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .secondary,
-                                                      ),
-                                                    );
-                                                    logFirebaseEvent(
-                                                        'Button_update_page_state');
                                                     _model.foundDevices = _model
                                                         .devicesScanCopy!
                                                         .toList()
                                                         .cast<BTDeviceStruct>();
-                                                    logFirebaseEvent(
-                                                        'Button_show_snack_bar');
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Devices scanned',
-                                                          style: TextStyle(
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .primary,
-                                                          ),
-                                                        ),
-                                                        duration: Duration(
-                                                            milliseconds: 4000),
-                                                        backgroundColor:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .secondary,
-                                                      ),
-                                                    );
 
                                                     setState(() {});
                                                   },
@@ -300,6 +241,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                                                   .of(context)
                                                               .primary,
                                                           fontSize: 18.0,
+                                                          letterSpacing: 0.0,
                                                           fontWeight:
                                                               FontWeight.bold,
                                                           useGoogleFonts:
@@ -351,11 +293,6 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                                       highlightColor:
                                                           Colors.transparent,
                                                       onTap: () async {
-                                                        logFirebaseEvent(
-                                                            'FIND_DEVICES_Container_hqpjqjuu_ON_TAP');
-                                                        logFirebaseEvent(
-                                                            'Container_navigate_to');
-
                                                         context.pushNamed(
                                                           'connecting',
                                                           queryParameters: {
@@ -409,14 +346,30 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                                                         .name,
                                                                     style: FlutterFlowTheme.of(
                                                                             context)
-                                                                        .bodyMedium,
+                                                                        .bodyMedium
+                                                                        .override(
+                                                                          fontFamily:
+                                                                              FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                          letterSpacing:
+                                                                              0.0,
+                                                                          useGoogleFonts:
+                                                                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                        ),
                                                                   ),
                                                                   Text(
                                                                     foundItem
                                                                         .id,
                                                                     style: FlutterFlowTheme.of(
                                                                             context)
-                                                                        .bodyMedium,
+                                                                        .bodyMedium
+                                                                        .override(
+                                                                          fontFamily:
+                                                                              FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                          letterSpacing:
+                                                                              0.0,
+                                                                          useGoogleFonts:
+                                                                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                        ),
                                                                   ),
                                                                 ],
                                                               ),

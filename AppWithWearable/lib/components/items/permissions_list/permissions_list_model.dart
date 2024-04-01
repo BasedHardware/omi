@@ -15,8 +15,6 @@ class PermissionsListModel extends FlutterFlowModel<PermissionsListWidget> {
   // Model for item_permission component.
   late ItemPermissionModel itemPermissionModel2;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     itemPermissionModel1 = createModel(context, () => ItemPermissionModel());
@@ -28,8 +26,4 @@ class PermissionsListModel extends FlutterFlowModel<PermissionsListWidget> {
     itemPermissionModel1.dispose();
     itemPermissionModel2.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

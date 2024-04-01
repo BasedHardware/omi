@@ -36,15 +36,9 @@ class DeviceDataModel extends FlutterFlowModel<DeviceDataWidget> {
   // Stores action output result for [Backend Call - API (WHISPER D)] action in deviceData widget.
   ApiCallResponse? whsiper;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {}
 
   @override
   void dispose() {}
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

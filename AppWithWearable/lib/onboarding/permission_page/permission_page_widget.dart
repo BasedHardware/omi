@@ -88,9 +88,6 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
     super.initState();
     _model = createModel(context, () => PermissionPageModel());
 
-    logFirebaseEvent('screen_view',
-        parameters: {'screen_name': 'PermissionPage'});
-
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
@@ -159,6 +156,7 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                                         fontFamily: FlutterFlowTheme.of(context)
                                             .displaySmallFamily,
                                         fontSize: 24.0,
+                                        letterSpacing: 0.0,
                                         fontWeight: FontWeight.bold,
                                         useGoogleFonts: GoogleFonts.asMap()
                                             .containsKey(
@@ -180,6 +178,7 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                                           fontFamily:
                                               FlutterFlowTheme.of(context)
                                                   .labelLargeFamily,
+                                          letterSpacing: 0.0,
                                           useGoogleFonts: GoogleFonts.asMap()
                                               .containsKey(
                                                   FlutterFlowTheme.of(context)
@@ -253,10 +252,6 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                                     .isOn)
                             ? null
                             : () async {
-                                logFirebaseEvent(
-                                    'PERMISSION_PAGE_PAGE_NEXT_BTN_ON_TAP');
-                                logFirebaseEvent('Button_navigate_to');
-
                                 context.goNamed('scanDevices');
                               },
                         text: 'Next',
@@ -272,6 +267,7 @@ class _PermissionPageWidgetState extends State<PermissionPageWidget>
                                     fontFamily: 'SF Pro Display',
                                     color: FlutterFlowTheme.of(context).primary,
                                     fontSize: 20.0,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
                                     useGoogleFonts: GoogleFonts.asMap()
                                         .containsKey('SF Pro Display'),

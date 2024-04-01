@@ -24,8 +24,6 @@ class ChatPageModel extends FlutterFlowModel<ChatPageWidget> {
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     columnController = ScrollController();
@@ -40,8 +38,4 @@ class ChatPageModel extends FlutterFlowModel<ChatPageWidget> {
     textFieldFocusNode?.dispose();
     textController?.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

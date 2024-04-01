@@ -33,25 +33,18 @@ class _ConnectingWidgetState extends State<ConnectingWidget> {
     super.initState();
     _model = createModel(context, () => ConnectingModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'connecting'});
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('CONNECTING_PAGE_connecting_ON_INIT_STATE');
-      logFirebaseEvent('connecting_custom_action');
       _model.hasWrite = await actions.ble0connectDevice(
         BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
       );
-      logFirebaseEvent('connecting_wait__delay');
       await Future.delayed(const Duration(milliseconds: 1000));
       while (_model.connectedFraction < 1.0) {
-        logFirebaseEvent('connecting_update_page_state');
         setState(() {
           _model.connectedFraction = _model.connectedFraction + .01;
         });
-        logFirebaseEvent('connecting_wait__delay');
         await Future.delayed(const Duration(milliseconds: 25));
       }
-      logFirebaseEvent('connecting_navigate_to');
 
       context.pushNamed(
         'connectDevice',
@@ -103,14 +96,28 @@ class _ConnectingWidgetState extends State<ConnectingWidget> {
                         _model.connectedFraction,
                         formatType: FormatType.percent,
                       ),
-                      style: FlutterFlowTheme.of(context).headlineLarge,
+                      style:
+                          FlutterFlowTheme.of(context).headlineLarge.override(
+                                fontFamily: FlutterFlowTheme.of(context)
+                                    .headlineLargeFamily,
+                                letterSpacing: 0.0,
+                                useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                    FlutterFlowTheme.of(context)
+                                        .headlineLargeFamily),
+                              ),
                     ),
                   ),
                   Align(
                     alignment: AlignmentDirectional(0.0, 0.0),
                     child: Text(
                       'Connecting',
-                      style: FlutterFlowTheme.of(context).titleSmall,
+                      style: FlutterFlowTheme.of(context).titleSmall.override(
+                            fontFamily:
+                                FlutterFlowTheme.of(context).titleSmallFamily,
+                            letterSpacing: 0.0,
+                            useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                FlutterFlowTheme.of(context).titleSmallFamily),
+                          ),
                     ),
                   ),
                 ].divide(SizedBox(height: 16.0)),
