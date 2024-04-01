@@ -8,12 +8,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'lat_lng.dart';
 import 'place.dart';
 import 'uploaded_file.dart';
-import '/backend/backend.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '/backend/schema/structs/index.dart';
 import '/backend/schema/enums/enums.dart';
-import '/backend/supabase/supabase.dart';
-import '/auth/firebase_auth/auth_util.dart';
 
 DateTime? sinceLastMonth() {
   // function that returns DateTime of 24 hours ago from now

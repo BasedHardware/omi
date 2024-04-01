@@ -1,4 +1,3 @@
-import '/backend/backend.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_animations.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -57,8 +56,6 @@ class FindDevicesModel extends FlutterFlowModel<FindDevicesWidget> {
   // Stores action output result for [Custom Action - ble0findDevices] action in Button widget.
   List<BTDeviceStruct>? devicesScanCopy;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     blurModel = createModel(context, () => BlurModel());
@@ -69,8 +66,4 @@ class FindDevicesModel extends FlutterFlowModel<FindDevicesWidget> {
     unfocusNode.dispose();
     blurModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

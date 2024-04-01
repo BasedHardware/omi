@@ -17,8 +17,6 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
   // Model for blur component.
   late BlurModel blurModel;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     blurModel = createModel(context, () => BlurModel());
@@ -29,8 +27,4 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
     unfocusNode.dispose();
     blurModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

@@ -27,8 +27,6 @@ class PermissionPageModel extends FlutterFlowModel<PermissionPageWidget> {
   // Model for permissionsList component.
   late PermissionsListModel permissionsListModel;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     permissionsListModel = createModel(context, () => PermissionsListModel());
@@ -39,8 +37,4 @@ class PermissionPageModel extends FlutterFlowModel<PermissionPageWidget> {
     unfocusNode.dispose();
     permissionsListModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

@@ -28,7 +28,6 @@ class _HomePageWidgetState extends State<HomePageWidget> {
     super.initState();
     _model = createModel(context, () => HomePageModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'homePage'});
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
@@ -75,8 +74,6 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                         children: [
                           FFButtonWidget(
                             onPressed: () async {
-                              logFirebaseEvent('HOME_PAGE_PAGE__BTN_ON_TAP');
-                              logFirebaseEvent('Button_launch_u_r_l');
                               await launchURL('https://discord.gg/EPDPMZgBgf');
                             },
                             text: '',
@@ -98,6 +95,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                     fontFamily: FlutterFlowTheme.of(context)
                                         .titleSmallFamily,
                                     color: Colors.white,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
                                     useGoogleFonts: GoogleFonts.asMap()
                                         .containsKey(
@@ -114,10 +112,6 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                           ),
                           FFButtonWidget(
                             onPressed: () async {
-                              logFirebaseEvent(
-                                  'HOME_PAGE_PAGE_CHAT_↗_BTN_ON_TAP');
-                              logFirebaseEvent('Button_navigate_to');
-
                               context.pushNamed('homePage');
                             },
                             text: 'Chat ↗',
@@ -136,6 +130,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                         .titleSmallFamily,
                                     color: Color(0xFFF7F4F4),
                                     fontSize: 16.0,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
                                     useGoogleFonts: GoogleFonts.asMap()
                                         .containsKey(
@@ -152,8 +147,6 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                           ),
                           FFButtonWidget(
                             onPressed: () async {
-                              logFirebaseEvent('HOME_PAGE_PAGE__BTN_ON_TAP');
-                              logFirebaseEvent('Button_launch_u_r_l');
                               await launchURL('https://discord.gg/EPDPMZgBgf');
                             },
                             text: '',
@@ -175,6 +168,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                     fontFamily: FlutterFlowTheme.of(context)
                                         .titleSmallFamily,
                                     color: Colors.white,
+                                    letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
                                     useGoogleFonts: GoogleFonts.asMap()
                                         .containsKey(
@@ -220,6 +214,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                       fontFamily: FlutterFlowTheme.of(context)
                                           .titleSmallFamily,
                                       color: Color(0xFFF7F4F4),
+                                      letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
                                           .containsKey(
@@ -254,6 +249,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                           .titleSmallFamily,
                                       color: FlutterFlowTheme.of(context)
                                           .primaryText,
+                                      letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
                                           .containsKey(
@@ -288,6 +284,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                           .titleSmallFamily,
                                       color: FlutterFlowTheme.of(context)
                                           .primaryText,
+                                      letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
                                           .containsKey(
@@ -429,8 +426,13 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                         child:
                                                                             Text(
                                                                           '7:39pm',
-                                                                          style:
-                                                                              FlutterFlowTheme.of(context).bodyMedium,
+                                                                          style: FlutterFlowTheme.of(context)
+                                                                              .bodyMedium
+                                                                              .override(
+                                                                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                letterSpacing: 0.0,
+                                                                                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                              ),
                                                                         ),
                                                                       ),
                                                                     ),
@@ -455,13 +457,10 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                               Colors.transparent,
                                                                           onTap:
                                                                               () async {
-                                                                            logFirebaseEvent('HOME_PAGE_PAGE_Icon_8i4ht8ye_ON_TAP');
-                                                                            logFirebaseEvent('Icon_share');
                                                                             await Share.share(
                                                                               '',
                                                                               sharePositionOrigin: getWidgetBoundingBox(context),
                                                                             );
-                                                                            logFirebaseEvent('Icon_haptic_feedback');
                                                                             HapticFeedback.lightImpact();
                                                                           },
                                                                           child:
@@ -509,6 +508,8 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                   fontFamily: FlutterFlowTheme.of(
                                                                           context)
                                                                       .bodyMediumFamily,
+                                                                  letterSpacing:
+                                                                      0.0,
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .bold,
@@ -626,8 +627,13 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                         child:
                                                                             Text(
                                                                           '7:39pm',
-                                                                          style:
-                                                                              FlutterFlowTheme.of(context).bodyMedium,
+                                                                          style: FlutterFlowTheme.of(context)
+                                                                              .bodyMedium
+                                                                              .override(
+                                                                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                letterSpacing: 0.0,
+                                                                                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                              ),
                                                                         ),
                                                                       ),
                                                                     ),
@@ -652,13 +658,10 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                               Colors.transparent,
                                                                           onTap:
                                                                               () async {
-                                                                            logFirebaseEvent('HOME_PAGE_PAGE_Icon_z8thrurj_ON_TAP');
-                                                                            logFirebaseEvent('Icon_share');
                                                                             await Share.share(
                                                                               '',
                                                                               sharePositionOrigin: getWidgetBoundingBox(context),
                                                                             );
-                                                                            logFirebaseEvent('Icon_haptic_feedback');
                                                                             HapticFeedback.lightImpact();
                                                                           },
                                                                           child:
@@ -706,6 +709,8 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                   fontFamily: FlutterFlowTheme.of(
                                                                           context)
                                                                       .bodyMediumFamily,
+                                                                  letterSpacing:
+                                                                      0.0,
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .bold,

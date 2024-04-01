@@ -1,22 +1,17 @@
 // ignore_for_file: unnecessary_getters_setters
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-import '/backend/schema/util/firestore_util.dart';
 import '/backend/schema/util/schema_util.dart';
 import '/backend/schema/enums/enums.dart';
 
 import 'index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
-class LocaleStruct extends FFFirebaseStruct {
+class LocaleStruct extends BaseStruct {
   LocaleStruct({
     String? name,
     String? id,
-    FirestoreUtilData firestoreUtilData = const FirestoreUtilData(),
   })  : _name = name,
-        _id = id,
-        super(firestoreUtilData);
+        _id = id;
 
   // "name" field.
   String? _name;
@@ -84,76 +79,8 @@ class LocaleStruct extends FFFirebaseStruct {
 LocaleStruct createLocaleStruct({
   String? name,
   String? id,
-  Map<String, dynamic> fieldValues = const {},
-  bool clearUnsetFields = true,
-  bool create = false,
-  bool delete = false,
 }) =>
     LocaleStruct(
       name: name,
       id: id,
-      firestoreUtilData: FirestoreUtilData(
-        clearUnsetFields: clearUnsetFields,
-        create: create,
-        delete: delete,
-        fieldValues: fieldValues,
-      ),
     );
-
-LocaleStruct? updateLocaleStruct(
-  LocaleStruct? locale, {
-  bool clearUnsetFields = true,
-  bool create = false,
-}) =>
-    locale
-      ?..firestoreUtilData = FirestoreUtilData(
-        clearUnsetFields: clearUnsetFields,
-        create: create,
-      );
-
-void addLocaleStructData(
-  Map<String, dynamic> firestoreData,
-  LocaleStruct? locale,
-  String fieldName, [
-  bool forFieldValue = false,
-]) {
-  firestoreData.remove(fieldName);
-  if (locale == null) {
-    return;
-  }
-  if (locale.firestoreUtilData.delete) {
-    firestoreData[fieldName] = FieldValue.delete();
-    return;
-  }
-  final clearFields =
-      !forFieldValue && locale.firestoreUtilData.clearUnsetFields;
-  if (clearFields) {
-    firestoreData[fieldName] = <String, dynamic>{};
-  }
-  final localeData = getLocaleFirestoreData(locale, forFieldValue);
-  final nestedData = localeData.map((k, v) => MapEntry('$fieldName.$k', v));
-
-  final mergeFields = locale.firestoreUtilData.create || clearFields;
-  firestoreData
-      .addAll(mergeFields ? mergeNestedFields(nestedData) : nestedData);
-}
-
-Map<String, dynamic> getLocaleFirestoreData(
-  LocaleStruct? locale, [
-  bool forFieldValue = false,
-]) {
-  if (locale == null) {
-    return {};
-  }
-  final firestoreData = mapToFirestore(locale.toMap());
-
-  // Add any Firestore field values
-  locale.firestoreUtilData.fieldValues.forEach((k, v) => firestoreData[k] = v);
-
-  return forFieldValue ? mergeNestedFields(firestoreData) : firestoreData;
-}
-
-List<Map<String, dynamic>> getLocaleListFirestoreData(
-  List<LocaleStruct>? locales,
-) =>
-    locales?.map((e) => getLocaleFirestoreData(e, true)).toList() ?? [];

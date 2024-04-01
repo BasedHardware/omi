@@ -28,8 +28,6 @@ class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
   // Model for deviceData component.
   late DeviceDataModel deviceDataModel;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     blurModel = createModel(context, () => BlurModel());
@@ -43,8 +41,4 @@ class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
     blurModel.dispose();
     deviceDataModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

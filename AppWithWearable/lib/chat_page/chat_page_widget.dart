@@ -36,17 +36,13 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
     super.initState();
     _model = createModel(context, () => ChatPageModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'chatPage'});
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('CHAT_PAGE_PAGE_chatPage_ON_INIT_STATE');
-      logFirebaseEvent('chatPage_scroll_to');
       await _model.listViewController?.animateTo(
         _model.listViewController!.position.maxScrollExtent,
         duration: Duration(milliseconds: 100),
         curve: Curves.ease,
       );
-      logFirebaseEvent('chatPage_scroll_to');
       await _model.listViewController?.animateTo(
         _model.listViewController!.position.maxScrollExtent,
         duration: Duration(milliseconds: 100),
@@ -94,8 +90,6 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                   children: [
                     FFButtonWidget(
                       onPressed: () async {
-                        logFirebaseEvent('CHAT_PAGE_PAGE__BTN_ON_TAP');
-                        logFirebaseEvent('Button_navigate_back');
                         context.safePop();
                       },
                       text: '',
@@ -117,6 +111,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                               fontFamily:
                                   FlutterFlowTheme.of(context).titleSmallFamily,
                               color: Colors.white,
+                              letterSpacing: 0.0,
                               fontWeight: FontWeight.bold,
                               useGoogleFonts: GoogleFonts.asMap().containsKey(
                                   FlutterFlowTheme.of(context)
@@ -267,7 +262,10 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                             color:
                                                                                 Color(0x33000000),
                                                                             offset:
-                                                                                Offset(0.0, 1.0),
+                                                                                Offset(
+                                                                              0.0,
+                                                                              1.0,
+                                                                            ),
                                                                           )
                                                                         ],
                                                                         borderRadius:
@@ -298,6 +296,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                                     fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
                                                                                     color: FlutterFlowTheme.of(context).secondary,
                                                                                     fontSize: 14.0,
+                                                                                    letterSpacing: 0.0,
                                                                                     fontWeight: FontWeight.w500,
                                                                                     useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleMediumFamily),
                                                                                     lineHeight: 1.5,
@@ -325,17 +324,11 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                             Colors.transparent,
                                                                         onTap:
                                                                             () async {
-                                                                          logFirebaseEvent(
-                                                                              'CHAT_PAGE_PAGE_Row_djv90iru_ON_TAP');
-                                                                          logFirebaseEvent(
-                                                                              'Row_copy_to_clipboard');
                                                                           await Clipboard.setData(ClipboardData(
                                                                               text: getJsonField(
                                                                             chatItem,
                                                                             r'''$['content']''',
                                                                           ).toString()));
-                                                                          logFirebaseEvent(
-                                                                              'Row_show_snack_bar');
                                                                           ScaffoldMessenger.of(context)
                                                                               .showSnackBar(
                                                                             SnackBar(
@@ -345,6 +338,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                                                                                       color: Color(0x00000000),
                                                                                       fontSize: 12.0,
+                                                                                      letterSpacing: 0.0,
                                                                                       useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                                                                                     ),
                                                                               ),
@@ -364,6 +358,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                                     fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                                                                                     color: FlutterFlowTheme.of(context).primary,
                                                                                     fontSize: 10.0,
+                                                                                    letterSpacing: 0.0,
                                                                                     useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                                                                                   ),
                                                                             ),
@@ -431,6 +426,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                               .override(
                                                                                 fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                                                                                 color: FlutterFlowTheme.of(context).primary,
+                                                                                letterSpacing: 0.0,
                                                                                 fontWeight: FontWeight.w500,
                                                                                 useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                                                                               ),
@@ -483,7 +479,10 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                           BoxShadow(
                                             blurRadius: 3.0,
                                             color: Color(0x33000000),
-                                            offset: Offset(0.0, 1.0),
+                                            offset: Offset(
+                                              0.0,
+                                              1.0,
+                                            ),
                                           )
                                         ],
                                         borderRadius:
@@ -505,6 +504,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                       _model.textController,
                                                   focusNode:
                                                       _model.textFieldFocusNode,
+                                                  autofocus: false,
                                                   textCapitalization:
                                                       TextCapitalization
                                                           .sentences,
@@ -524,6 +524,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                   .of(context)
                                                               .primaryText,
                                                           fontSize: 14.0,
+                                                          letterSpacing: 0.0,
                                                           fontWeight:
                                                               FontWeight.w500,
                                                           useGoogleFonts: GoogleFonts
@@ -618,6 +619,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                             FlutterFlowTheme.of(
                                                                     context)
                                                                 .primaryText,
+                                                        letterSpacing: 0.0,
                                                         fontWeight:
                                                             FontWeight.w500,
                                                         useGoogleFonts: GoogleFonts
@@ -628,7 +630,6 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                                     .bodyMediumFamily),
                                                       ),
                                                   maxLines: 8,
-                                                  minLines: 1,
                                                   keyboardType:
                                                       TextInputType.multiline,
                                                   validator: _model

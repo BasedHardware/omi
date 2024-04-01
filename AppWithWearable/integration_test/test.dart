@@ -9,19 +9,12 @@ import 'package:friend_private/main.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 
 import 'package:provider/provider.dart';
-import 'package:friend_private/backend/firebase/firebase_config.dart';
-import 'package:friend_private/auth/firebase_auth/auth_util.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:friend_private/backend/supabase/supabase.dart';
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('newTest', (WidgetTester tester) async {
     _overrideOnError();
-    await initFirebase();
-    await SupaFlow.initialize();
-    await authManager.signOut();
 
     FFAppState.reset();
     final appState = FFAppState();

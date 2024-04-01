@@ -25,8 +25,6 @@ class ConnectedModel extends FlutterFlowModel<ConnectedWidget> {
   // Model for blur component.
   late BlurModel blurModel;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     blurModel = createModel(context, () => BlurModel());
@@ -37,8 +35,4 @@ class ConnectedModel extends FlutterFlowModel<ConnectedWidget> {
     unfocusNode.dispose();
     blurModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

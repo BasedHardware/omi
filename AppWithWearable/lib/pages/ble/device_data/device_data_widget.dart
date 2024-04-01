@@ -38,18 +38,15 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
 
     // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('DEVICE_DATA_deviceData_ON_INIT_STATE');
       while (true) {
-        logFirebaseEvent('deviceData_custom_action');
         _model.wav = await actions.bleReceiveWAV(
           widget.btdevice!,
           10,
         );
-        logFirebaseEvent('deviceData_show_snack_bar');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Received Wave & processing',
+              'Checking if WAV is received',
               style: TextStyle(
                 color: FlutterFlowTheme.of(context).primary,
               ),
@@ -59,12 +56,10 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
           ),
         );
         if (_model.wav != null && (_model.wav?.bytes?.isNotEmpty ?? false)) {
-          logFirebaseEvent('deviceData_backend_call');
           _model.whsiper = await WhisperDCall.call(
             file: _model.wav,
           );
           if ((_model.whsiper?.succeeded ?? true)) {
-            logFirebaseEvent('deviceData_show_snack_bar');
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -77,14 +72,12 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
                 backgroundColor: FlutterFlowTheme.of(context).secondary,
               ),
             );
-            logFirebaseEvent('deviceData_update_component_state');
             setState(() {
               _model.addToWhispers(WhisperDCall.text(
                 (_model.whsiper?.jsonBody ?? ''),
               ).toString());
             });
           } else {
-            logFirebaseEvent('deviceData_alert_dialog');
             await showDialog(
               context: context,
               builder: (alertDialogContext) {
@@ -102,7 +95,6 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
             );
           }
         } else {
-          logFirebaseEvent('deviceData_show_snack_bar');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -158,7 +150,16 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
                             16.0, 0.0, 16.0, 0.0),
                         child: Text(
                           whispersListItem,
-                          style: FlutterFlowTheme.of(context).bodyMedium,
+                          style: FlutterFlowTheme.of(context)
+                              .bodyMedium
+                              .override(
+                                fontFamily: FlutterFlowTheme.of(context)
+                                    .bodyMediumFamily,
+                                letterSpacing: 0.0,
+                                useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                    FlutterFlowTheme.of(context)
+                                        .bodyMediumFamily),
+                              ),
                         ),
                       );
                     },

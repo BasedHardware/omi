@@ -33,25 +33,18 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
     super.initState();
     _model = createModel(context, () => ConnectedModel());
 
-    logFirebaseEvent('screen_view', parameters: {'screen_name': 'connected'});
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('CONNECTED_PAGE_connected_ON_INIT_STATE');
-      logFirebaseEvent('connected_custom_action');
       _model.hasWrite = await actions.ble0connectDevice(
         BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
       );
-      logFirebaseEvent('connected_wait__delay');
       await Future.delayed(const Duration(milliseconds: 1000));
       while (_model.connectedFraction < 1.0) {
-        logFirebaseEvent('connected_update_page_state');
         setState(() {
           _model.connectedFraction = _model.connectedFraction + .01;
         });
-        logFirebaseEvent('connected_wait__delay');
         await Future.delayed(const Duration(milliseconds: 25));
       }
-      logFirebaseEvent('connected_navigate_to');
 
       context.pushNamed(
         'connectDevice',
@@ -110,6 +103,7 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                                 fontFamily: FlutterFlowTheme.of(context)
                                     .headlineLargeFamily,
                                 fontSize: 24.0,
+                                letterSpacing: 0.0,
                                 fontWeight: FontWeight.bold,
                                 useGoogleFonts: GoogleFonts.asMap().containsKey(
                                     FlutterFlowTheme.of(context)
@@ -126,6 +120,7 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                             fontFamily:
                                 FlutterFlowTheme.of(context).titleSmallFamily,
                             color: Color(0x9AFFFFFF),
+                            letterSpacing: 0.0,
                             useGoogleFonts: GoogleFonts.asMap().containsKey(
                                 FlutterFlowTheme.of(context).titleSmallFamily),
                           ),
@@ -136,9 +131,6 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                         EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 12.0),
                     child: FFButtonWidget(
                       onPressed: () async {
-                        logFirebaseEvent('CONNECTED_PAGE_CONTINUE_BTN_ON_TAP');
-                        logFirebaseEvent('Button_navigate_to');
-
                         context.pushNamed('PermissionPage');
                       },
                       text: 'Continue',
@@ -154,6 +146,7 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                                   fontFamily: 'SF Pro Display',
                                   color: FlutterFlowTheme.of(context).primary,
                                   fontSize: 16.0,
+                                  letterSpacing: 0.0,
                                   fontWeight: FontWeight.bold,
                                   useGoogleFonts: GoogleFonts.asMap()
                                       .containsKey('SF Pro Display'),

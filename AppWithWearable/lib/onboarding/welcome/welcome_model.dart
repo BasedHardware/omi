@@ -17,8 +17,6 @@ class WelcomeModel extends FlutterFlowModel<WelcomeWidget> {
   // Model for logo_main component.
   late LogoMainModel logoMainModel;
 
-  /// Initialization and disposal methods.
-
   @override
   void initState(BuildContext context) {
     blurBotModel = createModel(context, () => BlurBotModel());
@@ -31,8 +29,4 @@ class WelcomeModel extends FlutterFlowModel<WelcomeWidget> {
     blurBotModel.dispose();
     logoMainModel.dispose();
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }
