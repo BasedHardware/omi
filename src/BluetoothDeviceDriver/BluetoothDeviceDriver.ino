@@ -1,5 +1,5 @@
 #include <mic.h>
-#include <LSM6DS3.h> // make sure to use the library "Seeed arduino LSM6DS3"
+#include <LSM6DS3.h>  // make sure to use the library "Seeed arduino LSM6DS3"
 #include <ArduinoBLE.h>
 
 // Settings
@@ -8,6 +8,7 @@
 #define CHUNK_SIZE 200
 #define BUFFER_SIZE (SAMPLES * 4)  // Doubled the buffer size to accommodate continuous recording
 #define int2Pin PIN_LSM6DS3TR_C_INT1
+//#define DOUBLE_TAP_ENABLED // This enables double tap and usage of IMU
 
 mic_config_t mic_config{
   .channel_cnt = 1,
@@ -44,13 +45,6 @@ void setup() {
     delay(10);  // Short delay to prevent hanging in a tight loop
   }
 
-#if defined(WIO_TERMINAL)
-  pinMode(WIO_KEY_A, INPUT_PULLUP);
-  Serial.println("WIO_TERMINAL");
-#elif defined(ARDUINO_ARCH_NRF52840)
-  Serial.println("ARDUINO_ARCH_NRF52840");
-#endif
-
   Mic.set_callback(audio_rec_callback);
   if (!Mic.begin()) {
     Serial.println("Mic initialization failed");
@@ -67,7 +61,7 @@ void setup() {
     while (1)
       ;
   }
-
+#ifdef DOUBLE_TAP_ENABLED
   if (gyro.begin() != 0) {
     Serial.println("gyro error");
     setLedRGB(true, false, false);
@@ -79,7 +73,7 @@ void setup() {
   setupDoubleTap();
 
   attachInterrupt(digitalPinToInterrupt(int2Pin), tapCallback, RISING);
-
+#endif
   setLedRGB(false, true, false);
   BLE.setLocalName("AudioRecorder");
 
@@ -105,23 +99,22 @@ void loop() {
     Serial.println("Type 'rec' to start recording");
   }
 
+#ifdef DOUBLE_TAP_ENABLED
   if (tapCount > prevTapCount) {
     Serial.println("Double tapped!");
+    recording = !recording;  // Toggle the recording state
 
-    if (!recording) {
-      // Start recording
-      recording = true;
-      setLedRGB(true, false, true);
+    if (recording) {
+      setLedRGB(true, false, true);  // Purple color for recording
       Serial.println("Recording started");
     } else {
-      // Stop recording
-      recording = false;
-      setLedRGB(false, true, false);
+      setLedRGB(false, true, false);  // Green color for stopped
       Serial.println("Recording stopped");
     }
   }
 
   prevTapCount = tapCount;
+#endif
 
   if (Serial.available()) {
     String resp = Serial.readStringUntil('\n');
@@ -139,10 +132,9 @@ void loop() {
   if (recording) {
     uint32_t available_samples = (recording_idx + BUFFER_SIZE - read_idx) % BUFFER_SIZE;
     if (available_samples >= CHUNK_SIZE) {
-      Serial.print("Sending ");
-      Serial.print(available_samples);
-      Serial.println(" samples");
-
+#ifdef DEBUG
+      Serial.println("Sending " + String(available_samples) + " samples");
+#endif
       uint16_t chunk[CHUNK_SIZE];
       for (int i = 0; i < CHUNK_SIZE; i++) {
         chunk[i] = recording_buf[(read_idx + i) % BUFFER_SIZE];
