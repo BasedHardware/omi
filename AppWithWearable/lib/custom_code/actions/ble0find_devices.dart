@@ -14,29 +14,36 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 Future<List<BTDeviceStruct>> ble0findDevices() async {
   List<BTDeviceStruct> devices = [];
-  FlutterBluePlus.scanResults.listen((results) {
+  var subscription = FlutterBluePlus.scanResults.listen((results) {
     List<ScanResult> scannedDevices = [];
     for (ScanResult r in results) {
-      if (r.device.name.isNotEmpty) {
+      if (r.device.platformName.isNotEmpty) {
         scannedDevices.add(r);
       }
     }
     scannedDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
     devices.clear();
-    scannedDevices.forEach((deviceResult) {
+    for (var deviceResult in scannedDevices) {
       devices.add(BTDeviceStruct(
-        name: deviceResult.device.name,
-        id: deviceResult.device.id.toString(),
+        name: deviceResult.device.platformName,
+        id: deviceResult.device.remoteId.toString(),
         rssi: deviceResult.rssi,
       ));
-    });
+    }
   });
+  FlutterBluePlus.cancelWhenScanComplete(subscription);
+
+  await FlutterBluePlus.adapterState
+      .where((val) => val == BluetoothAdapterState.on)
+      .first;
+
   final isScanning = FlutterBluePlus.isScanningNow;
   if (!isScanning) {
     await FlutterBluePlus.startScan(
-      timeout: const Duration(seconds: 5),
-    );
+        timeout: const Duration(seconds: 5), androidUsesFineLocation: true);
   }
+
+  await FlutterBluePlus.isScanning.where((val) => val == false).first;
 
   return devices;
 }
