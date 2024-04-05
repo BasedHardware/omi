@@ -16,7 +16,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:typed_data';
 import 'dart:async';
 
-const int sampleRate = 4000;
+const int sampleRate = 8000;
 const int channelCount = 1;
 const int sampleWidth = 2; // 2 bytes for 16-bit samples
 const int chunkSize = 200;
@@ -55,18 +55,21 @@ Future<FFUploadedFile?> bleReceiveWAV(
           await characteristic.setNotifyValue(true);
           print('Subscribed to characteristic: ${characteristic.uuid}');
           List<int> wavData = [];
-          int samplesToRead = 40000;
+          int samplesToRead = 150000;
 
           characteristic.value.listen((value) {
+          
+            value.removeRange(0, 3);
             print('values -- ${value[0]}, ${value[1]}');
-            // Interpret bytes as Uint16 directly
+          
+            // Interpret bytes as Int16 directly
             for (int i = 0; i < value.length; i += 2) {
               int byte1 = value[i];
               int byte2 = value[i + 1];
-              int uint16Value = (byte1 << 8) | byte2;
-              wavData.add(uint16Value);
-
-              print('$uint16Value');
+              int int16Value = (byte2 << 8) | byte1;
+              wavData.add(int16Value);
+          
+              print('$int16Value');
             }
 
             print(
@@ -74,11 +77,12 @@ Future<FFUploadedFile?> bleReceiveWAV(
             if (wavData.length >= samplesToRead && !completer.isCompleted) {
               print('Received desired amount of data');
               characteristic.setNotifyValue(false);
-              completer.complete(createWavFile(wavData));
+                completer.complete(createWavFile(wavData));
+          
             } else {
               print('Still need ${samplesToRead - wavData.length} samples');
             }
-          });
+});
 
           // Wait for the desired duration
           final waitSeconds = recordDuration + 20;
