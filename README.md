@@ -1,9 +1,15 @@
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
-|                                                             Assembled                                                             |                                                             Disassembled                                                             |
-| :-------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------: |
-| <img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" width="450">                | <img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" width="450">                   |
-
+<table>
+  <tr>
+    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" alt="Assembled" width="450"></td>
+    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" alt="Disassembled" width="450"></td>
+  </tr>
+  <tr>
+    <td align="center">Assembled</td>
+    <td align="center">Disassembled</td>
+  </tr>
+</table>
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://opensource.org/license/agpl-v3)
@@ -67,7 +73,7 @@ There are 2 different apps in these repositories located in different branches a
 
 ## Getting Started
 
-Follow these steps to get started with your Friend. Note, we tested everything on a mac + iphone. Currently trying to make it work for Android
+Follow these steps to get started with your Friend.
 
 ### Install the app
 
@@ -80,7 +86,7 @@ Follow these steps to get started with your Friend. Note, we tested everything o
 
    - For AppWithWearable, open file api_calls.dart located in `AppWithWearable/lib/backend/api_requests ` Find "Whisper" and instead of "key", provide your own api-key for openai whisper for transcriptions to work
 
-   ![CleanShot 2024-03-25 at 21 58 42](https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319)
+   <img src="https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
 
    - For AppStandalone, update variables in in .env.template file
 
@@ -95,44 +101,44 @@ Follow these steps to get started with your Friend. Note, we tested everything o
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
 - Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/project/friend-share-19bk3d)
 
-### Install Firmware
+# Install Firmware
 
-1. [Download Arduino](https://www.arduino.cc/en/software)
-2. Run `cd src/BluetoothDeviceDriver ` in your home repository and Open Arduino .ino file, go to "Settings" and paste these 2 links in additional Boards Manager URLs
+Follow these steps to install the firmware:
 
-   ```
-   https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
-   https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
-   ```
+1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8?feature=shared)
 
-   ![IMAGE 2024-03-24 19:44:35](https://github.com/BasedHardware/friend/assets/43514161/f08cf422-8d30-4ffa-b61c-0e8ee4a0e685)
+2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-3. Go to Boards Manager and download these 2 Boards
+   <img src="screenshots/vscode_extension.png" alt="VS Code Extension" width="200">
 
-   ![IMAGE 2024-03-24 19:46:49](https://github.com/BasedHardware/friend/assets/43514161/9c85a0c4-ee73-42ba-a75b-3f8fafa81cbe)
+3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-4. Connect NRF52840 board via USB cable to your computer
-5. Go to Tools > Board >
-   ![IMAGE 2024-03-24 19:50:42](https://github.com/BasedHardware/friend/assets/43514161/065e794f-6e20-4f91-a6bf-1b43a5a3614e)
-   and select "Seeed nRF52 mbed-enabled Boards (you need board that has Sense)
+   <img src="screenshots/addbuild.png" alt="Add Build Configuration" width="200">
 
-   Also select Port (should be something that contains USB...)
-   ![IMAGE 2024-03-24 19:55:07](https://github.com/BasedHardware/friend/assets/43514161/0719de62-b58f-4ceb-85e2-d288916375c9)
+4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic), make sure you download the `Seeed_Arduino_Mic` repository itself as a .zip file and not use the .zip from its releases section.
-7. Install Arduino BLE and Seeed Arduino LSM6DS3 libraries which can be found in Arduino's menu
-8. Click "Upload" and then open Serial Monitor to see logs
+   <img src="screenshots/build_settings.png" alt="Build Settings" width="400">
+
+5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
+
+6. Double-click on the reset button of the device. The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
+   
+   > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
+
+   <img src="screenshots/pinout.jpg" alt="Pinout" width="300">
+
+That's it! You have successfully installed the firmware on your device.
 
 ### Testing Audio Recording on Your Computer
 
 Follow these steps to test audio recording on your computer using a Python script:
 
-1. Open your terminal and navigate to your home directory.
+1. Open your terminal and navigate to the project's root directory.
 
-2. Change to the "src" folder:
+2. Change to the "test" folder:
 
    ```
-   cd src
+   cd test
    ```
 
 3. Install the required Python modules:
@@ -147,37 +153,7 @@ Follow these steps to test audio recording on your computer using a Python scrip
    python local_laptop_client.py
    ```
 
-   This script will list the available audio devices and their corresponding IDs.
-
-5. Copy the ID of the desired audio device.
-
-6. Open the `local_laptop_client.py` file in a text editor and locate the following line:
-
-   ```python
-   DEVICE_ID = "564A72F4-4552-8CE8-719D-8D5CB2E5D43D"
-   ```
-
-   Replace `"564A72F4-4552-8CE8-719D-8D5CB2E5D43D"` with the ID you copied in step 5.
-
-7. Save the changes to the `local_laptop_client.py` file.
-
-8. Run the script again:
-
-   ```
-   python local_laptop_client.py
-   ```
-
-   or
-
-   ```
-   python3 local_laptop_client.py
-   ```
-
-9. You can now control the audio recording:
-   - Double-tap the device to start recording.
-   - Double-tap the device again to stop recording.
-
-The recorded audio files will be stored periodically in the `src/recordings` directory.
+The recorded audio files will be stored periodically in the `test/recordings` directory.
 
 That's it! You have now set up and tested audio recording on your computer.
 
@@ -185,25 +161,25 @@ That's it! You have now set up and tested audio recording on your computer.
 
 **Step 0:** Make sure you have bought everything from the buying guide above
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" width="300">
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" alt="Components" width="300">
 
 **Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
 
 **Step 2:**
 Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
 
-![CleanShot 2024-03-28 at 17 01 53](https://github.com/BasedHardware/Friend/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419)
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419" alt="Soldering" width="400">
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" width="300">
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" alt="Soldered" width="300">
 
 **Step 3:**
 Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch, however it's not an ideal design. If you will figure out a better solution, please contribute!
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" width="300">
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" alt="Assembled" width="300">
 
 **Step 4:** Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the USB-port side, you'll find 2 small round holes. This is where the thread should go through.
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" width="200">
+<img src="https://github.com/BasedHardware/Friend/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" alt="Lid" width="200">
 
 Congratulations! you now have a fully working and assembled device!
 
