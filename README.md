@@ -121,7 +121,7 @@ Follow these steps to get started with your Friend. Note, we tested everything o
 
 6. Go to Sketch => Include Library => Add .zip library and upload a library which you should download [from here](https://github.com/Seeed-Studio/Seeed_Arduino_Mic), make sure you download the `Seeed_Arduino_Mic` repository itself as a .zip file and not use the .zip from its releases section.
 7. Install Arduino BLE and Seeed Arduino LSM6DS3 libraries which can be found in Arduino's menu
-8. Click "Upload" and then open Serial Monitor to see logs
+8. Click "Upload" and then open Serial Monitor to see logs. If Upload works but you can't see the logs try restarting IDE and replugging the board.
 
 ### Testing Audio Recording on Your Computer
 
