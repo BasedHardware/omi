@@ -123,20 +123,18 @@ class ListModelsCall {
 class WhisperDCall {
   static Future<ApiCallResponse> call({
     FFUploadedFile? file,
-    String? key = '',
+    String? apiKey = '', // Your Deepgram API key should be passed here.
   }) async {
     return ApiManager.instance.makeApiCall(
-      callName: 'WHISPER D',
-      apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
+      callName: 'DeepgramTranscription',
+      apiUrl: 'https://api.deepgram.com/v1/listen',
       callType: ApiCallType.POST,
       headers: {
-        'Authorization':
-            'Bearer <add_key_here>',
-        'Content-Type': 'multipart/form-data',
+        'Authorization': 'Token $apiKey',
+        'Content-Type': 'audio/mpeg',
       },
       params: {
         'file': file,
-        'model': "whisper-1",
       },
       bodyType: BodyType.MULTIPART,
       returnBody: true,
@@ -149,7 +147,7 @@ class WhisperDCall {
 
   static dynamic text(dynamic response) => getJsonField(
         response,
-        r'''$.text''',
+        r'''$.results.channels[0].alternatives[0].transcript''', // Adjust JSON path based on Deepgram's response structure.
       );
 }
 
