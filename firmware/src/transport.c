@@ -37,7 +37,7 @@ static struct bt_gatt_service audio_service = BT_GATT_SERVICE(attrs);
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, "Super", sizeof("Super") - 1),
+    BT_DATA(BT_DATA_NAME_COMPLETE, "Friend", sizeof("Friend") - 1),
 };
 
 // Scan response data
