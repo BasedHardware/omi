@@ -9,11 +9,11 @@ import os
 import struct
 from scipy.signal import stft, istft
 
-DEVICE_NAME = "Super"
+DEVICE_NAME = "Friend"
 SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 
-CODEC = "mulaw"  # "pcm" or "mulaw" 
+CODEC = "pcm"  # "pcm" or "mulaw" 
 SAMPLE_RATE = 8000  # Sample rate for the audio
 SAMPLE_WIDTH = 2  # 16-bit audio
 CHANNELS = 1  # Mono audio
