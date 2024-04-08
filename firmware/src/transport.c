@@ -5,10 +5,12 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
+#include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/atomic.h>
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
+#include "lib/battery/battery.h"
 
 //
 // Internal
@@ -83,12 +85,38 @@ static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t
 }
 
 //
+// Battery Service Handlers
+//
+
+struct k_work battery_work;
+
+void broadcast_battery_level(struct k_work *work_item) {
+    uint16_t battery_millivolt;
+    uint8_t battery_percentage;
+    
+    if (battery_get_millivolt(&battery_millivolt) == 0 &&
+        battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
+     
+        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+
+        // Use the Zephyr BAS function to set (and notify) the battery level
+        int err = bt_bas_set_battery_level(battery_percentage);
+        if (err) {
+            printk("Error updating battery level: %d\n", err);
+        }
+    } else {
+        printk("Failed to read battery level\n");
+    }
+}
+
+//
 // Connection Callbacks
 //
 
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+ 
     err = bt_conn_get_info(conn, &info);
     if (err)
     {
@@ -102,6 +130,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     printk("Interval: %d, latency: %d, timeout: %d\n", info.le.interval, info.le.latency, info.le.timeout);
     printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
+
+    k_work_submit(&battery_work);
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -246,7 +276,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 
         while (true)
         {
-
             // Try send notification
             int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
 
@@ -331,7 +360,6 @@ void pusher(void)
 
 int transport_start()
 {
-
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
@@ -356,6 +384,22 @@ int transport_start()
     {
         printk("Advertising successfully started\n");
     }
+
+     int battErr = 0;
+
+	battErr |= battery_init();
+	battErr |= battery_charge_start();
+
+	if (battErr)
+	{
+		 printk("Battery init failed (err %d)\n", battErr);
+	}
+	else
+	{
+		  printk("Battery initialized\n");
+	}  
+    
+    k_work_init(&battery_work, broadcast_battery_level);
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);
