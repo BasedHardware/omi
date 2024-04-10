@@ -203,11 +203,7 @@ Thank you for your interest in Friend, the open-source AI wearable. We're excite
 
 ## Licensing
 
-Friend is available under dual licensing options:
-
-1. **GNU General Public License (GPL)**: For open-source projects and community development, Friend is available under the GPL. This strong copyleft license ensures that all modifications and derived works are also open-source, fostering a collaborative development environment.
-
-2. **Commercial License**: For individuals or entities wishing to use Friend in closed-source projects or who require more flexible licensing terms than those offered by the GPL, a commercial license is available. The commercial license permits private modification, use, and distribution, as well as commercial support and warranty.
+Friend is available under MIT License
 
 ### Choosing Your License
 
