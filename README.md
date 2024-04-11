@@ -88,7 +88,7 @@ Follow these steps to get started with your Friend.
 
    <img src="https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
 
-   then, go to AppWithWearable/lib/custom_code/actions and in the "stream_api_response" file, add your openai key instead of <key>
+   then, go to AppWithWearable/lib/custom_code/actions and in the "stream_api_response" file, add your openai key instead of "<key>"
 ![CleanShot 2024-04-11 at 00 17 32](https://github.com/BasedHardware/Friend/assets/43514161/c4d9a61d-df17-4dd5-912e-3e602fa5066c)
 
    - For AppStandalone, update variables in in .env.template file
