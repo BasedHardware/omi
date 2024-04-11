@@ -53,9 +53,9 @@ linkStyle 4 stroke:#FF6B6B, stroke-width:2px
 
 There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
 
-- [Standalone Branch](https://github.com/BasedHardware/friend/tree/AppStandalone) or Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it.
+- [Standalone Branch](https://github.com/BasedHardware/friend/tree/apps/AppStandalone) or Folder "": Standalone version of the app that doesn't require any hardware to use it.
 
-- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/AppWithWearable) or Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
+- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/apps/AppWithWearable) or Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
 
 - [Main Branch] Branch that contains firmware, hardware, designs and both apps
 
@@ -79,17 +79,17 @@ Follow these steps to get started with your Friend.
 
 1. Clone the repo `git clone https://github.com/BasedHardware/friend.git`
 2. Choose which version of the app you want to install (see Structure).
-   - Don't have the device? run `cd AppStandalone` in terminal
-   - Have the device/NRF Board? run `cd AppWithWearable` in terminal
+   - Don't have the device? run `cd apps/AppStandalone` in terminal
+   - Have the device/NRF Board? run `cd apps/AppWithWearable` in terminal
 3. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
 4. Install your environment variables
 
-   - For AppWithWearable, open file api_calls.dart located in `AppWithWearable/lib/backend/api_requests ` Find "Whisper" and instead of "key", provide your own api-key for openai whisper for transcriptions to work
+   - For AppWithWearable, open file api_calls.dart located in `apps/AppWithWearable/lib/backend/api_requests ` Find "Whisper" and instead of "key", provide your own api-key for openai whisper for transcriptions to work
 
-   <img src="https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
+      <img src="https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
 
-   then, go to AppWithWearable/lib/custom_code/actions and in the "stream_api_response" file, add your openai key instead of "<key>"
-![CleanShot 2024-04-11 at 00 17 32](https://github.com/BasedHardware/Friend/assets/43514161/c4d9a61d-df17-4dd5-912e-3e602fa5066c)
+   then, go to apps/AppWithWearable/lib/custom_code/actions and in the "stream_api_response" file, add your openai key instead of "<key>"
+   ![CleanShot 2024-04-11 at 00 17 32](https://github.com/BasedHardware/Friend/assets/43514161/c4d9a61d-df17-4dd5-912e-3e602fa5066c)
 
    - For AppStandalone, update variables in in .env.template file
 
@@ -112,23 +112,23 @@ Follow these steps to install the firmware:
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-   <img src="Screenshots/vscode_extension.png" alt="VS Code Extension" width="200">
+   <img src="assets/screenshots/vscode_extension.png" alt="VS Code Extension" width="200">
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-   <img src="Screenshots/addbuild.png" alt="Add Build Configuration" width="200">
+   <img src="assets/screenshots/addbuild.png" alt="Add Build Configuration" width="200">
 
 4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-   <img src="Screenshots/build_settings.png" alt="Build Settings" width="400">
+   <img src="assets/screenshots/build_settings.png" alt="Build Settings" width="400">
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
 6. Double-click on the reset button of the device. The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
-   
+
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
-   <img src="Screenshots/pinout.jpg" alt="Pinout" width="300">
+   <img src="assets/screenshots/pinout.jpg" alt="Pinout" width="300">
 
 That's it! You have successfully installed the firmware on your device.
 
