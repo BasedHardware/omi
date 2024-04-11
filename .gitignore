@@ -6,8 +6,9 @@ venv/
 .DS_Store
 dump/
 *.zip
-*.txt
 *.wav
+node_modules
+yarn.lock
 
 # General
 .idea/
@@ -68,6 +69,6 @@ build/
 *.tmp
 hs_err_pid*
 
-#Apps
-apps/node_modules
-apps/yarn.lock
+#Servers
+backend/app-server/dist
+src/recordings

@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model AuthSession {
+    id    String @id
+    phone String @unique
+}
+
+model GlobalLock {
+    key     String   @id @default(cuid())
+    value   String
+    timeout DateTime
+}
+
+model SessionToken {
+    id        String   @id @default(cuid())
+    key       String   @unique
+    user      User?    @relation(fields: [userId], references: [id])
+    userId    String?
+    phone     String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model OnboardingState {
+    phone     String  @id
+    username  String? @unique
+    firstName String?
+    lastName  String?
+}
+
+enum SessionState {
+    STARTING
+    IN_PROGRESS
+    PROCESSING
+    FINISHED
+    CANCELED
+}
+
+model RepeatKey {
+    key       String   @id
+    value     String
+    createdAt DateTime @default(now())
+    expiresAt DateTime
+}
+
+model TrackingSession {
+    id             String               @id @default(cuid())
+    user           User                 @relation(fields: [userId], references: [id])
+    userId         String
+    index          Int
+    state          SessionState
+    audioFile      String?
+    audioDuration  Int?
+    audioSize      Int?
+    transcription String?
+    expiresAt      DateTime
+    createdAt      DateTime             @default(now())
+    updatedAt      DateTime             @updatedAt
+    AudioChunks    TrackingAudioChunk[]
+
+    @@unique([userId, index])
+}
+
+model TrackingAudioChunk {
+    session   TrackingSession @relation(fields: [sessionId], references: [id])
+    sessionId String
+    index     Int
+    format    String
+    data      Bytes
+    createdAt DateTime        @default(now())
+
+    @@unique([sessionId, index])
+}
+
+model User {
+    id String @id @default(cuid())
+
+    // Connection info
+    phone    String @unique
+    username String @unique
+
+    // Profile
+    firstName String
+    lastName  String?
+
+    // Meta
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Tokens
+    SessionToken SessionToken[]
+
+    // Sessions
+    TrackingSession TrackingSession[]
+    Update          Update[]
+}
+
+model Update {
+    // Connection info
+    userId String
+    seq    Int
+    user   User   @relation(fields: [userId], references: [id])
+
+    // Data
+    repeatKey String?
+    data      Json
+
+    // Meta
+    createdAt DateTime @default(now())
+
+    // PK
+    @@unique([userId, seq])
+}
