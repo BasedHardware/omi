@@ -67,3 +67,7 @@ build/
 *.swp
 *.tmp
 hs_err_pid*
+
+#Apps
+apps/node_modules
+apps/yarn.lock
