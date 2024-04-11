@@ -3,6 +3,8 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
+import '/custom_code/actions/index.dart' as actions;
+import '/flutter_flow/custom_functions.dart' as functions;
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -222,221 +224,231 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                               CrossAxisAlignment
                                                                   .start,
                                                           children: [
-                                                            Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .max,
-                                                              children: [
-                                                                Column(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .max,
-                                                                  crossAxisAlignment:
-                                                                      CrossAxisAlignment
-                                                                          .start,
-                                                                  children: [
-                                                                    Container(
-                                                                      constraints:
-                                                                          BoxConstraints(
-                                                                        maxWidth:
-                                                                            () {
-                                                                          if (MediaQuery.sizeOf(context).width >=
-                                                                              1170.0) {
-                                                                            return 700.0;
-                                                                          } else if (MediaQuery.sizeOf(context).width <=
-                                                                              470.0) {
-                                                                            return 330.0;
-                                                                          } else {
-                                                                            return 530.0;
-                                                                          }
-                                                                        }(),
-                                                                      ),
-                                                                      decoration:
-                                                                          BoxDecoration(
-                                                                        color: Color(
-                                                                            0x1AF7F4F4),
-                                                                        boxShadow: [
-                                                                          BoxShadow(
-                                                                            blurRadius:
-                                                                                3.0,
-                                                                            color:
-                                                                                Color(0x33000000),
-                                                                            offset:
-                                                                                Offset(
-                                                                              0.0,
-                                                                              1.0,
-                                                                            ),
-                                                                          )
-                                                                        ],
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(12.0),
-                                                                        border:
-                                                                            Border.all(
+                                                            if (functions.stringContainsString(
+                                                                    getJsonField(
+                                                                      chatItem,
+                                                                      r'''$.role''',
+                                                                    ).toString(),
+                                                                    'assistant') ??
+                                                                true)
+                                                              Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .max,
+                                                                children: [
+                                                                  Column(
+                                                                    mainAxisSize:
+                                                                        MainAxisSize
+                                                                            .max,
+                                                                    crossAxisAlignment:
+                                                                        CrossAxisAlignment
+                                                                            .start,
+                                                                    children: [
+                                                                      Container(
+                                                                        constraints:
+                                                                            BoxConstraints(
+                                                                          maxWidth:
+                                                                              () {
+                                                                            if (MediaQuery.sizeOf(context).width >=
+                                                                                1170.0) {
+                                                                              return 700.0;
+                                                                            } else if (MediaQuery.sizeOf(context).width <=
+                                                                                470.0) {
+                                                                              return 330.0;
+                                                                            } else {
+                                                                              return 530.0;
+                                                                            }
+                                                                          }(),
+                                                                        ),
+                                                                        decoration:
+                                                                            BoxDecoration(
                                                                           color:
-                                                                              FlutterFlowTheme.of(context).primary,
-                                                                          width:
-                                                                              1.0,
-                                                                        ),
-                                                                      ),
-                                                                      child:
-                                                                          Padding(
-                                                                        padding:
-                                                                            EdgeInsets.all(12.0),
-                                                                        child:
-                                                                            Column(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.min,
-                                                                          crossAxisAlignment:
-                                                                              CrossAxisAlignment.start,
-                                                                          children: [
-                                                                            SelectionArea(
-                                                                                child: AutoSizeText(
-                                                                              'Hello World',
-                                                                              style: FlutterFlowTheme.of(context).titleMedium.override(
-                                                                                    fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
-                                                                                    color: FlutterFlowTheme.of(context).secondary,
-                                                                                    fontSize: 14.0,
-                                                                                    letterSpacing: 0.0,
-                                                                                    fontWeight: FontWeight.w500,
-                                                                                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleMediumFamily),
-                                                                                    lineHeight: 1.5,
-                                                                                  ),
-                                                                            )),
+                                                                              Color(0x1AF7F4F4),
+                                                                          boxShadow: [
+                                                                            BoxShadow(
+                                                                              blurRadius: 3.0,
+                                                                              color: Color(0x33000000),
+                                                                              offset: Offset(
+                                                                                0.0,
+                                                                                1.0,
+                                                                              ),
+                                                                            )
                                                                           ],
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(12.0),
+                                                                          border:
+                                                                              Border.all(
+                                                                            color:
+                                                                                FlutterFlowTheme.of(context).primary,
+                                                                            width:
+                                                                                1.0,
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            Padding(
+                                                                          padding:
+                                                                              EdgeInsets.all(12.0),
+                                                                          child:
+                                                                              Column(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.min,
+                                                                            crossAxisAlignment:
+                                                                                CrossAxisAlignment.start,
+                                                                            children: [
+                                                                              SelectionArea(
+                                                                                  child: AutoSizeText(
+                                                                                getJsonField(
+                                                                                  chatItem,
+                                                                                  r'''$['content']''',
+                                                                                ).toString(),
+                                                                                style: FlutterFlowTheme.of(context).titleMedium.override(
+                                                                                      fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
+                                                                                      color: FlutterFlowTheme.of(context).secondary,
+                                                                                      fontSize: 14.0,
+                                                                                      letterSpacing: 0.0,
+                                                                                      fontWeight: FontWeight.w500,
+                                                                                      useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleMediumFamily),
+                                                                                      lineHeight: 1.5,
+                                                                                    ),
+                                                                              )),
+                                                                            ],
+                                                                          ),
                                                                         ),
                                                                       ),
-                                                                    ),
-                                                                    Padding(
-                                                                      padding: EdgeInsetsDirectional.fromSTEB(
-                                                                          0.0,
-                                                                          6.0,
-                                                                          0.0,
-                                                                          0.0),
-                                                                      child:
-                                                                          InkWell(
-                                                                        splashColor:
-                                                                            Colors.transparent,
-                                                                        focusColor:
-                                                                            Colors.transparent,
-                                                                        hoverColor:
-                                                                            Colors.transparent,
-                                                                        highlightColor:
-                                                                            Colors.transparent,
-                                                                        onTap:
-                                                                            () async {
-                                                                          await Clipboard.setData(ClipboardData(
-                                                                              text: getJsonField(
-                                                                            chatItem,
-                                                                            r'''$['content']''',
-                                                                          ).toString()));
-                                                                          ScaffoldMessenger.of(context)
-                                                                              .showSnackBar(
-                                                                            SnackBar(
-                                                                              content: Text(
-                                                                                'Response copied to clipboard.',
+                                                                      Padding(
+                                                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                                                            0.0,
+                                                                            6.0,
+                                                                            0.0,
+                                                                            0.0),
+                                                                        child:
+                                                                            InkWell(
+                                                                          splashColor:
+                                                                              Colors.transparent,
+                                                                          focusColor:
+                                                                              Colors.transparent,
+                                                                          hoverColor:
+                                                                              Colors.transparent,
+                                                                          highlightColor:
+                                                                              Colors.transparent,
+                                                                          onTap:
+                                                                              () async {
+                                                                            await Clipboard.setData(ClipboardData(
+                                                                                text: getJsonField(
+                                                                              chatItem,
+                                                                              r'''$['content']''',
+                                                                            ).toString()));
+                                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                                              SnackBar(
+                                                                                content: Text(
+                                                                                  'Response copied to clipboard.',
+                                                                                  style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                                                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                        color: Color(0x00000000),
+                                                                                        fontSize: 12.0,
+                                                                                        letterSpacing: 0.0,
+                                                                                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                      ),
+                                                                                ),
+                                                                                duration: Duration(milliseconds: 2000),
+                                                                                backgroundColor: FlutterFlowTheme.of(context).secondary,
+                                                                              ),
+                                                                            );
+                                                                          },
+                                                                          child:
+                                                                              Row(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.max,
+                                                                            children: [
+                                                                              Text(
+                                                                                'Copy response',
                                                                                 style: FlutterFlowTheme.of(context).bodyMedium.override(
                                                                                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                                                      color: Color(0x00000000),
-                                                                                      fontSize: 12.0,
+                                                                                      color: FlutterFlowTheme.of(context).primary,
+                                                                                      fontSize: 10.0,
                                                                                       letterSpacing: 0.0,
                                                                                       useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                                                                                     ),
                                                                               ),
-                                                                              duration: Duration(milliseconds: 2000),
-                                                                              backgroundColor: FlutterFlowTheme.of(context).secondary,
-                                                                            ),
-                                                                          );
-                                                                        },
-                                                                        child:
-                                                                            Row(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.max,
-                                                                          children: [
-                                                                            Text(
-                                                                              'Copy response',
-                                                                              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                                                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                                                    color: FlutterFlowTheme.of(context).primary,
-                                                                                    fontSize: 10.0,
-                                                                                    letterSpacing: 0.0,
-                                                                                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                                                                                  ),
-                                                                            ),
-                                                                          ],
+                                                                            ],
+                                                                          ),
                                                                         ),
                                                                       ),
+                                                                    ],
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            if (functions.stringContainsString(
+                                                                    getJsonField(
+                                                                      chatItem,
+                                                                      r'''$.role''',
+                                                                    ).toString(),
+                                                                    'user') ??
+                                                                true)
+                                                              Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .max,
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .end,
+                                                                children: [
+                                                                  Container(
+                                                                    constraints:
+                                                                        BoxConstraints(
+                                                                      maxWidth:
+                                                                          () {
+                                                                        if (MediaQuery.sizeOf(context).width >=
+                                                                            1170.0) {
+                                                                          return 700.0;
+                                                                        } else if (MediaQuery.sizeOf(context).width <=
+                                                                            470.0) {
+                                                                          return 330.0;
+                                                                        } else {
+                                                                          return 530.0;
+                                                                        }
+                                                                      }(),
                                                                     ),
-                                                                  ],
-                                                                ),
-                                                              ],
-                                                            ),
-                                                            Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .max,
-                                                              mainAxisAlignment:
-                                                                  MainAxisAlignment
-                                                                      .end,
-                                                              children: [
-                                                                Container(
-                                                                  constraints:
-                                                                      BoxConstraints(
-                                                                    maxWidth:
-                                                                        () {
-                                                                      if (MediaQuery.sizeOf(context)
-                                                                              .width >=
-                                                                          1170.0) {
-                                                                        return 700.0;
-                                                                      } else if (MediaQuery.sizeOf(context)
-                                                                              .width <=
-                                                                          470.0) {
-                                                                        return 330.0;
-                                                                      } else {
-                                                                        return 530.0;
-                                                                      }
-                                                                    }(),
-                                                                  ),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .primaryBackground,
-                                                                    borderRadius:
-                                                                        BorderRadius.circular(
-                                                                            12.0),
-                                                                  ),
-                                                                  child:
-                                                                      Padding(
-                                                                    padding:
-                                                                        EdgeInsets.all(
-                                                                            12.0),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: FlutterFlowTheme.of(
+                                                                              context)
+                                                                          .primaryBackground,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              12.0),
+                                                                    ),
                                                                     child:
-                                                                        Column(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .min,
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        Text(
-                                                                          'Hello World',
-                                                                          style: FlutterFlowTheme.of(context)
-                                                                              .bodyMedium
-                                                                              .override(
-                                                                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                                                color: FlutterFlowTheme.of(context).primary,
-                                                                                letterSpacing: 0.0,
-                                                                                fontWeight: FontWeight.w500,
-                                                                                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                                                                              ),
-                                                                        ),
-                                                                      ],
+                                                                        Padding(
+                                                                      padding:
+                                                                          EdgeInsets.all(
+                                                                              12.0),
+                                                                      child:
+                                                                          Column(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        crossAxisAlignment:
+                                                                            CrossAxisAlignment.start,
+                                                                        children: [
+                                                                          Text(
+                                                                            getJsonField(
+                                                                              chatItem,
+                                                                              r'''$['content']''',
+                                                                            ).toString(),
+                                                                            style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                                                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                  color: FlutterFlowTheme.of(context).primary,
+                                                                                  letterSpacing: 0.0,
+                                                                                  fontWeight: FontWeight.w500,
+                                                                                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
                                                                     ),
                                                                   ),
-                                                                ),
-                                                              ],
-                                                            ),
+                                                                ],
+                                                              ),
                                                           ],
                                                         ),
                                                       );
@@ -467,6 +479,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Container(
+                                  height: 100.0,
                                   decoration: BoxDecoration(),
                                   child: Padding(
                                     padding: EdgeInsetsDirectional.fromSTEB(
@@ -649,8 +662,57 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                 size: 30.0,
                                               ),
                                               showLoadingIndicator: true,
-                                              onPressed: () {
-                                                print('IconButton pressed ...');
+                                              onPressed: () async {
+                                                setState(() {
+                                                  FFAppState().chatHistory =
+                                                      functions
+                                                          .updateSystemPromptMemories(
+                                                              FFAppState()
+                                                                  .chatHistory,
+                                                              FFAppState()
+                                                                  .whispers
+                                                                  .toList())!;
+                                                });
+                                                setState(() {
+                                                  FFAppState().chatHistory =
+                                                      functions.saveChatHistory(
+                                                          FFAppState()
+                                                              .chatHistory,
+                                                          functions
+                                                              .convertToJSONRole(
+                                                                  _model
+                                                                      .textController
+                                                                      .text,
+                                                                  'user')!)!;
+                                                });
+                                                await _model.listViewController
+                                                    ?.animateTo(
+                                                  _model.listViewController!
+                                                      .position.maxScrollExtent,
+                                                  duration: Duration(
+                                                      milliseconds: 100),
+                                                  curve: Curves.ease,
+                                                );
+                                                setState(() {
+                                                  _model.textController
+                                                      ?.clear();
+                                                });
+                                                await actions.streamApiResponse(
+                                                  () async {
+                                                    setState(() {});
+                                                    await _model
+                                                        .listViewController
+                                                        ?.animateTo(
+                                                      _model
+                                                          .listViewController!
+                                                          .position
+                                                          .maxScrollExtent,
+                                                      duration: Duration(
+                                                          milliseconds: 100),
+                                                      curve: Curves.ease,
+                                                    );
+                                                  },
+                                                );
                                               },
                                             ),
                                           ],

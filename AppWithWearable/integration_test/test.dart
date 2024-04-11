@@ -13,17 +13,21 @@ import 'package:provider/provider.dart';
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('newTest', (WidgetTester tester) async {
+  setUpAll(() async {
     _overrideOnError();
+  });
 
+  setUp(() async {
     FFAppState.reset();
     final appState = FFAppState();
     await appState.initializePersistedState();
+  });
 
+  testWidgets('newTest', (WidgetTester tester) async {
     await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: 'kodjima33+sama@gmail.com', password: '123456');
     await tester.pumpWidget(ChangeNotifierProvider(
-      create: (context) => appState,
+      create: (context) => FFAppState(),
       child: MyApp(),
     ));
 
