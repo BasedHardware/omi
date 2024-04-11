@@ -325,6 +325,41 @@ class FFAppState extends ChangeNotifier {
   void insertAtIndexInTestlist(int _index, String _value) {
     _testlist.insert(_index, _value);
   }
+
+  String _wav = '';
+  String get wav => _wav;
+  set wav(String _value) {
+    _wav = _value;
+  }
+
+  List<String> _whispers = [];
+  List<String> get whispers => _whispers;
+  set whispers(List<String> _value) {
+    _whispers = _value;
+  }
+
+  void addToWhispers(String _value) {
+    _whispers.add(_value);
+  }
+
+  void removeFromWhispers(String _value) {
+    _whispers.remove(_value);
+  }
+
+  void removeAtIndexFromWhispers(int _index) {
+    _whispers.removeAt(_index);
+  }
+
+  void updateWhispersAtIndex(
+    int _index,
+    String Function(String) updateFn,
+  ) {
+    _whispers[_index] = updateFn(_whispers[_index]);
+  }
+
+  void insertAtIndexInWhispers(int _index, String _value) {
+    _whispers.insert(_index, _value);
+  }
 }
 
 void _safeInit(Function() initializeField) {

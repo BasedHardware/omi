@@ -5,6 +5,7 @@ A new Flutter project.
 ## Getting Started
 
 FlutterFlow projects are built to run on the Flutter _stable_ release.
+
 ## Integration Tests
 
 To test on a real iOS / Android device, first connect the device and run the following command from the root of the project:

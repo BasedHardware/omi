@@ -41,39 +41,20 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
       while (true) {
         _model.wav = await actions.bleReceiveWAV(
           widget.btdevice!,
-          10,
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Checking if WAV is received',
-              style: TextStyle(
-                color: FlutterFlowTheme.of(context).primary,
-              ),
-            ),
-            duration: Duration(milliseconds: 4000),
-            backgroundColor: FlutterFlowTheme.of(context).secondary,
-          ),
+          30,
         );
         if (_model.wav != null && (_model.wav?.bytes?.isNotEmpty ?? false)) {
           _model.whsiper = await WhisperDCall.call(
             file: _model.wav,
           );
           if ((_model.whsiper?.succeeded ?? true)) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Received 10 s WAV',
-                  style: TextStyle(
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-                duration: Duration(milliseconds: 4000),
-                backgroundColor: FlutterFlowTheme.of(context).secondary,
-              ),
-            );
             setState(() {
               _model.addToWhispers(WhisperDCall.text(
+                (_model.whsiper?.jsonBody ?? ''),
+              ).toString());
+            });
+            setState(() {
+              FFAppState().addToWhispers(WhisperDCall.text(
                 (_model.whsiper?.jsonBody ?? ''),
               ).toString());
             });
@@ -123,6 +104,8 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<FFAppState>();
+
     return Align(
       alignment: AlignmentDirectional(0.0, 0.0),
       child: Container(

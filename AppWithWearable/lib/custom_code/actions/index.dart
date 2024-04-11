@@ -7,3 +7,4 @@ export 'ble_receive_w_a_v.dart' show bleReceiveWAV;
 export 'ble0receive_data.dart' show ble0receiveData;
 export 'ble0find_devices.dart' show ble0findDevices;
 export 'ble_receive_wav_test.dart' show bleReceiveWavTest;
+export 'stream_api_response.dart' show streamApiResponse;

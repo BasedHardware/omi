@@ -120,6 +120,49 @@ class ListModelsCall {
 
 /// End Mistral AI API Group Code
 
+/// Start OpenAI  Group Code
+
+class OpenAIGroup {
+  static String baseUrl = 'https://api.openai.com/v1';
+  static Map<String, String> headers = {
+    'Content-Type': 'application/json',
+  };
+  static SendFullPromptCall sendFullPromptCall = SendFullPromptCall();
+}
+
+class SendFullPromptCall {
+  Future<ApiCallResponse> call({
+    String? apiKey = '',
+    dynamic? promptJson,
+  }) async {
+    final prompt = _serializeJson(promptJson);
+    final ffApiRequestBody = '''
+{
+  "model": "gpt-3.5-turbo",
+  "messages": ${prompt}
+}''';
+    return ApiManager.instance.makeApiCall(
+      callName: 'Send Full Prompt',
+      apiUrl: '${OpenAIGroup.baseUrl}/chat/completions',
+      callType: ApiCallType.POST,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${apiKey}',
+      },
+      params: {},
+      body: ffApiRequestBody,
+      bodyType: BodyType.JSON,
+      returnBody: true,
+      encodeBodyUtf8: false,
+      decodeUtf8: false,
+      cache: false,
+      alwaysAllowBody: false,
+    );
+  }
+}
+
+/// End OpenAI  Group Code
+
 class WhisperDCall {
   static Future<ApiCallResponse> call({
     FFUploadedFile? file,
@@ -131,7 +174,7 @@ class WhisperDCall {
       callType: ApiCallType.POST,
       headers: {
         'Authorization':
-            'Bearer <add_key_here>',
+            'Bearer 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',
         'Content-Type': 'multipart/form-data',
       },
       params: {
@@ -164,7 +207,7 @@ class WhisperLargeCall {
           'https://api-inference.huggingface.co/models/openai/whisper-large',
       callType: ApiCallType.POST,
       headers: {
-        'Authorization': 'Bearer <HF_KEY>',
+        'Authorization': 'Bearer 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',
         'Content-Type': 'multipart/form-data',
       },
       params: {
