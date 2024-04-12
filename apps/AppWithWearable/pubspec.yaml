@@ -26,12 +26,10 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   auto_size_text: 3.0.0
-  cached_network_image: 3.3.1
   collection: 1.18.0
   equatable: 2.0.5
   flutter_animate: 4.1.1+1
   flutter_blue_plus: ^1.31.17
-  flutter_cache_manager: 3.3.1
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
   go_router: 7.1.1
@@ -41,31 +39,15 @@ dependencies:
   json_path: 0.6.2
   mime_type: 1.0.0
   page_transition: 2.1.0
-  path_provider: 2.0.14
-  path_provider_android: 2.0.25
-  path_provider_foundation: 2.2.2
-  path_provider_platform_interface: 2.0.6
   permission_handler: 11.3.0
   provider: 6.0.5
   share_plus: 7.2.1
   shared_preferences: 2.2.2
-  shared_preferences_android: 2.2.1
-  shared_preferences_foundation: 2.3.4
-  shared_preferences_platform_interface: 2.3.1
-  shared_preferences_web: 2.2.1
   smooth_page_indicator: 1.1.0
-  sqflite: 2.2.6
   timeago: 3.2.2
   url_launcher: 6.2.5
-  url_launcher_android: 6.3.0
-  url_launcher_ios: 6.2.5
   url_launcher_platform_interface: 2.3.2
   wav: ^1.3.0
-
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.0
 
 dependency_overrides:
   http: 1.2.0
