@@ -108,9 +108,9 @@ class _ItemPermissionWidgetState extends State<ItemPermissionWidget> {
                         if (widget.permission == Permission.microphone) {
                           return 'We need access to your microphone';
                         } else if (widget.permission == Permission.bluetooth) {
-                          return 'We need access to send you notifications.';
+                          return 'We need access to your Bluetooth';
                         } else {
-                          return 'We need access to your microphone';
+                          return 'We need access to send your notifications'; 
                         }
                       }(),
                       style: FlutterFlowTheme.of(context).bodyMedium.override(

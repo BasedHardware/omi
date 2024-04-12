@@ -72,3 +72,9 @@ hs_err_pid*
 #Servers
 backend/app-server/dist
 src/recordings
+apps/AppWithWearable/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+apps/AppWithWearable/ios/Flutter/flutter_export_environment.sh
+apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
+apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
+apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
+apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
