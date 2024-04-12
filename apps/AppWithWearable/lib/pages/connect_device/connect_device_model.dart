@@ -1,16 +1,10 @@
-import '/flutter_flow/flutter_flow_theme.dart';
+import 'package:flutter/material.dart';
+
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur/blur_widget.dart';
 import '/pages/ble/device_data/device_data_widget.dart';
-import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
 import 'connect_device_widget.dart' show ConnectDeviceWidget;
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
   ///  Local state fields for this page.

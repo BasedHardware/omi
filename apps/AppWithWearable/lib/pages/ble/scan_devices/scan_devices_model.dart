@@ -1,11 +1,8 @@
-import '/flutter_flow/flutter_flow_theme.dart';
+import 'package:flutter/material.dart';
+
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/pages/ble/blur/blur_widget.dart';
 import 'scan_devices_widget.dart' show ScanDevicesWidget;
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 class ScanDevicesModel extends FlutterFlowModel<ScanDevicesWidget> {
   ///  Local state fields for this page.

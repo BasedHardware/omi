@@ -1,16 +1,16 @@
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import '/flutter_flow/instant_timer.dart';
-import '/pages/ble/blur/blur_widget.dart';
-import '/pages/ble/device_data/device_data_widget.dart';
-import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+
+import '/backend/schema/structs/index.dart';
+import '/custom_code/actions/index.dart' as actions;
+import '/flutter_flow/flutter_flow_theme.dart';
+import '/flutter_flow/flutter_flow_util.dart';
+import '/flutter_flow/instant_timer.dart';
+import '/pages/ble/blur/blur_widget.dart';
+import '/pages/ble/device_data/device_data_widget.dart';
 import 'connect_device_model.dart';
+
 export 'connect_device_model.dart';
 
 class ConnectDeviceWidget extends StatefulWidget {
