@@ -5,7 +5,6 @@ import 'api_manager.dart';
 
 export 'api_manager.dart' show ApiCallResponse;
 
-const _kPrivateApiFunctionName = 'ffPrivateApiCall';
 
 /// Start deepgram Group Code
 
@@ -131,7 +130,7 @@ class OpenAIGroup {
 class SendFullPromptCall {
   Future<ApiCallResponse> call({
     String? apiKey = '',
-    dynamic? promptJson,
+    dynamic promptJson,
   }) async {
     final prompt = _serializeJson(promptJson);
     final ffApiRequestBody = '''
@@ -194,62 +193,6 @@ class WhisperDCall {
       );
 }
 
-class WhisperLargeCall {
-  static Future<ApiCallResponse> call({
-    FFUploadedFile? file,
-    String? key = '',
-  }) async {
-    return ApiManager.instance.makeApiCall(
-      callName: 'Whisper large',
-      apiUrl:
-          'https://api-inference.huggingface.co/models/openai/whisper-large',
-      callType: ApiCallType.POST,
-      headers: {
-        'Authorization': 'Bearer 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',
-        'Content-Type': 'multipart/form-data',
-      },
-      params: {
-        'data-binary': file,
-      },
-      bodyType: BodyType.MULTIPART,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-
-  static dynamic text(dynamic response) => getJsonField(
-        response,
-        r'''$.text''',
-      );
-}
-
-class ApiPagingParams {
-  int nextPageNumber = 0;
-  int numItems = 0;
-  dynamic lastResponse;
-
-  ApiPagingParams({
-    required this.nextPageNumber,
-    required this.numItems,
-    required this.lastResponse,
-  });
-
-  @override
-  String toString() =>
-      'PagingParams(nextPageNumber: $nextPageNumber, numItems: $numItems, lastResponse: $lastResponse,)';
-}
-
-String _serializeList(List? list) {
-  list ??= <String>[];
-  try {
-    return json.encode(list);
-  } catch (_) {
-    return '[]';
-  }
-}
 
 String _serializeJson(dynamic jsonVar, [bool isList = false]) {
   jsonVar ??= (isList ? [] : {});
