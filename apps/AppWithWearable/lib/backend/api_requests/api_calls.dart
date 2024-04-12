@@ -131,7 +131,7 @@ class OpenAIGroup {
 class SendFullPromptCall {
   Future<ApiCallResponse> call({
     String? apiKey = '',
-    dynamic? promptJson,
+    dynamic promptJson,
   }) async {
     final prompt = _serializeJson(promptJson);
     final ffApiRequestBody = '''
