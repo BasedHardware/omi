@@ -1,17 +1,18 @@
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_animations.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import '/pages/ble/blur/blur_widget.dart';
-import '/custom_code/actions/index.dart' as actions;
-import '/flutter_flow/permissions_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+
+import '/backend/schema/structs/index.dart';
+import '/custom_code/actions/index.dart' as actions;
+import '/flutter_flow/flutter_flow_animations.dart';
+import '/flutter_flow/flutter_flow_theme.dart';
+import '/flutter_flow/flutter_flow_util.dart';
+import '/flutter_flow/flutter_flow_widgets.dart';
+import '/flutter_flow/permissions_util.dart';
+import '/pages/ble/blur/blur_widget.dart';
 import 'find_devices_model.dart';
+
 export 'find_devices_model.dart';
 
 class FindDevicesWidget extends StatefulWidget {

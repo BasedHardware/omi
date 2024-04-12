@@ -1,11 +1,8 @@
-import '/backend/schema/enums/enums.dart';
+import 'package:flutter/material.dart';
+
 import '/components/items/item_permission/item_permission_widget.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'permissions_list_widget.dart' show PermissionsListWidget;
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 class PermissionsListModel extends FlutterFlowModel<PermissionsListWidget> {
   ///  State fields for stateful widgets in this component.
