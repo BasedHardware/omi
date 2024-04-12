@@ -1,9 +1,10 @@
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
 <table>
+
   <tr>
-    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" alt="Assembled" width="450"></td>
-    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" alt="Disassembled" width="450"></td>
+    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/58532023/7f86291b-72d0-471c-96ac-73e708802ddd" alt="Assembled" width="300" height="400"></td>
+    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/58532023/59420ed4-8737-4976-88f8-ef5bd93fa146" alt="Disassembled" width="300" height="300"></td>
   </tr>
   <tr>
     <td align="center">Assembled</td>
@@ -63,16 +64,17 @@ There are 2 different apps in these repositories located in different branches a
 
 ## Hardware Buying Guide (<$20 total)
 
-- Board: Seeed Studio XIAO nRF52840 Sense | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon](https://www.amazon.com/Seeed-Studio-XIAO-nRF52840-Microcontroller/dp/B09T94SZ8K/ref=sr_1_2?dib=eyJ2IjoiMSJ9.i8MUToWd9xYaOg5PHVw2pyxS9i6YZMcZTG4DVV3lwRRKxy64YMOtO-LDhe63d90cDl7xEr3CeA2zN4P5c2G7nGgJl99_6yCVplKsFqtxJyfSQuCMUyZON27nWRtnp-uW1wazpgUV0lN5ds7FKkYz5HTI8bZoLnK2OnFuUet_S4Wsr20oABAovtdI2xrjVYyLaiqLzxrpZyveKDRk_TDpht0rztApuX-YrBb00GDQyFs.sZLkUFW18C8b3EnZpgVKEomXioMKdSLq0F17PikAwc0&dib_tag=se&keywords=nrf52840&qid=1711331537&sr=8-2&th=1) and also [link for europe ](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-ble-nrf52840/) | <$15/unit
+- Board: Seeed Studio XIAO nRF52840 Sense | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon](https://www.amazon.com/Seeed-Studio-XIAO-nRF52840-Microcontroller/dp/B09T94SZ8K/ref=sr_1_2?dib=eyJ2IjoiMSJ9.i8MUToWd9xYaOg5PHVw2pyxS9i6YZMcZTG4DVV3lwRRKxy64YMOtO-LDhe63d90cDl7xEr3CeA2zN4P5c2G7nGgJl99_6yCVplKsFqtxJyfSQuCMUyZON27nWRtnp-uW1wazpgUV0lN5ds7FKkYz5HTI8bZoLnK2OnFuUet_S4Wsr20oABAovtdI2xrjVYyLaiqLzxrpZyveKDRk_TDpht0rztApuX-YrBb00GDQyFs.sZLkUFW18C8b3EnZpgVKEomXioMKdSLq0F17PikAwc0&dib_tag=se&keywords=nrf52840&qid=1711331537&sr=8-2&th=1) and also [link for Europe ](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-ble-nrf52840/) | <$15/unit
 
-- Rechargeable Coin Battery| [$13 for 5 units on Amazon](https://www.amazon.com/EEMB-LIR2450-Rechargeable-Lithium-ion-Batteries/dp/B096LRQWJS/ref=sr_1_2_sspa?c=ts&dib=eyJ2IjoiMSJ9.iB9wqIOnOFHp9bY1qXkvWnYNLa8HARTAYvJVpVbQw-qguwquzLFLUkNGPkwizKa3c7DF0VJuhO9BTT_NvIx7fCvPalViw9V0BMf0AJP70zR5RR3IxfqXO0P7cEVGBldfucYyftWN05Wd58HGdIFSFyDy1ov1-10FzULlR4uIAAkFzUiSMCHzRcC_JSDym8cVGWr6lnYd6X_sn3yLDRaWdzPvoonRihopnSSN_4YS8FB7htsM_hVHhxfkq7VSPEN9Gha0j2_g2N1yFz3c_bHUywG7FTp1GVSX3BWb9LAhWbY.DTlkyIjSmkY3V14SNbhsNkghKuK2l-hoeHuKQYqgqbI&dib_tag=se&keywords=Coin+%26+Button+Cell+Batteries&qid=1711331648&refinements=p_n_feature_twenty_browse-bin%3A10063714011&s=hpc&sr=1-2-spons&ts_id=389581011&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&psc=1) and also [link for europe ](https://amzn.eu/d/50zZymw)but you only need one | $2.5/unit
+- Rechargeable LiPo Battery| [solarbotics](https://www.solarbotics.com/product/17802) and also [link for europe ](https://www.amazon.com.be/-/en/400mAh-Battery-Endurance-Perfect-Airplanes/dp/B0CBDBNJF5) and [India](https://robu.in/product/400mah-pcm-protected-micro-li-po-battery-2/)| $3-$10
 
-- Slider switch | $7 for 30+ units [on Amazon](https://www.amazon.com/Tnuocke-Vertical-Position-Latching-SS12F15-G5/dp/B099N3HFPG/ref=sr_1_2?dib=eyJ2IjoiMSJ9.vWYaZHNA7Z38_YnK7oxLKHvVPX-koqNn5CYGqZXKURCQso_zrAwckot4_h8c77Kgy2-m8FcrQymrZff0rlZIGdECJFA5Rwc5EQObrZ5wDb9zjnwVjonhSZfHlyM-KkJKO4_E6mKcC_I0vZg2vS1PBPkNSAXj9H9pTVK3D2iVtuoMNsxvAEwrYUPx3gYOiIjMOzJYoj8aHPmy2W1R4bWcPWp8IvhbO1GO29TT0jVE97U.ZavNMHkM9KYGMLSB_3DREpSJjhQ16_cjqOpo7aPAfHY&dib_tag=se&keywords=slider%2Bswitch&qid=1711332053&sr=8-2&th=1) and also [link for europe ](https://amzn.eu/d/9U0gjPB) but you only need one | <$1/unit
+- Slider switch | $7 for 30+ units [on Amazon](https://www.amazon.com/Tnuocke-Vertical-Position-Latching-SS12F15-G5/dp/B099N3HFPG/ref=sr_1_2?dib=eyJ2IjoiMSJ9.vWYaZHNA7Z38_YnK7oxLKHvVPX-koqNn5CYGqZXKURCQso_zrAwckot4_h8c77Kgy2-m8FcrQymrZff0rlZIGdECJFA5Rwc5EQObrZ5wDb9zjnwVjonhSZfHlyM-KkJKO4_E6mKcC_I0vZg2vS1PBPkNSAXj9H9pTVK3D2iVtuoMNsxvAEwrYUPx3gYOiIjMOzJYoj8aHPmy2W1R4bWcPWp8IvhbO1GO29TT0jVE97U.ZavNMHkM9KYGMLSB_3DREpSJjhQ16_cjqOpo7aPAfHY&dib_tag=se&keywords=slider%2Bswitch&qid=1711332053&sr=8-2&th=1) and also [link for europe ](https://amzn.eu/d/9U0gjPB) but you only need one | <$1/unit | and [India](https://robu.in/product/4mm-spdt-1p2t-slide-switch-pack-of-10/)
 
 - Wires. I didn't try [these ones ](https://www.amazon.com/dp/B01AAX64WO/ref=sspa_dk_detail_2?pd_rd_i=B01AAX64WO&pd_rd_w=UFPsz&content-id=amzn1.sym.f734d1a2-0bf9-4a26-ad34-2e1b969a5a75&pf_rd_p=f734d1a2-0bf9-4a26-ad34-2e1b969a5a75&pf_rd_r=PFJDBA593BYA99HSYMPS&pd_rd_wg=oMhw3&pd_rd_r=bc4c1e7c-6545-429c-b90e-de823a9196a5&s=industrial&sp_csd=d2lkZ2V0TmFtZT1zcF9kZXRhaWw&th=1)but they should work
 
 - 3D-print design of the case is located [here](https://github.com/BasedHardware/friend/tree/main/3d-printing%20designs)
 
+- For the cord you could tie a Knot with a thread of your choice or get the magnetic shoe laces from here which can be used as a [magnetic hook](https://www.amazon.com/Aiboxin-Upgraded-Version-Shoelaces-Magnetic/dp/B08526QVCS/) for easy wear
 ## Getting Started
 
 Follow these steps to get started with your Friend.
@@ -166,25 +168,23 @@ That's it! You have now set up and tested audio recording on your computer.
 
 **Step 0:** Make sure you have bought everything from the buying guide above
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" alt="Components" width="300">
-
-**Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
+**Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/assets/3d_printing_designs/Case%20with%20LiPo%20battery.stl). If you don't know how to do it, send this file to someone who has a 3d printer
 
 **Step 2:**
 Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
 
 <img src="https://github.com/BasedHardware/Friend/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419" alt="Soldering" width="400">
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" alt="Soldered" width="300">
+<img src="https://github.com/BasedHardware/Friend/assets/58532023/497f67dc-7efa-4ba0-9398-d853d37225bb" alt="Soldered" width="370">
 
 **Step 3:**
-Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch, however it's not an ideal design. If you will figure out a better solution, please contribute!
+Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch. If you will figure out a better solution, please contribute!
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" alt="Assembled" width="300">
+<img src="https://github.com/BasedHardware/Friend/assets/58532023/b212a422-6f42-40a2-9d7c-d8b804e7a508" alt="Assembled" width="300">
 
-**Step 4:** Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the USB-port side, you'll find 2 small round holes. This is where the thread should go through.
+**Step 4:** Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the slider switch side, you'll find 2 small round holes. This is where the thread should go through.
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" alt="Lid" width="200">
+<img src="https://github.com/BasedHardware/Friend/assets/58532023/f18b7958-c45a-4b5c-a2df-0892bc9562cf" alt="Lid" width="200">
 
 Congratulations! you now have a fully working and assembled device!
 
