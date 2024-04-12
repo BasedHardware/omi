@@ -207,8 +207,3 @@ Thank you for your interest in Friend, the open-source AI wearable. We're excite
 ## Licensing
 
 Friend is available under MIT License
-
-### Choosing Your License
-
-- If you wish to contribute to or use Friend in open-source projects, you are free to do so under the terms of the GPL, as detailed in the LICENSE file.
-- If you require a commercial license for your project or enterprise, please contact us at [team@whomane.com](mailto:team@whomane.com) to discuss your needs and obtain licensing information.
