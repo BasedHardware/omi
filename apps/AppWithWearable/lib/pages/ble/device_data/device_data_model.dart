@@ -1,13 +1,8 @@
-import '/backend/api_requests/api_calls.dart';
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/custom_code/actions/index.dart' as actions;
-import 'device_data_widget.dart' show DeviceDataWidget;
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+
+import '/backend/api_requests/api_calls.dart';
+import '/flutter_flow/flutter_flow_util.dart';
+import 'device_data_widget.dart' show DeviceDataWidget;
 
 class DeviceDataModel extends FlutterFlowModel<DeviceDataWidget> {
   ///  Local state fields for this component.
