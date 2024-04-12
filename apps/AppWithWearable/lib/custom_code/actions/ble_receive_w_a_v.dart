@@ -23,6 +23,12 @@ const int channelCount = 1;
 const int sampleWidth = 2; // 2 bytes for 16-bit samples
 const int chunkSize = 200;
 
+// UUIDs for the specific service and characteristics
+const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
+const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
+const String audioCharacteristicFormatUuid =
+    "19b10002-e8f2-537e-4f6c-d104768a1214";
+
 /*List<int> filterAudioData(List<int> audioData) {
   // Calculate the scaling factor
   //
@@ -50,56 +56,68 @@ Future<FFUploadedFile?> bleReceiveWAV(
     print('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
-      for (BluetoothCharacteristic characteristic in service.characteristics) {
-        final isNotify = characteristic.properties.notify;
+      if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          if (characteristic.uuid.str128.toLowerCase() ==
+                  audioCharacteristicUuid ||
+              characteristic.uuid.str128.toLowerCase() ==
+                  audioCharacteristicFormatUuid) {
+            final isNotify = characteristic.properties.notify;
 
-        if (isNotify) {
-          await characteristic.setNotifyValue(true);
-          print('Subscribed to characteristic: ${characteristic.uuid}');
-          List<int> wavData = [];
-          int samplesToRead = 150000;
+            if (isNotify) {
+              await characteristic.setNotifyValue(true);
+              print(
+                  'Subscribed to characteristic: ${characteristic.uuid.str128}');
+              List<int> wavData = [];
+              int samplesToRead = 150000;
 
-          characteristic.value.listen((value) {
-            value.removeRange(0, 3);
-            print('values -- ${value[0]}, ${value[1]}');
+              characteristic.value.listen((value) {
+                if (value.isEmpty) return;
+                value.removeRange(0, 3);
+                // print('values -- ${value[0]}, ${value[1]}');
 
-            // Interpret bytes as Int16 directly
-            for (int i = 0; i < value.length; i += 2) {
-              int byte1 = value[i];
-              int byte2 = value[i + 1];
-              int int16Value = (byte2 << 8) | byte1;
-              wavData.add(int16Value);
+                // Interpret bytes as Int16 directly
+                for (int i = 0; i < value.length; i += 2) {
+                  int byte1 = value[i];
+                  int byte2 = value[i + 1];
+                  int int16Value = (byte2 << 8) | byte1;
+                  wavData.add(int16Value);
 
-              print('$int16Value');
+                  //print('$int16Value');
+                }
+
+                print(
+                    'Received ------ ${value.length ~/ 2} samples, total: ${wavData.length}/$samplesToRead');
+                if (wavData.length >= samplesToRead && !completer.isCompleted) {
+                  print('Received desired amount of data');
+                  characteristic.setNotifyValue(false);
+                  completer.complete(createWavFile(wavData));
+                } else {
+                  print('Still need ${samplesToRead - wavData.length} samples');
+                }
+              });
+
+              // Wait for the desired duration
+              final waitSeconds = recordDuration + 20;
+              await Future.delayed(Duration(seconds: waitSeconds));
+
+              // If the desired amount of data is not received within the duration,
+              // return null if the completer is not already completed
+              if (!completer.isCompleted) {
+                print(
+                    'Recording duration reached without receiving enough data');
+                await characteristic.setNotifyValue(false);
+                completer.complete(null);
+              }
+
+              return completer.future;
             }
-
-            print(
-                'Received ------ ${value.length ~/ 2} samples, total: ${wavData.length}/$samplesToRead');
-            if (wavData.length >= samplesToRead && !completer.isCompleted) {
-              print('Received desired amount of data');
-              characteristic.setNotifyValue(false);
-              completer.complete(createWavFile(wavData));
-            } else {
-              print('Still need ${samplesToRead - wavData.length} samples');
-            }
-          });
-
-          // Wait for the desired duration
-          final waitSeconds = recordDuration + 20;
-          await Future.delayed(Duration(seconds: waitSeconds));
-
-          // If the desired amount of data is not received within the duration,
-          // return null if the completer is not already completed
-          if (!completer.isCompleted) {
-            print('Recording duration reached without receiving enough data');
-            await characteristic.setNotifyValue(false);
-            completer.complete(null);
           }
-
-          return completer.future;
         }
       }
     }
+
     print('Desired characteristic not found');
     if (!completer.isCompleted) {
       completer.complete(null);
