@@ -18,6 +18,18 @@ To test on a web browser, first launch `chromedriver` as follows:
 chromedriver --port=4444
 ```
 
+You may need to run this if you get the following error
+
+Error
+```
+lib/env/env.dart:2:6: Error: Error when reading 'lib/env/env.g.dart': No such file or directory
+part 'env.g.dart';
+```
+Command
+```
+flutter pub run build_runner build
+```
+
 Then from the root of the project, run the following command:
 ```bash
 flutter drive \
