@@ -53,13 +53,13 @@ linkStyle 4 stroke:#FF6B6B, stroke-width:2px
 
 ## Structure
 
-There are 2 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
+There are 3 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
 
-- [Standalone Branch](https://github.com/BasedHardware/friend/tree/apps/AppStandalone) or Folder "": Standalone version of the app that doesn't require any hardware to use it.
+Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it.
 
-- [AppWithWearable Branch](https://github.com/BasedHardware/friend/tree/apps/AppWithWearable) or Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
+Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
 
-- [Main Branch] Branch that contains firmware, hardware, designs and both apps
+Folder "AppWithWearableReactNative": Wearable-connected version of the app that is built in React native
 
 ## Hardware Buying Guide (<$20 total)
 
