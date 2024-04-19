@@ -70,7 +70,7 @@ Folder "AppWithWearableReactNative": Wearable-connected version of the app that 
 
 - Wires. I didn't try [these ones ](https://www.amazon.com/dp/B09X4629C1)but they should work
 
-- 3D-print design of the case is located [here](https://github.com/BasedHardware/friend/tree/main/3d-printing%20designs)
+- 3D-print design of the case is located [here](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs)
 
 ## Getting Started
 
