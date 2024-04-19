@@ -223,3 +223,4 @@ Thank you for your interest in Friend, the open-source AI wearable. We're excite
 ## Licensing
 
 Friend is available under MIT License
+a
