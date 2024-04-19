@@ -1,0 +1,19 @@
+title: Friend Documentation
+description: Open Source AI Wearable device
+theme: just-the-docs
+
+url: https://basedhardware.github.io
+
+aux_links:
+  Github: https://github.com/BasedHardware/Friend
+
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: Discord
+    url: https://discord.gg/kEXXsnb5b3
+    opens_in_new_tab: true
+
+  - title: GitHub
+    url: https://github.com/BasedHardware/Friend
+    opens_in_new_tab: true
