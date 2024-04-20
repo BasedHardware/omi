@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/pages/ble/blur/blur_widget.dart';
+import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'scan_devices_model.dart';
 
 export 'scan_devices_model.dart';
@@ -50,7 +50,7 @@ class _ScanDevicesWidgetState extends State<ScanDevicesWidget> {
             wrapWithModel(
               model: _model.blurModel,
               updateCallback: () => setState(() {}),
-              child: BlurWidget(),
+              child: BlurBotWidget(),
             ),
             Align(
               alignment: AlignmentDirectional(0.0, 0.0),
