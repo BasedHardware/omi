@@ -4,7 +4,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthContext, AuthProvider } from './contexts/AuthContext';
 import AuthStack from './screens/LoginScreen';
 
-
 const Stack = createNativeStackNavigator();
 
 const AuthenticatedRoutes = () => {
