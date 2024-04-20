@@ -96,7 +96,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                 Align(
                   alignment: AlignmentDirectional(0.0, 1.0),
                   child: Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(30.0, 80.0, 30.0, 40.0),
+                    padding: EdgeInsetsDirectional.fromSTEB(30.0, 140.0, 30.0, 40.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -129,7 +129,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 20.0),
+                  padding: EdgeInsetsDirectional.fromSTEB(0.0, 20.0, 0.0, 20.0),
                   child: Material(
                     elevation: 4.0,
                     shape: CircleBorder(),
