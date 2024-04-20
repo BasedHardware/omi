@@ -7,7 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/pages/ble/blur/blur_widget.dart';
+import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'home_page_model.dart';
 
 export 'home_page_model.dart';
@@ -59,7 +59,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                   child: wrapWithModel(
                     model: _model.blurModel,
                     updateCallback: () => setState(() {}),
-                    child: BlurWidget(),
+                    child: BlurBotWidget(),
                   ),
                 ),
                 Column(

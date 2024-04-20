@@ -7,7 +7,7 @@ import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/pages/ble/blur/blur_widget.dart';
+import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'connected_model.dart';
 
 export 'connected_model.dart';
@@ -82,7 +82,7 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
             wrapWithModel(
               model: _model.blurModel,
               updateCallback: () => setState(() {}),
-              child: BlurWidget(),
+              child: BlurBotWidget(),
             ),
             Align(
               alignment: AlignmentDirectional(0.0, 0.0),
