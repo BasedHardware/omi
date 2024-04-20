@@ -12,6 +12,8 @@ import 'welcome_model.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'package:permission_handler/permission_handler.dart';
+
 
 class WelcomeWidget extends StatefulWidget {
   const WelcomeWidget({super.key});
@@ -140,7 +142,68 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                       highlightColor: Colors.transparent,
                       mouseCursor: SystemMouseCursors.click,
                       onTap: () async {
-                        context.goNamed('PermissionPage');
+                        // Check if Bluetooth permission is granted
+                        PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
+                        if (bluetoothStatus.isGranted) {
+                          // Bluetooth permission is already granted
+                          // Request notification permission
+                          PermissionStatus notificationStatus = await Permission.notification.request();
+
+                          // Navigate to the 'scanDevices' screen
+                          context.goNamed('scanDevices');
+                        } else {
+                          // Bluetooth permission is not granted
+                          if (await Permission.bluetooth.request().isGranted) {
+                            // Bluetooth permission is granted now
+                            // Request notification permission
+                            PermissionStatus notificationStatus = await Permission.notification.request();
+
+                            // Navigate to the 'scanDevices' screen
+                            context.goNamed('scanDevices');
+                          } else {
+                            // Bluetooth permission is denied
+                            // Show a dialog to inform the user and provide an action to open app settings
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  backgroundColor: Colors.grey[900],
+                                  title: Text(
+                                    'Bluetooth Required',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  content: Text(
+                                    'This app needs Bluetooth to function properly. Please enable it in the settings.',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        openAppSettings();
+                                      },
+                                      child: Text(
+                                        'OK',
+                                        style: TextStyle(
+                                          color: Colors.blue,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          }
+                        }
                       },
                       child: ShaderMask(
                         shaderCallback: (Rect bounds) {
