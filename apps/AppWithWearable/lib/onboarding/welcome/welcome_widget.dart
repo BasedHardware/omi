@@ -150,7 +150,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                           PermissionStatus notificationStatus = await Permission.notification.request();
 
                           // Navigate to the 'scanDevices' screen
-                          context.goNamed('scanDevices');
+                          context.goNamed('findDevices');
                         } else {
                           // Bluetooth permission is not granted
                           if (await Permission.bluetooth.request().isGranted) {
@@ -159,7 +159,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                             PermissionStatus notificationStatus = await Permission.notification.request();
 
                             // Navigate to the 'scanDevices' screen
-                            context.goNamed('scanDevices');
+                            context.goNamed('findDevices');
                           } else {
                             // Bluetooth permission is denied
                             // Show a dialog to inform the user and provide an action to open app settings
