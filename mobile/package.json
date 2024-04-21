@@ -14,6 +14,7 @@
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/native-stack": "^6.9.26",
     "expo": "~50.0.14",
+    "expo-local-authentication": "~13.8.0",
     "expo-secure-store": "^12.8.1",
     "expo-status-bar": "~1.11.1",
     "react": "^18.2.0",
@@ -21,11 +22,11 @@
     "react-native": "0.73.6",
     "react-native-dotenv": "^3.4.11",
     "react-native-elements": "^3.4.3",
+    "react-native-get-random-values": "^1.11.0",
     "react-native-safe-area-context": "4.8.2",
     "react-native-screens": "~3.29.0",
     "react-native-web": "~0.19.6",
-    "uuid": "^9.0.1",
-    "expo-local-authentication": "~13.8.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

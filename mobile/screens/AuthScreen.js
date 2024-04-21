@@ -1,23 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Input, Button, Icon } from 'react-native-elements';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { v4 as uuidv4 } from 'uuid';
+import { useNavigation } from '@react-navigation/native';
+import { AuthContext } from '../contexts/AuthContext';
+import LoadingComponent from '../components/LoadingComponent';
 import * as SecureStore from 'expo-secure-store';
+
+const deleteUserData = async () => {
+    await SecureStore.deleteItemAsync('users');
+};
 
 const Stack = createNativeStackNavigator();
 
 const LoginTab = ({ navigation }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const { loggedIn } = useContext(AuthContext);
 
     const handleLogin = () => {
         // Implement Firebase Auth
     };
 
     useEffect(() => {
-        // Set user state data
-    }, []);
+        if (loggedIn) {
+            navigation.navigate('Home');
+        }
+    }, [loggedIn, navigation]);
 
     return (
         <View style={styles.container}>
@@ -57,6 +66,7 @@ const LoginTab = ({ navigation }) => {
                 title="Go to Register"
                 onPress={() => navigation.navigate('Register')}
             />
+            <Button title="Delete User Data" onPress={deleteUserData} />
         </View>
     );
 };
@@ -67,23 +77,26 @@ const RegisterTab = ({ navigation }) => {
     const [firstname, setFirstname] = useState('');
     const [lastname, setLastname] = useState('');
     const [email, setEmail] = useState('');
+    const { setIsLoading, registerUser } = useContext(AuthContext);
 
     const handleRegister = async () => {
-        const userId = uuidv4(); // Generates a unique user ID
+        setIsLoading(true);
         const userInfo = {
             username,
-            password, // Consider encrypting the password or using a secure authentication method
+            password,
+            loggedIn: true,
             firstname,
             lastname,
             email,
+            useBioAuth: false,
         };
 
         try {
-            await SecureStore.setItemAsync(userId, JSON.stringify(userInfo));
-            console.log('User registered with ID:', userId);
-            // Optionally, navigate to the login screen or directly log the user in
+            await registerUser(userInfo);
         } catch (error) {
-            console.error('Error storing the user info', error);
+            console.error('Registration failed:', error);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -131,7 +144,7 @@ const RegisterTab = ({ navigation }) => {
             />
             <View style={styles.formButton}>
                 <Button
-                    onPress={() => handleRegister()}
+                    onPress={handleRegister}
                     title="Register"
                     color="#5637DD"
                     icon={
@@ -145,14 +158,23 @@ const RegisterTab = ({ navigation }) => {
                     }
                 />
             </View>
-            <Button title="Back to Login" onPress={() => navigation.goBack()} />
+            <Button
+                title="Back to Login"
+                onPress={() => navigation.navigate('Login')}
+            />
         </View>
     );
 };
 
 const AuthScreen = () => {
+    const { isLoading } = useContext(AuthContext);
+
+    if (isLoading) {
+        return <LoadingComponent />;
+    }
+
     return (
-        <Stack.Navigator initialRouteName="Login">
+        <Stack.Navigator>
             <Stack.Screen
                 name="Login"
                 component={LoginTab}
