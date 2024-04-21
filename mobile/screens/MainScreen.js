@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Icon } from 'react-native-elements';
+import RecordTab from './RecordTab';
 const Tab = createBottomTabNavigator();
 
 const ChatTab = () => {
@@ -12,13 +13,7 @@ const ChatTab = () => {
         </View>
     );
 };
-const RecordTab = () => {
-    return (
-        <View style={styles.container}>
-            <Text>Record Tab</Text>
-        </View>
-    );
-};
+
 const SettingsTab = () => {
     return (
         <View style={styles.container}>
