@@ -1,12 +1,24 @@
-import React, {useState} from 'react';
+import React, {useState, useContext} from 'react';
 import base64 from 'react-native-base64';
 import {View, StyleSheet, Text, TouchableOpacity} from 'react-native';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import {DEEPGRAM_API_KEY} from '@env';
 
-const RecordTab = () => {
+import {MomentsContext} from '../contexts/MomentsContext';
+
+const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
-  const [transcribedText, setTranscribedText] = useState('');
+
+  const {streamingTranscript, buildTranscript} = useContext(MomentsContext);
+
+  const model = 'nova-2';
+  const language = 'en-US';
+  const smart_format = true;
+  const encoding = 'linear16';
+  const sample_rate = 44100;
+
+  const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
+  const ws = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
 
   const startRecording = async () => {
     const options = {
@@ -17,20 +29,9 @@ const RecordTab = () => {
     };
 
     try {
-      const model = 'nova-2';
-      const language = 'en-US';
-      const smart_format = true;
-      const encoding = 'linear16';
-      const sample_rate = 44100;
-
-      const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
-      const ws = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
-
       ws.onopen = () => {
-        console.log('WebSocket connection opened');
-        // Initialize your audio stream
+        // Initialize audio stream
         LiveAudioStream.init(options);
-
         LiveAudioStream.on('data', base64String => {
           // Decode base64 string to binary data
           const binaryString = base64.decode(base64String);
@@ -40,26 +41,36 @@ const RecordTab = () => {
             bytes[i] = binaryString.charCodeAt(i);
           }
 
-          // Now, bytes is an ArrayBuffer that can be sent via WebSocket
           ws.send(bytes.buffer);
         });
 
         // Start recording
         LiveAudioStream.start();
         setIsRecording(true);
+
+        // Used to keep connection to deepgram alive until we explicitly close it
+        setInterval(() => {
+          const keepAliveMsg = JSON.stringify({type: 'KeepAlive'});
+          ws.send(keepAliveMsg);
+          console.log('Sent KeepAlive message');
+        }, 3000);
       };
 
       ws.onmessage = event => {
-        // Handle the transcription data here
-        console.log('Transcription data:', event.data);
+        // Parse the JSON string to an object
+        const dataObj = JSON.parse(event.data);
+
+        const transcribedWord = dataObj?.channel?.alternatives?.[0]?.transcript;
+        console.log('Transcribed word:', transcribedWord);
+        if (transcribedWord) {
+          buildTranscript(transcribedWord);
+        } else {
+          console.log('Silence detected or transcript not available');
+        }
       };
 
       ws.onerror = error => {
         console.error('WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket connection closed');
       };
     } catch (error) {
       console.error('Failed to start recording', error);
@@ -70,7 +81,21 @@ const RecordTab = () => {
     try {
       LiveAudioStream.stop();
       setIsRecording(false);
-      // Handle the stop recording logic here, like saving the file if needed
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        // Capture the summary object
+        ws.onmessage = event => {
+          // Assuming the server sends a JSON response
+          const response = JSON.parse(event.data);
+          console.log('Response from server:', response);
+        };
+
+        ws.send(JSON.stringify({type: 'CloseStream'}));
+
+        ws.onclose = () => {
+          console.log('WebSocket connection closed by the server');
+        };
+      }
     } catch (error) {
       console.error('Failed to stop recording', error);
     }
@@ -84,7 +109,7 @@ const RecordTab = () => {
         <Text style={styles.buttonText}>{isRecording ? 'Stop' : 'Record'}</Text>
       </TouchableOpacity>
       <View style={styles.transcriptionContainer}>
-        <Text style={styles.transcriptionText}>{transcribedText}</Text>
+        <Text style={styles.transcriptionText}>{streamingTranscript}</Text>
       </View>
     </View>
   );
@@ -119,4 +144,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default RecordTab;
+export default MomentsTab;

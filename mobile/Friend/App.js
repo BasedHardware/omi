@@ -3,6 +3,7 @@ import React, {useContext, useEffect, useState} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {AuthContext, AuthProvider} from './contexts/AuthContext';
+import {MomentsProvider} from './contexts/MomentsContext';
 import AuthScreen from './screens/AuthScreen';
 import MainScreen from './screens/MainScreen';
 
@@ -33,7 +34,7 @@ const UnauthenticatedRoutes = () => {
 };
 
 const App = () => {
-  const {isAuthorized} = useContext(AuthContext); // Ensure this context provides isAuthorized or similar flag
+  const {isAuthorized} = useContext(AuthContext);
 
   return (
     <NavigationContainer>
@@ -44,6 +45,8 @@ const App = () => {
 
 export default () => (
   <AuthProvider>
-    <App />
+    <MomentsProvider>
+      <App />
+    </MomentsProvider>
   </AuthProvider>
 );
