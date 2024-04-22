@@ -40,58 +40,43 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
 
     // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      while (true) {
-        _model.wav = await actions.bleReceiveWAV(
-          widget.btdevice!,
-          30,
-        );
-        if (_model.wav != null && (_model.wav?.bytes?.isNotEmpty ?? false)) {
-          _model.whsiper = await WhisperDCall.call(
-            file: _model.wav,
-          );
-          if ((_model.whsiper?.succeeded ?? true)) {
+            print('Checking for transcript');
+      _model.wav = await actions.bleReceiveWAV(
+        widget.btdevice!,
+        (String receivedData) {
+          print("Deepgram Finalized Callback received: $receivedData");
+          setState(() {
+            _model.addToWhispers(receivedData);
+          });
+          setState(() {
+            FFAppState().addToWhispers(receivedData);
+          });
+          // You can perform any action using receivedData here
+        },
+        (String receivedData) {
+          print("Deepgram Interim Callback received: $receivedData");
+
+          // We dont have any whispers yet so we need to create the first one to update
+          if(_model.whispers.length == 0){
             setState(() {
-              _model.addToWhispers(WhisperDCall.text(
-                (_model.whsiper?.jsonBody ?? ''),
-              ).toString());
+              _model.addToWhispers(receivedData);
             });
             setState(() {
-              FFAppState().addToWhispers(WhisperDCall.text(
-                (_model.whsiper?.jsonBody ?? ''),
-              ).toString());
+              FFAppState().addToWhispers(receivedData);
             });
           } else {
-            await showDialog(
-              context: context,
-              builder: (alertDialogContext) {
-                return AlertDialog(
-                  title: Text('Error'),
-                  content: Text((_model.whsiper?.jsonBody ?? '').toString()),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(alertDialogContext),
-                      child: Text('Ok'),
-                    ),
-                  ],
-                );
-              },
-            );
+               setState(() {
+              _model.updateWhispersAtIndex(_model.whispers.length-1, receivedData);
+            });
+            setState(() {
+              FFAppState().updateWhispersAtIndex(_model.whispers.length-1, receivedData);
+            });
           }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'No audio yet',
-                style: TextStyle(
-                  color: FlutterFlowTheme.of(context).primary,
-                ),
-              ),
-              duration: Duration(milliseconds: 4000),
-              backgroundColor: FlutterFlowTheme.of(context).secondary,
-            ),
-          );
+        
+
         }
-      }
+      );
+      
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
@@ -104,9 +89,9 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    context.watch<FFAppState>();
+ @override
+Widget build(BuildContext context) {
+  context.watch<FFAppState>();
 
     return Align(
       alignment: AlignmentDirectional(0.0, 0.0),

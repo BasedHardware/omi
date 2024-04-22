@@ -13,9 +13,9 @@ class DeviceDataModel extends FlutterFlowModel<DeviceDataWidget> {
   void removeAtIndexFromWhispers(int index) => whispers.removeAt(index);
   void insertAtIndexInWhispers(int index, String item) =>
       whispers.insert(index, item);
-  void updateWhispersAtIndex(int index, Function(String) updateFn) =>
+  void updateWhispersAtIndexFunction(int index, Function(String) updateFn) =>
       whispers[index] = updateFn(whispers[index]);
-
+  void updateWhispersAtIndex(int index, String _value) => whispers[index] = _value;
   List<int> ints = [];
   void addToInts(int item) => ints.add(item);
   void removeFromInts(int item) => ints.remove(item);
@@ -27,7 +27,7 @@ class DeviceDataModel extends FlutterFlowModel<DeviceDataWidget> {
   ///  State fields for stateful widgets in this component.
 
   // Stores action output result for [Custom Action - bleReceiveWAV] action in deviceData widget.
-  FFUploadedFile? wav;
+  String wav = '';
   // Stores action output result for [Backend Call - API (WHISPER D)] action in deviceData widget.
   ApiCallResponse? whsiper;
 
