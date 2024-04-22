@@ -350,18 +350,11 @@ class FFAppState extends ChangeNotifier {
     _whispers.removeAt(_index);
   }
 
-  void updateWhispersAtIndexWithFunction(
+  void updateWhispersAtIndex(
     int _index,
     String Function(String) updateFn,
   ) {
     _whispers[_index] = updateFn(_whispers[_index]);
-  }
-
-  void updateWhispersAtIndex(
-    int _index,
-    String _value,
-  ) {
-    _whispers[_index] = _value;
   }
 
   void insertAtIndexInWhispers(int _index, String _value) {
