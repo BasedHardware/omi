@@ -29,10 +29,10 @@ Friend is an AI wearable device that records everything you say, gives you proac
 
 ```mermaid
 graph TD;
-    A[Device] -- Streams Audio --> B[Phone App];
-    B -- Transmits --> C[Deepgram];
-    C -- Returns Transcript --> D[Phone App];
-    D -- Saves Transcript --> E[Phone Storage];
+   A[Device] -- Streams Audio --> B[Phone App];
+   B -- Transmits --> C[Deepgram];
+   C -- Returns Transcript --> D[Phone App];
+   D -- Saves Transcript --> E[Phone Storage];
 
 classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
 classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
@@ -47,9 +47,7 @@ linkStyle 0 stroke:#FF4136, stroke-width:2px
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px
 linkStyle 2 stroke:#FFCC00, stroke-width:2px
 linkStyle 3 stroke:#2ECC40, stroke-width:2px
-linkStyle 4 stroke:#FF6B6B, stroke-width:2px
 ```
-
 ## Structure
 
 There are 3 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
