@@ -6,6 +6,15 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'dart:convert';
+import 'package:web_socket_channel/io.dart';
+import 'package:flutter/material.dart';
+
+const serverUrl =
+    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
+const apiKey = 'DEEPGRAM_API_KEY';
+
+late IOWebSocketChannel channel;
 
 const int sampleRate = 8000;
 const int channelCount = 1;
@@ -18,27 +27,68 @@ const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid =
     "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-/*List<int> filterAudioData(List<int> audioData) {
-  // Calculate the scaling factor
-  //
-  //int maxVal = audioData.reduce((curr, next) => curr > next ? curr : next);
-  //int minVal = audioData.reduce((curr, next) => curr < next ? curr : next);
-  //double scalingFactor = 2 * 32768 / (max(0, maxVal) - min(0, minVal));
-  // for each item in the list subtract 32
-  double afterSubtraction =
-  // Apply the scaling factor
-  List<int> scaledAudioData =
-      audioData.map((e) => (e * scalingFactor).toInt()).toList();
-  return scaledAudioData;
-  }
-*/
+Future<void> _initStream(void Function(String) finalized_callback, void Function(String) interim_callback) async {
+  print('Websocket Opening');
+  channel = IOWebSocketChannel.connect(Uri.parse(serverUrl),
+      headers: {'Authorization': 'Token $apiKey'});
+   var is_finals = [];
+   var is_finalized = false;
+  channel.ready.then((_) {
+    channel.stream.listen((event) {
+      print('Event from Stream: $event');
+      final parsedJson = jsonDecode(event);
+      final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
+      final is_final = parsedJson['is_final'];
+      final speech_final = parsedJson['is_final'];
 
-Future<FFUploadedFile?> bleReceiveWAV(
-    BTDeviceStruct btDevice, int recordDuration) async {
-  final device = BluetoothDevice.fromId(btDevice.id);
-  final completer = Completer<FFUploadedFile?>();
+      print('Transcript: ${transcript}');
+      if(transcript.length > 0){
+        if (speech_final) {
+          interim_callback(is_finals.join(' ') + (is_finals.length > 0 ? ' ' : '') + transcript);
+          finalized_callback('');
+          is_finals = [];
+        } else {
+          if(is_final) {
+            is_finals.add(transcript);
+            interim_callback(transcript);
+          } else {
+            interim_callback(transcript);
+          }
+        }
+      }
+      // Re-instantiate the Completer for next use
+      // completer = Completer<String>();
+    },onError: (err){
+      print('Websocket Error: ${err}');
+    // handle stream error
+    },
+    onDone: (() {
+     // stream on done callback... 
+      print('Websocket Closed');
+    }),
+    cancelOnError: true
+    );
+
+  }).onError((error, stackTrace) {
+    print("WebsocketChannel was unable to establishconnection");
+  });
 
   try {
+    await channel.ready;
+  } catch (e) {
+    // handle exception here
+    print("Websocket was unable to establishconnection");
+
+  }
+}
+
+Future<String> bleReceiveWAV(
+    BTDeviceStruct btDevice, void Function(String) finalized_callback, void Function(String) interim_callback) async {
+  final device = BluetoothDevice.fromId(btDevice.id);
+  final completer = Completer<String>();
+
+  try {
+    _initStream(finalized_callback, interim_callback);
     await device.connect();
     print('Connected to device: ${device.id}');
     List<BluetoothService> services = await device.discoverServices();
@@ -64,41 +114,10 @@ Future<FFUploadedFile?> bleReceiveWAV(
               characteristic.value.listen((value) {
                 if (value.isEmpty) return;
                 value.removeRange(0, 3);
-                // print('values -- ${value[0]}, ${value[1]}');
-
-                // Interpret bytes as Int16 directly
-                for (int i = 0; i < value.length; i += 2) {
-                  int byte1 = value[i];
-                  int byte2 = value[i + 1];
-                  int int16Value = (byte2 << 8) | byte1;
-                  wavData.add(int16Value);
-
-                  //print('$int16Value');
-                }
-
-                print(
-                    'Received ------ ${value.length ~/ 2} samples, total: ${wavData.length}/$samplesToRead');
-                if (wavData.length >= samplesToRead && !completer.isCompleted) {
-                  print('Received desired amount of data');
-                  characteristic.setNotifyValue(false);
-                  completer.complete(createWavFile(wavData));
-                } else {
-                  print('Still need ${samplesToRead - wavData.length} samples');
-                }
+                channel.sink.add(value);
               });
 
-              // Wait for the desired duration
-              final waitSeconds = recordDuration + 20;
-              await Future.delayed(Duration(seconds: waitSeconds));
 
-              // If the desired amount of data is not received within the duration,
-              // return null if the completer is not already completed
-              if (!completer.isCompleted) {
-                print(
-                    'Recording duration reached without receiving enough data');
-                await characteristic.setNotifyValue(false);
-                completer.complete(null);
-              }
 
               return completer.future;
             }
