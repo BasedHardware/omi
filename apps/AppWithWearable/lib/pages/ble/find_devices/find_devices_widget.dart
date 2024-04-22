@@ -167,10 +167,9 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
     final gifSize = getGifSize(screenHeight);
 
     return Scaffold(
-      backgroundColor: FlutterFlowTheme.of(context).primary,
+      backgroundColor: Color.fromARGB(255, 0, 0, 0),
       body: Stack(
         children: [
-          BlurBotWidget(),
           SafeArea(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
