@@ -1,41 +1,47 @@
 import React, {useState} from 'react';
+import base64 from 'react-native-base64';
 import {View, StyleSheet, Text, TouchableOpacity} from 'react-native';
 import LiveAudioStream from 'react-native-live-audio-stream';
-import {createClient, LiveTranscriptionEvents} from '@deepgram/sdk';
 import {DEEPGRAM_API_KEY} from '@env';
 
 const RecordTab = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
 
-  console.log(DEEPGRAM_API_KEY);
   const startRecording = async () => {
     const options = {
       sampleRate: 44100,
       channels: 1,
       bitsPerSample: 16,
-      audioSource: 6,
       bufferSize: 4096,
     };
 
     try {
       const model = 'nova-2';
-      const language = 'en';
+      const language = 'en-US';
       const smart_format = true;
-      const encoding = 'pcm_s16le';
+      const encoding = 'linear16';
       const sample_rate = 44100;
 
-      const url = `wss://api.deepgram.com/v1/listen?access_token=${DEEPGRAM_API_KEY}`;
-      const ws = new WebSocket(url);
+      const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
+      const ws = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
 
       ws.onopen = () => {
         console.log('WebSocket connection opened');
         // Initialize your audio stream
         LiveAudioStream.init(options);
 
-        LiveAudioStream.on('data', data => {
-          // Send the audio data to the WebSocket server
-          ws.send(data);
+        LiveAudioStream.on('data', base64String => {
+          // Decode base64 string to binary data
+          const binaryString = base64.decode(base64String);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // Now, bytes is an ArrayBuffer that can be sent via WebSocket
+          ws.send(bytes.buffer);
         });
 
         // Start recording
