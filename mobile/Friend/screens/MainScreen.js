@@ -3,7 +3,7 @@ import {Text} from 'react-native';
 import {View, StyleSheet} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Icon} from 'react-native-elements';
-import MomentsTab from './Moments';
+import MomentsTab from './MomentsScreen';
 const Tab = createBottomTabNavigator();
 
 const ChatTab = () => {
@@ -37,7 +37,7 @@ const MainScreen = ({navigation}) => {
         }}
       />
       <Tab.Screen
-        name="Record"
+        name="Moments"
         component={MomentsTab}
         options={{
           tabBarIcon: props => {
