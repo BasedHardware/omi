@@ -22,14 +22,47 @@ class FindDevicesWidget extends StatefulWidget {
   _FindDevicesWidgetState createState() => _FindDevicesWidgetState();
 }
 
-class _FindDevicesWidgetState extends State<FindDevicesWidget> {
+class _FindDevicesWidgetState extends State<FindDevicesWidget>
+    with SingleTickerProviderStateMixin {
   late FindDevicesModel _model;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+  BTDeviceStruct? _friendDevice;
+  String _stringStatus1 = 'Looking for Friend wearable';
+  String _stringStatus2 =
+      'Locating your Friend device. Keep it near your phone for pairing';
+  bool _isConnected = false;
 
   @override
   void initState() {
     super.initState();
     _model = FindDevicesModel();
     _fetchDevices();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 5),
+    );
+
+    _animation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.fastLinearToSlowEaseIn,
+      ),
+    );
+
+    _animationController.forward();
+
+    // Automatically scan for devices when the screen loads
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _scanDevices();
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchDevices() async {
@@ -41,25 +74,15 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> {
       _model.fetchedConnectedDevices = await actions.ble0getConnectedDevices();
       setState(() {
         _model.isFetchingConnectedDevices = false;
-        _model.connectedDevices = _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
+        _model.connectedDevices =
+            _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
       });
       _model.devices = await actions.ble0findDevices();
       setState(() {
-        _model.connectedDevices = _model.devices!.toList().cast<BTDeviceStruct>();
+        _model.connectedDevices =
+            _model.devices!.toList().cast<BTDeviceStruct>();
         _model.isFetchingDevices = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'finding devices....',
-              style: TextStyle(
-                color: FlutterFlowTheme.of(context).primary,
-              ),
-            ),
-          duration: Duration(milliseconds: 4000),
-          backgroundColor: FlutterFlowTheme.of(context).secondary,
-        ),
-      );
     } else {
       showDialog(
         context: context,
@@ -77,8 +100,72 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> {
     }
   }
 
+  Future<void> _scanDevices() async {
+    while (true) {
+      _model.devicesScanCopy = await actions.ble0findDevices();
+      setState(() {
+        _model.foundDevices =
+            _model.devicesScanCopy!.toList().cast<BTDeviceStruct>();
+      });
+
+      try {
+        final friendDevice = _model.foundDevices.firstWhere(
+          (device) => device.name == 'Friend' || device.name == 'Super',
+        );
+
+        // Connect to the device in the background
+        bool hasWrite = await actions.ble0connectDevice(friendDevice);
+
+        // Set _isConnected to true when connected
+        setState(() {
+          _isConnected = true;
+          _friendDevice = friendDevice;
+          _stringStatus1 = 'Friend Wearable';
+          _stringStatus2 =
+              'Successfully connected and ready to accelerate your journey with AI';
+        });
+        break;
+      } catch (e) {
+        // No matching device found, continue scanning
+      }
+
+      await Future.delayed(Duration(seconds: 5));
+
+    }
+  }
+
+  void _navigateToConnecting() {
+    context.pushNamed(
+      'connectDevice',
+      queryParameters: {
+        'btdevice': serializeParam(
+          _friendDevice!.toMap(),
+          ParamType.JSON,
+        ),
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    double getGifSize(double screenHeight) {
+      if (screenHeight <= 667) {
+        return 200.0; // iPhone SE, iPhone 8 and earlier
+      } else if (screenHeight <= 736) {
+        return 250.0; // iPhone 8 Plus
+      } else if (screenHeight <= 844) {
+        return 300.0; // iPhone 12, iPhone 13
+      } else if (screenHeight <= 896) {
+        return 350.0; // iPhone XR, iPhone 11
+      } else if (screenHeight <= 926) {
+        return 400.0; // iPhone 12 Pro Max, iPhone 13 Pro Max
+      } else {
+        return 450.0; // iPhone 14 Pro Max and larger devices
+      }
+    }
+    final gifSize = getGifSize(screenHeight);
+
     return Scaffold(
       backgroundColor: FlutterFlowTheme.of(context).primary,
       body: Stack(
@@ -86,91 +173,166 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> {
           BlurBotWidget(),
           SafeArea(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
+                Padding(
+                  padding: EdgeInsets.only(top: 16.0),
+                  child: Text(
+                    'Pairing',
+                    style: FlutterFlowTheme.of(context).bodyMedium.override(
+                          fontFamily: 'SF Pro Display',
+                          color: Colors.white,
+                          fontSize: 30.0,
+                          letterSpacing: 0.0,
+                          fontWeight: FontWeight.w700,
+                          useGoogleFonts:
+                              GoogleFonts.asMap().containsKey('SF Pro Display'),
+                          lineHeight: 1.2,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                SizedBox(height: 16.0),
+                AnimatedOpacity(
+                  duration: Duration(milliseconds: 500),
+                  opacity: _isConnected ? 1.0 : 0.0,
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/images/favicon.png',
-                          width: 90,
-                          height: 60,
-                          fit: BoxFit.fitHeight,
+                    padding:
+                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                          color: Colors.white,
+                          width: 2,
                         ),
-                        SizedBox(height: 16),
-                        Text(
-                          'Find your device',
-                          style: FlutterFlowTheme.of(context).displaySmall,
-                        ),
-                        SizedBox(height: 32),
-                        FFButtonWidget(
-                          onPressed: () async {
-                            _model.devicesScanCopy = await actions.ble0findDevices();
-                            setState(() {
-                              _model.foundDevices = _model.devicesScanCopy!.toList().cast<BTDeviceStruct>();
-                            });
-                          },
-                          text: 'Scan Devices',
-                          options: FFButtonOptions(
-                            height: 60,
-                            padding: EdgeInsets.symmetric(horizontal: 40),
-                            color: FlutterFlowTheme.of(context).secondary,
-                            textStyle: FlutterFlowTheme.of(context).titleSmall.copyWith(
-                                  color: FlutterFlowTheme.of(context).primary,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                            borderSide: BorderSide(
-                              color: FlutterFlowTheme.of(context).secondary,
-                              width: 1,
+                      ),
+                      padding: EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: Color.fromARGB(255, 0, 255, 8),
+                              shape: BoxShape.circle,
                             ),
-                            borderRadius: BorderRadius.circular(30),
                           ),
-                        ),
-                        SizedBox(height: 16),
-                        Expanded(
-                          child: ListView.separated(
-                            itemCount: _model.foundDevices.length,
-                            separatorBuilder: (_, __) => SizedBox(height: 16),
-                            itemBuilder: (context, index) {
-                              final device = _model.foundDevices[index];
-                              return InkWell(
-                                onTap: () {
-                                  context.pushNamed(
-                                    'connecting',
-                                    queryParameters: {
-                                      'btdevice': serializeParam(device.toMap(), ParamType.JSON),
-                                    },
-                                  );
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: FlutterFlowTheme.of(context).secondary),
-                                  ),
-                                  padding: EdgeInsets.all(16),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(device.name),
-                                          Text(device.id),
-                                        ],
-                                      ),
-                                      Icon(Icons.navigate_next),
-                                    ],
+                          SizedBox(width: 8.0),
+                          Text(
+                            'Friend Connected',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16.0),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: gifSize,
+                        height: gifSize,
+                        child: AnimatedBuilder(
+                          animation: _animation,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: _animation.value,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color.fromARGB(0, 89, 255, 0),
+                                ),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/images/sphere.gif',
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            );
+                          },
                         ),
-                      ],
-                    ),
+                      ),
+                      SizedBox(height: 16.0),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 30.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              _stringStatus1,
+                              style: FlutterFlowTheme.of(context)
+                                  .bodyMedium
+                                  .override(
+                                    fontFamily: 'SF Pro Display',
+                                    color: Colors.white,
+                                    fontSize: 32.0,
+                                    letterSpacing: 0.0,
+                                    fontWeight: FontWeight.w700,
+                                    useGoogleFonts: GoogleFonts.asMap()
+                                        .containsKey('SF Pro Display'),
+                                    lineHeight: 1.2,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8.0),
+                            Text(
+                              _stringStatus2,
+                              style: TextStyle(
+                                color: Color.fromARGB(255, 255, 255, 255),
+                                fontSize: 16.0,
+                                fontWeight: FontWeight.w500,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 16.0),
+                            AnimatedOpacity(
+                              duration: Duration(milliseconds: 500),
+                              opacity: _isConnected ? 1.0 : 0.0,
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: FFButtonWidget(
+                                  onPressed: _navigateToConnecting,
+                                  text: 'Continue',
+                                  options: FFButtonOptions(
+                                    height: 50,
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 30),
+                                    color:
+                                        FlutterFlowTheme.of(context).secondary,
+                                    textStyle: FlutterFlowTheme.of(context)
+                                        .titleSmall
+                                        .copyWith(
+                                          color: FlutterFlowTheme.of(context)
+                                              .primary,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                    borderSide: BorderSide(
+                                      color: FlutterFlowTheme.of(context)
+                                          .secondary,
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
