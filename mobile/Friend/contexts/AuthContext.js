@@ -10,9 +10,7 @@ export const AuthProvider = ({ children }) => {
     const [loggedIn, setLoggedIn] = useState(false);
 
     const fetchUserData = async () => {
-        console.log('Fetching user data');
         const usersJson = await EncryptedStorage.getItem('users');
-        console.log('Users JSON', usersJson); 
         const usersData = JSON.parse(usersJson);
         const firstUserId = Object.keys(usersData)[0];
         const firstUser = usersData[firstUserId];
@@ -55,6 +53,7 @@ export const AuthProvider = ({ children }) => {
         setIsAuthorized(false);
     };
 
+    /* eslint-disable react/jsx-filename-extension */
     return (
         <AuthContext.Provider
             value={{
