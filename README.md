@@ -106,6 +106,8 @@ Follow these steps to get started with your Friend.
 
 Follow these steps to install the firmware:
 
+We have uploaded a build of the firmware in ``firmware/Build``, that will always contain the most up to date build of the firmware. To use this firmware please download it and follow step 6 below. If you would like to build the firmware your self please follow all the steps below.
+
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8?feature=shared)
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
