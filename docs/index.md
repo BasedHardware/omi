@@ -40,7 +40,8 @@ Friend is an AI wearable device that records everything you say, gives you proac
 
 ## How it works
 
-<img src="docs/images/how_it_works.png" alt="how_it_works " width="300">
+
+<img src="./images/how_it_works.png" alt="how_it_works " width="300">
 
 ## Structure
 
@@ -104,15 +105,15 @@ Follow these steps to install the firmware:
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-   <img src="docs/images/vscode_extension.png" alt="VS Code Extension" width="200">
+   <img src="./images/vscode_extension.png" alt="VS Code Extension" width="200">
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-   <img src="docs/images/addbuild.png" alt="Add Build Configuration" width="200">
+   <img src="./images/addbuild.png" alt="Add Build Configuration" width="200">
 
 4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-   <img src="docs/images/build_settings.png" alt="Build Settings" width="400">
+   <img src="./images/build_settings.png" alt="Build Settings" width="400">
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
@@ -120,7 +121,7 @@ Follow these steps to install the firmware:
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
-   <img src="docs/images/pinout.jpg" alt="Pinout" width="300">
+   <img src="./images/pinout.jpg" alt="Pinout" width="300">
 
 That's it! You have successfully installed the firmware on your device.
 
