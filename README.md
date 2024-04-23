@@ -2,7 +2,7 @@
 
 <table>
   <tr>
-    <td align="center"><img src="https://github.com/BasedHardware/Friend/docs/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" alt="Assembled" width="450"></td>
+    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" alt="Assembled" width="450"></td>
     <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" alt="Disassembled" width="450"></td>
   </tr>
   <tr>
