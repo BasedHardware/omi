@@ -4,7 +4,6 @@ import {View, StyleSheet} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Icon} from 'react-native-elements';
 import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
-import MomentsTab from './MomentsScreen';
 const Tab = createBottomTabNavigator();
 
 const ChatTab = () => {

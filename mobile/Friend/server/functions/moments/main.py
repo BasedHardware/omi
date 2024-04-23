@@ -29,7 +29,9 @@ def cors_preflight_response():
 
 def handle_fetch_moments():
     # Get all moments from the database
-    moments_list = []
+    db_client = MongoService()
+    moments_list = db_client.get_all_moments()
+    print(moments_list)
     return jsonify({'moments': moments_list}), 200, headers
 
 def handle_add_moment(request):

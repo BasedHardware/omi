@@ -9,10 +9,14 @@ class MongoService:
         self.client = MongoClient(mongo_uri)
         self.db = self.client['friend']
 
-    def get_moments(self):
+    def get_all_moments(self):
         # Fetch all moments from the database
         moments_collection = self.db['moments']
-        return list(moments_collection.find({}))
+        moments = list(moments_collection.find({}))
+        # Convert ObjectId to string and change key _id to id
+        for moment in moments:
+            moment['id'] = str(moment.pop('_id'))
+        return moments
 
     def add_moment(self, moment_data):
         # Add a new moment to the database

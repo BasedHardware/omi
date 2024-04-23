@@ -1,20 +1,17 @@
-import React, {useState, useContext, useEffect, useRef} from 'react';
+import React, {useState, useContext, useRef} from 'react';
 import {useNavigation} from '@react-navigation/native';
 import base64 from 'react-native-base64';
 import {View, Text, StyleSheet, FlatList, TouchableOpacity} from 'react-native';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {ListItem} from 'react-native-elements';
 import LiveAudioStream from 'react-native-live-audio-stream';
-import {DEEPGRAM_API_KEY, BACKEND_URL} from '@env';
-import axios from 'axios';
-
-import MomentDetailScreen from './MomentDetailScreen';
+import {DEEPGRAM_API_KEY} from '@env';
+import {MomentsContext} from '../contexts/MomentsContext';
+import MomentListItem from '../components/MomentsListItem';
 
 const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
-  const [moments, setMoments] = useState([]);
   const [streamingTranscript, setStreamingTranscript] = useState('');
+  const {moments, setMoments, addMoment} = useContext(MomentsContext);
   const ws = useRef(null);
   const navigation = useNavigation();
 
@@ -98,27 +95,6 @@ const MomentsTab = () => {
     }
   };
 
-  const sendMomentToDb = async moment => {
-    try {
-      const response = await axios.post(`${BACKEND_URL}:30000/moments`, {
-        newMoment: moment,
-      });
-      console.log('Response:', response);
-      if (response.status === 200) {
-        console.log('Success:', response.data);
-      } else {
-        // Handle responses with status codes outside the 2xx range
-        console.log(
-          'Request succeeded but with a non-200 status code:',
-          response.status,
-        );
-      }
-    } catch (error) {
-      // Handle network errors or responses with status codes outside the 2xx range
-      console.error('Request failed:', error);
-    }
-  };
-
   const stopRecording = async () => {
     try {
       LiveAudioStream.stop();
@@ -133,19 +109,11 @@ const MomentsTab = () => {
         date: new Date(),
       };
       setMoments([...moments, newMoment]);
-      await sendMomentToDb(newMoment);
+      await addMoment(newMoment);
       setStreamingTranscript('');
     } catch (error) {
       console.error('Failed to stop recording', error);
     }
-  };
-
-  const renderRightActions = (progress, dragX, item) => {
-    return (
-      <TouchableOpacity onPress={() => deleteMoment(item)}>
-        <Text>Delete</Text>
-      </TouchableOpacity>
-    );
   };
 
   const handlePress = item => {
@@ -176,20 +144,11 @@ const MomentsTab = () => {
           data={moments}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({item}) => (
-            <Swipeable
-              renderRightActions={() => renderRightActions(null, null, item)}>
-              <ListItem onPress={() => handlePress(item)} bottomDivider>
-                <ListItem.Content>
-                  <ListItem.Title>
-                    {item.text.substring(0, 30) + '...'}
-                  </ListItem.Title>
-                  <ListItem.Subtitle>
-                    {item.date.toLocaleString() + ' | ' + item.duration}
-                  </ListItem.Subtitle>
-                </ListItem.Content>
-                <ListItem.Chevron />
-              </ListItem>
-            </Swipeable>
+            <MomentListItem
+              item={item}
+              onItemPress={handlePress}
+              onItemDelete={deleteMoment}
+            />
           )}
           style={{flex: 1}}
         />
