@@ -2,7 +2,7 @@
 title: Example
 layout: default
 parent: How to Guides
-nav_order: 2
+nav_order: 3
 ---
 
 # EXAMPLE FOR NIK
