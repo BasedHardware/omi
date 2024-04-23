@@ -3,6 +3,7 @@ import {ListItem} from 'react-native-elements';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {Text, TouchableOpacity} from 'react-native';
 const MomentListItem = ({item, onItemPress, onItemDelete}) => {
+  console.log(item)
   const renderRightActions = () => (
     <TouchableOpacity onPress={() => onItemDelete(item)}>
       <Text>Delete</Text>
@@ -26,7 +27,7 @@ const MomentListItem = ({item, onItemPress, onItemDelete}) => {
         <ListItem.Content>
           <ListItem.Title>{item.text.substring(0, 30) + '...'}</ListItem.Title>
           <ListItem.Subtitle>
-            {formatDate(item.date) + ' | ' + item.duration}
+            {formatDate(item.date)}
           </ListItem.Subtitle>
         </ListItem.Content>
         <ListItem.Chevron />

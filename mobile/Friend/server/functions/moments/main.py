@@ -10,9 +10,11 @@ load_dotenv()
 
 # Google clouds file structure is different
 if os.getenv('LOCAL_DEV') == 'True':
-    from .mongo_service import MongoService
+    from .MongoService import MongoService
+    from .BossAgent import BossAgent
 else:
-    from mongo_service import MongoService
+    from MongoService import MongoService
+    from BossAgent import BossAgent
 
 mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
@@ -36,8 +38,11 @@ def handle_fetch_moments():
 
 def handle_add_moment(request):
     db_client = MongoService()
+    boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
+    summary = boss_agent.summarize_moment(new_moment)
+    new_moment['summary'] = summary
     db_client.add_moment(new_moment)
     return ('Moment Added', 200, headers)
 
