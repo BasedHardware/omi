@@ -18,7 +18,7 @@ class MongoService:
         # Add a new moment to the database
         moments_collection = self.db['moments']
         result = moments_collection.insert_one(moment_data)
-        return result.inserted_id
+        return result
 
     def close_connection(self):
         # Close the MongoDB connection

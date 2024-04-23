@@ -33,9 +33,10 @@ def handle_fetch_moments():
     return jsonify({'moments': moments_list}), 200, headers
 
 def handle_add_moment(request):
-    db = MongoService()
+    db_client = MongoService()
     data = request.json
-    print(data)
+    
+    db_client.add_moment(data)
     return ('Moment Added', 200, headers)
 
 def moments(request):
@@ -43,6 +44,7 @@ def moments(request):
         return cors_preflight_response()
 
     if request.path in ('/', '/moments'):
+       print('Request path is /moments')
        if request.method == 'GET':
             return handle_fetch_moments()
        
