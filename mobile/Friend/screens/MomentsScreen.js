@@ -1,16 +1,22 @@
 import React, {useState, useContext, useEffect, useRef} from 'react';
+import {useNavigation} from '@react-navigation/native';
 import base64 from 'react-native-base64';
-import {View, StyleSheet, Text, TouchableOpacity} from 'react-native';
+import {View, Text, StyleSheet, FlatList, TouchableOpacity} from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {ListItem} from 'react-native-elements';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import {DEEPGRAM_API_KEY, BACKEND_URL} from '@env';
 import axios from 'axios';
 
-import {MomentsContext} from '../contexts/MomentsContext';
+import MomentDetailScreen from './MomentDetailScreen';
 
 const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
-  const {streamingTranscript, buildTranscript} = useContext(MomentsContext);
+  const [moments, setMoments] = useState([]);
+  const [streamingTranscript, setStreamingTranscript] = useState('');
   const ws = useRef(null);
+  const navigation = useNavigation();
 
   const initWebSocket = () => {
     const model = 'nova-2';
@@ -40,7 +46,9 @@ const MomentsTab = () => {
       const transcribedWord = dataObj?.channel?.alternatives?.[0]?.transcript;
       console.log('Transcribed word:', transcribedWord);
       if (transcribedWord) {
-        buildTranscript(transcribedWord);
+        setStreamingTranscript(
+          prevTranscript => prevTranscript + ' ' + transcribedWord,
+        );
       } else {
         console.log('Silence detected or transcript not available');
       }
@@ -73,6 +81,8 @@ const MomentsTab = () => {
     setIsRecording(true);
 
     // Used to keep connection to deepgram alive until we explicitly close it
+    // We should use the else statement from ws.onmessage as a trigger to start the counter
+    // would minimize unnecessary keepalive messages
     setInterval(() => {
       const keepAliveMsg = JSON.stringify({type: 'KeepAlive'});
       ws.current.send(keepAliveMsg);
@@ -88,11 +98,10 @@ const MomentsTab = () => {
     }
   };
 
-  const sendMomentToDb = async () => {
-    console.log(streamingTranscript);
+  const sendMomentToDb = async moment => {
     try {
-      const response = await axios.post(`${BACKEND_URL}:50000/moments`, {
-        text: streamingTranscript,
+      const response = await axios.post(`${BACKEND_URL}:30000/moments`, {
+        newMoment: moment,
       });
       console.log('Response:', response);
       if (response.status === 200) {
@@ -116,33 +125,87 @@ const MomentsTab = () => {
       setIsRecording(false);
       ws.current.send(JSON.stringify({type: 'CloseStream'}));
       console.log('Sent CloseStream message');
-      await sendMomentToDb();
+
       ws.current.close();
+
+      const newMoment = {
+        text: streamingTranscript,
+        date: new Date(),
+      };
+      setMoments([...moments, newMoment]);
+      await sendMomentToDb(newMoment);
+      setStreamingTranscript('');
     } catch (error) {
       console.error('Failed to stop recording', error);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        onPress={isRecording ? stopRecording : startRecording}
-        style={styles.recordButton}>
-        <Text style={styles.buttonText}>{isRecording ? 'Stop' : 'Record'}</Text>
+  const renderRightActions = (progress, dragX, item) => {
+    return (
+      <TouchableOpacity onPress={() => deleteMoment(item)}>
+        <Text>Delete</Text>
       </TouchableOpacity>
-      <View style={styles.transcriptContainer}>
-        <Text style={styles.transcriptText}>{streamingTranscript}</Text>
+    );
+  };
+
+  const handlePress = item => {
+    navigation.navigate('Moment Details', {
+      transcript: item.fullTranscript,
+      summary: item.summary,
+    });
+  };
+
+  const deleteMoment = itemToRemove => {
+    setMoments(moments.filter(item => item !== itemToRemove));
+  };
+
+  return (
+    <GestureHandlerRootView style={{flex: 1}}>
+      <View style={styles.container}>
+        <TouchableOpacity
+          onPress={isRecording ? stopRecording : startRecording}
+          style={styles.recordButton}>
+          <Text style={styles.buttonText}>
+            {isRecording ? 'Stop' : 'Record'}
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.transcriptContainer}>
+          <Text style={styles.transcriptText}>{streamingTranscript}</Text>
+        </View>
+        <FlatList
+          data={moments}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({item}) => (
+            <Swipeable
+              renderRightActions={() => renderRightActions(null, null, item)}>
+              <ListItem onPress={() => handlePress(item)} bottomDivider>
+                <ListItem.Content>
+                  <ListItem.Title>
+                    {item.text.substring(0, 30) + '...'}
+                  </ListItem.Title>
+                  <ListItem.Subtitle>
+                    {item.date.toLocaleString() + ' | ' + item.duration}
+                  </ListItem.Subtitle>
+                </ListItem.Content>
+                <ListItem.Chevron />
+              </ListItem>
+            </Swipeable>
+          )}
+          style={{flex: 1}}
+        />
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F5FCFF',
+  },
+  contentContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5FCFF',
   },
   recordButton: {
     padding: 20,

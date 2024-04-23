@@ -2,10 +2,10 @@
 
 # Path to the current directory(script must be ran from the functions directory)
 FUNCTIONS_DIR=$(pwd)
-PORT=50000
+PORT=30000
 
 # Kill any existing processes on ports 50000-50007
-lsof -ti:50000-50007 | xargs kill
+lsof -ti:30000-30007 | xargs kill
 
 # This is a workaround for a known issue with Python 3.7+ on macOS
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES

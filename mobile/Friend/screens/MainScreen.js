@@ -3,6 +3,7 @@ import {Text} from 'react-native';
 import {View, StyleSheet} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Icon} from 'react-native-elements';
+import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
 import MomentsTab from './MomentsScreen';
 const Tab = createBottomTabNavigator();
 
@@ -37,14 +38,15 @@ const MainScreen = ({navigation}) => {
         }}
       />
       <Tab.Screen
-        name="Moments"
-        component={MomentsTab}
+        name="Moments Tab"
+        component={MomentsStackNavigator}
         options={{
           tabBarIcon: props => {
             return (
               <Icon name="user-plus" type="font-awesome" color={props.color} />
             );
           },
+          headerShown: false,
         }}
       />
       <Tab.Screen

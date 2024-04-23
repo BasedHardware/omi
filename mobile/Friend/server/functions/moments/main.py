@@ -35,8 +35,8 @@ def handle_fetch_moments():
 def handle_add_moment(request):
     db_client = MongoService()
     data = request.json
-    
-    db_client.add_moment(data)
+    new_moment = data['newMoment']
+    db_client.add_moment(new_moment)
     return ('Moment Added', 200, headers)
 
 def moments(request):

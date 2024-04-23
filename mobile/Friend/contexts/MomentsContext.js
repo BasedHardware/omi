@@ -4,13 +4,8 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 export const MomentsContext = createContext();
 
 export const MomentsProvider = ({children}) => {
-  const [streamingTranscript, setStreamingTranscript] = useState('');
   const [moments, setMoments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const buildTranscript = transcribedWord => {
-    setStreamingTranscript(prevTranscript => prevTranscript + ' ' + transcribedWord);
-  };
 
   const fetchMoments = async () => {
     setIsLoading(true);
@@ -50,8 +45,6 @@ export const MomentsProvider = ({children}) => {
         isLoading,
         fetchMoments,
         addMoment,
-        buildTranscript,
-        streamingTranscript,
       }}>
       {children}
     </MomentsContext.Provider>
