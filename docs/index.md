@@ -5,15 +5,13 @@ nav_order: 1
 ---
 
 # Friend Documentation
-
 {: .no_toc }
 
 ## Table of contents
-
 {: .no_toc .text-delta }
 
 1. TOC
-   {:toc}
+{:toc}
 
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
@@ -42,29 +40,7 @@ Friend is an AI wearable device that records everything you say, gives you proac
 
 ## How it works
 
-```mermaid
-graph TD
-A[Device] -- Streams Audio --> B[Phone App]
-B -- Saves Audio --> C[Phone Storage]
-C -- After X mins --> D[Send Audio to Whisper API]
-D -- Returns Transcript --> B[Phone App]
-B -- Saves Transcript --> F[Phone Storage]
-
-classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
-classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
-
-classDef lightModeLinks stroke:#333333;
-classDef darkModeLinks stroke:#FFFFFF;
-
-class A,B,C,D,F lightMode
-class A,B,C,D,F darkMode
-
-linkStyle 0 stroke:#FF4136, stroke-width:2px
-linkStyle 1 stroke:#1ABC9C, stroke-width:2px
-linkStyle 2 stroke:#FFCC00, stroke-width:2px
-linkStyle 3 stroke:#2ECC40, stroke-width:2px
-linkStyle 4 stroke:#FF6B6B, stroke-width:2px
-```
+<img src="docs/images/how_it_works.png" alt="how_it_works " width="300">
 
 ## Structure
 
@@ -128,15 +104,15 @@ Follow these steps to install the firmware:
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-   <img src="assets/screenshots/vscode_extension.png" alt="VS Code Extension" width="200">
+   <img src="docs/images/vscode_extension.png" alt="VS Code Extension" width="200">
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-   <img src="assets/screenshots/addbuild.png" alt="Add Build Configuration" width="200">
+   <img src="docs/images/addbuild.png" alt="Add Build Configuration" width="200">
 
 4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-   <img src="assets/screenshots/build_settings.png" alt="Build Settings" width="400">
+   <img src="docs/images/build_settings.png" alt="Build Settings" width="400">
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
@@ -144,7 +120,7 @@ Follow these steps to install the firmware:
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
-   <img src="assets/screenshots/pinout.jpg" alt="Pinout" width="300">
+   <img src="docs/images/pinout.jpg" alt="Pinout" width="300">
 
 That's it! You have successfully installed the firmware on your device.
 

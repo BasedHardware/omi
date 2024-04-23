@@ -14,8 +14,6 @@
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-
-
 Friend is an AI wearable device that records everything you say, gives you proactive feedback and advice.
 
 ## Features
@@ -48,6 +46,7 @@ linkStyle 1 stroke:#1ABC9C, stroke-width:2px
 linkStyle 2 stroke:#FFCC00, stroke-width:2px
 linkStyle 3 stroke:#2ECC40, stroke-width:2px
 ```
+
 ## Structure
 
 There are 3 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
@@ -62,7 +61,7 @@ Folder "AppWithWearableReactNative": Wearable-connected version of the app that 
 
 - Board: Seeed Studio XIAO nRF52840 Sense | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon](https://amzn.to/3TZD1pO) and also [link for europe ](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-ble-nrf52840/) | <$15/unit
 
-- Rechargeable Battery on [Amazon](https://amzn.to/3TXlE9f) $7  
+- Rechargeable Battery on [Amazon](https://amzn.to/3TXlE9f) $7
 - Slider switch | $7 for 30+ units [on Amazon](https://www.amazon.com/Tnuocke-Vertical-Position-Latching-SS12F15-G5/dp/B099N3HFPG/ref=sr_1_2?dib=eyJ2IjoiMSJ9.vWYaZHNA7Z38_YnK7oxLKHvVPX-koqNn5CYGqZXKURCQso_zrAwckot4_h8c77Kgy2-m8FcrQymrZff0rlZIGdECJFA5Rwc5EQObrZ5wDb9zjnwVjonhSZfHlyM-KkJKO4_E6mKcC_I0vZg2vS1PBPkNSAXj9H9pTVK3D2iVtuoMNsxvAEwrYUPx3gYOiIjMOzJYoj8aHPmy2W1R4bWcPWp8IvhbO1GO29TT0jVE97U.ZavNMHkM9KYGMLSB_3DREpSJjhQ16_cjqOpo7aPAfHY&dib_tag=se&keywords=slider%2Bswitch&qid=1711332053&sr=8-2&th=1) and also [link for europe ](https://amzn.eu/d/9U0gjPB) but you only need one | <$1/unit
 
 - Wires. I didn't try [these ones ](https://www.amazon.com/dp/B09X4629C1)but they should work
@@ -110,15 +109,15 @@ Follow these steps to install the firmware:
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-   <img src="assets/screenshots/vscode_extension.png" alt="VS Code Extension" width="200">
+   <img src="docs/images/vscode_extension.png" alt="VS Code Extension" width="200">
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-   <img src="assets/screenshots/addbuild.png" alt="Add Build Configuration" width="200">
+   <img src="docs/images/addbuild.png" alt="Add Build Configuration" width="200">
 
 4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-   <img src="assets/screenshots/build_settings.png" alt="Build Settings" width="400">
+   <img src="docs/images/build_settings.png" alt="Build Settings" width="400">
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
@@ -126,7 +125,7 @@ Follow these steps to install the firmware:
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
-   <img src="assets/screenshots/pinout.jpg" alt="Pinout" width="300">
+   <img src="docs/images/pinout.jpg" alt="Pinout" width="300">
 
 That's it! You have successfully installed the firmware on your device.
 
