@@ -1,15 +1,8 @@
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
-<table>
-  <tr>
-    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/59a67cc8-e337-4e86-824b-638718619e77" alt="Assembled" width="450"></td>
-    <td align="center"><img src="https://github.com/BasedHardware/Friend/assets/883804/e524c4f9-de2c-47a5-b634-9fdd2772b345" alt="Disassembled" width="450"></td>
-  </tr>
-  <tr>
-    <td align="center">Assembled</td>
-    <td align="center">Disassembled</td>
-  </tr>
-</table>
+
+![Frame 208](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
+
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
