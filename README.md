@@ -3,11 +3,21 @@
 
 ![Frame 208](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
 
-
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+<div align="center">
+<h3>
+
+[Homepage](https://basedhardware.com/) | [Documentation](https://github.com/BasedHardware/Friend) 
+
+</h3>
+</div>
+
+
 Friend is an AI wearable device that records everything you say, gives you proactive feedback and advice.
+
+
 
 ## Features
 
