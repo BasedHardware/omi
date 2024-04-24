@@ -68,13 +68,13 @@ Mini Slider Switch
 Global Options:
 
 RS Components (RS Online) - Europe
-   ◦ RS offers a variety of slide switches, including multiple configurations like Normally Open (NO), Normally Closed (NC), and different                     mechanical mounting options such as through-hole and panel mounting. This variety ensures compatibility with various circuit setups and                   project requirements. Their product range includes options suitable for small, battery-operated electrical devices, which might be ideal for              your wearable project. For more details, visit RS Components.
+   ◦ RS offers a variety of slide switches, including multiple configurations like Normally Open (NO), Normally Closed (NC), and different                     mechanical mounting options such as through-hole and panel mounting. This variety ensures compatibility with various circuit setups and                   project requirements. Their product range includes options suitable for small, battery-operated electrical devices, which might be ideal for              your wearable project. For more details, visit [RS Components](https://uk.rs-online.com/web/c/switches/toggle-switches-slide-switches/slide-switches/).
 
 Mouser Electronics - Global
-   ◦ Mouser provides a wide selection of slide switches, including those with specific current and voltage ratings suitable for various                        applications. Their extensive filtering options on the website allow you to find the precise switch for your needs, whether it's for low or               high-power applications. Mouser Electronics.
+   ◦ Mouser provides a wide selection of slide switches, including those with specific current and voltage ratings suitable for various                        applications. Their extensive filtering options on the website allow you to find the precise switch for your needs, whether it's for low or               high-power applications. [Mouser Electronics](https://eu.mouser.com/).
 
 Global Sources - Asia and International
-   ◦ Global Sources lists numerous electronics components suppliers, including those offering slide switches. This platform connects buyers with               manufacturers and wholesalers globally, providing a vast range of products to choose from. It's an excellent resource for finding specific                components for niche applications. Global Sources.
+   ◦ Global Sources lists numerous electronics components suppliers, including those offering slide switches. This platform connects buyers with               manufacturers and wholesalers globally, providing a vast range of products to choose from. It's an excellent resource for finding specific                components for niche applications. [Global Sources](https://www.globalsources.com/searchList/products?keyWord=slide%20switches&pageNum=1).
 
 4. Wires
 
