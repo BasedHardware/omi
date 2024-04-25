@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_tilt/flutter_tilt.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
@@ -130,7 +129,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
         // No matching device found, continue scanning
       }
 
-      await Future.delayed(Duration(seconds: 3));
+      await Future.delayed(Duration(seconds: 5));
 
     }
   }
@@ -239,36 +238,28 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Tilt(
-                        shadowConfig: ShadowConfig(disable: true),
-                        lightConfig: LightConfig(disable: true),
-                        tiltConfig: TiltConfig(
-                          angle: 16,
-                          moveDuration: Duration(milliseconds: 500),
-                        ),
-                        child: SizedBox(
-                          width: gifSize,
-                          height: gifSize,
-                          child: AnimatedBuilder(
-                            animation: _animation,
-                            builder: (context, child) {
-                              return Transform.scale(
-                                scale: _animation.value,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Color.fromARGB(0, 89, 255, 0),
-                                  ),
-                                  child: ClipOval(
-                                    child: Image.asset(
-                                      'assets/images/sphere.gif',
-                                      fit: BoxFit.cover,
-                                    ),
+                      SizedBox(
+                        width: gifSize,
+                        height: gifSize,
+                        child: AnimatedBuilder(
+                          animation: _animation,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: _animation.value,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color.fromARGB(0, 89, 255, 0),
+                                ),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/images/sphere.gif',
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       SizedBox(height: 16.0),
