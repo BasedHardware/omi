@@ -1,5 +1,0 @@
-Builds native projects using the Expo SDK 
-    - You will need to set up xcode/android studio
-
-npx expo run:android
-npx expo run:ios

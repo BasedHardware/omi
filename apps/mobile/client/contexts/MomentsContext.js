@@ -9,109 +9,89 @@ export const MomentsProvider = ({children}) => {
   const [moments, setMoments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchMoments = async () => {
-    setIsLoading(true);
-    let momentsData = [];
+  const logError = (message, error) => {
+    console.error(message, error);
+  };
 
-    // Try fetching moments from local storage
+  const updateLocalStorage = async data => {
+    try {
+      await EncryptedStorage.setItem('moments', JSON.stringify(data));
+    } catch (error) {
+      logError('Failed to update local storage:', error);
+      throw new Error('Error saving data');
+    }
+  };
+
+  const fetchMomentsFromLocalStorage = async () => {
     try {
       const momentsJson = await EncryptedStorage.getItem('moments');
-      if (momentsJson) {
-        try {
-          momentsData = JSON.parse(momentsJson);
-        } catch (parseError) {
-          console.error('Error parsing moments JSON:', parseError);
-        }
-      } else {
-        console.log('No moments stored locally');
-      }
-    } catch (storageError) {
-      console.error(
-        'Failed to retrieve moments from local storage:',
-        storageError,
-      );
+      return momentsJson ? JSON.parse(momentsJson) : null;
+    } catch (error) {
+      logError('Failed to retrieve moments from local storage:', error);
+      return null;
     }
+  };
 
-    // Fetch moments from server if local fetch is unsuccessful or empty
+  const fetchMoments = async () => {
+    setIsLoading(true);
+    let momentsData = (await fetchMomentsFromLocalStorage()) || [];
+
     if (momentsData.length === 0) {
       try {
         const response = await axios.get(`${BACKEND_URL}:30000/moments`);
         if (response.status === 200 && response.data) {
           momentsData = response.data.moments;
-          setMoments(momentsData);
-
-          try {
-            await EncryptedStorage.setItem(
-              'moments',
-              JSON.stringify(momentsData),
-            );
-          } catch (storageError) {
-            console.error('Failed to update local storage:', storageError);
-          }
+          await updateLocalStorage(momentsData);
         } else {
           console.log(
             'Request succeeded but with a non-200 status code:',
             response.status,
           );
         }
-      } catch (networkError) {
-        console.error('Request failed:', networkError);
+      } catch (error) {
+        logError('Request failed:', error);
       }
-    } else {
-      // If data is successfully fetched from local storage
-      setMoments(momentsData);
     }
 
+    setMoments(momentsData);
     setIsLoading(false);
   };
 
   const addMoment = async moment => {
     try {
-      // Retrieve and parse stored moments
-      const momentsJson = await EncryptedStorage.getItem('moments');
-      let moments = [];
-
-      if (momentsJson) {
-        try {
-          moments = JSON.parse(momentsJson);
-        } catch (parseError) {
-          console.error('Error parsing moments JSON:', parseError);
-          // Optionally, handle corrupted data, for example by initializing an empty array.
-          moments = [];
-        }
-      }
-
-      // Add new moment and update storage
-      moments.push(moment);
-      try {
-        await EncryptedStorage.setItem('moments', JSON.stringify(moments));
-      } catch (storageError) {
-        console.error('Failed to save moments:', storageError);
-        throw new Error('Error saving data');
-      }
-
-      // Update local state
-      setMoments(moments);
-    } catch (error) {
-      console.error('Error managing local storage for moments:', error);
-    }
-
-    // Post new moment to the server
-    try {
       const response = await axios.post(`${BACKEND_URL}:30000/moments`, {
         newMoment: moment,
       });
-      console.log('Response:', response);
       if (response.status === 200 && response.data) {
-        console.log('Success:', response.data);
+        moment.id = response.data.id;
+        const moments = (await fetchMomentsFromLocalStorage()) || [];
+        moments.push(moment);
+        await updateLocalStorage(moments);
+        setMoments(moments);
       } else {
         console.log(
           'Request succeeded but with a non-200 status code:',
           response.status,
         );
       }
-    } catch (networkError) {
-      console.error('Request failed:', networkError);
+    } catch (error) {
+      logError('Error managing local storage for moments:', error);
+    }
+  };
+
+  const deleteMoment = async moment => {
+    try {
+      const response = await axios.delete(`${BACKEND_URL}:30000/moments`, {
+        data: {id: moment.id},
+      });
+      if (response.status === 200) {
+        let moments = (await fetchMomentsFromLocalStorage()) || [];
+        moments = moments.filter(item => item.id !== moment.id);
+        await updateLocalStorage(moments);
+        setMoments(moments);
+      }
+    } catch (error) {
+      logError('Error deleting moment:', error);
     }
   };
 
@@ -126,6 +106,7 @@ export const MomentsProvider = ({children}) => {
         setMoments,
         isLoading,
         fetchMoments,
+        deleteMoment,
         addMoment,
       }}>
       {children}

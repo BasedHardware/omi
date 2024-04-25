@@ -1,4 +1,5 @@
 import os
+from bson.objectid import ObjectId
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
@@ -34,7 +35,7 @@ class MongoService:
 
     def get_all_moments(self):
         self._initialize_client()
-        if self.db:
+        if self.db is not None:  
             moments_collection = self.db['moments']
             moments = list(moments_collection.find({}))
             for moment in moments:
@@ -46,13 +47,23 @@ class MongoService:
 
     def add_moment(self, moment_data):
         self._initialize_client()
-        if self.db:
+        if self.db is not None:
             moments_collection = self.db['moments']
             result = moments_collection.insert_one(moment_data)
-            return result.inserted_id
+            return str(result.inserted_id)
         else:
             print("MongoDB connection is not initialized.")
             return None
+        
+    def delete_moment(self, moment_id):
+        self._initialize_client()
+        if self.db is not None:
+            moments_collection = self.db['moments']
+            result = moments_collection.delete_one({'_id': ObjectId(moment_id)})
+            return result.deleted_count
+        else:
+            print("MongoDB connection is not initialized.")
+            return 0
 
     def close_connection(self):
         if self.client:

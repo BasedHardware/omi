@@ -123,10 +123,6 @@ const MomentsTab = () => {
     });
   };
 
-  const deleteMoment = itemToRemove => {
-    setMoments(moments.filter(item => item !== itemToRemove));
-  };
-
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <View style={styles.container}>
@@ -144,11 +140,7 @@ const MomentsTab = () => {
           data={moments}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({item}) => (
-            <MomentListItem
-              item={item}
-              onItemPress={handlePress}
-              onItemDelete={deleteMoment}
-            />
+            <MomentListItem item={item} onItemPress={handlePress} />
           )}
           style={{flex: 1}}
         />
