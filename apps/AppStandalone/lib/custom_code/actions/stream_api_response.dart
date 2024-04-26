@@ -40,6 +40,7 @@ Future streamApiResponse(
   final headers = {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ${Env.openAIApiKey}',
+    'OpenAI-Organization': Env.openAIOrganization,
   };
 
   // Create Request
