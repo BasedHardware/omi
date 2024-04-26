@@ -46,7 +46,7 @@ Before starting, make sure you have the following installed:
     ```
 
 4. **Firebase Project**:
-    - Create a new project in Firebase Console.
+    - Create a new project in [Firebase Console](https://console.firebase.google.com/).
     - Activate the FlutterFire CLI tool:
         ```
         dart pub global activate flutterfire_cli
