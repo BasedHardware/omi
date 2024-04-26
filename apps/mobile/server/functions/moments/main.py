@@ -40,10 +40,12 @@ def handle_add_moment(request):
     boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
-    summary = boss_agent.summarize_moment(new_moment)
+    summary, title = boss_agent.summarize_moment(new_moment)
     new_moment['summary'] = summary
-    new_moment_id = db_client.add_moment(new_moment)
-    return new_moment_id
+    new_moment['title'] = title
+    db_client.add_moment(new_moment)
+    
+    return new_moment
 
 def handle_delete_moment(request):
     db_client = MongoService()
@@ -62,8 +64,8 @@ def moments(request):
             return jsonify({'moments': moments_list}), 200, headers
        
        if request.method == 'POST':
-            new_moment_id = handle_add_moment(request)
-            return jsonify({'id': new_moment_id}), 200, headers
+            new_moment = handle_add_moment(request)
+            return jsonify({'moment': new_moment}), 200, headers
        
        if request.method == 'DELETE':
             handle_delete_moment(request)

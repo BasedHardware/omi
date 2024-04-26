@@ -49,8 +49,10 @@ class MongoService:
         self._initialize_client()
         if self.db is not None:
             moments_collection = self.db['moments']
-            result = moments_collection.insert_one(moment_data)
-            return str(result.inserted_id)
+            moments_collection.insert_one(moment_data)
+            # Convert _id to string and rename it to id
+            moment_data['id'] = str(moment_data.pop('_id'))
+            return moment_data
         else:
             print("MongoDB connection is not initialized.")
             return None

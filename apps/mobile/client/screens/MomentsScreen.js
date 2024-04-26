@@ -117,8 +117,9 @@ const MomentsTab = () => {
   };
 
   const handlePress = item => {
+    console.log('Moment selected:', item);
     navigation.navigate('Moment Details', {
-      transcript: item.fullTranscript,
+      title: item.title,
       summary: item.summary,
     });
   };

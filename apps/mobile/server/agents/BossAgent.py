@@ -33,10 +33,9 @@ class BossAgent:
     def summarize_moment(self, moment):
         self._initialize_dspy()
         if self.lm:
-            generate_summary_prompt = dspy.ChainOfThought('content -> detailed_summary')
+            generate_summary_prompt = dspy.ChainOfThought('content -> content_title, content_summary')
             prediction = generate_summary_prompt(content=moment['text'])
-            print(prediction.summary)
-            return prediction.summary
+            return prediction.content_summary, prediction.content_title
         else:
             print("dspy is not initialized.")
             return None

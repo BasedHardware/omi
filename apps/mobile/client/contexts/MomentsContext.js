@@ -63,9 +63,8 @@ export const MomentsProvider = ({children}) => {
         newMoment: moment,
       });
       if (response.status === 200 && response.data) {
-        moment.id = response.data.id;
         const moments = (await fetchMomentsFromLocalStorage()) || [];
-        moments.push(moment);
+        moments.push(response.data.moment);
         await updateLocalStorage(moments);
         setMoments(moments);
       } else {
@@ -96,6 +95,8 @@ export const MomentsProvider = ({children}) => {
   };
 
   useEffect(() => {
+    // delete all moments so I can test the app
+    // EncryptedStorage.removeItem('moments');
     fetchMoments();
   }, []);
 

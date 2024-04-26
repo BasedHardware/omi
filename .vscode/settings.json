@@ -1,0 +1,6 @@
+{
+    "nrf-connect.applications": [
+        "${workspaceFolder}/firmware"
+    ],
+    "nrf-connect.topdir": "/opt/nordic/ncs/v2.6.99-cs1"
+}

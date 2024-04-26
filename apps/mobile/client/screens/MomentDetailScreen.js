@@ -3,6 +3,7 @@ import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { Card } from 'react-native-elements';
 
 const MomentDetailScreen = ({ route }) => {
+  console.log(route.params);
   const { transcript, summary } = route.params;
 
   return (
