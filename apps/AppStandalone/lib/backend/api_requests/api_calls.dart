@@ -575,7 +575,7 @@ class QueryVectorsCall {
 
     final ffApiRequestBody = '''
 {
-  "namespace": "ns1",
+  "namespace": "${Env.pineconeIndexNamespace}",
   "vector": $vector,
   "topK": 10,
   "includeValues": true,
@@ -587,7 +587,7 @@ class QueryVectorsCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'QueryVectors',
-      apiUrl: 'https://index-i7j24t4.svc.gcp-starter.pinecone.io/query',
+      apiUrl: '${Env.pineconeIndexUrl}/query',
       callType: ApiCallType.POST,
       headers: {
         'Api-Key': Env.pineconeApiKey,
