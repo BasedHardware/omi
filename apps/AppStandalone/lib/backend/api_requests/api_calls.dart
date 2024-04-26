@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+
 import '/flutter_flow/flutter_flow_util.dart';
 import 'api_manager.dart';
 import '../../env/env.dart';
@@ -29,6 +31,7 @@ class StructuredMemoryCall {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -70,6 +73,7 @@ class ChatGPTFeedbackCall {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -116,6 +120,7 @@ class TestCall {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -150,6 +155,7 @@ class ChatGPTWhisperCall {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {
         'file': file,
@@ -193,6 +199,7 @@ class VoiceCommandRespondCall {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -233,6 +240,7 @@ class DailyMemoriesCall {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -273,6 +281,7 @@ class SummariesCall {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -314,6 +323,7 @@ class IsFeeedbackUsefulCall {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -355,6 +365,7 @@ class BoolTestCall {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -390,6 +401,7 @@ class SendFullPromptCall {
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -478,11 +490,11 @@ class VectorizeCall {
   static Future<ApiCallResponse> call({
     String? input = '',
   }) async {
-    final ffApiRequestBody = '''
-{
-  "input": "$input",
-  "model": "text-embedding-3-small"
-}''';
+    final ffApiRequestBody = jsonEncode({
+      'input': input,
+      'model': 'text-embedding-3-small',
+    });
+    debugPrint('ffApiRequestBody: $ffApiRequestBody');
     return ApiManager.instance.makeApiCall(
       callName: 'Vectorize',
       apiUrl: 'https://api.openai.com/v1/embeddings',
@@ -490,6 +502,7 @@ class VectorizeCall {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${Env.openAIApiKey}',
+        'OpenAI-Organization': Env.openAIOrganization,
       },
       params: {},
       body: ffApiRequestBody,
@@ -532,12 +545,11 @@ class CreateVectorPineconeCall {
       }
     }
   ],
-  "namespace": "ns1"
+  "namespace": "${Env.pineconeIndexNamespace}"
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'createVectorPinecone',
-      apiUrl:
-          'https://index-i7j24t4.svc.gcp-starter.pinecone.io/vectors/upsert',
+      apiUrl: '${Env.pineconeIndexUrl}/vectors/upsert',
       callType: ApiCallType.POST,
       headers: {
         'Api-Key': Env.pineconeApiKey,
