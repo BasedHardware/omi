@@ -1,5 +1,6 @@
 import React, {useState, useContext, useRef} from 'react';
 import {useNavigation} from '@react-navigation/native';
+import BleManager from 'react-native-ble-manager';
 import base64 from 'react-native-base64';
 import {View, Text, StyleSheet, FlatList, TouchableOpacity} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
@@ -7,6 +8,7 @@ import LiveAudioStream from 'react-native-live-audio-stream';
 import {DEEPGRAM_API_KEY} from '@env';
 import {MomentsContext} from '../contexts/MomentsContext';
 import MomentListItem from '../components/MomentsListItem';
+import {bleManagerEmitter} from './SettingsTab';
 
 const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -14,6 +16,9 @@ const MomentsTab = () => {
   const {moments, setMoments, addMoment} = useContext(MomentsContext);
   const ws = useRef(null);
   const navigation = useNavigation();
+
+  const serviceUUID = '19B10000-E8F2-537E-4F6C-D104768A1214';
+  const audioCharacteristicUUID = '19B10001-E8F2-537E-4F6C-D104768A1214';
 
   const initWebSocket = () => {
     const model = 'nova-2';
@@ -52,6 +57,40 @@ const MomentsTab = () => {
     };
   };
 
+  const handleUpdateValueForCharacteristic = data => {
+    // Convert the binary data to a format that can be sent to the WebSocket
+    const binaryString = base64.decode(data);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    console.log('stream from bluetooth device');
+    // Send the data to the WebSocket
+    ws.current.send(bytes.buffer);
+  };
+
+  bleManagerEmitter.addListener(
+    'BleManagerDidUpdateValueForCharacteristic',
+    handleUpdateValueForCharacteristic,
+  );
+
+  const startBluetoothStreaming = peripheralId => {
+    // Subscribe to the audio service
+    BleManager.startNotification(
+      peripheralId,
+      serviceUUID,
+      audioCharacteristicUUID,
+    )
+      .then(() => {
+        console.log('Started notification on ' + serviceUUID);
+      })
+      .catch(error => {
+        console.log('Notification error', error);
+      });
+  };
+
   const startStreaming = () => {
     const options = {
       sampleRate: 44100,
@@ -69,7 +108,7 @@ const MomentsTab = () => {
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-
+      console.log('stream from phone');
       ws.current.send(bytes.buffer);
     });
 
@@ -89,9 +128,21 @@ const MomentsTab = () => {
 
   const startRecording = async () => {
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      initWebSocket(); // Initialize WebSocket if not already open
+      // Check if a Bluetooth device is connected
+      const connectedDevices = await BleManager.getConnectedPeripherals([
+        serviceUUID,
+      ]);
+      console.log('Connected devices:', connectedDevices);
+      if (connectedDevices.length > 0) {
+        // If a Bluetooth device is connected, start streaming audio from the Bluetooth device
+        startBluetoothStreaming(connectedDevices[0].id);
+      } else {
+        // If no Bluetooth device is connected, initialize the WebSocket and start streaming from the phone's microphone
+        initWebSocket();
+      }
     } else {
-      startStreaming(); // If WebSocket is already open, start streaming directly
+      // If WebSocket is already open, start streaming directly
+      startStreaming();
     }
   };
 

@@ -19,6 +19,7 @@
     "react": "18.2.0",
     "react-native": "0.73.7",
     "react-native-base64": "^0.2.1",
+    "react-native-ble-manager": "^11.5.2",
     "react-native-elements": "^3.4.3",
     "react-native-encrypted-storage": "^4.0.3",
     "react-native-gesture-handler": "^2.16.0",

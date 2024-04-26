@@ -1,6 +1,6 @@
 import React from 'react';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import MomentsScreen from '../screens/MomentsScreen';
+import MomentsScreen from '../screens/MomentsTab';
 import MomentDetailScreen from '../screens/MomentDetailScreen';
 
 const Stack = createNativeStackNavigator();
