@@ -20,7 +20,7 @@ Before starting, make sure you have the following installed:
 - Xcode (for iOS)
 - Android Studio (for Android)
 - CocoaPods (for iOS dependencies)
-- Firebase account
+- Firebase account and [Firebase CLI](https://firebase.google.com/docs/cli#install_the_firebase_cli)
 
 ### Setup Instructions
 
