@@ -57,16 +57,25 @@ Before starting, make sure you have the following installed:
         ```
       Follow the prompts to select your project and target platforms (Android, iOS, Web).
 
-5. **API Keys**:
+
+5. **Pinecone Index**:
+    - If you don't have one yet, create a new [Pinecone](https://www.pinecone.io/) account.
+    - Navigate to the Pinecone Console and initiate a new index.
+        - Define the index name.
+        - Set the number of dimensions to `1,536`, as required for the `text-embedding-3-small` embeddings model.
+        - Keep the remaining settings as default and proceed with creation.
+        - Retrieve your index URL and namespace values, and update them in the environment variables file.
+
+6. **API Keys**:
    Add your Firebase and other necessary API keys to the `.env` file.
 
-6. **Run Build Runner**:
+7. **Run Build Runner**:
    Generate necessary files with Build Runner:
     ```
     dart run build_runner build
     ```
 
-7. **Configure Xcode**:
+8. **Configure Xcode**:
     - Open your iOS project in Xcode:
         ```
         open ios/Runner.xcworkspace
@@ -106,7 +115,7 @@ Before starting, make sure you have the following installed:
                       ),
                     ```
 
-8. **Run the App**:
+9. **Run the App**:
     - Select your target device in Xcode or Android Studio.
     - Run the app.
 
