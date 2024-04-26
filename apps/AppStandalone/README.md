@@ -69,7 +69,7 @@ Before starting, make sure you have the following installed:
 7. **Configure Xcode**:
     - Open your iOS project in Xcode:
         ```
-        open ios/Runner/Runner.xcworkspace
+        open ios/Runner.xcworkspace
         ```
     - Set up the imageNotification and main app:
         - For imageNotification:
