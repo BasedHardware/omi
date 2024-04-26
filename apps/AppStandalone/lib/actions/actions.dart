@@ -192,13 +192,15 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, ApiCallResponse vector
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
   if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
     logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
-    triggerPushNotification(
-      notificationTitle: 'Sama',
-      notificationText: FFAppState().feedback,
-      userRefs: [currentUserReference!],
-      initialPageName: 'chat',
-      parameterData: {},
-    );
+    if (currentUserReference != null) {
+      triggerPushNotification(
+        notificationTitle: 'Sama',
+        notificationText: FFAppState().feedback,
+        userRefs: [currentUserReference!],
+        initialPageName: 'chat',
+        parameterData: {},
+      );
+    }
   }
 }
 
@@ -262,14 +264,16 @@ void updateAppStateForVoiceResult(ApiCallResponse result) {
 // Trigger notifications based on voice command results
 void triggerVoiceCommandNotification(ApiCallResponse result) {
   logFirebaseEvent('voiceCommandBlock_trigger_push_notification');
-  triggerPushNotification(
-    notificationTitle: 'Sama',
-    notificationText: extractContent(result),
-    notificationSound: 'default',
-    userRefs: [currentUserReference!],
-    initialPageName: 'chat',
-    parameterData: {},
-  );
+  if (currentUserReference != null) {
+    triggerPushNotification(
+      notificationTitle: 'Sama',
+      notificationText: extractContent(result),
+      notificationSound: 'default',
+      userRefs: [currentUserReference!],
+      initialPageName: 'chat',
+      parameterData: {},
+    );
+  }
 }
 
 // Save the memory from a voice command
@@ -325,13 +329,15 @@ void updateMemoryOnFinish(String lastWords) {
 // Trigger notification to indicate recording is disabled
 void triggerFinishNotification() {
   logFirebaseEvent('OnFinishAction_trigger_push_notification');
-  triggerPushNotification(
-    notificationTitle: 'Sama',
-    notificationText: 'Recording is disabled! Please restart audio recording',
-    userRefs: [currentUserReference!],
-    initialPageName: 'chat',
-    parameterData: {},
-  );
+  if (currentUserReference != null) {
+    triggerPushNotification(
+      notificationTitle: 'Sama',
+      notificationText: 'Recording is disabled! Please restart audio recording',
+      userRefs: [currentUserReference!],
+      initialPageName: 'chat',
+      parameterData: {},
+    );
+  }
 }
 
 // Start recording function placeholder
