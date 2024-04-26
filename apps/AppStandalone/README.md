@@ -25,6 +25,7 @@ Before starting, make sure you have the following installed:
 ### Setup Instructions
 
 1. **Get Flutter Dependencies**:
+     From within `apps/AppStandalone`, install flutter packages:
     ```
     flutter pub get
     ```
