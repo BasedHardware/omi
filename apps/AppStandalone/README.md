@@ -20,11 +20,12 @@ Before starting, make sure you have the following installed:
 - Xcode (for iOS)
 - Android Studio (for Android)
 - CocoaPods (for iOS dependencies)
-- Firebase account
+- Firebase account and [Firebase CLI](https://firebase.google.com/docs/cli#install_the_firebase_cli)
 
 ### Setup Instructions
 
 1. **Get Flutter Dependencies**:
+     From within `apps/AppStandalone`, install flutter packages:
     ```
     flutter pub get
     ```
@@ -40,11 +41,12 @@ Before starting, make sure you have the following installed:
 3. **Environment Configuration**:
    Rename the environment configuration file:
     ```
+    cd ..
     mv .env.template .env
     ```
 
 4. **Firebase Project**:
-    - Create a new project in Firebase Console.
+    - Create a new project in [Firebase Console](https://console.firebase.google.com/).
     - Activate the FlutterFire CLI tool:
         ```
         dart pub global activate flutterfire_cli
@@ -67,7 +69,7 @@ Before starting, make sure you have the following installed:
 7. **Configure Xcode**:
     - Open your iOS project in Xcode:
         ```
-        open ios/Runner/Runner.xcworkspace
+        open ios/Runner.xcworkspace
         ```
     - Set up the imageNotification and main app:
         - For imageNotification:
