@@ -41,6 +41,7 @@ Before starting, make sure you have the following installed:
 3. **Environment Configuration**:
    Rename the environment configuration file:
     ```
+    cd ..
     mv .env.template .env
     ```
 
