@@ -277,13 +277,13 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                     if (_model.openAIVector != null) {
                                       logFirebaseEvent('Button_backend_call');
                                       _model.addedVector =
-                                          await CreateVectorPineconeCall.call(
-                                        id: _model.createdMemoryManually
-                                            ?.reference.id,
-                                        structuredMemory: _model
+                                          await createPineconeVector(
+                                         _model.openAIVector,
+                                         _model
                                             .createdMemoryManually
                                             ?.structuredMemory,
-                                        vectorList: _model.openAIVector,
+                                         _model.createdMemoryManually
+                                            ?.reference.id,
                                       );
                                       if (!(_model.addedVector?.succeeded ??
                                           true)) {

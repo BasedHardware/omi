@@ -28,7 +28,7 @@ class ChatModel extends FlutterFlowModel<ChatWidget> {
   // Stores action output result for [Backend Call - API (Vectorize)] action in IconButton widget.
   List<double>? vector;
   // Stores action output result for [Backend Call - API (QueryVectors)] action in IconButton widget.
-  ApiCallResponse? simillarVectors;
+  List? simillarVectors;
 
   /// Initialization and disposal methods.
 

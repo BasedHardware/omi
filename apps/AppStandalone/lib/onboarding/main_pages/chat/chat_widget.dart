@@ -691,15 +691,12 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                   _model.textController.text,
                                                 );
                                                 logFirebaseEvent('IconButton_backend_call');
-                                                _model.simillarVectors = await QueryVectorsCall.call(
-                                                  vectorList: _model.vector ?? [],
-                                                );
+                                                queryPineconeVectors(_model.vector ?? []);
+                                                _model.simillarVectors = await queryPineconeVectors(_model.vector ?? []);
                                                 logFirebaseEvent('IconButton_update_app_state');
                                                 setState(() {
-                                                  FFAppState().test = (_model.simillarVectors?.bodyText ?? '');
-                                                  FFAppState().testlist = QueryVectorsCall.metadata(
-                                                    (_model.simillarVectors?.jsonBody ?? ''),
-                                                  )!
+                                                  // FFAppState().test = (_model.simillarVectors?.bodyText ?? '');
+                                                  FFAppState().testlist = _model.simillarVectors!
                                                       .map((e) => e.toString())
                                                       .toList()
                                                       .cast<String>();

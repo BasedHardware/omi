@@ -1089,8 +1089,9 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                                               4.0),
                                                                           child:
                                                                               Text(
-                                                                            dateTimeFormat('M/d h:mm a',
-                                                                                listViewMemoriesRecord.date!),
+                                                                                listViewMemoriesRecord.date != null ?
+                                                                                dateTimeFormat('M/d h:mm a', listViewMemoriesRecord.date!)
+                                                                                    : '',
                                                                             style:
                                                                                 FlutterFlowTheme.of(context).bodyMedium,
                                                                           ),

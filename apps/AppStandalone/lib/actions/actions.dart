@@ -24,14 +24,6 @@ Future<String> structureMemory() async {
   return await fetchStructuredMemory(FFAppState().lastMemory);
 }
 
-// Extract content from API response
-String extractContent(ApiCallResponse response) {
-  return getJsonField(
-    (response.jsonBody ?? ''),
-    r'''$.choices[0].message.content''',
-  ).toString();
-}
-
 // Save failure memory when structured memory contains NA
 Future<void> saveFailureMemory(String structuredMemory) async {
   logFirebaseEvent('memoryCreationBlock_backend_call');
@@ -85,7 +77,7 @@ Future<void> evaluateFeedback(String feedback) async {
   await actions.debugLog(feedback);
   logFirebaseEvent('memoryCreationBlock_backend_call');
   // TODO: doing anything with this response?
-  await isFeedbackUseful(FFAppState().lastMemory,feedback);
+  await isFeedbackUseful(FFAppState().lastMemory, feedback);
 }
 
 // Update app state after processing feedback
@@ -94,8 +86,8 @@ void updateFinalAppState(String feedback) {
   FFAppState().update(() {
     FFAppState().feedback = functions.jsonEncodeString(feedback)!;
     FFAppState().isFeedbackUseful = functions.jsonEncodeString(feedback)!;
-    FFAppState().chatHistory = functions.saveChatHistory(
-        FFAppState().chatHistory, functions.convertToJSONRole(feedback, 'assistant'));
+    FFAppState().chatHistory =
+        functions.saveChatHistory(FFAppState().chatHistory, functions.convertToJSONRole(feedback, 'assistant'));
     FFAppState().memoryCreationProcessing = false;
   });
 }
@@ -133,8 +125,7 @@ Future<List<double>> vectorizeMemory(String structuredMemory) async {
 }
 
 // Create memory record
-Future<MemoriesRecord> createMemoryRecord(
-    String structuredMemory, List<double> vector) async {
+Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> vector) async {
   var recordRef = MemoriesRecord.collection.doc();
   await recordRef.set({
     ...createMemoriesRecordData(
@@ -173,10 +164,10 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
   // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
-  var vectorAdded = await CreateVectorPineconeCall.call(
-    vectorList: vector,
-    id: memoryRecord.reference.id,
-    structuredMemory: memoryRecord.structuredMemory,
+  var vectorAdded = await createPineconeVector(
+    vector,
+    memoryRecord.structuredMemory,
+    memoryRecord.reference.id,
   );
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
   if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
@@ -232,15 +223,12 @@ Future<void> processVoiceCommand(List<MemoriesRecord> memories) async {
   FFAppState().update(() {
     FFAppState().commandState = 'Thinking...';
   });
-  var result =await voiceCommandRequest(
-      functions.limitTranscript(FFAppState().stt, 12000),
-      functions.jsonEncodeString(functions.documentsToText(memories.toList()))
-  );
+  var result = await voiceCommandRequest(functions.limitTranscript(FFAppState().stt, 12000),
+      functions.jsonEncodeString(functions.documentsToText(memories.toList())));
   updateAppStateForVoiceResult();
-  if (result != ''){
+  if (result != '') {
     triggerVoiceCommandNotification(result);
     await saveVoiceCommandMemory(result);
-
   }
 }
 
