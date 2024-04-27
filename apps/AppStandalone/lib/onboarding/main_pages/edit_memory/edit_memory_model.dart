@@ -1,4 +1,3 @@
-import '/backend/api_requests/api_calls.dart';
 import '/backend/backend.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'edit_memory_widget.dart' show EditMemoryWidget;
@@ -20,7 +19,7 @@ class EditMemoryModel extends FlutterFlowModel<EditMemoryWidget> {
   // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
   List<double>? openAIVector;
   // Stores action output result for [Backend Call - API (createVectorPinecone)] action in Button widget.
-  ApiCallResponse? addedVector;
+  dynamic addedVector;
 
   /// Initialization and disposal methods.
 

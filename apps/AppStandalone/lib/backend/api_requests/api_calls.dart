@@ -138,7 +138,7 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
-Future<dynamic> createPineconeVector(List<double>? vectorList, String? structuredMemory, String? id) async {
+Future<bool> createPineconeVector(List<double>? vectorList, String? structuredMemory, String? id) async {
   var body = jsonEncode({
     'vectors': [
       {
@@ -151,6 +151,7 @@ Future<dynamic> createPineconeVector(List<double>? vectorList, String? structure
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
   debugPrint('createVectorPinecone response: $responseBody');
+  return (responseBody['upserted_count'] ?? 0) > 0;
 }
 
 Future<List> queryPineconeVectors(List<double>? vectorList) async {
