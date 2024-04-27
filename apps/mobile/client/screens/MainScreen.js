@@ -1,8 +1,9 @@
 import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {Icon} from 'react-native-elements';
 import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
 import SettingsStackNavigator from '../navigators/SettingsStackNavigator';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import { faComment, faCameraRetro, faCog } from '@fortawesome/free-solid-svg-icons';
 
 const Tab = createBottomTabNavigator();
 
@@ -14,7 +15,7 @@ const ChatTab = () => {
   );
 };
 
-const MainScreen = ({navigation}) => {
+const MainScreen = () => {
   return (
     <Tab.Navigator>
       <Tab.Screen
@@ -22,9 +23,7 @@ const MainScreen = ({navigation}) => {
         component={ChatTab}
         options={{
           tabBarIcon: props => {
-            return (
-              <Icon name="user-plus" type="font-awesome" color={props.color} />
-            );
+            return <FontAwesomeIcon icon={faComment} size={24} color={props.color} />;
           },
         }}
       />
@@ -33,9 +32,7 @@ const MainScreen = ({navigation}) => {
         component={MomentsStackNavigator}
         options={{
           tabBarIcon: props => {
-            return (
-              <Icon name="user-plus" type="font-awesome" color={props.color} />
-            );
+            return <FontAwesomeIcon icon={faCameraRetro} size={24} color={props.color} />;
           },
           headerShown: false,
         }}
@@ -45,9 +42,7 @@ const MainScreen = ({navigation}) => {
         component={SettingsStackNavigator}
         options={{
           tabBarIcon: props => {
-            return (
-              <Icon name="user-plus" type="font-awesome" color={props.color} />
-            );
+            return <FontAwesomeIcon icon={faCog} size={24} color={props.color} />;
           },
           headerShown: false,
         }}
