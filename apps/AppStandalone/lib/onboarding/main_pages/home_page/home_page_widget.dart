@@ -73,11 +73,10 @@ class _HomePageWidgetState extends State<HomePageWidget> {
               (_model.monthlyMemoriesQuery)!.isNotEmpty) &&
           (_model.monthlyMemoriesQuery!.length > 100)) {
         logFirebaseEvent('homePage_backend_call');
-        _model.monthlySummary = await SummariesCall.call(
-          structuredMemories:
+        _model.monthlySummary = await requestSummary(
               functions.documentsToText(_model.monthlyMemoriesQuery!.toList()),
         );
-        if ((_model.weeklySummary?.succeeded ?? true)) {
+        if (_model.weeklySummary != '') {
           logFirebaseEvent('homePage_backend_call');
 
           var summariesRecordReference1 = SummariesRecord.collection.doc();
@@ -85,9 +84,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.monthly,
-              summary: SummariesCall.responsegpt(
-                (_model.monthlySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.monthlySummary ?? '',
             ),
             ...mapToFirestore(
               {
@@ -99,9 +96,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.monthly,
-              summary: SummariesCall.responsegpt(
-                (_model.monthlySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.monthlySummary ?? '',
             ),
             ...mapToFirestore(
               {
@@ -157,11 +152,10 @@ class _HomePageWidgetState extends State<HomePageWidget> {
           FFAppState().test = 'true-condition';
         });
         logFirebaseEvent('homePage_backend_call');
-        _model.weeklySummary = await SummariesCall.call(
-          structuredMemories:
-              functions.documentsToText(_model.monthlyMemoriesQuery!.toList()),
+        _model.weeklySummary = await requestSummary(
+          functions.documentsToText(_model.monthlyMemoriesQuery!.toList()),
         );
-        if ((_model.weeklySummary?.succeeded ?? true)) {
+        if (_model.weeklySummary != '') {
           logFirebaseEvent('homePage_backend_call');
 
           var summariesRecordReference2 = SummariesRecord.collection.doc();
@@ -169,9 +163,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.weekly,
-              summary: SummariesCall.responsegpt(
-                (_model.weeklySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.weeklySummary ?? '',
             ),
             ...mapToFirestore(
               {
@@ -183,9 +175,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.weekly,
-              summary: SummariesCall.responsegpt(
-                (_model.weeklySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.weeklySummary ?? '',
             ),
             ...mapToFirestore(
               {
@@ -239,14 +229,14 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                   functions.since18hoursago()!)) &&
           (_model.monthlyMemoriesQuery!.length > 10)) {
         logFirebaseEvent('homePage_backend_call');
-        _model.dailySummary = await SummariesCall.call(
-          structuredMemories: functions.documentsToText(_model
+        _model.dailySummary = await requestSummary(
+          functions.documentsToText(_model
               .monthlyMemoriesQuery!
               .where((e) => e.date! >= functions.sinceYesterday()!)
               .toList()
               .toList()),
         );
-        if ((_model.dailySummary?.succeeded ?? true)) {
+        if (_model.dailySummary != '') {
           logFirebaseEvent('homePage_backend_call');
 
           var summariesRecordReference3 = SummariesRecord.collection.doc();
@@ -254,9 +244,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.daily,
-              summary: SummariesCall.responsegpt(
-                (_model.dailySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.dailySummary ?? '',
             ),
             ...mapToFirestore(
               {
@@ -268,9 +256,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             ...createSummariesRecordData(
               user: currentUserReference,
               type: SummaryType.daily,
-              summary: SummariesCall.responsegpt(
-                (_model.dailySummary?.jsonBody ?? ''),
-              ),
+              summary: _model.dailySummary ?? ''
             ),
             ...mapToFirestore(
               {

@@ -112,21 +112,15 @@ class _ChatWidgetState extends State<ChatWidget> {
                       options: FFButtonOptions(
                         width: 44.0,
                         height: 44.0,
-                        padding:
-                            const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-                        iconPadding:
-                            const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                         color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context)
-                            .titleSmall
-                            .override(
-                              fontFamily:
-                                  FlutterFlowTheme.of(context).titleSmallFamily,
+                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                  FlutterFlowTheme.of(context)
-                                      .titleSmallFamily),
+                              useGoogleFonts:
+                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                             ),
                         elevation: 3.0,
                         borderSide: const BorderSide(
@@ -142,8 +136,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                       hoverColor: Colors.transparent,
                       highlightColor: Colors.transparent,
                       onLongPress: () async {
-                        logFirebaseEvent(
-                            'CHAT_PAGE_MEMORIES_↗_BTN_ON_LONG_PRESS');
+                        logFirebaseEvent('CHAT_PAGE_MEMORIES_↗_BTN_ON_LONG_PRESS');
                         logFirebaseEvent('Button_navigate_to');
 
                         context.pushNamed('testNew');
@@ -169,22 +162,16 @@ class _ChatWidgetState extends State<ChatWidget> {
                         options: FFButtonOptions(
                           width: MediaQuery.sizeOf(context).width * 0.4,
                           height: 44.0,
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              12.0, 0.0, 12.0, 0.0),
-                          iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                              0.0, 0.0, 0.0, 0.0),
+                          padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
+                          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                           color: const Color(0x1AF7F4F4),
-                          textStyle: FlutterFlowTheme.of(context)
-                              .titleSmall
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .titleSmallFamily,
+                          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                 color: const Color(0xFFF7F4F4),
                                 fontSize: 16.0,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .titleSmallFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                               ),
                           elevation: 3.0,
                           borderSide: const BorderSide(
@@ -210,21 +197,15 @@ class _ChatWidgetState extends State<ChatWidget> {
                       options: FFButtonOptions(
                         width: 44.0,
                         height: 44.0,
-                        padding:
-                            const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-                        iconPadding:
-                            const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                         color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context)
-                            .titleSmall
-                            .override(
-                              fontFamily:
-                                  FlutterFlowTheme.of(context).titleSmallFamily,
+                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                  FlutterFlowTheme.of(context)
-                                      .titleSmallFamily),
+                              useGoogleFonts:
+                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                             ),
                         elevation: 3.0,
                         borderSide: const BorderSide(
@@ -268,19 +249,16 @@ class _ChatWidgetState extends State<ChatWidget> {
                           child: Align(
                             alignment: const AlignmentDirectional(0.0, -1.0),
                             child: Padding(
-                              padding: const EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 12.0, 0.0, 0.0),
+                              padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 0.0),
                               child: Column(
                                 mainAxisSize: MainAxisSize.max,
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Expanded(
                                     child: Padding(
-                                      padding: const EdgeInsetsDirectional.fromSTEB(
-                                          12.0, 12.0, 12.0, 0.0),
+                                      padding: const EdgeInsetsDirectional.fromSTEB(12.0, 12.0, 12.0, 0.0),
                                       child: ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
+                                        borderRadius: BorderRadius.circular(12.0),
                                         child: BackdropFilter(
                                           filter: ImageFilter.blur(
                                             sigmaX: 5.0,
@@ -290,46 +268,29 @@ class _ChatWidgetState extends State<ChatWidget> {
                                             width: double.infinity,
                                             decoration: BoxDecoration(
                                               color: const Color(0x00151619),
-                                              borderRadius:
-                                                  BorderRadius.circular(6.0),
+                                              borderRadius: BorderRadius.circular(6.0),
                                               border: Border.all(
                                                 color: const Color(0x00E0E3E7),
                                               ),
                                             ),
                                             child: Align(
-                                              alignment: const AlignmentDirectional(
-                                                  0.0, 1.0),
+                                              alignment: const AlignmentDirectional(0.0, 1.0),
                                               child: Builder(
                                                 builder: (context) {
-                                                  final chat = FFAppState()
-                                                      .chatHistory
-                                                      .toList()
-                                                      .take(100)
-                                                      .toList();
+                                                  final chat = FFAppState().chatHistory.toList().take(100).toList();
                                                   return ListView.builder(
                                                     padding: EdgeInsets.zero,
                                                     shrinkWrap: true,
-                                                    scrollDirection:
-                                                        Axis.vertical,
+                                                    scrollDirection: Axis.vertical,
                                                     itemCount: chat.length,
-                                                    itemBuilder:
-                                                        (context, chatIndex) {
-                                                      final chatItem =
-                                                          chat[chatIndex];
+                                                    itemBuilder: (context, chatIndex) {
+                                                      final chatItem = chat[chatIndex];
                                                       return Padding(
                                                         padding:
-                                                            const EdgeInsetsDirectional
-                                                                .fromSTEB(
-                                                                    0.0,
-                                                                    12.0,
-                                                                    0.0,
-                                                                    0.0),
+                                                            const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 0.0),
                                                         child: Column(
-                                                          mainAxisSize:
-                                                              MainAxisSize.max,
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
+                                                          mainAxisSize: MainAxisSize.max,
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
                                                           children: [
                                                             if (functions.stringContainsString(
                                                                     getJsonField(
@@ -339,27 +300,20 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                     'assistant') ??
                                                                 true)
                                                               Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .max,
+                                                                mainAxisSize: MainAxisSize.max,
                                                                 children: [
                                                                   Column(
-                                                                    mainAxisSize:
-                                                                        MainAxisSize
-                                                                            .max,
-                                                                    crossAxisAlignment:
-                                                                        CrossAxisAlignment
-                                                                            .start,
+                                                                    mainAxisSize: MainAxisSize.max,
+                                                                    crossAxisAlignment: CrossAxisAlignment.start,
                                                                     children: [
                                                                       Container(
-                                                                        constraints:
-                                                                            BoxConstraints(
-                                                                          maxWidth:
-                                                                              () {
+                                                                        constraints: BoxConstraints(
+                                                                          maxWidth: () {
                                                                             if (MediaQuery.sizeOf(context).width >=
                                                                                 1170.0) {
                                                                               return 700.0;
-                                                                            } else if (MediaQuery.sizeOf(context).width <=
+                                                                            } else if (MediaQuery.sizeOf(context)
+                                                                                    .width <=
                                                                                 470.0) {
                                                                               return 330.0;
                                                                             } else {
@@ -367,10 +321,8 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                             }
                                                                           }(),
                                                                         ),
-                                                                        decoration:
-                                                                            BoxDecoration(
-                                                                          color:
-                                                                              const Color(0x1AF7F4F4),
+                                                                        decoration: BoxDecoration(
+                                                                          color: const Color(0x1AF7F4F4),
                                                                           boxShadow: const [
                                                                             BoxShadow(
                                                                               blurRadius: 3.0,
@@ -378,24 +330,16 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                               offset: Offset(0.0, 1.0),
                                                                             )
                                                                           ],
-                                                                          borderRadius:
-                                                                              BorderRadius.circular(12.0),
-                                                                          border:
-                                                                              Border.all(
-                                                                            color:
-                                                                                FlutterFlowTheme.of(context).primary,
-                                                                            width:
-                                                                                1.0,
+                                                                          borderRadius: BorderRadius.circular(12.0),
+                                                                          border: Border.all(
+                                                                            color: FlutterFlowTheme.of(context).primary,
+                                                                            width: 1.0,
                                                                           ),
                                                                         ),
-                                                                        child:
-                                                                            Padding(
-                                                                          padding:
-                                                                              const EdgeInsets.all(12.0),
-                                                                          child:
-                                                                              Column(
-                                                                            mainAxisSize:
-                                                                                MainAxisSize.min,
+                                                                        child: Padding(
+                                                                          padding: const EdgeInsets.all(12.0),
+                                                                          child: Column(
+                                                                            mainAxisSize: MainAxisSize.min,
                                                                             crossAxisAlignment:
                                                                                 CrossAxisAlignment.start,
                                                                             children: [
@@ -405,12 +349,23 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                                   chatItem,
                                                                                   r'''$['content']''',
                                                                                 ).toString(),
-                                                                                style: FlutterFlowTheme.of(context).titleMedium.override(
-                                                                                      fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
-                                                                                      color: FlutterFlowTheme.of(context).secondary,
+                                                                                style: FlutterFlowTheme.of(context)
+                                                                                    .titleMedium
+                                                                                    .override(
+                                                                                      fontFamily:
+                                                                                          FlutterFlowTheme.of(context)
+                                                                                              .titleMediumFamily,
+                                                                                      color:
+                                                                                          FlutterFlowTheme.of(context)
+                                                                                              .secondary,
                                                                                       fontSize: 14.0,
                                                                                       fontWeight: FontWeight.w500,
-                                                                                      useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleMediumFamily),
+                                                                                      useGoogleFonts: GoogleFonts
+                                                                                              .asMap()
+                                                                                          .containsKey(
+                                                                                              FlutterFlowTheme.of(
+                                                                                                      context)
+                                                                                                  .titleMediumFamily),
                                                                                       lineHeight: 1.5,
                                                                                     ),
                                                                               )),
@@ -420,23 +375,15 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                       ),
                                                                       Padding(
                                                                         padding: const EdgeInsetsDirectional.fromSTEB(
-                                                                            0.0,
-                                                                            6.0,
-                                                                            0.0,
-                                                                            0.0),
-                                                                        child:
-                                                                            InkWell(
-                                                                          splashColor:
-                                                                              Colors.transparent,
-                                                                          focusColor:
-                                                                              Colors.transparent,
-                                                                          hoverColor:
-                                                                              Colors.transparent,
-                                                                          highlightColor:
-                                                                              Colors.transparent,
-                                                                          onTap:
-                                                                              () async {
-                                                                            logFirebaseEvent('CHAT_PAGE_Row_mwx7yrjj_ON_TAP');
+                                                                            0.0, 6.0, 0.0, 0.0),
+                                                                        child: InkWell(
+                                                                          splashColor: Colors.transparent,
+                                                                          focusColor: Colors.transparent,
+                                                                          hoverColor: Colors.transparent,
+                                                                          highlightColor: Colors.transparent,
+                                                                          onTap: () async {
+                                                                            logFirebaseEvent(
+                                                                                'CHAT_PAGE_Row_mwx7yrjj_ON_TAP');
                                                                             logFirebaseEvent('Row_copy_to_clipboard');
                                                                             await Clipboard.setData(ClipboardData(
                                                                                 text: getJsonField(
@@ -448,38 +395,61 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                               SnackBar(
                                                                                 content: Text(
                                                                                   'Response copied to clipboard.',
-                                                                                  style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                                                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                  style: FlutterFlowTheme.of(context)
+                                                                                      .bodyMedium
+                                                                                      .override(
+                                                                                        fontFamily:
+                                                                                            FlutterFlowTheme.of(context)
+                                                                                                .bodyMediumFamily,
                                                                                         color: const Color(0x00000000),
                                                                                         fontSize: 12.0,
-                                                                                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                        useGoogleFonts: GoogleFonts
+                                                                                                .asMap()
+                                                                                            .containsKey(
+                                                                                                FlutterFlowTheme.of(
+                                                                                                        context)
+                                                                                                    .bodyMediumFamily),
                                                                                       ),
                                                                                 ),
-                                                                                duration: const Duration(milliseconds: 2000),
-                                                                                backgroundColor: FlutterFlowTheme.of(context).secondary,
+                                                                                duration:
+                                                                                    const Duration(milliseconds: 2000),
+                                                                                backgroundColor:
+                                                                                    FlutterFlowTheme.of(context)
+                                                                                        .secondary,
                                                                               ),
                                                                             );
                                                                           },
-                                                                          child:
-                                                                              Row(
-                                                                            mainAxisSize:
-                                                                                MainAxisSize.max,
+                                                                          child: Row(
+                                                                            mainAxisSize: MainAxisSize.max,
                                                                             children: [
                                                                               Padding(
-                                                                                padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
+                                                                                padding: const EdgeInsetsDirectional
+                                                                                    .fromSTEB(0.0, 0.0, 4.0, 0.0),
                                                                                 child: Icon(
                                                                                   Icons.content_copy,
-                                                                                  color: FlutterFlowTheme.of(context).primary,
+                                                                                  color: FlutterFlowTheme.of(context)
+                                                                                      .primary,
                                                                                   size: 10.0,
                                                                                 ),
                                                                               ),
                                                                               Text(
                                                                                 'Copy response',
-                                                                                style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                                                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                                                      color: FlutterFlowTheme.of(context).primary,
+                                                                                style: FlutterFlowTheme.of(context)
+                                                                                    .bodyMedium
+                                                                                    .override(
+                                                                                      fontFamily:
+                                                                                          FlutterFlowTheme.of(context)
+                                                                                              .bodyMediumFamily,
+                                                                                      color:
+                                                                                          FlutterFlowTheme.of(context)
+                                                                                              .primary,
                                                                                       fontSize: 10.0,
-                                                                                      useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                      useGoogleFonts: GoogleFonts
+                                                                                              .asMap()
+                                                                                          .containsKey(
+                                                                                              FlutterFlowTheme.of(
+                                                                                                      context)
+                                                                                                  .bodyMediumFamily),
                                                                                     ),
                                                                               ),
                                                                             ],
@@ -498,18 +468,12 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                     'user') ??
                                                                 true)
                                                               Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .max,
-                                                                mainAxisAlignment:
-                                                                    MainAxisAlignment
-                                                                        .end,
+                                                                mainAxisSize: MainAxisSize.max,
+                                                                mainAxisAlignment: MainAxisAlignment.end,
                                                                 children: [
                                                                   Container(
-                                                                    constraints:
-                                                                        BoxConstraints(
-                                                                      maxWidth:
-                                                                          () {
+                                                                    constraints: BoxConstraints(
+                                                                      maxWidth: () {
                                                                         if (MediaQuery.sizeOf(context).width >=
                                                                             1170.0) {
                                                                           return 700.0;
@@ -521,37 +485,35 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                                         }
                                                                       }(),
                                                                     ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: FlutterFlowTheme.of(
-                                                                              context)
+                                                                    decoration: BoxDecoration(
+                                                                      color: FlutterFlowTheme.of(context)
                                                                           .primaryBackground,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              12.0),
+                                                                      borderRadius: BorderRadius.circular(12.0),
                                                                     ),
-                                                                    child:
-                                                                        Padding(
-                                                                      padding:
-                                                                          const EdgeInsets.all(
-                                                                              12.0),
-                                                                      child:
-                                                                          Column(
-                                                                        mainAxisSize:
-                                                                            MainAxisSize.min,
-                                                                        crossAxisAlignment:
-                                                                            CrossAxisAlignment.start,
+                                                                    child: Padding(
+                                                                      padding: const EdgeInsets.all(12.0),
+                                                                      child: Column(
+                                                                        mainAxisSize: MainAxisSize.min,
+                                                                        crossAxisAlignment: CrossAxisAlignment.start,
                                                                         children: [
                                                                           Text(
                                                                             getJsonField(
                                                                               chatItem,
                                                                               r'''$['content']''',
                                                                             ).toString(),
-                                                                            style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                                                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                                                  color: FlutterFlowTheme.of(context).primary,
+                                                                            style: FlutterFlowTheme.of(context)
+                                                                                .bodyMedium
+                                                                                .override(
+                                                                                  fontFamily:
+                                                                                      FlutterFlowTheme.of(context)
+                                                                                          .bodyMediumFamily,
+                                                                                  color: FlutterFlowTheme.of(context)
+                                                                                      .primary,
                                                                                   fontWeight: FontWeight.w500,
-                                                                                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                  useGoogleFonts: GoogleFonts.asMap()
+                                                                                      .containsKey(
+                                                                                          FlutterFlowTheme.of(context)
+                                                                                              .bodyMediumFamily),
                                                                                 ),
                                                                           ),
                                                                         ],
@@ -564,8 +526,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                         ),
                                                       );
                                                     },
-                                                    controller: _model
-                                                        .listViewController,
+                                                    controller: _model.listViewController,
                                                   );
                                                 },
                                               ),
@@ -583,8 +544,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                         Align(
                           alignment: const AlignmentDirectional(0.0, 0.0),
                           child: Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(
-                                0.0, 5.0, 0.0, 0.0),
+                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 5.0, 0.0, 0.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.max,
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -602,8 +562,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                                 Container(
                                   decoration: const BoxDecoration(),
                                   child: Padding(
-                                    padding: const EdgeInsetsDirectional.fromSTEB(
-                                        12.0, 16.0, 12.0, 12.0),
+                                    padding: const EdgeInsetsDirectional.fromSTEB(12.0, 16.0, 12.0, 12.0),
                                     child: Container(
                                       width: double.infinity,
                                       decoration: BoxDecoration(
@@ -615,154 +574,84 @@ class _ChatWidgetState extends State<ChatWidget> {
                                             offset: Offset(0.0, 1.0),
                                           )
                                         ],
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
+                                        borderRadius: BorderRadius.circular(12.0),
                                       ),
                                       child: Padding(
-                                        padding: const EdgeInsetsDirectional.fromSTEB(
-                                            20.0, 4.0, 10.0, 4.0),
+                                        padding: const EdgeInsetsDirectional.fromSTEB(20.0, 4.0, 10.0, 4.0),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.max,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: SizedBox(
                                                 width: 300.0,
                                                 child: TextFormField(
-                                                  controller:
-                                                      _model.textController,
-                                                  focusNode:
-                                                      _model.textFieldFocusNode,
-                                                  textCapitalization:
-                                                      TextCapitalization
-                                                          .sentences,
+                                                  controller: _model.textController,
+                                                  focusNode: _model.textFieldFocusNode,
+                                                  textCapitalization: TextCapitalization.sentences,
                                                   obscureText: false,
                                                   decoration: InputDecoration(
-                                                    hintText:
-                                                        'Chat with memories...',
-                                                    hintStyle: FlutterFlowTheme
-                                                            .of(context)
-                                                        .bodySmall
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodySmallFamily,
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primaryText,
+                                                    hintText: 'Chat with memories...',
+                                                    hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
+                                                          fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                                                          color: FlutterFlowTheme.of(context).primaryText,
                                                           fontSize: 14.0,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          useGoogleFonts: GoogleFonts
-                                                                  .asMap()
-                                                              .containsKey(
-                                                                  FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmallFamily),
+                                                          fontWeight: FontWeight.w500,
+                                                          useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                                              FlutterFlowTheme.of(context).bodySmallFamily),
                                                         ),
-                                                    enabledBorder:
-                                                        const UnderlineInputBorder(
+                                                    enabledBorder: const UnderlineInputBorder(
                                                       borderSide: BorderSide(
-                                                        color:
-                                                            Color(0x00000000),
+                                                        color: Color(0x00000000),
                                                         width: 1.0,
                                                       ),
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .only(
-                                                        topLeft:
-                                                            Radius.circular(
-                                                                4.0),
-                                                        topRight:
-                                                            Radius.circular(
-                                                                4.0),
+                                                      borderRadius: BorderRadius.only(
+                                                        topLeft: Radius.circular(4.0),
+                                                        topRight: Radius.circular(4.0),
                                                       ),
                                                     ),
-                                                    focusedBorder:
-                                                        const UnderlineInputBorder(
+                                                    focusedBorder: const UnderlineInputBorder(
                                                       borderSide: BorderSide(
-                                                        color:
-                                                            Color(0x00000000),
+                                                        color: Color(0x00000000),
                                                         width: 1.0,
                                                       ),
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .only(
-                                                        topLeft:
-                                                            Radius.circular(
-                                                                4.0),
-                                                        topRight:
-                                                            Radius.circular(
-                                                                4.0),
+                                                      borderRadius: BorderRadius.only(
+                                                        topLeft: Radius.circular(4.0),
+                                                        topRight: Radius.circular(4.0),
                                                       ),
                                                     ),
-                                                    errorBorder:
-                                                        const UnderlineInputBorder(
+                                                    errorBorder: const UnderlineInputBorder(
                                                       borderSide: BorderSide(
-                                                        color:
-                                                            Color(0x00000000),
+                                                        color: Color(0x00000000),
                                                         width: 1.0,
                                                       ),
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .only(
-                                                        topLeft:
-                                                            Radius.circular(
-                                                                4.0),
-                                                        topRight:
-                                                            Radius.circular(
-                                                                4.0),
+                                                      borderRadius: BorderRadius.only(
+                                                        topLeft: Radius.circular(4.0),
+                                                        topRight: Radius.circular(4.0),
                                                       ),
                                                     ),
-                                                    focusedErrorBorder:
-                                                        const UnderlineInputBorder(
+                                                    focusedErrorBorder: const UnderlineInputBorder(
                                                       borderSide: BorderSide(
-                                                        color:
-                                                            Color(0x00000000),
+                                                        color: Color(0x00000000),
                                                         width: 1.0,
                                                       ),
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .only(
-                                                        topLeft:
-                                                            Radius.circular(
-                                                                4.0),
-                                                        topRight:
-                                                            Radius.circular(
-                                                                4.0),
+                                                      borderRadius: BorderRadius.only(
+                                                        topLeft: Radius.circular(4.0),
+                                                        topRight: Radius.circular(4.0),
                                                       ),
                                                     ),
                                                   ),
-                                                  style: FlutterFlowTheme.of(
-                                                          context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        color:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .primaryText,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        useGoogleFonts: GoogleFonts
-                                                                .asMap()
-                                                            .containsKey(
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodyMediumFamily),
+                                                  style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                        color: FlutterFlowTheme.of(context).primaryText,
+                                                        fontWeight: FontWeight.w500,
+                                                        useGoogleFonts: GoogleFonts.asMap()
+                                                            .containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                                                       ),
                                                   maxLines: 8,
                                                   minLines: 1,
-                                                  keyboardType:
-                                                      TextInputType.multiline,
-                                                  validator: _model
-                                                      .textControllerValidator
-                                                      .asValidator(context),
+                                                  keyboardType: TextInputType.multiline,
+                                                  validator: _model.textControllerValidator.asValidator(context),
                                                 ),
                                               ),
                                             ),
@@ -778,132 +667,76 @@ class _ChatWidgetState extends State<ChatWidget> {
                                               ),
                                               showLoadingIndicator: true,
                                               onPressed: () async {
-                                                logFirebaseEvent(
-                                                    'CHAT_PAGE_send_rounded_ICN_ON_TAP');
-                                                logFirebaseEvent(
-                                                    'IconButton_firestore_query');
-                                                _model.latestMemoriesChat2 =
-                                                    await queryMemoriesRecordOnce(
-                                                  queryBuilder:
-                                                      (memoriesRecord) =>
-                                                          memoriesRecord
-                                                              .where(
-                                                                'user',
-                                                                isEqualTo:
-                                                                    currentUserReference,
-                                                              )
-                                                              .where(
-                                                                'isUselessMemory',
-                                                                isEqualTo:
-                                                                    false,
-                                                              )
-                                                              .where(
-                                                                'emptyMemory',
-                                                                isEqualTo:
-                                                                    false,
-                                                              )
-                                                              .orderBy('date',
-                                                                  descending:
-                                                                      true),
+                                                logFirebaseEvent('CHAT_PAGE_send_rounded_ICN_ON_TAP');
+                                                logFirebaseEvent('IconButton_firestore_query');
+                                                _model.latestMemoriesChat2 = await queryMemoriesRecordOnce(
+                                                  queryBuilder: (memoriesRecord) => memoriesRecord
+                                                      .where(
+                                                        'user',
+                                                        isEqualTo: currentUserReference,
+                                                      )
+                                                      .where(
+                                                        'isUselessMemory',
+                                                        isEqualTo: false,
+                                                      )
+                                                      .where(
+                                                        'emptyMemory',
+                                                        isEqualTo: false,
+                                                      )
+                                                      .orderBy('date', descending: true),
                                                   limit: 50,
                                                 );
-                                                logFirebaseEvent(
-                                                    'IconButton_backend_call');
-                                                _model.vector =
-                                                    await VectorizeCall.call(
-                                                  input: _model
-                                                      .textController.text,
+                                                logFirebaseEvent('IconButton_backend_call');
+                                                _model.vector = await getEmbeddingsFromInput(
+                                                  _model.textController.text,
                                                 );
-                                                logFirebaseEvent(
-                                                    'IconButton_backend_call');
-                                                _model.simillarVectors =
-                                                    await QueryVectorsCall.call(
-                                                  vectorList:
-                                                      VectorizeCall.embedding(
-                                                    (_model.vector?.jsonBody ??
-                                                        ''),
-                                                  ),
+                                                logFirebaseEvent('IconButton_backend_call');
+                                                _model.simillarVectors = await QueryVectorsCall.call(
+                                                  vectorList: _model.vector ?? [],
                                                 );
-                                                logFirebaseEvent(
-                                                    'IconButton_update_app_state');
+                                                logFirebaseEvent('IconButton_update_app_state');
                                                 setState(() {
-                                                  FFAppState().test = (_model
-                                                          .simillarVectors
-                                                          ?.bodyText ??
-                                                      '');
-                                                  FFAppState().testlist =
-                                                      QueryVectorsCall.metadata(
-                                                    (_model.simillarVectors
-                                                            ?.jsonBody ??
-                                                        ''),
+                                                  FFAppState().test = (_model.simillarVectors?.bodyText ?? '');
+                                                  FFAppState().testlist = QueryVectorsCall.metadata(
+                                                    (_model.simillarVectors?.jsonBody ?? ''),
                                                   )!
-                                                          .map((e) =>
-                                                              e.toString())
-                                                          .toList()
-                                                          .cast<String>();
+                                                      .map((e) => e.toString())
+                                                      .toList()
+                                                      .cast<String>();
                                                 });
-                                                logFirebaseEvent(
-                                                    'IconButton_update_app_state');
+                                                logFirebaseEvent('IconButton_update_app_state');
                                                 setState(() {
-                                                  FFAppState().chatHistory = functions
-                                                      .updateSystemPromptMemories(
-                                                          FFAppState()
-                                                              .chatHistory,
-                                                          functions.documentsToText(
-                                                              _model
-                                                                  .latestMemoriesChat2!
-                                                                  .toList())!,
-                                                          FFAppState()
-                                                              .lastMemory)!;
+                                                  FFAppState().chatHistory = functions.updateSystemPromptMemories(
+                                                      FFAppState().chatHistory,
+                                                      functions.documentsToText(_model.latestMemoriesChat2!.toList())!,
+                                                      FFAppState().lastMemory)!;
                                                 });
-                                                logFirebaseEvent(
-                                                    'IconButton_update_app_state');
+                                                logFirebaseEvent('IconButton_update_app_state');
                                                 setState(() {
-                                                  FFAppState().chatHistory =
-                                                      functions.saveChatHistory(
-                                                          FFAppState()
-                                                              .chatHistory,
-                                                          functions
-                                                              .convertToJSONRole(
-                                                                  _model
-                                                                      .textController
-                                                                      .text,
-                                                                  'user')!)!;
+                                                  FFAppState().chatHistory = functions.saveChatHistory(
+                                                      FFAppState().chatHistory,
+                                                      functions.convertToJSONRole(
+                                                          _model.textController.text, 'user')!)!;
                                                 });
-                                                logFirebaseEvent(
-                                                    'IconButton_scroll_to');
-                                                await _model.listViewController
-                                                    ?.animateTo(
-                                                  _model.listViewController!
-                                                      .position.maxScrollExtent,
-                                                  duration: const Duration(
-                                                      milliseconds: 100),
+                                                logFirebaseEvent('IconButton_scroll_to');
+                                                await _model.listViewController?.animateTo(
+                                                  _model.listViewController!.position.maxScrollExtent,
+                                                  duration: const Duration(milliseconds: 100),
                                                   curve: Curves.ease,
                                                 );
-                                                logFirebaseEvent(
-                                                    'IconButton_clear_text_fields_pin_codes');
+                                                logFirebaseEvent('IconButton_clear_text_fields_pin_codes');
                                                 setState(() {
-                                                  _model.textController
-                                                      ?.clear();
+                                                  _model.textController?.clear();
                                                 });
-                                                logFirebaseEvent(
-                                                    'IconButton_custom_action');
+                                                logFirebaseEvent('IconButton_custom_action');
                                                 await actions.streamApiResponse(
                                                   () async {
-                                                    logFirebaseEvent(
-                                                        '_update_app_state');
+                                                    logFirebaseEvent('_update_app_state');
                                                     setState(() {});
-                                                    logFirebaseEvent(
-                                                        '_scroll_to');
-                                                    await _model
-                                                        .listViewController
-                                                        ?.animateTo(
-                                                      _model
-                                                          .listViewController!
-                                                          .position
-                                                          .maxScrollExtent,
-                                                      duration: const Duration(
-                                                          milliseconds: 100),
+                                                    logFirebaseEvent('_scroll_to');
+                                                    await _model.listViewController?.animateTo(
+                                                      _model.listViewController!.position.maxScrollExtent,
+                                                      duration: const Duration(milliseconds: 100),
                                                       curve: Curves.ease,
                                                     );
                                                   },

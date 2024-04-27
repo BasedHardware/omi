@@ -272,11 +272,9 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                     }, memoriesRecordReference);
                                     logFirebaseEvent('Button_backend_call');
                                     _model.openAIVector =
-                                        await VectorizeCall.call(
-                                      input: _model.textController.text,
+                                        await getEmbeddingsFromInput(_model.textController.text,
                                     );
-                                    if ((_model.openAIVector?.succeeded ??
-                                        true)) {
+                                    if (_model.openAIVector != null) {
                                       logFirebaseEvent('Button_backend_call');
                                       _model.addedVector =
                                           await CreateVectorPineconeCall.call(
@@ -285,9 +283,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                         structuredMemory: _model
                                             .createdMemoryManually
                                             ?.structuredMemory,
-                                        vectorList: VectorizeCall.embedding(
-                                          (_model.openAIVector?.jsonBody ?? ''),
-                                        ),
+                                        vectorList: _model.openAIVector,
                                       );
                                       if (!(_model.addedVector?.succeeded ??
                                           true)) {

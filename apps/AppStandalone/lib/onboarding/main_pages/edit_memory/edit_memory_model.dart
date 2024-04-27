@@ -18,7 +18,7 @@ class EditMemoryModel extends FlutterFlowModel<EditMemoryWidget> {
   // Stores action output result for [Backend Call - Create Document] action in Button widget.
   MemoriesRecord? createdMemoryManually;
   // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
-  ApiCallResponse? openAIVector;
+  List<double>? openAIVector;
   // Stores action output result for [Backend Call - API (createVectorPinecone)] action in Button widget.
   ApiCallResponse? addedVector;
 

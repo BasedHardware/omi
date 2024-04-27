@@ -12,7 +12,7 @@ class ImportAppleModel extends FlutterFlowModel<ImportAppleWidget> {
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
   // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
-  ApiCallResponse? vectorized;
+  List<double>? vectorized;
   // Stores action output result for [Backend Call - Create Document] action in Button widget.
   MemoriesRecord? createdMemoryManually;
   // Stores action output result for [Backend Call - API (createVectorPinecone)] action in Button widget.
