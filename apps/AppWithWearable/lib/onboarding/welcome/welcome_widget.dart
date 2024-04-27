@@ -151,30 +151,38 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                               mouseCursor: SystemMouseCursors.click,
                               onTap: () async {
                                 // Check if Bluetooth permission is granted
-                                PermissionStatus bluetoothStatus =
-                                    await Permission.bluetooth.status;
+                                PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
+
+                                if (!bluetoothStatus.isGranted) {
+                                  // Request Bluetooth permission if not already granted
+                                  bluetoothStatus = await Permission.bluetooth.request();
+                                }
+
                                 if (bluetoothStatus.isGranted) {
-                                  // Bluetooth permission is already granted
-                                  // Request notification permission
-                                  PermissionStatus notificationStatus =
-                                      await Permission.notification.request();
+                                  // Bluetooth permission is granted
 
-                                  // Navigate to the 'scanDevices' screen
-                                  context.goNamed('findDevices');
-                                } else {
-                                  // Bluetooth permission is not granted
-                                  if (await Permission.bluetooth
-                                      .request()
-                                      .isGranted) {
-                                    // Bluetooth permission is granted now
+                                  // Now check and request ACCESS_FINE_LOCATION permission
+                                  PermissionStatus locationStatus = await Permission.location.status;
+                                  if (!locationStatus.isGranted) {
+                                    // Request ACCESS_FINE_LOCATION permission if not already granted
+                                    locationStatus = await Permission.location.request();
+                                  }
+
+                                  if (locationStatus.isGranted) {
+
                                     // Request notification permission
-                                    PermissionStatus notificationStatus =
-                                        await Permission.notification.request();
+                                    PermissionStatus notificationStatus = await Permission.notification.request();
+                                    if (notificationStatus.isGranted) {
+                                      // Notification permission is granted
 
-                                    // Navigate to the 'scanDevices' screen
-                                    context.goNamed('findDevices');
+                                      // Navigate to the 'scanDevices' screen
+                                      context.goNamed('findDevices');
+                                    } else {
+                                      // Handle the case when notification permission is denied
+                                      // You can show a dialog or a notification to the user
+                                    }
                                   } else {
-                                    // Bluetooth permission is denied
+                                    // ACCESS_FINE_LOCATION permission is denied
                                     // Show a dialog to inform the user and provide an action to open app settings
                                     showDialog(
                                       context: context,
@@ -182,7 +190,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                         return AlertDialog(
                                           backgroundColor: Colors.grey[900],
                                           title: Text(
-                                            'Bluetooth Required',
+                                            'Location Required',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 20,
@@ -190,7 +198,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                             ),
                                           ),
                                           content: Text(
-                                            'This app needs Bluetooth to function properly. Please enable it in the settings.',
+                                            'This app needs location access to function properly. Please enable it in the settings.',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 16,
@@ -216,6 +224,48 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                       },
                                     );
                                   }
+                                } else {
+                                  // Bluetooth permission is denied
+                                  // Show a dialog to inform the user and provide an action to open app settings
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        backgroundColor: Colors.grey[900],
+                                        title: Text(
+                                          'Bluetooth Required',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        content: Text(
+                                          'This app needs Bluetooth to function properly. Please enable it in the settings.',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              openAppSettings();
+                                            },
+                                            child: Text(
+                                              'OK',
+                                              style: TextStyle(
+                                                color: Colors.blue,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
                                 }
                               },
                               child: ShaderMask(
