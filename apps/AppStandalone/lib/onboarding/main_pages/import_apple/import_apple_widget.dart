@@ -277,10 +277,10 @@ class _ImportAppleWidgetState extends State<ImportAppleWidget> {
                         }, memoriesRecordReference);
                         if (_model.vectorized != null) {
                           logFirebaseEvent('Button_backend_call');
-                          _model.addedVector = await CreateVectorPineconeCall.call(
-                            id: _model.createdMemoryManually?.reference.id,
-                            structuredMemory: _model.createdMemoryManually?.structuredMemory,
-                            vectorList: _model.vectorized,
+                          _model.addedVector = await createPineconeVector(
+                             _model.vectorized,
+                             _model.createdMemoryManually?.structuredMemory,
+                             _model.createdMemoryManually?.reference.id,
                           );
                         } else {
                           logFirebaseEvent('Button_show_snack_bar');

@@ -1,13 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
-
-import '/flutter_flow/flutter_flow_util.dart';
-import 'api_manager.dart';
 import '../../env/env.dart';
 import 'package:http/http.dart' as http;
-
-export 'api_manager.dart' show ApiCallResponse;
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -33,9 +27,7 @@ dynamic extractContentFromResponse(http.Response? response, {bool isEmbedding = 
   if (response != null && response.statusCode == 200) {
     var data = jsonDecode(response.body);
     if (isEmbedding) {
-      debugPrint('extractContentFromResponse: $data');
       var embedding = data['data'][0]['embedding'];
-      // return casted to double
       return embedding;
     }
     return data['choices'][0]['message']['content'];
@@ -51,6 +43,7 @@ Future<dynamic> gptApiCall({
   String urlSuffix = 'chat/completions',
   List<Map<String, String>> messages = const [],
   String contentToEmbed = '',
+  bool jsonResponseFormat = false,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
@@ -62,7 +55,11 @@ Future<dynamic> gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    body = jsonEncode({'model': model, 'messages': messages});
+    var bodyData = {'model': model, 'messages': messages};
+    if (jsonResponseFormat) {
+      bodyData['response_format'] = {'type': 'json_object'};
+    }
+    body = jsonEncode(bodyData);
   }
 
   var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
@@ -130,147 +127,58 @@ Future<List<double>> getEmbeddingsFromInput(String? input) async {
   return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
 }
 
-class CreateVectorPineconeCall {
-  static Future<ApiCallResponse> call({
-    List<double>? vectorList,
-    String? structuredMemory = '',
-    String? id = '',
-  }) async {
-    final vector = _serializeList(vectorList);
-
-    final ffApiRequestBody = '''
-{
-  "vectors": [
-    {
-      "id": "$id",
-      "values": $vector,
-      "metadata": {
-        "structuredMemory": "$structuredMemory"
-      }
-    }
-  ],
-  "namespace": "${Env.pineconeIndexNamespace}"
-}''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'createVectorPinecone',
-      apiUrl: '${Env.pineconeIndexUrl}/vectors/upsert',
-      callType: ApiCallType.POST,
-      headers: {
-        'Api-Key': Env.pineconeApiKey,
-        'Content-Type': 'application/json',
-      },
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
+Future<dynamic> pineconeApiCall({required String urlSuffix, required String body}) async {
+  var url = '${Env.pineconeIndexUrl}/$urlSuffix';
+  final headers = {
+    'Api-Key': Env.pineconeApiKey,
+    'Content-Type': 'application/json',
+  };
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var responseBody = jsonDecode(response?.body ?? '{}');
+  return responseBody;
 }
 
-class QueryVectorsCall {
-  static Future<ApiCallResponse> call({
-    List<double>? vectorList,
-  }) async {
-    final vector = _serializeList(vectorList);
-
-    final ffApiRequestBody = '''
-{
-  "namespace": "${Env.pineconeIndexNamespace}",
-  "vector": $vector,
-  "topK": 10,
-  "includeValues": true,
-  "includeMetadata": true,
-  "filter": {
-    "genre": {
-    }
-  }
-}''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'QueryVectors',
-      apiUrl: '${Env.pineconeIndexUrl}/query',
-      callType: ApiCallType.POST,
-      headers: {
-        'Api-Key': Env.pineconeApiKey,
-        'Content-Type': 'application/json',
-      },
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-
-  static List? metadata(dynamic response) => getJsonField(
-        response,
-        r'''$.matches[:].metadata''',
-        true,
-      ) as List?;
-}
-
-String _serializeList(List? list) {
-  list ??= <String>[];
-  try {
-    return json.encode(list);
-  } catch (_) {
-    return '[]';
-  }
-}
-
-class TestCall {
-  static Future<ApiCallResponse> call({
-    String? memory = '',
-    String? structuredMemory = '',
-  }) async {
-    const ffApiRequestBody = '''
-{
-    "model": "gpt-3.5-turbo-0125",
-    "response_format": { "type": "json_object" },
-    "messages": [
+Future<dynamic> createPineconeVector(List<double>? vectorList, String? structuredMemory, String? id) async {
+  var body = jsonEncode({
+    'vectors': [
       {
-        "role": "system",
-        "content": "You are a helpful assistant designed to output JSON in this format: key = memory. value = {your response}"
-      },
-      {
-        "role": "user",
-        "content": "return 5 random memories"
+        'id': id,
+        'values': vectorList,
+        'metadata': {'structuredMemory': structuredMemory}
       }
-    ]
-  }''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'test',
-      apiUrl: 'https://api.openai.com/v1/chat/completions',
-      callType: ApiCallType.POST,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': 'Bearer ${Env.openAIApiKey}',
-        'OpenAI-Organization': Env.openAIOrganization,
-      },
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: true,
-      decodeUtf8: true,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
+    ],
+    'namespace': Env.pineconeIndexNamespace
+  });
+  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
+  debugPrint('createVectorPinecone response: $responseBody');
+}
 
-  static List<String>? responsegpt(dynamic response) => (getJsonField(
-        response,
-        r'''$.choices[:].message.content''',
-        true,
-      ) as List?)
-          ?.withoutNulls
-          .map((x) => castToType<String>(x))
-          .withoutNulls
-          .toList();
+Future<List> queryPineconeVectors(List<double>? vectorList) async {
+  var body = jsonEncode({
+    'namespace': Env.pineconeIndexNamespace,
+    'vector': vectorList,
+    'topK': 10,
+    'includeValues': true,
+    'includeMetadata': true,
+    'filter': {'genre': {}}
+  });
+  var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
+  return (responseBody['matches'])?.map((e) => e['metadata']).toList() ?? [];
+}
+
+Future<List<String>> testRequest(String? memory, String? structuredMemory) async {
+  var responseBody = await gptApiCall(
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          'role': 'system',
+          'content':
+              '''You are a helpful assistant designed to output JSON in this format: key = memory. value = {your response}'''
+        },
+        {'role': 'user', 'content': '''return 5 random memories'''},
+      ],
+      jsonResponseFormat: true);
+  var decoded = [jsonDecode(responseBody)];
+  debugPrint('testRequest response: ${decoded.runtimeType} $decoded');
+  return decoded.map<String>((e) => e.toString()).toList();
 }
