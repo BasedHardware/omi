@@ -8,7 +8,7 @@ import LiveAudioStream from 'react-native-live-audio-stream';
 import {DEEPGRAM_API_KEY} from '@env';
 import {MomentsContext} from '../contexts/MomentsContext';
 import MomentListItem from '../components/MomentsListItem';
-import {bleManagerEmitter} from './SettingsTab';
+import {bleManagerEmitter} from '../contexts/useBluetooth';
 
 const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -20,7 +20,7 @@ const MomentsTab = () => {
   const serviceUUID = '19B10000-E8F2-537E-4F6C-D104768A1214';
   const audioCharacteristicUUID = '19B10001-E8F2-537E-4F6C-D104768A1214';
 
-  const initWebSocket = () => {
+  const initWebSocket = peripheralId => {
     const model = 'nova-2';
     const language = 'en-US';
     const smart_format = true;
@@ -32,7 +32,11 @@ const MomentsTab = () => {
 
     ws.current.onopen = () => {
       console.log('WebSocket connection opened');
-      startStreaming();
+      if (peripheralId) {
+        startBluetoothStreaming(peripheralId);
+      } else {
+        startStreaming();
+      }
     };
 
     ws.current.onerror = error => {
@@ -58,17 +62,8 @@ const MomentsTab = () => {
   };
 
   const handleUpdateValueForCharacteristic = data => {
-    // Convert the binary data to a format that can be sent to the WebSocket
-    const binaryString = base64.decode(data);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    console.log('stream from bluetooth device');
-    // Send the data to the WebSocket
-    ws.current.send(bytes.buffer);
+    const uint8Array = new Uint8Array(data.value);
+    ws.current.send(uint8Array.buffer);
   };
 
   bleManagerEmitter.addListener(
@@ -85,6 +80,7 @@ const MomentsTab = () => {
     )
       .then(() => {
         console.log('Started notification on ' + serviceUUID);
+        setIsRecording(true);
       })
       .catch(error => {
         console.log('Notification error', error);
@@ -108,7 +104,6 @@ const MomentsTab = () => {
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      console.log('stream from phone');
       ws.current.send(bytes.buffer);
     });
 
@@ -135,7 +130,7 @@ const MomentsTab = () => {
       console.log('Connected devices:', connectedDevices);
       if (connectedDevices.length > 0) {
         // If a Bluetooth device is connected, start streaming audio from the Bluetooth device
-        startBluetoothStreaming(connectedDevices[0].id);
+        initWebSocket(connectedDevices[0].id);
       } else {
         // If no Bluetooth device is connected, initialize the WebSocket and start streaming from the phone's microphone
         initWebSocket();
