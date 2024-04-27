@@ -10,20 +10,18 @@ import '/flutter_flow/custom_functions.dart' as functions;
 
 // Process the creation of memory records
 Future<void> memoryCreationBlock(BuildContext context) async {
-  var structuredMemoryResponse = await structureMemory();
-  if (functions.memoryContainsNA(extractContent(structuredMemoryResponse))) {
-    await saveFailureMemory(structuredMemoryResponse);
+  var structuredMemory = await structureMemory();
+  if (functions.memoryContainsNA(structuredMemory)) {
+    await saveFailureMemory(structuredMemory);
   } else {
-    await processStructuredMemory(structuredMemoryResponse);
+    await processStructuredMemory(structuredMemory);
   }
 }
 
 // Call to the API to get structured memory
-Future<ApiCallResponse> structureMemory() async {
+Future<String> structureMemory() async {
   logFirebaseEvent('memoryCreationBlock_StructureMemoryAPI');
-  return await StructuredMemoryCall.call(
-    memory: functions.jsonEncodeString(FFAppState().lastMemory),
-  );
+  return await fetchStructuredMemory(FFAppState().lastMemory);
 }
 
 // Extract content from API response
@@ -35,13 +33,13 @@ String extractContent(ApiCallResponse response) {
 }
 
 // Save failure memory when structured memory contains NA
-Future<void> saveFailureMemory(ApiCallResponse response) async {
+Future<void> saveFailureMemory(String structuredMemory) async {
   logFirebaseEvent('memoryCreationBlock_backend_call');
   await MemoriesRecord.collection.doc().set({
     ...createMemoriesRecordData(
       memory: FFAppState().lastMemory,
       user: currentUserReference,
-      structuredMemory: extractContent(response),
+      structuredMemory: structuredMemory,
       feedback: '',
       toShowToUserShowHide: 'Hide',
       emptyMemory: FFAppState().lastMemory == '',
@@ -54,17 +52,17 @@ Future<void> saveFailureMemory(ApiCallResponse response) async {
 }
 
 // Process structured memory when it's valid
-Future<void> processStructuredMemory(ApiCallResponse response) async {
+Future<void> processStructuredMemory(String structuredMemory) async {
   if (functions.xGreaterThany(functions.wordCount(FFAppState().lastMemory), 1)!) {
     updateAppStateForProcessing();
-    var feedbackResponse = await requestFeedback(response);
-    await evaluateFeedback(feedbackResponse);
-    updateFinalAppState(feedbackResponse);
+    var feedback = await requestFeedback(structuredMemory);
+    await evaluateFeedback(feedback);
+    updateFinalAppState(feedback);
   } else {
     updateAppStateForEmptyFeedback();
   }
-  logFirebaseEvent('memoryCreationBlock_backend_call', parameters: buildLogParameters(response));
-  await finalizeMemoryRecord(response);
+  logFirebaseEvent('memoryCreationBlock_backend_call', parameters: buildLogParameters(structuredMemory));
+  await finalizeMemoryRecord(structuredMemory);
 }
 
 // Update app state when starting memory processing
@@ -76,33 +74,28 @@ void updateAppStateForProcessing() {
 }
 
 // Request feedback for the given memory
-Future<ApiCallResponse> requestFeedback(ApiCallResponse structuredMemoryResponse) async {
+Future<String> requestFeedback(String structuredMemory) async {
   logFirebaseEvent('memoryCreationBlock_FEEDBACKapi');
-  return await ChatGPTFeedbackCall.call(
-    memory: functions.jsonEncodeString(FFAppState().lastMemory),
-    structuredMemory: functions.jsonEncodeString(extractContent(structuredMemoryResponse)),
-  );
+  return await getGPTFeedback(FFAppState().lastMemory, structuredMemory);
 }
 
 // Evaluate feedback usefulness
-Future<void> evaluateFeedback(ApiCallResponse feedbackResponse) async {
+Future<void> evaluateFeedback(String feedback) async {
   logFirebaseEvent('memoryCreationBlock_custom_action');
-  await actions.debugLog(extractContent(feedbackResponse));
+  await actions.debugLog(feedback);
   logFirebaseEvent('memoryCreationBlock_backend_call');
-  await IsFeeedbackUsefulCall.call(
-    memory: FFAppState().lastMemory,
-    feedback: extractContent(feedbackResponse),
-  );
+  // TODO: doing anything with this response?
+  await isFeedbackUseful(FFAppState().lastMemory,feedback);
 }
 
 // Update app state after processing feedback
-void updateFinalAppState(ApiCallResponse feedbackResponse) {
+void updateFinalAppState(String feedback) {
   logFirebaseEvent('memoryCreationBlock_update_app_state');
   FFAppState().update(() {
-    FFAppState().feedback = functions.jsonEncodeString(extractContent(feedbackResponse))!;
-    FFAppState().isFeedbackUseful = functions.jsonEncodeString(extractContent(feedbackResponse))!;
+    FFAppState().feedback = functions.jsonEncodeString(feedback)!;
+    FFAppState().isFeedbackUseful = functions.jsonEncodeString(feedback)!;
     FFAppState().chatHistory = functions.saveChatHistory(
-        FFAppState().chatHistory, functions.convertToJSONRole(extractContent(feedbackResponse), 'assistant'));
+        FFAppState().chatHistory, functions.convertToJSONRole(feedback, 'assistant'));
     FFAppState().memoryCreationProcessing = false;
   });
 }
@@ -117,75 +110,71 @@ void updateAppStateForEmptyFeedback() {
 }
 
 // Build log parameters for structured memory processing
-Map<String, dynamic> buildLogParameters(ApiCallResponse response) {
+Map<String, dynamic> buildLogParameters(String structuredMemory) {
   return {
-    'jsonBody': (response.jsonBody ?? ''),
+    'jsonBody': (structuredMemory),
     'memory': FFAppState().lastMemory,
     'user': currentUserReference,
   };
 }
 
 // Finalize memory record after processing feedback
-Future<void> finalizeMemoryRecord(ApiCallResponse structuredMemoryResponse) async {
-  var vectorResponse = await vectorizeMemory(structuredMemoryResponse);
+Future<void> finalizeMemoryRecord(String structuredMemory) async {
+  var vector = await vectorizeMemory(structuredMemory);
   logFirebaseEvent('memoryCreationBlock_backend_call');
-  var memoryRecord = await createMemoryRecord(structuredMemoryResponse, vectorResponse);
+  var memoryRecord = await createMemoryRecord(structuredMemory, vector);
   logFirebaseEvent('memoryCreationBlock_backend_call');
-  await storeVectorData(memoryRecord, vectorResponse);
+  await storeVectorData(memoryRecord, vector);
 }
 
 // Call vectorization API for structured memory
-Future<ApiCallResponse> vectorizeMemory(ApiCallResponse structuredMemoryResponse) async {
-  // debugPrint('vectorizeMemory ${structuredMemoryResponse.jsonBody}');
-  var input = StructuredMemoryCall.responsegpt(
-    (structuredMemoryResponse.jsonBody ?? ''),
-  );
-  return await VectorizeCall.call(input: input?.toString());
+Future<List<double>> vectorizeMemory(String structuredMemory) async {
+  return await getEmbeddingsFromInput(structuredMemory);
 }
 
 // Create memory record
 Future<MemoriesRecord> createMemoryRecord(
-    ApiCallResponse structuredMemoryResponse, ApiCallResponse vectorResponse) async {
+    String structuredMemory, List<double> vector) async {
   var recordRef = MemoriesRecord.collection.doc();
   await recordRef.set({
     ...createMemoriesRecordData(
       memory: FFAppState().lastMemory,
       user: currentUserReference,
-      structuredMemory: extractContent(structuredMemoryResponse),
+      structuredMemory: structuredMemory,
       feedback: FFAppState().feedback,
       toShowToUserShowHide: FFAppState().isFeedbackUseful,
       emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: functions.memoryContainsNA(extractContent(structuredMemoryResponse)),
+      isUselessMemory: functions.memoryContainsNA(structuredMemory),
     ),
     ...mapToFirestore({
       'date': FieldValue.serverTimestamp(),
-      'vector': VectorizeCall.embedding((vectorResponse.jsonBody ?? '')),
+      'vector': vector,
     }),
   });
   return MemoriesRecord.getDocumentFromData({
     ...createMemoriesRecordData(
       memory: FFAppState().lastMemory,
       user: currentUserReference,
-      structuredMemory: extractContent(structuredMemoryResponse),
+      structuredMemory: structuredMemory,
       feedback: FFAppState().feedback,
       toShowToUserShowHide: FFAppState().isFeedbackUseful,
       emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: functions.memoryContainsNA(extractContent(structuredMemoryResponse)),
+      isUselessMemory: functions.memoryContainsNA(structuredMemory),
     ),
     ...mapToFirestore({
       'date': DateTime.now(),
-      'vector': VectorizeCall.embedding((vectorResponse.jsonBody ?? '')),
+      'vector': vector,
     }),
   }, recordRef);
 }
 
 // Store vector data after memory record creation
-Future<void> storeVectorData(MemoriesRecord memoryRecord, ApiCallResponse vectorResponse) async {
+Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) async {
   // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
   var vectorAdded = await CreateVectorPineconeCall.call(
-    vectorList: VectorizeCall.embedding((vectorResponse.jsonBody ?? '')),
+    vectorList: vector,
     id: memoryRecord.reference.id,
     structuredMemory: memoryRecord.structuredMemory,
   );
@@ -243,31 +232,30 @@ Future<void> processVoiceCommand(List<MemoriesRecord> memories) async {
   FFAppState().update(() {
     FFAppState().commandState = 'Thinking...';
   });
-
-  var result = await VoiceCommandRespondCall.call(
-    memory: functions.limitTranscript(FFAppState().stt, 12000),
-    longTermMemory: functions.jsonEncodeString(functions.documentsToText(memories.toList())),
+  var result =await voiceCommandRequest(
+      functions.limitTranscript(FFAppState().stt, 12000),
+      functions.jsonEncodeString(functions.documentsToText(memories.toList()))
   );
-
-  updateAppStateForVoiceResult(result);
-  if (result.succeeded ?? true) {
+  updateAppStateForVoiceResult();
+  if (result != ''){
     triggerVoiceCommandNotification(result);
     await saveVoiceCommandMemory(result);
+
   }
 }
 
 // Update app state after voice command results are processed
-void updateAppStateForVoiceResult(ApiCallResponse result) {
+void updateAppStateForVoiceResult() {
   FFAppState().commandState = 'Query';
 }
 
 // Trigger notifications based on voice command results
-void triggerVoiceCommandNotification(ApiCallResponse result) {
+void triggerVoiceCommandNotification(String result) {
   logFirebaseEvent('voiceCommandBlock_trigger_push_notification');
   if (currentUserReference != null) {
     triggerPushNotification(
       notificationTitle: 'Sama',
-      notificationText: extractContent(result),
+      notificationText: result,
       notificationSound: 'default',
       userRefs: [currentUserReference!],
       initialPageName: 'chat',
@@ -277,11 +265,11 @@ void triggerVoiceCommandNotification(ApiCallResponse result) {
 }
 
 // Save the memory from a voice command
-Future<void> saveVoiceCommandMemory(ApiCallResponse result) async {
+Future<void> saveVoiceCommandMemory(String result) async {
   await MemoriesRecord.collection.doc().set({
     ...createMemoriesRecordData(
       user: currentUserReference,
-      feedback: extractContent(result),
+      feedback: result,
       toShowToUserShowHide: 'Show',
       emptyMemory: true,
       isUselessMemory: false,

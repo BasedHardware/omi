@@ -124,16 +124,18 @@ class _StartStopRecordingWidgetState extends State<StartStopRecordingWidget> {
                 ).then((value) => setState(() {}));
 
                 logFirebaseEvent('Button_trigger_push_notification');
-                triggerPushNotification(
-                  notificationTitle: 'Sama',
-                  notificationText:
-                      'Great job activating me! I\'ll passively listen to you and will send you my feedback, just like this! Make sure that the microphone is activated! ',
-                  userRefs: [currentUserReference!],
-                  initialPageName: 'chat',
-                  parameterData: {
-                    'test': 'test1',
-                  },
-                );
+                if (currentUserReference != null){
+                  triggerPushNotification(
+                    notificationTitle: 'Sama',
+                    notificationText:
+                    'Great job activating me! I\'ll passively listen to you and will send you my feedback, just like this! Make sure that the microphone is activated! ',
+                    userRefs: [currentUserReference!],
+                    initialPageName: 'chat',
+                    parameterData: {
+                      'test': 'test1',
+                    },
+                  );
+                }
                 logFirebaseEvent('Button_stop_periodic_action');
                 _model.instantTimer1?.cancel();
                 logFirebaseEvent('Button_start_periodic_action');
