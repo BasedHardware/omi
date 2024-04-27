@@ -11,6 +11,7 @@ import '/flutter_flow/custom_functions.dart' as functions;
 // Process the creation of memory records
 Future<void> memoryCreationBlock(BuildContext context) async {
   var structuredMemory = await structureMemory();
+  debugPrint('Structured Memory: $structuredMemory');
   if (functions.memoryContainsNA(structuredMemory)) {
     await saveFailureMemory(structuredMemory);
   } else {
@@ -45,15 +46,24 @@ Future<void> saveFailureMemory(String structuredMemory) async {
 
 // Process structured memory when it's valid
 Future<void> processStructuredMemory(String structuredMemory) async {
-  if (functions.xGreaterThany(functions.wordCount(FFAppState().lastMemory), 1)!) {
+  debugPrint('processStructuredMemory: $structuredMemory');
+  debugPrint('processStructuredMemory: ${functions.wordCount(FFAppState().lastMemory)}');
+
+  if (functions.wordCount(FFAppState().lastMemory) > 1) {
     updateAppStateForProcessing();
     var feedback = await requestFeedback(structuredMemory);
-    await evaluateFeedback(feedback);
-    updateFinalAppState(feedback);
+    var isFeedbackUseful = await evaluateFeedback(feedback);
+    debugPrint('Feedback: $feedback');
+    debugPrint('isFeedbackUseful: $isFeedbackUseful');
+    updateFinalAppState(feedback, isFeedbackUseful);
   } else {
     updateAppStateForEmptyFeedback();
   }
-  logFirebaseEvent('memoryCreationBlock_backend_call', parameters: buildLogParameters(structuredMemory));
+  logFirebaseEvent('memoryCreationBlock_backend_call', parameters: {
+    'jsonBody': (structuredMemory),
+    'memory': FFAppState().lastMemory,
+    'user': currentUserReference,
+  });
   await finalizeMemoryRecord(structuredMemory);
 }
 
@@ -72,19 +82,18 @@ Future<String> requestFeedback(String structuredMemory) async {
 }
 
 // Evaluate feedback usefulness
-Future<void> evaluateFeedback(String feedback) async {
+Future<String> evaluateFeedback(String feedback) async {
   logFirebaseEvent('memoryCreationBlock_custom_action');
   logFirebaseEvent('memoryCreationBlock_backend_call');
-  // TODO: doing anything with this response?
-  await isFeedbackUseful(FFAppState().lastMemory, feedback);
+  return await isFeedbackUseful(FFAppState().lastMemory, feedback);
 }
 
 // Update app state after processing feedback
-void updateFinalAppState(String feedback) {
+void updateFinalAppState(String feedback, String isFeedbackUseful) {
   logFirebaseEvent('memoryCreationBlock_update_app_state');
   FFAppState().update(() {
-    FFAppState().feedback = functions.jsonEncodeString(feedback)!;
-    FFAppState().isFeedbackUseful = functions.jsonEncodeString(feedback)!;
+    FFAppState().feedback = feedback;
+    FFAppState().isFeedbackUseful = isFeedbackUseful;
     FFAppState().chatHistory =
         functions.saveChatHistory(FFAppState().chatHistory, functions.convertToJSONRole(feedback, 'assistant'));
     FFAppState().memoryCreationProcessing = false;
@@ -98,15 +107,6 @@ void updateAppStateForEmptyFeedback() {
     FFAppState().feedback = '';
     FFAppState().isFeedbackUseful = 'Hide';
   });
-}
-
-// Build log parameters for structured memory processing
-Map<String, dynamic> buildLogParameters(String structuredMemory) {
-  return {
-    'jsonBody': (structuredMemory),
-    'memory': FFAppState().lastMemory,
-    'user': currentUserReference,
-  };
 }
 
 // Finalize memory record after processing feedback
@@ -169,6 +169,7 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
     memoryRecord.reference.id,
   );
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
+  // TODO: this is never triggering as `toShowToUserShowHide` is set to feedback
   if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
     logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
     if (currentUserReference != null) {
