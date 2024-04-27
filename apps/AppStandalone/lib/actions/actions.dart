@@ -74,7 +74,6 @@ Future<String> requestFeedback(String structuredMemory) async {
 // Evaluate feedback usefulness
 Future<void> evaluateFeedback(String feedback) async {
   logFirebaseEvent('memoryCreationBlock_custom_action');
-  await actions.debugLog(feedback);
   logFirebaseEvent('memoryCreationBlock_backend_call');
   // TODO: doing anything with this response?
   await isFeedbackUseful(FFAppState().lastMemory, feedback);
@@ -288,7 +287,7 @@ void updateLastMemory(String lastWords) {
 Future<void> onFinishAction(BuildContext context) async {
   String lastWordsOnFinishAction = await actions.getLastWords();
   logFirebaseEvent('OnFinishAction_custom_action');
-  await actions.debugLog('LAST WORDS FINISH: $lastWordsOnFinishAction');
+  debugPrint('LAST WORDS FINISH: $lastWordsOnFinishAction');
 
   updateMemoryOnFinish(lastWordsOnFinishAction);
   logFirebaseEvent('OnFinishAction_action_block');

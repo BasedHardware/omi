@@ -4,4 +4,3 @@ export 'is_app_microphone_active.dart' show isAppMicrophoneActive;
 export 'get_last_words.dart' show getLastWords;
 export 'list_locales.dart' show listLocales;
 export 'stream_api_response.dart' show streamApiResponse;
-export 'debug_log.dart' show debugLog;
