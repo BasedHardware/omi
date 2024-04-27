@@ -164,7 +164,7 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
   // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
-  var vectorAdded = await createPineconeVector(
+  await createPineconeVector(
     vector,
     memoryRecord.structuredMemory,
     memoryRecord.reference.id,

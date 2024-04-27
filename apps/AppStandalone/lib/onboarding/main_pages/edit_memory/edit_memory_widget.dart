@@ -285,8 +285,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                          _model.createdMemoryManually
                                             ?.reference.id,
                                       );
-                                      if (!(_model.addedVector?.succeeded ??
-                                          true)) {
+                                      if (_model.addedVector) {
                                         logFirebaseEvent(
                                             'Button_show_snack_bar');
                                         ScaffoldMessenger.of(context)
