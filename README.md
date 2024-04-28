@@ -9,7 +9,7 @@
 <div align="center">
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://github.com/BasedHardware/Friend) | [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss)
+[Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss)
 
 </h3>
 </div>
