@@ -23,15 +23,18 @@ Future monitorListenner() async {
         FFAppState().latestUse = now;
       }
       if (now.difference(FFAppState().latestUse!).inMinutes > 5) {
-        triggerPushNotification(
-          notificationTitle: 'Sama',
-          notificationText:
-              'Recording is disabled. Please restart audio recording',
-          notificationSound: 'default',
-          userRefs: [currentUserReference!],
-          initialPageName: 'homePage',
-          parameterData: {},
-        );
+        if (currentUserReference != null) {
+          triggerPushNotification(
+            notificationTitle: 'Sama',
+            notificationText:
+            'Recording is disabled. Please restart audio recording',
+            notificationSound: 'default',
+            userRefs: [currentUserReference!],
+            initialPageName: 'homePage',
+            parameterData: {},
+          );
+        }
+
       }
     }
   });
