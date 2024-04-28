@@ -169,7 +169,6 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
     memoryRecord.reference.id,
   );
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
-  // TODO: this is never triggering as `toShowToUserShowHide` is set to feedback
   if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
     logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
     if (currentUserReference != null) {
