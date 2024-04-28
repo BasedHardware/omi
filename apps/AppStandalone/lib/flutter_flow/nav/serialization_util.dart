@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '/backend/backend.dart';
 import '/backend/schema/enums/enums.dart';
-import '/backend/supabase/supabase.dart';
 
 import '../../flutter_flow/place.dart';
 import '../../flutter_flow/uploaded_file.dart';
@@ -94,9 +93,6 @@ String? serializeParam(
 
       case ParamType.Enum:
         return (param is Enum) ? param.serialize() : null;
-
-      case ParamType.SupabaseRow:
-        return json.encode((param as SupabaseDataRow).data);
 
       default:
         return null;
@@ -188,7 +184,6 @@ enum ParamType {
   DocumentReference,
   DataStruct,
   Enum,
-  SupabaseRow,
 }
 
 dynamic deserializeParam<T>(
@@ -249,19 +244,6 @@ dynamic deserializeParam<T>(
         return json.decode(param);
       case ParamType.DocumentReference:
         return _deserializeDocumentReference(param, collectionNamePath ?? []);
-
-      case ParamType.SupabaseRow:
-        final data = json.decode(param) as Map<String, dynamic>;
-        switch (T) {
-          case RecordsRow:
-            return RecordsRow(data);
-          case ConversationsRow:
-            return ConversationsRow(data);
-          case UsersRow:
-            return UsersRow(data);
-          default:
-            return null;
-        }
 
       case ParamType.DataStruct:
         final data = json.decode(param) as Map<String, dynamic>? ?? {};

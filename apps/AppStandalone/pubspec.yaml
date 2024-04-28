@@ -18,7 +18,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.5+2
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -97,8 +97,6 @@ dependencies:
   sqflite: 2.2.6
   storage_client: 1.5.4
   stream_transform: 2.1.0
-  supabase: 1.11.11
-  supabase_flutter: 1.10.24
   timeago: 3.2.2
   url_launcher: 6.2.5
   url_launcher_android: 6.3.0
@@ -108,7 +106,6 @@ dependencies:
   webview_flutter_android: 3.15.0
   webview_flutter_platform_interface: 2.10.0
   webview_flutter_wkwebview: 3.12.0
-
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -124,7 +121,7 @@ dev_dependencies:
   flutter_launcher_icons: 0.13.1
   flutter_lints: 3.0.0
   image: 4.0.17
-  integration_test: 
+  integration_test:
     sdk: flutter
   lints: 3.0.0
 
@@ -132,7 +129,6 @@ dev_dependencies:
     sdk: flutter
   envied_generator: ^0.5.3
   build_runner: ^2.4.8
-
 
 flutter_launcher_icons:
   android: true
@@ -142,13 +138,11 @@ flutter_launcher_icons:
     generate: true
   image_path: 'assets/images/app_launcher_icon.png'
 
-
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
@@ -186,7 +180,6 @@ flutter:
           weight: 900
           style: italic
 
-  
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 
@@ -212,4 +205,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
-

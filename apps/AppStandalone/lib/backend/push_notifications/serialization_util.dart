@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '/backend/backend.dart';
-import '/backend/supabase/supabase.dart';
 
 import '../../flutter_flow/place.dart';
 import '../../flutter_flow/uploaded_file.dart';
@@ -44,8 +43,6 @@ dynamic serializeParameter(dynamic value) {
       return placeToString(value as FFPlace);
     case FFUploadedFile:
       return uploadedFileToString(value as FFUploadedFile);
-    case SupabaseDataRow:
-      return json.encode((value as SupabaseDataRow).data);
   }
 
   if (value is DocumentReference) {
@@ -144,13 +141,6 @@ T? getParameter<T>(Map<String, dynamic> data, String paramName) {
         return placeFromString(param) as T;
       case FFUploadedFile:
         return uploadedFileFromString(param) as T;
-      case RecordsRow:
-        return RecordsRow(json.decode(param) as Map<String, dynamic>) as T;
-      case ConversationsRow:
-        return ConversationsRow(json.decode(param) as Map<String, dynamic>)
-            as T;
-      case UsersRow:
-        return UsersRow(json.decode(param) as Map<String, dynamic>) as T;
     }
     if (param is String) {
       return FirebaseFirestore.instance.doc(param) as T;
