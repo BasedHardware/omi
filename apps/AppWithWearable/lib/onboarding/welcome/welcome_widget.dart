@@ -13,8 +13,8 @@ import 'welcome_model.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'dart:io' show Platform;
 import 'package:permission_handler/permission_handler.dart';
-
 
 class WelcomeWidget extends StatefulWidget {
   const WelcomeWidget({super.key});
@@ -150,72 +150,96 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                               highlightColor: Colors.transparent,
                               mouseCursor: SystemMouseCursors.click,
                               onTap: () async {
-                                // Check if Bluetooth permission is granted
-                                PermissionStatus bluetoothStatus =
-                                    await Permission.bluetooth.status;
-                                if (bluetoothStatus.isGranted) {
-                                  // Bluetooth permission is already granted
-                                  // Request notification permission
-                                  PermissionStatus notificationStatus =
-                                      await Permission.notification.request();
+                                Map<Permission, PermissionStatus> statuses;
+                                List<Permission> requestStatuses;
 
-                                  // Navigate to the 'scanDevices' screen
+                                if (Platform.isAndroid) {
+                                  statuses = {
+                                    Permission.bluetooth:
+                                        PermissionStatus.denied,
+                                    Permission.notification:
+                                        PermissionStatus.denied,
+                                    Permission.location:
+                                        PermissionStatus.denied,
+                                  };
+                                } else {
+                                  // iOS-specific code
+                                  statuses = {
+                                    Permission.bluetooth:
+                                        PermissionStatus.denied,
+                                    Permission.notification:
+                                        PermissionStatus.denied,
+                                    Permission.location:
+                                        PermissionStatus.denied,
+                                  };
+                                }
+                                requestStatuses = statuses.keys.toList();
+
+                                bool granted = false;
+                                // check if all statuses are 'granted
+                                bool allStatusesGranted(
+                                    Map<Permission, PermissionStatus>
+                                        statuses) {
+                                  return statuses.values
+                                      .every((status) => status.isGranted);
+                                }
+
+                                int attempts = 0;
+                                int maxAttempts = 3;
+                                while (attempts < maxAttempts &&
+                                    !allStatusesGranted(statuses)) {
+                                  // Request permissions
+                                  statuses = await requestStatuses.request();
+                                  if (allStatusesGranted(statuses)) {
+                                    granted = true;
+                                    break;
+                                  }
+                                  attempts += 1;
+                                }
+                                if (granted) {
                                   context.goNamed('findDevices');
                                 } else {
-                                  // Bluetooth permission is not granted
-                                  if (await Permission.bluetooth
-                                      .request()
-                                      .isGranted) {
-                                    // Bluetooth permission is granted now
-                                    // Request notification permission
-                                    PermissionStatus notificationStatus =
-                                        await Permission.notification.request();
-
-                                    // Navigate to the 'scanDevices' screen
-                                    context.goNamed('findDevices');
-                                  } else {
-                                    // Bluetooth permission is denied
-                                    // Show a dialog to inform the user and provide an action to open app settings
-                                    showDialog(
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          backgroundColor: Colors.grey[900],
-                                          title: Text(
-                                            'Bluetooth Required',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                  // Bluetooth permission is denied
+                                  // Show a dialog to inform the user and provide an action to open app settings
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        backgroundColor: Colors.grey[900],
+                                        title: Text(
+                                          'Bluetooth Required',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
                                           ),
-                                          content: Text(
-                                            'This app needs Bluetooth to function properly. Please enable it in the settings.',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                            ),
+                                        ),
+                                        content: Text(
+                                          'This app needs Bluetooth to function properly. Please enable it in the settings.',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
                                           ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.of(context).pop();
-                                                openAppSettings();
-                                              },
-                                              child: Text(
-                                                'OK',
-                                                style: TextStyle(
-                                                  color: Colors.blue,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              openAppSettings();
+                                            },
+                                            child: Text(
+                                              'OK',
+                                              style: TextStyle(
+                                                color: Colors.blue,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  }
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
                                 }
                               },
                               child: ShaderMask(
