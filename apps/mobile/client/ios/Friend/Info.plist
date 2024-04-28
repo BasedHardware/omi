@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-<key>NSBluetoothAlwaysUsageDescription</key>
-<string>We need your permission to use the bluetooth.</string>
-<key>NSMicrophoneUsageDescription</key>
-<string>We need your permission to use the microphone.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>We need your permission to use the bluetooth.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need your permission to use the microphone.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -52,5 +52,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>UIAppFonts</key>
+    <array>
+        <string>FontAwesome.ttf</string>
+        <string>Ionicons.ttf</string>
+        
+    </array>
 </dict>
 </plist>

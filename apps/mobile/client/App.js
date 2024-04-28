@@ -4,6 +4,8 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {AuthContext, AuthProvider} from './contexts/AuthContext';
 import {MomentsProvider} from './contexts/MomentsContext';
+import {ChatProvider} from './contexts/ChatContext';
+import {SnackbarProvider} from './contexts/SnackbarContext';
 import AuthScreen from './screens/AuthScreen';
 import MainScreen from './screens/MainScreen';
 
@@ -44,9 +46,13 @@ const App = () => {
 };
 
 export default () => (
-  <AuthProvider>
-    <MomentsProvider>
-      <App />
-    </MomentsProvider>
-  </AuthProvider>
+  <SnackbarProvider>
+    <AuthProvider>
+      <MomentsProvider>
+        <ChatProvider>
+          <App />
+        </ChatProvider>
+      </MomentsProvider>
+    </AuthProvider>
+  </SnackbarProvider>
 );

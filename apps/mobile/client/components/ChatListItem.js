@@ -2,20 +2,20 @@ import {useContext, useRef} from 'react';
 import {ListItem} from 'react-native-elements';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {TouchableOpacity, StyleSheet} from 'react-native';
-import {MomentsContext} from '../contexts/MomentsContext';
+import {ChatContext} from '../contexts/ChatContext';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faTrash} from '@fortawesome/free-solid-svg-icons';
 
-const MomentListItem = ({item, onItemPress}) => {
-  const {deleteMoment} = useContext(MomentsContext);
+const ChatListItem = ({item, onItemPress}) => {
   const swipeableRef = useRef(null);
   const touchableRef = useRef(null);
+  const {deleteChat} = useContext(ChatContext);
 
   const handleDelete = item => {
     if (swipeableRef.current) {
       swipeableRef.current.close();
     }
-    deleteMoment(item);
+    deleteChat(item);
   };
 
   const renderRightActions = () => (
@@ -84,4 +84,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MomentListItem;
+export default ChatListItem;

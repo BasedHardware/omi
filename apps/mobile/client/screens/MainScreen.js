@@ -2,29 +2,27 @@ import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
 import SettingsStackNavigator from '../navigators/SettingsStackNavigator';
+import ChatStackNavigator from '../navigators/ChatStackNavigator';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
-import { faComment, faCameraRetro, faCog } from '@fortawesome/free-solid-svg-icons';
+import {
+  faComment,
+  faCameraRetro,
+  faCog,
+} from '@fortawesome/free-solid-svg-icons';
 
 const Tab = createBottomTabNavigator();
-
-const ChatTab = () => {
-  return (
-    <View style={styles.container}>
-      <Text>Chat Tab</Text>
-    </View>
-  );
-};
 
 const MainScreen = () => {
   return (
     <Tab.Navigator>
       <Tab.Screen
-        name="Chat"
-        component={ChatTab}
+        name="Chat Tab"
+        component={ChatStackNavigator}
         options={{
-          tabBarIcon: props => {
-            return <FontAwesomeIcon icon={faComment} size={24} color={props.color} />;
-          },
+          tabBarIcon: ({color}) => (
+            <FontAwesomeIcon icon={faComment} size={24} color={color} />
+          ),
+          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -32,7 +30,13 @@ const MainScreen = () => {
         component={MomentsStackNavigator}
         options={{
           tabBarIcon: props => {
-            return <FontAwesomeIcon icon={faCameraRetro} size={24} color={props.color} />;
+            return (
+              <FontAwesomeIcon
+                icon={faCameraRetro}
+                size={24}
+                color={props.color}
+              />
+            );
           },
           headerShown: false,
         }}
@@ -42,7 +46,9 @@ const MainScreen = () => {
         component={SettingsStackNavigator}
         options={{
           tabBarIcon: props => {
-            return <FontAwesomeIcon icon={faCog} size={24} color={props.color} />;
+            return (
+              <FontAwesomeIcon icon={faCog} size={24} color={props.color} />
+            );
           },
           headerShown: false,
         }}
