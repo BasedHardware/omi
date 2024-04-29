@@ -53,9 +53,8 @@ def handle_create_chat(request):
 def handle_delete_chat(request):
     chat_service = ChatService()
     data = request.get_json()
-    user_id = data['userId']
     chat_id = data['chatId']
-    chat_service.delete_conversation(user_id, chat_id)
+    chat_service.delete_chat(chat_id)
     return 'Conversation deleted'
 
 def handle_post_message(request):

@@ -15,7 +15,8 @@ const ChatListItem = ({item, onItemPress}) => {
     if (swipeableRef.current) {
       swipeableRef.current.close();
     }
-    deleteChat(item);
+
+    deleteChat(item.chatId);
   };
 
   const renderRightActions = () => (

@@ -7,12 +7,12 @@ import {
   useEffect,
 } from 'react';
 import axios from 'axios';
+import EncryptedStorage from 'react-native-encrypted-storage';
 import {processToken} from '../components/chat/utils/processToken';
 import {SnackbarContext} from '../contexts/SnackbarContext';
 import {AuthContext} from './AuthContext';
-export const ChatContext = createContext();
 
-import EncryptedStorage from 'react-native-encrypted-storage';
+export const ChatContext = createContext();
 
 export const ChatProvider = ({children}) => {
   const {showSnackbar} = useContext(SnackbarContext);
@@ -108,6 +108,7 @@ export const ChatProvider = ({children}) => {
     }
   }, [chatUrl, setChatArray, setMessages, showSnackbar, userId]);
 
+  // Needs a refactor to separate concerns
   const sendMessage = async (chatId, input) => {
     // Optimistic update
     const userMessage = {
@@ -215,7 +216,7 @@ export const ChatProvider = ({children}) => {
 
   const clearChat = async chatId => {
     try {
-      const response = await fetch(`${messagesUrl}/messages/clear`, {
+      const response = await fetch(`${chatUrl}/chat/messages`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -230,15 +231,15 @@ export const ChatProvider = ({children}) => {
         const updatedChatArray = prevChatArray.map(chat => {
           if (chat.chatId === chatId) {
             // Clear messages for the matching chat
-            return {...agent, messages: []};
+            return {...chat, messages: []};
           }
-          return agent;
+          return chat;
         });
 
         return updatedChatArray;
       });
 
-      // Perform the asynchronous storage operation after updating the state
+      // Manage Local Storage
       try {
         const updatedChatArray = chatArray.map(chat => {
           if (chat.chatId === chatId) {
@@ -268,15 +269,14 @@ export const ChatProvider = ({children}) => {
 
   const deleteChat = async chatId => {
     try {
-      const response = await fetch(`${chatUrl}/chat/delete`, {
-        method: 'DELETE',
+      const response = await axios.delete(`${chatUrl}/chat`, {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({chatId}),
+        data: {chatId},
       });
 
-      if (!response.ok) throw new Error('Failed to delete conversation');
+      if (response.status !== 200) throw new Error('Failed to delete conversation');
 
       setChatArray(prevChatArray => {
         const updatedChatArray = prevChatArray.filter(

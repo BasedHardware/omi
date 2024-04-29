@@ -86,10 +86,10 @@ class ChatService:
             print("MongoDB connection is not initialized.")
             return None
 
-    def delete_conversation(self, uid, chat_id):
+    def delete_chat(self, chat_id):
         self._initialize_client()
         if self.db is not None:
-            result = self.db['chats'].delete_one({'_id': ObjectId(chat_id), 'uid': uid})
+            result = self.db['chats'].delete_one({'_id': ObjectId(chat_id)})
             return result.deleted_count
         else:
             print("MongoDB connection is not initialized.")
