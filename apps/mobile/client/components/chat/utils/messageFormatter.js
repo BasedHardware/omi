@@ -1,7 +1,3 @@
-import React from 'react';
-import {Text} from 'react-native';
-import SyntaxHighlighter from 'react-native-syntax-highlighter';
-import { prism } from 'react-syntax-highlighter/styles/prism';
 
 export const formatBlockMessage = message => {
   const codeblock = /```(\S*)?\s([\s\S]*?)```/g;
@@ -18,29 +14,30 @@ export const formatBlockMessage = message => {
       lang = 'javascript';
     }
 
-    // Create a React component for the highlighted code
-    const highlightedCode = (
-      <SyntaxHighlighter language={lang} style={prism}>
-        {code}
-      </SyntaxHighlighter>
-    );
-
     // Add the text before the code block to the parts array.
     if (match.index > lastIndex) {
-      parts.push(
-        <Text>{message.content.substring(lastIndex, match.index)}</Text>,
-      );
+      parts.push({
+        type: 'text',
+        content: message.content.substring(lastIndex, match.index),
+      });
     }
 
-    // Add the highlighted code block to the parts array.
-    parts.push(highlightedCode);
+    // Add the code block information to the parts array.
+    parts.push({
+      type: 'code',
+      content: code,
+      language: lang,
+    });
 
     lastIndex = codeblock.lastIndex;
   }
 
   // If there's any remaining message content, add it to the parts array.
   if (lastIndex < message.content.length) {
-    parts.push(<Text>{message.content.substring(lastIndex)}</Text>);
+    parts.push({
+      type: 'text',
+      content: message.content.substring(lastIndex),
+    });
   }
 
   return parts;
@@ -49,14 +46,19 @@ export const formatBlockMessage = message => {
 export const formatStreamMessage = (message, insideCodeBlock, language) => {
   const parts = [];
   if (insideCodeBlock) {
-    const highlightedCode = (
-      <SyntaxHighlighter language={language || 'markdown'} style={prism}>
-        {message.content}
-      </SyntaxHighlighter>
-    );
-    parts.push(highlightedCode);
+    // Store only the necessary data for rendering the code block later
+    parts.push({
+      type: 'code',
+      content: message.content,
+      language: language || 'markdown',
+      message_from: message.message_from,
+    });
   } else {
-    parts.push(<Text>{message.content}</Text>);
+    parts.push({
+      type: 'text',
+      content: message.content,
+      message_from: message.message_from,
+    });
   }
 
   return parts;

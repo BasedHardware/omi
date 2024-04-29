@@ -85,14 +85,12 @@ export const AuthProvider = ({children}) => {
 
   useEffect(() => {
     const rehydrateUser = async () => {
-      const messages = await EncryptedStorage.getItem('messages');
-      console.log('Messages:', messages);
       const usersJson = await EncryptedStorage.getItem('users');
       if (usersJson) {
         const users = JSON.parse(usersJson);
         const loggedInUser = Object.values(users).find(user => user.isLoggedIn);
         if (loggedInUser) {
-          console.log('User is logged in:', loggedInUser);
+          console.log('User is logged in:', loggedInUser.userId);
           setUserId(loggedInUser.userId);
           setIsAuthorized(true);
           setLoggedIn(true);

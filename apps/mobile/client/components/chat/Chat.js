@@ -1,7 +1,6 @@
 import React, {useContext, useEffect, useRef} from 'react';
 import {
   ScrollView,
-  View,
   StyleSheet,
   SafeAreaView,
   KeyboardAvoidingView,
@@ -27,7 +26,6 @@ const Chat = ({route}) => {
   const {chat_name: chatName, chatId} = route.params;
   const nodeRef = useRef(null);
   const {messages} = useContext(ChatContext);
-  console.log(messages);
 
   // scrolls chat window to the bottom
   useEffect(() => {

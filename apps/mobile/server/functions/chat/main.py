@@ -11,9 +11,7 @@ load_dotenv()
 if os.getenv('LOCAL_DEV') == 'True':
     from .ChatService import ChatService
     from .BossAgent import BossAgent
-    from .MongoService import MongoService
 else:
-    from MongoService import MongoService
     from ChatService import ChatService
     from BossAgent import BossAgent
 
@@ -67,8 +65,11 @@ def handle_post_message(request):
     user_message = data.get('userMessage')
     chat_history = data.get('chatHistory')
     chat_id = data.get('chatId')
+    message_content = user_message['content']
+    chat_service.create_message(chat_id, 'user', message_content)
 
     complete_message = ''
+    
     response_generator = boss_agent.process_message(chat_id, user_message, chat_history)
 
     # Create a generator to handle streaming and compile the complete message
@@ -76,14 +77,14 @@ def handle_post_message(request):
         nonlocal complete_message
         for response in response_generator:
             complete_message += response['content']
-            yield json.dumps(response) + '\n'
+            json_response = json.dumps(response) + '\n'
+            yield json_response
 
     # Stream responses to client
     streamed_responses = compile_and_stream()
     response = Response(streamed_responses, mimetype='application/json')
-
     # After streaming, store the complete message
-    chat_service.create_message(chat_id, 'agent', complete_message)
+    response.call_on_close(lambda: chat_service.create_message(chat_id, 'agent', complete_message))
 
     return response
 

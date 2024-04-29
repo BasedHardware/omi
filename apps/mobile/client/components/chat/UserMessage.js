@@ -1,6 +1,7 @@
-import React, {useContext} from 'react';
+import {useContext} from 'react';
 import {View, Image, Text, StyleSheet} from 'react-native';
-import {Avatar} from 'react-native-elements';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import {faUser} from '@fortawesome/free-solid-svg-icons';
 
 const UserMessage = ({message}) => {
   return (
@@ -8,15 +9,16 @@ const UserMessage = ({message}) => {
       style={[
         styles.messageContainer,
         {
-          backgroundColor: 'blue',
+          backgroundColor: 'lightgray',
         },
       ]}>
-      <Avatar
-        rounded
-        source={{uri: 'https://example.com/default-avatar.png'}}
-        containerStyle={styles.avatar}
+      <FontAwesomeIcon
+        icon={faUser}
+        size={14}
+        color="#666" // Adjust color based on your theme
+        style={styles.icon}
       />
-      <View style={[styles.messageContent, {alignSelf: 'flex-start'}]}>
+      <View style={styles.messageContent}>
         <Text>{message.content}</Text>
       </View>
     </View>
@@ -29,25 +31,15 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingRight: 50,
-    paddingTop: 20,
-    paddingBottom: 20,
+    padding: 10,
   },
-  avatar: {
-    margin: 13,
-    width: 33,
-    height: 33,
-    backgroundColor: 'transparent',
-  },
-  image: {
-    width: 90,
-    height: undefined,
-    aspectRatio: 1,
+  icon: {
+    marginRight: 13,
   },
   messageContent: {
     maxHeight: '100%',
     overflow: 'hidden',
     width: '100%',
-    marginLeft: 10,
+    paddingRight: 30,
   },
 });

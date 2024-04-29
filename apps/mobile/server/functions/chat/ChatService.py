@@ -52,8 +52,26 @@ class ChatService:
     def get_all_chats(self, uid):
         self._initialize_client()
         if self.db is not None:
+            # Query the conversations collection for conversations belonging to the user
             chats_cursor = self.db['chats'].find({'uid': uid}).sort('created_at', -1)
-            chats = [dict(chat, chatId=str(chat.pop('_id'))) for chat in chats_cursor]
+            
+            # Function to recursively convert ObjectId to string
+            def convert_objectid(obj):
+                if isinstance(obj, ObjectId):
+                    return str(obj)
+                elif isinstance(obj, list):
+                    return [convert_objectid(item) for item in obj]
+                elif isinstance(obj, dict):
+                    return {k: convert_objectid(v) for k, v in obj.items()}
+                else:
+                    return obj
+
+            # Create a list of dictionaries with all fields, converting ObjectId to string
+            chats = []
+            for conv in chats_cursor:
+                chat = convert_objectid(conv)
+                chat['chatId'] = chat.pop('_id')  # Rename '_id' to 'chatId'
+                chats.append(chat)
             return chats
         else:
             print("MongoDB connection is not initialized.")

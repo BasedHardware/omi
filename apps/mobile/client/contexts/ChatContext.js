@@ -9,12 +9,14 @@ import {
 import axios from 'axios';
 import {processToken} from '../components/chat/utils/processToken';
 import {SnackbarContext} from '../contexts/SnackbarContext';
+import {AuthContext} from './AuthContext';
 export const ChatContext = createContext();
 
 import EncryptedStorage from 'react-native-encrypted-storage';
 
 export const ChatProvider = ({children}) => {
   const {showSnackbar} = useContext(SnackbarContext);
+  const {userId} = useContext(AuthContext);
   const [chatArray, setChatArray] = useState([]);
   const [messages, setMessages] = useState({});
   const [insideCodeBlock, setInsideCodeBlock] = useState(false);
@@ -57,11 +59,13 @@ export const ChatProvider = ({children}) => {
   };
 
   const getChats = useCallback(async () => {
+    if (!userId) {
+      return;
+    }
     try {
-      const cachedChats = await EncryptedStorage.getItem('agentArray');
+      const cachedChats = await EncryptedStorage.getItem('chatArray');
       if (cachedChats) {
         const parsedChats = JSON.parse(cachedChats);
-        console.log('parsedChats', parsedChats);
         setChatArray(parsedChats);
 
         const cachedMessages = parsedChats.reduce((acc, chat) => {
@@ -96,13 +100,13 @@ export const ChatProvider = ({children}) => {
       }, {});
       setMessages(messagesFromData);
 
-      await EncryptedStorage.setItem('agentArray', JSON.stringify(data));
+      await EncryptedStorage.setItem('chatArray', JSON.stringify(data));
       return data;
     } catch (error) {
       console.error(error);
       showSnackbar(`Network or fetch error: ${error.message}`, 'error');
     }
-  }, [chatUrl, setChatArray, setMessages, showSnackbar]);
+  }, [chatUrl, setChatArray, setMessages, showSnackbar, userId]);
 
   const sendMessage = async (chatId, input) => {
     // Optimistic update
@@ -124,6 +128,7 @@ export const ChatProvider = ({children}) => {
 
     try {
       const response = await fetch(`${chatUrl}/chat/messages`, {
+        reactNative: {textStreaming: true},
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,6 +140,7 @@ export const ChatProvider = ({children}) => {
         throw new Error('Failed to send message');
       }
 
+      console.log('Response:', response);
       const reader = response.body.getReader();
       let completeMessage = '';
       while (true) {
@@ -142,9 +148,8 @@ export const ChatProvider = ({children}) => {
         if (done) {
           break;
         }
-        const decodedValue = new TextDecoder('utf-8').decode(value);
-        
-        // Split the decoded value by newline and filter out any empty lines
+        const decodedValue = new TextDecoder('utf-8').decode(value); // Split the decoded value by newline and filter out any empty lines
+        console.log('Decoded value:', value);
         const jsonChunks = decodedValue
           .split('\n')
           .filter(line => line.trim() !== '');
@@ -213,7 +218,6 @@ export const ChatProvider = ({children}) => {
       const response = await fetch(`${messagesUrl}/messages/clear`, {
         method: 'DELETE',
         headers: {
-          Authorization: idToken,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({chatId}),
@@ -221,30 +225,30 @@ export const ChatProvider = ({children}) => {
 
       if (!response.ok) throw new Error('Failed to clear messages');
 
-      // Update the agentArray state
-      setChatArray(prevAgentArray => {
-        const updatedAgentArray = prevAgentArray.map(agent => {
-          if (agent.chatId === chatId) {
+      // Update the chatArray state
+      setChatArray(prevChatArray => {
+        const updatedChatArray = prevChatArray.map(chat => {
+          if (chat.chatId === chatId) {
             // Clear messages for the matching chat
             return {...agent, messages: []};
           }
           return agent;
         });
 
-        return updatedAgentArray;
+        return updatedChatArray;
       });
 
       // Perform the asynchronous storage operation after updating the state
       try {
-        const updatedAgentArray = chatArray.map(agent => {
-          if (agent.chatId === chatId) {
-            return {...agent, messages: []};
+        const updatedChatArray = chatArray.map(chat => {
+          if (chat.chatId === chatId) {
+            return {...chat, messages: []};
           }
           return agent;
         });
         await EncryptedStorage.setItem(
-          'agentArray',
-          JSON.stringify(updatedAgentArray),
+          'chatArray',
+          JSON.stringify(updatedChatArray),
         );
       } catch (error) {
         console.error('Failed to save agent array:', error);
@@ -253,7 +257,7 @@ export const ChatProvider = ({children}) => {
       // Update the messages state for the UI to reflect the cleared messages
       setMessages(prevMessages => {
         const updatedMessages = {...prevMessages, [chatId]: []};
-        // No need to update 'messages' in local storage since it's part of 'agentArray'
+        // No need to update 'messages' in local storage since it's part of 'chatArray'
         return updatedMessages;
       });
     } catch (error) {
@@ -268,7 +272,6 @@ export const ChatProvider = ({children}) => {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: idToken,
         },
         body: JSON.stringify({chatId}),
       });
@@ -289,7 +292,7 @@ export const ChatProvider = ({children}) => {
           chatObj => chatObj.chatId !== chatId,
         );
         await EncryptedStorage.setItem(
-          'agentArray',
+          'chatArray',
           JSON.stringify(updatedChatArray),
         );
       } catch (error) {
@@ -321,17 +324,17 @@ export const ChatProvider = ({children}) => {
       if (response.status !== 200) throw new Error('Failed to create chat');
 
       const data = await response.data;
-      // Update the agentArray directly here
-      setChatArray(prevAgents => {
-        const updatedAgentArray = [data, ...prevAgents];
-        return updatedAgentArray;
+      // Update the chatArray directly here
+      setChatArray(prevChats => {
+        const updatedChatArray = [data, ...prevChats];
+        return updatedChatArray;
       });
 
       try {
-        const updatedAgentArray = [data, ...chatArray];
+        const updatedChatArray = [data, ...chatArray];
         await EncryptedStorage.setItem(
-          'agentArray',
-          JSON.stringify(updatedAgentArray),
+          'chatArray',
+          JSON.stringify(updatedChatArray),
         );
       } catch (error) {
         console.error('Failed to save agent array:', error);
@@ -343,10 +346,16 @@ export const ChatProvider = ({children}) => {
   };
 
   useEffect(() => {
-    getChats().then(() => {
-      setLoading(false);
-    });
-  }, []);
+    // EncryptedStorage.removeItem('chatArray');
+    getChats()
+      .then(() => {
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('Error fetching chats:', error);
+        setLoading(false); // Ensure loading is set to false even if there's an error
+      });
+  }, [userId]); // Add userId as a dependency
 
   return (
     <ChatContext.Provider
