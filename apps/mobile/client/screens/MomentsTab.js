@@ -26,7 +26,7 @@ const MomentsTab = () => {
     const language = 'en-US';
     const smart_format = true;
     const encoding = 'linear16';
-    const sample_rate = 44100;
+    const sample_rate = 16000;
 
     const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
     ws.current = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
@@ -90,7 +90,7 @@ const MomentsTab = () => {
 
   const startStreaming = () => {
     const options = {
-      sampleRate: 44100,
+      sampleRate: 16000,
       channels: 1,
       bitsPerSample: 16,
       bufferSize: 4096,
@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#cccccc',
     borderRadius: 5,
-    backgroundColor: '#ffffff', 
-    shadowColor: '#000', 
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
     shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
