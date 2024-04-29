@@ -21,12 +21,6 @@ export const ChatProvider = ({children}) => {
   const [loading, setLoading] = useState(true);
   const ignoreNextTokenRef = useRef(false);
   const languageRef = useRef(null);
-
-  const messagesUrl =
-    process.env.NODE_ENV === 'development'
-      ? 'http://localhost:50003'
-      : process.env.REACT_APP_BACKEND_URL_PROD;
-
   const chatUrl =
     process.env.NODE_ENV === 'development'
       ? 'http://192.168.86.242:30000'
@@ -111,7 +105,6 @@ export const ChatProvider = ({children}) => {
   }, [chatUrl, setChatArray, setMessages, showSnackbar]);
 
   const sendMessage = async (chatId, input) => {
-    console.log('sendMessage', input);
     // Optimistic update
     const userMessage = {
       content: input,
@@ -121,98 +114,98 @@ export const ChatProvider = ({children}) => {
     };
     addMessage(chatId, userMessage);
 
-    // const chatHistory = await getMessages(chatId);
+    const chatHistory = await getMessages(chatId);
 
-    // const dataPacket = {
-    //   chatSettings,
-    //   userMessage,
-    //   chatHistory,
-    // };
+    const dataPacket = {
+      chatId,
+      userMessage,
+      chatHistory,
+    };
 
-    // try {
-    //   const response = await fetch(`${messagesUrl}/messages/post`, {
-    //     method: 'POST',
-    //     headers: {
-    //       'Content-Type': 'application/json',
-    //       Authorization: idToken,
-    //     },
-    //     body: JSON.stringify(dataPacket),
-    //   });
+    try {
+      const response = await fetch(`${chatUrl}/chat/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataPacket),
+      });
 
-    //   if (!response.ok) {
-    //     throw new Error('Failed to send message');
-    //   }
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
 
-    //   const reader = response.body.getReader();
-    //   let completeMessage = '';
-    //   while (true) {
-    //     const {done, value} = await reader.read();
-    //     if (done) {
-    //       break;
-    //     }
-    //     const decodedValue = new TextDecoder('utf-8').decode(value);
-    //     // Split the decoded value by newline and filter out any empty lines
-    //     const jsonChunks = decodedValue
-    //       .split('\n')
-    //       .filter(line => line.trim() !== '');
+      const reader = response.body.getReader();
+      let completeMessage = '';
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) {
+          break;
+        }
+        const decodedValue = new TextDecoder('utf-8').decode(value);
+        
+        // Split the decoded value by newline and filter out any empty lines
+        const jsonChunks = decodedValue
+          .split('\n')
+          .filter(line => line.trim() !== '');
 
-    //     const messages = jsonChunks.map(chunk => {
-    //       const messageObj = JSON.parse(chunk);
-    //       processToken(
-    //         messageObj,
-    //         setInsideCodeBlock,
-    //         insideCodeBlock,
-    //         setMessages,
-    //         chatSettings.chatId,
-    //         ignoreNextTokenRef,
-    //         languageRef,
-    //       );
-    //       return messageObj.content;
-    //     });
-    //     completeMessage += messages.join('');
-    //   }
-    //   // While streaming an array of objects is being built for the stream.
-    //   // This sets that array to a message object in the state
-    //   setMessages(prevMessages => {
-    //     const updatedMessages = prevMessages[chatSettings.chatId].slice(0, -1);
-    //     updatedMessages.push({
-    //       content: completeMessage,
-    //       message_from: 'agent',
-    //       type: 'database',
-    //     });
+        const messages = jsonChunks.map(chunk => {
+          const messageObj = JSON.parse(chunk);
+          processToken(
+            messageObj,
+            setInsideCodeBlock,
+            insideCodeBlock,
+            setMessages,
+            chatId,
+            ignoreNextTokenRef,
+            languageRef,
+          );
+          return messageObj.content;
+        });
+        completeMessage += messages.join('');
+      }
+      // While streaming an array of objects is being built for the stream.
+      // This sets that array to a message object in the state
+      setMessages(prevMessages => {
+        const updatedMessages = prevMessages[chatId].slice(0, -1);
+        updatedMessages.push({
+          content: completeMessage,
+          message_from: 'agent',
+          type: 'database',
+        });
 
-    //     const newMessagesState = {
-    //       ...prevMessages,
-    //       [chatSettings.chatId]: updatedMessages,
-    //     };
+        const newMessagesState = {
+          ...prevMessages,
+          [chatId]: updatedMessages,
+        };
 
-    //     return newMessagesState;
-    //   });
+        return newMessagesState;
+      });
 
-    //   // Perform the asynchronous storage operation after updating the state
-    //   try {
-    //     const updatedMessages = {
-    //       ...messages,
-    //       [chatSettings.chatId]: [
-    //         ...(messages[chatSettings.chatId] || []).slice(0, -1),
-    //         {
-    //           content: completeMessage,
-    //           message_from: 'agent',
-    //           type: 'database',
-    //         },
-    //       ],
-    //     };
-    //     await EncryptedStorage.setItem(
-    //       'messages',
-    //       JSON.stringify(updatedMessages),
-    //     );
-    //   } catch (error) {
-    //     console.error('Failed to save messages:', error);
-    //   }
-    // } catch (error) {
-    //   console.error(error);
-    //   showSnackbar(`Network or fetch error: ${error.message}`, 'error');
-    // }
+      // Perform the asynchronous storage operation after updating the state
+      try {
+        const updatedMessages = {
+          ...messages,
+          [chatId]: [
+            ...(messages[chatId] || []).slice(0, -1),
+            {
+              content: completeMessage,
+              message_from: 'agent',
+              type: 'database',
+            },
+          ],
+        };
+        await EncryptedStorage.setItem(
+          'messages',
+          JSON.stringify(updatedMessages),
+        );
+      } catch (error) {
+        console.error('Failed to save messages:', error);
+      }
+    } catch (error) {
+      console.error(error);
+      showSnackbar(`Network or fetch error: ${error.message}`, 'error');
+    }
   };
 
   const clearChat = async chatId => {

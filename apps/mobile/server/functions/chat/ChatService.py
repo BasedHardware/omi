@@ -77,6 +77,37 @@ class ChatService:
             print("MongoDB connection is not initialized.")
             return 0
 
+    def create_message(self, chat_id, message_from, message_content):
+        self._initialize_client()
+        
+        new_message = {
+            '_id': ObjectId(),
+            'message_from': message_from,
+            'content': message_content,
+            'type': 'database',
+            'time_stamp': datetime.utcnow()
+        }
+        if self.db is not None:
+            # Update the chat document to append the new message to the 'messages' array
+            self.db.chats.update_one(
+                {'_id': ObjectId(chat_id)}, 
+                {'$push': {'messages': new_message}}
+            )
+        else:
+            print("MongoDB connection is not initialized.")
+        return new_message
+
+    def delete_all_messages(self, chat_id):
+        self._initialize_client()
+        if self.db is not None:
+            # Update the chat document to clear the 'messages' array
+            self.db.chats.update_one(
+                {'_id': ObjectId(chat_id)},
+                {'$set': {'messages': []}}
+            )
+        else:
+            print("MongoDB connection is not initialized.")
+            
     def close_connection(self):
         if self.client:
             self.client.close()

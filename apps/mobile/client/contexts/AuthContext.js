@@ -85,6 +85,8 @@ export const AuthProvider = ({children}) => {
 
   useEffect(() => {
     const rehydrateUser = async () => {
+      const messages = await EncryptedStorage.getItem('messages');
+      console.log('Messages:', messages);
       const usersJson = await EncryptedStorage.getItem('users');
       if (usersJson) {
         const users = JSON.parse(usersJson);

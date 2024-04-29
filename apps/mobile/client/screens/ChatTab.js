@@ -17,10 +17,8 @@ const ChatTab = () => {
 
   const handlePress = item => {
     navigation.navigate('Chat Room', {
-      chat_name: item.title,
-      summary: item.summary,
-      text: item.text,
-      chatId: item.id,
+      chat_name: item.chat_name,
+      chatId: item.chatId,
     });
   };
 
