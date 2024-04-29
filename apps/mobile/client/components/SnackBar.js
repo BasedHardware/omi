@@ -1,7 +1,10 @@
-import {useEffect} from 'react';
+import React, {useContext, useEffect} from 'react';
 import {View, Text, StyleSheet, Animated} from 'react-native';
+import {SnackbarContext} from '../contexts/SnackbarContext'; 
 
-const MySnackBar = ({open, message, severity}) => {
+const MySnackBar = () => {
+  const {snackbarInfo} = useContext(SnackbarContext);
+  const {open, message, severity} = snackbarInfo;
   const opacity = new Animated.Value(0);
 
   useEffect(() => {
@@ -14,15 +17,18 @@ const MySnackBar = ({open, message, severity}) => {
       }).start();
 
       // Fade out after 6 seconds
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         Animated.timing(opacity, {
           toValue: 0,
           duration: 500,
           useNativeDriver: true,
         }).start();
       }, 6000);
+
+      // Clear timeout if component unmounts
+      return () => clearTimeout(timer);
     }
-  }, [open]);
+  }, [open, opacity]);
 
   const backgroundColor = severity === 'error' ? 'red' : 'green';
 

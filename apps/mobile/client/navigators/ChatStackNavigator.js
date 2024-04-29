@@ -6,6 +6,13 @@ import {getFocusedRouteNameFromRoute} from '@react-navigation/native';
 
 const Stack = createNativeStackNavigator();
 
+const logoutButton = () => (
+  <Button onPress={() => signOut()} title="">
+    <FontAwesomeIcon icon={faSignOutAlt} size={24} color="#000" />
+  </Button>
+);
+
+
 const ChatStackNavigator = ({navigation, route}) => {
   useLayoutEffect(() => {
     const routeName = getFocusedRouteNameFromRoute(route) ?? 'Chat';
@@ -22,6 +29,7 @@ const ChatStackNavigator = ({navigation, route}) => {
         name="Chat Room"
         component={Chat}
         options={{title: ''}}
+        headerRight={logoutButton}
       />
     </Stack.Navigator>
   );

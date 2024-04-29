@@ -6,20 +6,21 @@ import {AuthContext} from '../contexts/AuthContext';
 import LoadingComponent from '../components/LoadingComponent';
 import EncryptedStorage from 'react-native-encrypted-storage';
 
-const deleteUserData = async () => {
-  await EncryptedStorage.getItem('users');
-  await EncryptedStorage.removeItem('users');
-};
+// const deleteUserData = async () => {
+//   await EncryptedStorage.getItem('users');
+//   await EncryptedStorage.removeItem('users');
+// };
 
 const Stack = createNativeStackNavigator();
 
 const LoginTab = ({navigation}) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const {loggedIn} = useContext(AuthContext);
+  const {loggedIn, signIn} = useContext(AuthContext);
 
   const handleLogin = () => {
-    // Implement Firebase Auth
+    console.log('Logging in with:', email, password);
+    signIn(email, password);
   };
 
   useEffect(() => {
@@ -31,10 +32,10 @@ const LoginTab = ({navigation}) => {
   return (
     <View style={styles.container}>
       <Input
-        placeholder="Username"
-        leftIcon={{type: 'font-awesome', name: 'user-o'}}
-        onChangeText={text => setUsername(text)}
-        value={username}
+        placeholder="Email"
+        leftIcon={{type: 'font-awesome', name: 'envelope-o'}}
+        onChangeText={text => setEmail(text)}
+        value={email}
         containerStyle={styles.formInput}
         leftIconContainerStyle={styles.formIcon}
       />
@@ -48,7 +49,7 @@ const LoginTab = ({navigation}) => {
       />
       <View style={styles.formButton}>
         <Button
-          onPress={() => handleLogin()}
+          onPress={handleLogin}
           icon={
             <Icon
               name="sign-in"
@@ -63,10 +64,10 @@ const LoginTab = ({navigation}) => {
         />
       </View>
       <Button
-        title="Go to Register"
+        title="Register"
         onPress={() => navigation.navigate('Register')}
       />
-      <Button title="Delete User Data" onPress={deleteUserData} />
+      {/* <Button title="Delete User Data" onPress={deleteUserData} /> */}
     </View>
   );
 };
@@ -84,7 +85,6 @@ const RegisterTab = ({navigation}) => {
     const userInfo = {
       username,
       password,
-      loggedIn: true,
       firstname,
       lastname,
       email,

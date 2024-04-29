@@ -1,49 +1,20 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useContext} from 'react';
 import {useNavigation} from '@react-navigation/native';
 import {View, FlatList, StyleSheet} from 'react-native';
-import { Icon, Text, Button} from 'react-native-elements';
-import ChatListItem from '../components/ChatListItem';
+import {Button} from 'react-native-elements';
+import ChatListItem from '../components/chat/ChatListItem';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import {faPlus} from '@fortawesome/free-solid-svg-icons';
+import {ChatContext} from '../contexts/ChatContext';
+
+import NewChatModal from '../components/chat/NewChatModal';
+
 const ChatTab = () => {
-  const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const {chatArray} = useContext(ChatContext);
+  const [modalVisible, setModalVisible] = useState(false);
   const navigation = useNavigation();
 
-  useEffect(() => {
-    setLoading(true);
-    // Simulate fetching data
-    setTimeout(() => {
-      setChats([
-        {id: '1', title: 'Chat 1', subtitle: 'Last message...'},
-        {id: '2', title: 'Chat 2', subtitle: 'Last message...'},
-        {id: '3', title: 'Chat 3', subtitle: 'Last message...'},
-        // Add more chats as needed
-      ]);
-      setLoading(false);
-    }, 2000);
-  }, []);
-
-  // Mock chat data
-  const chatData = [
-    {
-      id: '1',
-      title: 'Chat 1',
-      summary: 'Last message...',
-      text: 'Chat 1',
-    },
-    {
-      id: '2',
-      title: 'Chat 2',
-      summary: 'Last message...',
-      text: 'Chat 2',
-    },
-    {
-      id: '3',
-      title: 'Chat 3',
-      summary: 'Last message...',
-      text: 'Chat 3',
-    },
-  ];
   const handlePress = item => {
     navigation.navigate('Chat Room', {
       chat_name: item.title,
@@ -56,12 +27,19 @@ const ChatTab = () => {
   return (
     <GestureHandlerRootView>
       <View style={styles.container}>
-        <Button style={styles.button}>
-          <Icon name="chat" size={24} color="#fff" />
-          <Text style={styles.buttonText}>Create Chat</Text>
-        </Button>
+        <Button
+          icon={<FontAwesomeIcon icon={faPlus} size={24} color="#000" />}
+          title="Create Chat"
+          buttonStyle={styles.button}
+          titleStyle={styles.buttonText}
+          onPress={() => setModalVisible(true)}
+        />
+        <NewChatModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+        />
         <FlatList
-          data={chatData}
+          data={chatArray}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({item}) => (
             <ChatListItem item={item} onItemPress={handlePress} />
@@ -81,14 +59,18 @@ const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007bff',
+    backgroundColor: 'transparent',
+    borderColor: '#000',
+    borderWidth: 2,
     padding: 10,
     borderRadius: 5,
     marginHorizontal: 10,
     marginBottom: 20,
+    width: '50%',
+    alignSelf: 'center',
   },
   buttonText: {
-    color: '#fff',
+    color: '#000',
     marginLeft: 10,
   },
 });

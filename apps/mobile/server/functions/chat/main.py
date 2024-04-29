@@ -14,7 +14,7 @@ else:
 mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
 db = client['paxxium']
-chat_service = ChatService(db)
+
 
 def cors_preflight_response():
     cors_headers = {
@@ -26,30 +26,33 @@ def cors_preflight_response():
     return ("", 204, cors_headers)
 
 def handle_fetch_chats(request):
-    uid = request.headers.get('uid')
-    # Get all moments from the database
-    chat_data_list = chat_service.get_all_chats(uid)
+    chat_service = ChatService()
+    user_id = request.headers.get('userId')
+    chat_data_list = chat_service.get_all_chats(user_id)
     return chat_data_list
 
-def handle_add_chat(request):
+def handle_create_chat(request):
+    chat_service = ChatService()
     data = request.get_json()
-    uid = request.headers.get('uid')
+    user_id = data['userId']
     chat_name = data['chatName']
-    agent_model = data['agentModel']
+    model = data['model']
 
-    chat_id = chat_service.create_chat_in_db(uid, chat_name, agent_model, )
+    chat_id = chat_service.create_chat_in_db(user_id, chat_name, model)
     chat_data = {
         'chatId': chat_id,
         'chat_name': chat_name,
-        'agent_model': agent_model,
+        'model': model,
+        'userId': user_id,
     }
     return chat_data
 
 def handle_delete_chat(request):
+    chat_service = ChatService()
     data = request.get_json()
-    uid = request.headers.get('uid')
+    user_id = data['userId']
     chat_id = data['chatId']
-    chat_service.delete_conversation(uid, chat_id)
+    chat_service.delete_conversation(user_id, chat_id)
     return 'Conversation deleted'
 
 def chat(request):
@@ -61,7 +64,7 @@ def chat(request):
         return (chat_data, 200, headers)
     
     if request.method == 'POST':
-        chat_data = handle_add_chat(request)
+        chat_data = handle_create_chat(request)
         return (chat_data, 200, headers)
     
     if request.method == 'DELETE':

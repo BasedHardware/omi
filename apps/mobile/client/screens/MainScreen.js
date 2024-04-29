@@ -1,4 +1,4 @@
-import {StyleSheet, View, Text} from 'react-native';
+import {StyleSheet} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
 import SettingsStackNavigator from '../navigators/SettingsStackNavigator';

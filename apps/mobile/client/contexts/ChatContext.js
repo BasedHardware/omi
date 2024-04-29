@@ -15,7 +15,7 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 
 export const ChatProvider = ({children}) => {
   const {showSnackbar} = useContext(SnackbarContext);
-  const [agentArray, setAgentArray] = useState([]);
+  const [chatArray, setChatArray] = useState([]);
   const [messages, setMessages] = useState({});
   const [insideCodeBlock, setInsideCodeBlock] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,7 +29,7 @@ export const ChatProvider = ({children}) => {
 
   const chatUrl =
     process.env.NODE_ENV === 'development'
-      ? 'http://localhost:50001'
+      ? 'http://192.168.86.242:30000'
       : process.env.REACT_APP_BACKEND_URL_PROD;
 
   // Used to add a new user message to the messages state
@@ -67,7 +67,8 @@ export const ChatProvider = ({children}) => {
       const cachedChats = await EncryptedStorage.getItem('agentArray');
       if (cachedChats) {
         const parsedChats = JSON.parse(cachedChats);
-        setAgentArray(parsedChats);
+        console.log('parsedChats', parsedChats);
+        setChatArray(parsedChats);
 
         const cachedMessages = parsedChats.reduce((acc, chat) => {
           if (chat.messages) {
@@ -79,24 +80,27 @@ export const ChatProvider = ({children}) => {
 
         return parsedChats;
       }
-      const response = await fetch(`${chatUrl}/chat`, {
-        method: 'GET',
+
+      const response = await axios.get(`${chatUrl}/chat`, {
+        headers: {
+          'Content-Type': 'application/json',
+          userId: userId,
+        },
       });
 
-      if (!response.ok) throw new Error('Failed to load user conversations');
+      if (response.status !== 200)
+        throw new Error('Failed to load user conversations');
 
-      const data = await response.json();
-      setAgentArray(data);
-      console.log(data);
+      const data = response.data;
+      setChatArray(data);
 
-      // Assuming each chat object in the data array now includes a messages array
       const messagesFromData = data.reduce((acc, chat) => {
         if (chat.messages) {
           acc[chat.chatId] = chat.messages;
         }
         return acc;
       }, {});
-      setMessages(messagesFromData); // Update messages state with the loaded data
+      setMessages(messagesFromData);
 
       await EncryptedStorage.setItem('agentArray', JSON.stringify(data));
       return data;
@@ -104,7 +108,7 @@ export const ChatProvider = ({children}) => {
       console.error(error);
       showSnackbar(`Network or fetch error: ${error.message}`, 'error');
     }
-  }, [chatUrl, setAgentArray, setMessages, showSnackbar]);
+  }, [chatUrl, setChatArray, setMessages, showSnackbar]);
 
   const sendMessage = async (chatId, input) => {
     console.log('sendMessage', input);
@@ -225,7 +229,7 @@ export const ChatProvider = ({children}) => {
       if (!response.ok) throw new Error('Failed to clear messages');
 
       // Update the agentArray state
-      setAgentArray(prevAgentArray => {
+      setChatArray(prevAgentArray => {
         const updatedAgentArray = prevAgentArray.map(agent => {
           if (agent.chatId === chatId) {
             // Clear messages for the matching chat
@@ -239,7 +243,7 @@ export const ChatProvider = ({children}) => {
 
       // Perform the asynchronous storage operation after updating the state
       try {
-        const updatedAgentArray = agentArray.map(agent => {
+        const updatedAgentArray = chatArray.map(agent => {
           if (agent.chatId === chatId) {
             return {...agent, messages: []};
           }
@@ -278,7 +282,7 @@ export const ChatProvider = ({children}) => {
 
       if (!response.ok) throw new Error('Failed to delete conversation');
 
-      setAgentArray(prevChatArray => {
+      setChatArray(prevChatArray => {
         const updatedChatArray = prevChatArray.filter(
           chatObj => chatObj.chatId !== chatId,
         );
@@ -288,7 +292,7 @@ export const ChatProvider = ({children}) => {
 
       // Perform the asynchronous storage operation after updating the state
       try {
-        const updatedChatArray = agentArray.filter(
+        const updatedChatArray = chatArray.filter(
           chatObj => chatObj.chatId !== chatId,
         );
         await EncryptedStorage.setItem(
@@ -304,13 +308,15 @@ export const ChatProvider = ({children}) => {
     }
   };
 
-  const createChat = async (agentModel, chatName) => {
+  const createChat = async (model, chatName, userId) => {
+    console.log('createChat', model, chatName, userId);
     try {
       const response = await axios.post(
-        `${chatUrl}/chat/create`,
+        `${chatUrl}/chat`,
         {
-          agentModel,
+          model,
           chatName,
+          userId,
         },
         {
           headers: {
@@ -321,16 +327,15 @@ export const ChatProvider = ({children}) => {
 
       if (response.status !== 200) throw new Error('Failed to create chat');
 
-      const data = await response.json();
+      const data = await response.data;
       // Update the agentArray directly here
-      setAgentArray(prevAgents => {
+      setChatArray(prevAgents => {
         const updatedAgentArray = [data, ...prevAgents];
         return updatedAgentArray;
       });
 
-      // Perform the asynchronous storage operation after updating the state
       try {
-        const updatedAgentArray = [data, ...agentArray];
+        const updatedAgentArray = [data, ...chatArray];
         await EncryptedStorage.setItem(
           'agentArray',
           JSON.stringify(updatedAgentArray),
@@ -345,16 +350,16 @@ export const ChatProvider = ({children}) => {
   };
 
   useEffect(() => {
-    // getChats().then(() => {
-    //   setLoading(false);
-    // });
+    getChats().then(() => {
+      setLoading(false);
+    });
   }, []);
 
   return (
     <ChatContext.Provider
       value={{
-        agentArray,
-        setAgentArray,
+        chatArray,
+        setChatArray,
         messages,
         sendMessage,
         clearChat,

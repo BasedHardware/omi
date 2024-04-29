@@ -8,6 +8,7 @@ import {ChatProvider} from './contexts/ChatContext';
 import {SnackbarProvider} from './contexts/SnackbarContext';
 import AuthScreen from './screens/AuthScreen';
 import MainScreen from './screens/MainScreen';
+import MySnackBar from './components/SnackBar';
 
 const Stack = createNativeStackNavigator();
 
@@ -51,6 +52,7 @@ export default () => (
       <MomentsProvider>
         <ChatProvider>
           <App />
+          <MySnackBar />
         </ChatProvider>
       </MomentsProvider>
     </AuthProvider>

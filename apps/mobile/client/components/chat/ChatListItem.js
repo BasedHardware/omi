@@ -2,7 +2,7 @@ import {useContext, useRef} from 'react';
 import {ListItem} from 'react-native-elements';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {TouchableOpacity, StyleSheet} from 'react-native';
-import {ChatContext} from '../contexts/ChatContext';
+import {ChatContext} from '../../contexts/ChatContext';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faTrash} from '@fortawesome/free-solid-svg-icons';
 
@@ -26,17 +26,6 @@ const ChatListItem = ({item, onItemPress}) => {
     </TouchableOpacity>
   );
 
-  const formatDate = date => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  };
-
   return (
     <Swipeable
       ref={swipeableRef}
@@ -51,10 +40,8 @@ const ChatListItem = ({item, onItemPress}) => {
         style={styles.touchable}>
         <ListItem key={item.id} bottomDivider containerStyle={styles.listItem}>
           <ListItem.Content>
-            <ListItem.Title>
-              {item.text.substring(0, 30) + '...'}
-            </ListItem.Title>
-            <ListItem.Subtitle>{formatDate(item.date)}</ListItem.Subtitle>
+            <ListItem.Title>{item.chat_name}</ListItem.Title>
+            <ListItem.Subtitle>{item.model}</ListItem.Subtitle>
           </ListItem.Content>
           <ListItem.Chevron />
         </ListItem>
@@ -71,14 +58,14 @@ const styles = StyleSheet.create({
   },
   touchable: {
     flex: 1,
-    marginHorizontal: 10, // Side margins for better spacing
+    marginHorizontal: 10,
   },
   deleteButton: {
     backgroundColor: 'red',
     justifyContent: 'center',
     alignItems: 'center',
     width: 70,
-    height: 'calc(100% - 16px)',
+    height: 'auto',
     marginVertical: 8,
     borderRadius: 10,
   },

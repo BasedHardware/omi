@@ -11,6 +11,7 @@ import {
 
 import {Colors} from 'react-native/Libraries/NewAppScreen';
 import {useBluetooth} from '../contexts/useBluetooth';
+
 const SettingsTab = () => {
   const {
     isScanning,
@@ -19,6 +20,7 @@ const SettingsTab = () => {
     togglePeripheralConnection,
     retrieveConnected,
   } = useBluetooth();
+
   const renderItem = ({item}) => {
     const backgroundColor = item.connected ? '#069400' : Colors.white;
     return (
@@ -114,7 +116,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   body: {
-    backgroundColor: '#0082FC',
+    backgroundColor: '#fff',
     flex: 1,
   },
   sectionContainer: {
