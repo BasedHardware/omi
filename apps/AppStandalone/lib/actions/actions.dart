@@ -12,7 +12,7 @@ import '/flutter_flow/custom_functions.dart' as functions;
 Future<void> memoryCreationBlock(BuildContext context) async {
   var structuredMemory = await structureMemory();
   debugPrint('Structured Memory: $structuredMemory');
-  if (functions.memoryContainsNA(structuredMemory)) {
+  if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(structuredMemory);
   } else {
     await processStructuredMemory(structuredMemory);
@@ -38,9 +38,7 @@ Future<void> saveFailureMemory(String structuredMemory) async {
       emptyMemory: FFAppState().lastMemory == '',
       isUselessMemory: true,
     ),
-    ...mapToFirestore({
-      'date': FieldValue.serverTimestamp(),
-    }),
+    ...mapToFirestore({'date': FieldValue.serverTimestamp()}),
   });
 }
 
@@ -92,7 +90,7 @@ Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> 
       feedback: '',
       toShowToUserShowHide: FFAppState().isFeedbackUseful,
       emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: functions.memoryContainsNA(structuredMemory),
+      isUselessMemory: false,
     ),
     ...mapToFirestore({'date': FieldValue.serverTimestamp()}),
   });
@@ -124,25 +122,6 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
   }
 }
 
-// Process voice commands
-Future<void> voiceCommandBlock(BuildContext context) async {
-  if (!FFAppState().commandIsProcessing) {
-    startProcessingCommand();
-    var latestMemories = await fetchLatestMemories();
-    await processVoiceCommand(latestMemories);
-    FFAppState().commandIsProcessing = false;
-  }
-}
-
-// Start processing a voice command
-void startProcessingCommand() {
-  logFirebaseEvent('voiceCommandBlock_update_app_state');
-  FFAppState().update(() {
-    FFAppState().commandIsProcessing = true;
-    FFAppState().commandState = 'Listening...';
-  });
-}
-
 // Fetch latest valid memories
 Future<List<MemoriesRecord>> fetchLatestMemories() async {
   logFirebaseEvent('voiceCommandBlock_firestore_query');
@@ -156,90 +135,28 @@ Future<List<MemoriesRecord>> fetchLatestMemories() async {
   );
 }
 
-// Process the voice command with potential delays and updates
-Future<void> processVoiceCommand(List<MemoriesRecord> memories) async {
-  await Future.delayed(const Duration(milliseconds: 6000));
-  logFirebaseEvent('voiceCommandBlock_update_app_state');
-  FFAppState().update(() {
-    FFAppState().commandState = 'Thinking...';
-  });
-  var result = await voiceCommandRequest(functions.limitTranscript(FFAppState().stt, 12000),
-      functions.jsonEncodeString(functions.documentsToText(memories.toList())));
-  updateAppStateForVoiceResult();
-  if (result != '') {
-    triggerVoiceCommandNotification(result);
-    await saveVoiceCommandMemory(result);
-  }
-}
-
-// Update app state after voice command results are processed
-void updateAppStateForVoiceResult() {
-  FFAppState().commandState = 'Query';
-}
-
-// Trigger notifications based on voice command results
-void triggerVoiceCommandNotification(String result) {
-  logFirebaseEvent('voiceCommandBlock_trigger_push_notification');
-  if (currentUserReference != null) {
-    triggerPushNotification(
-      notificationTitle: 'Sama',
-      notificationText: result,
-      notificationSound: 'default',
-      userRefs: [currentUserReference!],
-      initialPageName: 'chat',
-      parameterData: {},
-    );
-  }
-}
-
-// Save the memory from a voice command
-Future<void> saveVoiceCommandMemory(String result) async {
-  await MemoriesRecord.collection.doc().set({
-    ...createMemoriesRecordData(
-      user: currentUserReference,
-      feedback: result,
-      toShowToUserShowHide: 'Show',
-      emptyMemory: true,
-      isUselessMemory: false,
-    ),
-    ...mapToFirestore({
-      'date': FieldValue.serverTimestamp(),
-    }),
-  });
-}
-
 // Perform actions periodically
 Future<void> periodicAction(BuildContext context) async {
-  String lastWords = await actions.getLastWords();
-  updateLastMemory(lastWords);
+  String lastWords = actions.getLastWords();
   if (lastWords.isNotEmpty) {
-    logFirebaseEvent('periodicAction_addlastwordstomemory');
+    updateLastMemory(lastWords);
     await action_blocks.memoryCreationBlock(context);
   }
 }
 
-// Update last memory based on the last words
-void updateLastMemory(String lastWords) {
-  logFirebaseEvent('periodicAction_update_app_state');
-  FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
-}
-
 // Perform final actions on finish
 Future<void> onFinishAction(BuildContext context) async {
-  String lastWordsOnFinishAction = await actions.getLastWords();
-  logFirebaseEvent('OnFinishAction_custom_action');
-  debugPrint('LAST WORDS FINISH: $lastWordsOnFinishAction');
-
-  updateMemoryOnFinish(lastWordsOnFinishAction);
-  logFirebaseEvent('OnFinishAction_action_block');
-  await action_blocks.memoryCreationBlock(context);
-
+  periodicAction(context);
   triggerFinishNotification();
 }
 
 // Update memory when finishing an action
-void updateMemoryOnFinish(String lastWords) {
+void updateLastMemory(String lastWords) {
   FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
+  debugPrint('FFAppState().lastMemory ${FFAppState().lastMemory}');
+  // ~ Should this join memories? or treat every memory isolated?
+  // ~ I'd say isolating each memory is best, ~ as for memories list, but also for retrieving chats.
+  // Eventually it'd be great to retrieve most recent memory and do a few tokens overlapping with the new one.
 }
 
 // Trigger notification to indicate recording is disabled
@@ -254,9 +171,4 @@ void triggerFinishNotification() {
       parameterData: {},
     );
   }
-}
-
-// Start recording function placeholder
-Future<void> startRecording(BuildContext context) async {
-  // Implement recording start logic here
 }
