@@ -670,27 +670,6 @@ class _ChatWidgetState extends State<ChatWidget> {
                                               onPressed: () async {
                                                 logFirebaseEvent('CHAT_PAGE_send_rounded_ICN_ON_TAP');
                                                 logFirebaseEvent('IconButton_firestore_query');
-                                                // _model.latestMemoriesChat2 = await queryMemoriesRecordOnce(
-                                                //   queryBuilder: (memoriesRecord) => memoriesRecord
-                                                //       .where(
-                                                //         'user',
-                                                //         isEqualTo: currentUserReference,
-                                                //       )
-                                                //       .where(
-                                                //         'isUselessMemory',
-                                                //         isEqualTo: false,
-                                                //       )
-                                                //       .where(
-                                                //         'emptyMemory',
-                                                //         isEqualTo: false,
-                                                //       )
-                                                //       .orderBy('date', descending: true),
-                                                //   limit: 50,
-                                                // );
-                                                // debugPrint('_model.latestMemoriesChat2');
-                                                // for (final doc in _model.latestMemoriesChat2!) {
-                                                //   debugPrint('doc: ${doc.toString()}');
-                                                // }
 
                                                 logFirebaseEvent('IconButton_backend_call');
                                                 _model.vector = await getEmbeddingsFromInput(
@@ -708,15 +687,6 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                       .cast<String>();
                                                 });
                                                 logFirebaseEvent('IconButton_update_app_state');
-                                                // debugPrint('FFAppState().chatHistory: ${FFAppState().chatHistory}');
-                                                // setState(() {
-                                                //   FFAppState().chatHistory = functions.updateSystemPromptMemories(
-                                                //       FFAppState().chatHistory,
-                                                //       functions.documentsToText(_model.latestMemoriesChat2!.toList())!,
-                                                //       FFAppState().lastMemory)!;
-                                                // });
-                                                // State is being updated but not used for anything ... ?
-                                                // debugPrint('FFAppState().chatHistory: ${FFAppState().chatHistory}');
                                                 logFirebaseEvent('IconButton_update_app_state');
                                                 setState(() {
                                                   FFAppState().chatHistory = functions.saveChatHistory(
