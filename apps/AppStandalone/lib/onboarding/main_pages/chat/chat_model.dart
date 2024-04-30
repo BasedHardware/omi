@@ -26,9 +26,9 @@ class ChatModel extends FlutterFlowModel<ChatWidget> {
   // Stores action output result for [Firestore Query - Query a collection] action in IconButton widget.
   List<MemoriesRecord>? latestMemoriesChat2;
   // Stores action output result for [Backend Call - API (Vectorize)] action in IconButton widget.
-  ApiCallResponse? vector;
+  List<double>? vector;
   // Stores action output result for [Backend Call - API (QueryVectors)] action in IconButton widget.
-  ApiCallResponse? simillarVectors;
+  List? simillarVectors;
 
   /// Initialization and disposal methods.
 

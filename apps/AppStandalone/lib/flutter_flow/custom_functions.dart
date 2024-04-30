@@ -195,7 +195,7 @@ DateTime? since18hoursago() {
   return eighteenHoursAgo;
 }
 
-int? wordCount(String? input) {
+int wordCount(String? input) {
   // Check if the input is null or empty
   if (input == null || input.isEmpty) {
     return 0;
@@ -204,13 +204,6 @@ int? wordCount(String? input) {
   // Split the string by spaces and count the elements
   List<String> words = input.split(RegExp(r'\s+'));
   return words.length;
-}
-
-bool? xGreaterThany(
-  int? xval,
-  int? yval,
-) {
-  return xval! > yval!;
 }
 
 dynamic convertToJSONRole(

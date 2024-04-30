@@ -520,15 +520,12 @@ class _TestNewWidgetState extends State<TestNewWidget> {
                     onPressed: () async {
                       logFirebaseEvent('TEST_NEW_PAGE_API_LIST_BTN_ON_TAP');
                       logFirebaseEvent('Button_backend_call');
-                      _model.devided = await TestCall.call(
-                        memory:
-                            'Napoleon - uses his brain as boxes so the different knowledge (chertogi razuma ) - “It takes genius to be lucky” - He meditated? - Built iterative: when building a building, already built part would be used for living and amortization of costs (immediate usefulness) - The prospect of immortal glory warms the hearts of the living  - “Be successful. I dive only men by result of their actions” - My wife would have died and I wouldn’t interfere for 15min from my plans - “I have no true friends” - Women are machines to make children - There is only one thing in the world. Acquire more and more money and power   Sam Altman hiring parameters:  - are they smart!  - Can they get things done?  - Do I want to spend a lot of time around them?   Sam Alman pbrioritization  - Choose 2-3 most important tasks only based on the few goals you set up for the company  - say No a lot - Recruiting advisors doesn’t matter - Out of the list of 100 tasks, your job is to identify top-2/3 that are really important  - List on what to do per yer, per month, per day - Prefers lists written down on paper - Doesn’t categorise lists - Prioritise by where I can get momentum and where I can make progress  - Eating lots of sugar is bad - Drinks coffee every morning  - Fasting every 15 hours  - Create a list of everything I got done at the end of day ',
+                      _model.devided = await testRequest(
+                            'Napoleon - uses his brain as boxes so the different knowledge (chertogi razuma ) - “It takes genius to be lucky” - He meditated? - Built iterative: when building a building, already built part would be used for living and amortization of costs (immediate usefulness) - The prospect of immortal glory warms the hearts of the living  - “Be successful. I dive only men by result of their actions” - My wife would have died and I wouldn’t interfere for 15min from my plans - “I have no true friends” - Women are machines to make children - There is only one thing in the world. Acquire more and more money and power   Sam Altman hiring parameters:  - are they smart!  - Can they get things done?  - Do I want to spend a lot of time around them?   Sam Alman pbrioritization  - Choose 2-3 most important tasks only based on the few goals you set up for the company  - say No a lot - Recruiting advisors doesn’t matter - Out of the list of 100 tasks, your job is to identify top-2/3 that are really important  - List on what to do per yer, per month, per day - Prefers lists written down on paper - Doesn’t categorise lists - Prioritise by where I can get momentum and where I can make progress  - Eating lots of sugar is bad - Drinks coffee every morning  - Fasting every 15 hours  - Create a list of everything I got done at the end of day ',''
                       );
                       logFirebaseEvent('Button_update_app_state');
                       setState(() {
-                        FFAppState().testlist = TestCall.responsegpt(
-                          (_model.devided?.jsonBody ?? ''),
-                        )!
+                        FFAppState().testlist = _model.devided!
                             .toList()
                             .cast<String>();
                       });
@@ -536,7 +533,7 @@ class _TestNewWidgetState extends State<TestNewWidget> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            (_model.devided?.bodyText ?? ''),
+                            (_model.devided?.toString() ?? ''),
                             style: TextStyle(
                               color: FlutterFlowTheme.of(context).primaryText,
                             ),

@@ -235,8 +235,8 @@ class _ImportAppleWidgetState extends State<ImportAppleWidget> {
                         logFirebaseEvent('Button_close_dialog,_drawer,_etc');
                         Navigator.pop(context);
                         logFirebaseEvent('Button_backend_call');
-                        _model.vectorized = await VectorizeCall.call(
-                          input: _model.textController.text,
+                        _model.vectorized = await getEmbeddingsFromInput(
+                          _model.textController.text,
                         );
                         logFirebaseEvent('Button_backend_call');
 
@@ -254,9 +254,7 @@ class _ImportAppleWidgetState extends State<ImportAppleWidget> {
                           ...mapToFirestore(
                             {
                               'date': FieldValue.serverTimestamp(),
-                              'vector': VectorizeCall.embedding(
-                                (_model.vectorized?.jsonBody ?? ''),
-                              ),
+                              'vector': _model.vectorized,
                             },
                           ),
                         });
@@ -273,22 +271,16 @@ class _ImportAppleWidgetState extends State<ImportAppleWidget> {
                           ...mapToFirestore(
                             {
                               'date': DateTime.now(),
-                              'vector': VectorizeCall.embedding(
-                                (_model.vectorized?.jsonBody ?? ''),
-                              ),
+                              'vector': _model.vectorized,
                             },
                           ),
                         }, memoriesRecordReference);
-                        if ((_model.vectorized?.succeeded ?? true)) {
+                        if (_model.vectorized != null) {
                           logFirebaseEvent('Button_backend_call');
-                          _model.addedVector =
-                              await CreateVectorPineconeCall.call(
-                            id: _model.createdMemoryManually?.reference.id,
-                            structuredMemory:
-                                _model.createdMemoryManually?.structuredMemory,
-                            vectorList: VectorizeCall.embedding(
-                              (_model.vectorized?.jsonBody ?? ''),
-                            ),
+                          _model.addedVector = await createPineconeVector(
+                             _model.vectorized,
+                             _model.createdMemoryManually?.structuredMemory,
+                             _model.createdMemoryManually?.reference.id,
                           );
                         } else {
                           logFirebaseEvent('Button_show_snack_bar');
