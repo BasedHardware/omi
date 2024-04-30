@@ -4,9 +4,32 @@ import '/backend/api_requests/api_calls.dart';
 import '/backend/backend.dart';
 import '/backend/push_notifications/push_notifications_util.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/actions/actions.dart' as action_blocks;
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/custom_functions.dart' as functions;
+
+// Perform actions periodically
+Future<void> periodicAction(BuildContext context) async {
+  String lastWords = actions.getLastWords();
+  if (lastWords.isNotEmpty) {
+    updateLastMemory(lastWords);
+    await memoryCreationBlock(context);
+  }
+}
+
+// Perform final actions on finish
+Future<void> onFinishAction(BuildContext context) async {
+  periodicAction(context);
+  triggerFinishNotification();
+}
+
+// Update memory when finishing an action
+void updateLastMemory(String lastWords) {
+  FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
+  debugPrint('FFAppState().lastMemory ${FFAppState().lastMemory}');
+  // ~ Should this join memories? or treat every memory isolated?
+  // ~ I'd say isolating each memory is best, ~ as for memories list, but also for retrieving chats.
+  // Eventually it'd be great to retrieve most recent memory and do a few tokens overlapping with the new one.
+}
 
 // Process the creation of memory records
 Future<void> memoryCreationBlock(BuildContext context) async {
@@ -22,7 +45,7 @@ Future<void> memoryCreationBlock(BuildContext context) async {
 // Call to the API to get structured memory
 Future<String> structureMemory() async {
   logFirebaseEvent('memoryCreationBlock_StructureMemoryAPI');
-  return await fetchStructuredMemory(FFAppState().lastMemory);
+  return await generateTitleAndSummaryForMemory(FFAppState().lastMemory);
 }
 
 // Save failure memory when structured memory contains NA
@@ -133,30 +156,6 @@ Future<List<MemoriesRecord>> fetchLatestMemories() async {
         .orderBy('date', descending: true),
     limit: 30,
   );
-}
-
-// Perform actions periodically
-Future<void> periodicAction(BuildContext context) async {
-  String lastWords = actions.getLastWords();
-  if (lastWords.isNotEmpty) {
-    updateLastMemory(lastWords);
-    await action_blocks.memoryCreationBlock(context);
-  }
-}
-
-// Perform final actions on finish
-Future<void> onFinishAction(BuildContext context) async {
-  periodicAction(context);
-  triggerFinishNotification();
-}
-
-// Update memory when finishing an action
-void updateLastMemory(String lastWords) {
-  FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
-  debugPrint('FFAppState().lastMemory ${FFAppState().lastMemory}');
-  // ~ Should this join memories? or treat every memory isolated?
-  // ~ I'd say isolating each memory is best, ~ as for memories list, but also for retrieving chats.
-  // Eventually it'd be great to retrieve most recent memory and do a few tokens overlapping with the new one.
 }
 
 // Trigger notification to indicate recording is disabled

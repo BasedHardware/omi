@@ -73,12 +73,24 @@ Future<String> executeGptPrompt(String? prompt) async {
   ]);
 }
 
-Future<String> fetchStructuredMemory(String? memory) async {
+Future<String> generateTitleAndSummaryForMemory(String? memory) async {
   var prompt = '''
-    Generate a suitable title for the summary based on the content below and write it in the beginning.
-    Also, Identify the specific details in the conversation and summarize specific facts that are important to remember or
-    action-items in very concise short points in second person. Respond in bullet points. If no valid memories/topics 
-    could be extracted OR if conversation is empty, reply with \\"N/A\\". Here is the conversation: \\"\\"\\"$memory\\"\\"\\"
+    Generate a title and a summary for the following recording chunk of a conversation.
+    For the title, use the most important topic or the most important action-item in the conversation.
+    For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
+    action-items in very concise short points in second person (use bullet points). 
+    
+    Is possible that the conversation is empty or is useless, in that case output "N/A".
+    Here is the recording ```$memory```.
+    
+    Remember to output using the following format:
+    ```
+    Title: ... 
+    Summary:
+    - Action item 1
+    - Action item 2
+    ...
+    ```
     ''';
   return await executeGptPrompt(prompt);
 }
