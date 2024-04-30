@@ -123,6 +123,9 @@ By following these steps, you should be able to run the app on your local machin
 any issues, please refer to the official Flutter and Firebase documentation, or check the community
 forums for similar problems and solutions.
 
+### Summarization Process Explanation
+![Removing Capabilities](assets/docs/summarization.png)
+
 ## Integration Tests
 
 To test on a real iOS / Android device, first connect the device and run the following command from
