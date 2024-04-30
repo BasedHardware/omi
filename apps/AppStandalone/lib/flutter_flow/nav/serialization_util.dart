@@ -184,7 +184,6 @@ enum ParamType {
   DocumentReference,
   DataStruct,
   Enum,
-  SupabaseRow,
 }
 
 dynamic deserializeParam<T>(
@@ -245,6 +244,7 @@ dynamic deserializeParam<T>(
         return json.decode(param);
       case ParamType.DocumentReference:
         return _deserializeDocumentReference(param, collectionNamePath ?? []);
+
       case ParamType.DataStruct:
         final data = json.decode(param) as Map<String, dynamic>? ?? {};
         return structBuilder != null ? structBuilder(data) : null;
