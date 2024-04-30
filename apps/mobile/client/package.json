@@ -16,7 +16,6 @@
     "@fortawesome/free-regular-svg-icons": "^6.5.2",
     "@fortawesome/free-solid-svg-icons": "^6.5.2",
     "@fortawesome/react-native-fontawesome": "^0.3.0",
-    "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-native-picker/picker": "^2.7.5",
     "@react-navigation/bottom-tabs": "^6.5.20",
     "@react-navigation/native": "^6.1.17",
@@ -26,7 +25,6 @@
     "react-native": "0.73.7",
     "react-native-base64": "^0.2.1",
     "react-native-ble-manager": "^11.5.2",
-    "react-native-document-picker": "^9.1.2",
     "react-native-elements": "^3.4.3",
     "react-native-encrypted-storage": "^4.0.3",
     "react-native-fetch-api": "^3.0.0",
@@ -40,7 +38,7 @@
     "react-native-syntax-highlighter": "^2.1.0",
     "react-native-vector-icons": "^10.0.3",
     "uuid": "^9.0.1",
-    "web-streams-polyfill": "^4.0.0"
+    "web-streams-polyfill": "^3.3.3"
   },
   "devDependencies": {
     "@babel/core": "^7.24.4",
@@ -64,5 +62,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "overrides": {
+    "web-streams-polyfill": "3.3.3"
   }
+  
 }

@@ -12,7 +12,6 @@ const logoutButton = () => (
   </Button>
 );
 
-
 const ChatStackNavigator = ({navigation, route}) => {
   useLayoutEffect(() => {
     const routeName = getFocusedRouteNameFromRoute(route) ?? 'Chat';

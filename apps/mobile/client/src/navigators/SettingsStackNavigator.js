@@ -7,7 +7,7 @@ import {faSignOutAlt} from '@fortawesome/free-solid-svg-icons';
 import {AuthContext} from '../contexts/AuthContext';
 
 const Stack = createNativeStackNavigator();
-const logoutButton = (signOut) => (
+const logoutButton = signOut => (
   <Button
     buttonStyle={{backgroundColor: 'transparent'}}
     onPress={() => signOut()}

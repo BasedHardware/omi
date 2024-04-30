@@ -101,37 +101,6 @@ export const useBluetooth = navigation => {
     }
   };
 
-  const retrieveConnected = async () => {
-    try {
-      const connectedPeripherals = await BleManager.getConnectedPeripherals();
-      if (connectedPeripherals.length === 0) {
-        console.warn('[retrieveConnected] No connected peripherals found.');
-        return;
-      }
-
-      console.debug(
-        '[retrieveConnected] connectedPeripherals',
-        connectedPeripherals,
-      );
-
-      for (let peripheral of connectedPeripherals) {
-        setPeripherals(map => {
-          let p = map.get(peripheral.id);
-          if (p) {
-            p.connected = true;
-            return new Map(map.set(p.id, p));
-          }
-          return map;
-        });
-      }
-    } catch (error) {
-      console.error(
-        '[retrieveConnected] unable to retrieve connected peripherals.',
-        error,
-      );
-    }
-  };
-
   const connectPeripheral = async peripheral => {
     try {
       if (peripheral) {
@@ -318,6 +287,5 @@ export const useBluetooth = navigation => {
     peripherals,
     startScan,
     togglePeripheralConnection,
-    retrieveConnected,
   };
 };

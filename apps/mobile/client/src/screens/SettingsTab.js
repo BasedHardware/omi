@@ -1,3 +1,4 @@
+import React, {useEffect} from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -40,20 +41,17 @@ const SettingsTab = () => {
     );
   };
 
+  useEffect(() => {
+    startScan();
+  }, []);
+
   return (
     <>
-      <StatusBar />
       <SafeAreaView style={styles.body}>
         <View style={styles.buttonGroup}>
           <Pressable style={styles.scanButton} onPress={startScan}>
             <Text style={styles.scanButtonText}>
               {isScanning ? 'Scanning...' : 'Scan Bluetooth'}
-            </Text>
-          </Pressable>
-
-          <Pressable style={styles.scanButton} onPress={retrieveConnected}>
-            <Text style={styles.scanButtonText} lineBreakMode="middle">
-              {'Retrieve connected peripherals'}
             </Text>
           </Pressable>
         </View>
