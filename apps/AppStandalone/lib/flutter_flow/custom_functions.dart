@@ -115,10 +115,6 @@ DateTime? sinceYesterday() {
   return twentyFourHoursAgo;
 }
 
-bool memoryContainsNA(String memory) {
-  return memory.contains("N/A");
-}
-
 String? limitTranscript(
   String transcript,
   int maxChars,
