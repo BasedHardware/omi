@@ -8,7 +8,6 @@ import 'auth/firebase_auth/firebase_user_provider.dart';
 import 'auth/firebase_auth/auth_util.dart';
 
 import 'backend/push_notifications/push_notifications_util.dart';
-import '/backend/supabase/supabase.dart';
 import 'backend/firebase/firebase_config.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'flutter_flow/revenue_cat_util.dart' as revenue_cat;
@@ -21,8 +20,6 @@ void main() async {
   // Start initial custom actions code
   await actions.listLocales();
   // End initial custom actions code
-
-  await SupaFlow.initialize();
 
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
@@ -81,7 +78,7 @@ class _MyAppState extends State<MyApp> {
     jwtTokenStream.listen((_) {});
     Future.delayed(
       const Duration(milliseconds: 1000),
-      () => _appStateNotifier.stopShowingSplashImage(),
+          () => _appStateNotifier.stopShowingSplashImage(),
     );
   }
 
@@ -93,8 +90,8 @@ class _MyAppState extends State<MyApp> {
   }
 
   void setThemeMode(ThemeMode mode) => setState(() {
-        _themeMode = mode;
-      });
+    _themeMode = mode;
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -78,5 +78,10 @@ apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
 apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
 apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
 apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+
 apps/AppStandalone/ios/Runner/RunnerDebug.entitlements
 apps/AppStandalone/lib/firebase_options.dart
+apps/AppStandalone/firebase.json
+apps/AppStandalone/android/app/google-services.json
+apps/AppStandalone/ios/Runner/GoogleService-Info.plist
+
