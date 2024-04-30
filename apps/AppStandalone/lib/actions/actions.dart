@@ -49,29 +49,21 @@ Future<void> processStructuredMemory(String structuredMemory) async {
   debugPrint('processStructuredMemory: $structuredMemory');
   debugPrint('processStructuredMemory: ${functions.wordCount(FFAppState().lastMemory)}');
 
-  if (functions.wordCount(FFAppState().lastMemory) > 1) {
-    updateAppStateForProcessing();
-    var feedback = await requestFeedback(structuredMemory);
-    var isFeedbackUseful = await evaluateFeedback(feedback);
-    debugPrint('Feedback: $feedback');
-    debugPrint('isFeedbackUseful: $isFeedbackUseful');
-    updateFinalAppState(feedback, isFeedbackUseful);
-  } else {
-    updateAppStateForEmptyFeedback();
-  }
   logFirebaseEvent('memoryCreationBlock_backend_call', parameters: {
     'jsonBody': (structuredMemory),
     'memory': FFAppState().lastMemory,
     'user': currentUserReference,
   });
+  changeAppStateMemoryCreating();
   await finalizeMemoryRecord(structuredMemory);
+  changeAppStateMemoryCreating();
 }
 
 // Update app state when starting memory processing
-void updateAppStateForProcessing() {
+void changeAppStateMemoryCreating() {
   logFirebaseEvent('memoryCreationBlock_update_app_state');
   FFAppState().update(() {
-    FFAppState().memoryCreationProcessing = true;
+    FFAppState().memoryCreationProcessing = !FFAppState().memoryCreationProcessing;
   });
 }
 
