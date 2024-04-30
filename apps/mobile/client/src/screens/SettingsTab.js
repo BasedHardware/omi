@@ -1,27 +1,19 @@
-import React, {useEffect} from 'react';
+import React, {useContext} from 'react';
 import {
   SafeAreaView,
   StyleSheet,
   View,
   Text,
-  StatusBar,
   FlatList,
   TouchableHighlight,
   Pressable,
 } from 'react-native';
-
+import {BluetoothContext} from '../contexts/BluetoothContext';
 import {Colors} from 'react-native/Libraries/NewAppScreen';
-import {useBluetooth} from '../contexts/useBluetooth';
 
 const SettingsTab = () => {
   const {isScanning, peripherals, startScan, togglePeripheralConnection} =
-    useBluetooth();
-
-  useEffect(() => {
-    setTimeout(() => {
-      startScan();
-    }, 0);
-  }, []);
+    useContext(BluetoothContext);
 
   const renderItem = ({item}) => {
     const backgroundColor = item.connected ? '#069400' : Colors.white;

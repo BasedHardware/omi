@@ -1,10 +1,17 @@
-import {useState, useEffect} from 'react';
+import React, {createContext, useContext, useState, useEffect} from 'react';
 import BleManager, {
   BleScanCallbackType,
   BleScanMatchMode,
   BleScanMode,
 } from 'react-native-ble-manager';
-import {NativeModules, NativeEventEmitter} from 'react-native';
+import {
+  NativeModules,
+  NativeEventEmitter,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
+
+export const BluetoothContext = createContext();
 
 const SECONDS_TO_SCAN_FOR = 3;
 const SERVICE_UUIDS = ['19B10000-E8F2-537E-4F6C-D104768A1214'];
@@ -12,58 +19,93 @@ const serviceUUID = '19B10000-E8F2-537E-4F6C-D104768A1214';
 const ALLOW_DUPLICATES = true;
 
 const BleManagerModule = NativeModules.BleManager;
-export const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
+const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 
-export const useBluetooth = navigation => {
+export const BluetoothProvider = ({children}) => {
   const [isScanning, setIsScanning] = useState(false);
   const [peripherals, setPeripherals] = useState(new Map());
 
   const startScan = () => {
     if (!isScanning) {
-      // reset found peripherals before scan
       setPeripherals(new Map());
-
-      try {
-        console.debug('[startScan] starting scan...');
-        setIsScanning(true);
-        BleManager.scan(SERVICE_UUIDS, SECONDS_TO_SCAN_FOR, ALLOW_DUPLICATES, {
-          matchMode: BleScanMatchMode.Sticky,
-          scanMode: BleScanMode.LowLatency,
-          callbackType: BleScanCallbackType.AllMatches,
+      setIsScanning(true);
+      BleManager.scan(SERVICE_UUIDS, SECONDS_TO_SCAN_FOR, ALLOW_DUPLICATES, {
+        matchMode: BleScanMatchMode.Sticky,
+        scanMode: BleScanMode.LowLatency,
+        callbackType: BleScanCallbackType.AllMatches,
+      })
+        .then(() => {
+          console.debug('[startScan] scan promise returned successfully.');
         })
-          .then(() => {
-            console.debug('[startScan] scan promise returned successfully.');
-          })
-          .catch(err => {
-            console.error('[startScan] ble scan returned in error', err);
-          });
-      } catch (error) {
-        console.error('[startScan] ble scan error thrown', error);
-      }
+        .catch(err => {
+          console.error('[startScan] ble scan returned in error', err);
+          setIsScanning(false);
+        });
     }
   };
 
-  const handleStopScan = () => {
-    setIsScanning(false);
-    console.debug('[handleStopScan] scan is stopped.');
-  };
+  useEffect(() => {
+    // Initialize BleManager
+    BleManager.start({showAlert: false})
+      .then(() => {
+        console.debug('BleManager started.');
 
-  const handleDisconnectedPeripheral = event => {
-    console.debug(
-      `[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`,
-    );
-    setPeripherals(map => {
-      let p = map.get(event.peripheral);
-      if (p) {
-        p.connected = false;
-        return new Map(map.set(event.peripheral, p));
-      }
-      return map;
-    });
-  };
+        // Set up listeners
+        const listeners = [
+          bleManagerEmitter.addListener(
+            'BleManagerDiscoverPeripheral',
+            handleDiscoverPeripheral,
+          ),
+          bleManagerEmitter.addListener('BleManagerStopScan', () =>
+            setIsScanning(false),
+          ),
+          bleManagerEmitter.addListener(
+            'BleManagerDisconnectPeripheral',
+            handleDisconnectedPeripheral,
+          ),
+          bleManagerEmitter.addListener(
+            'BleManagerConnectPeripheral',
+            handleConnectPeripheral,
+          ),
+        ];
 
-  const handleConnectPeripheral = event => {
-    console.log(`[handleConnectPeripheral][${event.peripheral}] connected.`);
+        setTimeout(() => {
+          startScan();
+        }, 1000);
+
+        // Clean up on component unmount
+        return () => {
+          console.debug(
+            '[BluetoothProvider] Unmounting. Removing listeners...',
+          );
+          listeners.forEach(listener => listener.remove());
+        };
+      })
+      .catch(error => console.error('BleManager could not be started.', error));
+  }, []);
+
+  const handleAndroidPermissions = () => {
+    if (Platform.OS === 'android') {
+      const permissions =
+        Platform.Version >= 31
+          ? [
+              PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+              PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+            ]
+          : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+
+      PermissionsAndroid.requestMultiple(permissions).then(results => {
+        if (
+          Object.values(results).every(
+            status => status === PermissionsAndroid.RESULTS.GRANTED,
+          )
+        ) {
+          console.debug('[handleAndroidPermissions] Permissions granted');
+        } else {
+          console.error('[handleAndroidPermissions] Permissions denied');
+        }
+      });
+    }
   };
 
   const handleDiscoverPeripheral = peripheral => {
@@ -72,18 +114,26 @@ export const useBluetooth = navigation => {
       peripheral.name = 'NO NAME';
     }
     if (
-      peripheral.advertising &&
-      peripheral.advertising.serviceUUIDs &&
-      peripheral.advertising.serviceUUIDs.includes(serviceUUID)
+      peripheral.advertising?.serviceUUIDs?.some(
+        uuid => uuid.toLowerCase() === serviceUUID.toLowerCase(),
+      )
     ) {
       console.debug(
         '[handleDiscoverPeripheral] Audio service found in peripheral:',
         peripheral.id,
       );
+      BleManager.stopScan()
+        .then(() => {
+          console.debug(
+            '[handleDiscoverPeripheral] Scanning stopped after finding target UUID.',
+          );
+          setIsScanning(false);
+        })
+        .catch(err => {
+          console.error('[handleDiscoverPeripheral] Error stopping scan:', err);
+        });
     }
-    setPeripherals(map => {
-      return new Map(map.set(peripheral.id, peripheral));
-    });
+    setPeripherals(prev => new Map(prev.set(peripheral.id, peripheral)));
   };
 
   const togglePeripheralConnection = async peripheral => {
@@ -200,91 +250,34 @@ export const useBluetooth = navigation => {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  useEffect(() => {
-    try {
-      BleManager.start({showAlert: false})
-        .then(() => console.debug('BleManager started.'))
-        .catch(error =>
-          console.error('BeManager could not be started.', error),
-        );
-    } catch (error) {
-      console.error('unexpected error starting BleManager.', error);
-      return;
-    }
+  const handleConnectPeripheral = event => {
+    console.log(`[handleConnectPeripheral][${event.peripheral}] connected.`);
+  };
 
-    const listeners = [
-      bleManagerEmitter.addListener(
-        'BleManagerDiscoverPeripheral',
-        handleDiscoverPeripheral,
-      ),
-      bleManagerEmitter.addListener('BleManagerStopScan', handleStopScan),
-      bleManagerEmitter.addListener(
-        'BleManagerDisconnectPeripheral',
-        handleDisconnectedPeripheral,
-      ),
-      bleManagerEmitter.addListener(
-        'BleManagerConnectPeripheral',
-        handleConnectPeripheral,
-      ),
-    ];
-
-    handleAndroidPermissions();
-
-    return () => {
-      console.debug('[app] main component unmounting. Removing listeners...');
-      for (const listener of listeners) {
-        listener.remove();
+  const handleDisconnectedPeripheral = event => {
+    console.debug(
+      `[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`,
+    );
+    setPeripherals(prev => {
+      const p = prev.get(event.peripheral);
+      if (p) {
+        p.connected = false;
+        return new Map(prev.set(event.peripheral, p));
       }
-    };
-  }, []);
-
-  const handleAndroidPermissions = () => {
-    if (Platform.OS === 'android' && Platform.Version >= 31) {
-      PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      ]).then(result => {
-        if (result) {
-          console.debug(
-            '[handleAndroidPermissions] User accepts runtime permissions android 12+',
-          );
-        } else {
-          console.error(
-            '[handleAndroidPermissions] User refuses runtime permissions android 12+',
-          );
-        }
-      });
-    } else if (Platform.OS === 'android' && Platform.Version >= 23) {
-      PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ).then(checkResult => {
-        if (checkResult) {
-          console.debug(
-            '[handleAndroidPermissions] runtime permission Android <12 already OK',
-          );
-        } else {
-          PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          ).then(requestResult => {
-            if (requestResult) {
-              console.debug(
-                '[handleAndroidPermissions] User accepts runtime permission android <12',
-              );
-            } else {
-              console.error(
-                '[handleAndroidPermissions] User refuses runtime permission android <12',
-              );
-            }
-          });
-        }
-      });
-    }
+      return prev;
+    });
   };
 
-  return {
-    isScanning,
-    peripherals,
-    startScan,
-    togglePeripheralConnection,
-  };
+  return (
+    <BluetoothContext.Provider
+      value={{
+        isScanning,
+        peripherals,
+        startScan,
+        bleManagerEmitter,
+        togglePeripheralConnection,
+      }}>
+      {children}
+    </BluetoothContext.Provider>
+  );
 };

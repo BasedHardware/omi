@@ -8,13 +8,14 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import {DEEPGRAM_API_KEY} from '@env';
 import {MomentsContext} from '../contexts/MomentsContext';
+import {BluetoothContext} from '../contexts/BluetoothContext';
 import MomentListItem from '../components/MomentsListItem';
-import {bleManagerEmitter} from '../contexts/useBluetooth';
 
 const MomentsTab = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [streamingTranscript, setStreamingTranscript] = useState('');
   const {moments, setMoments, addMoment} = useContext(MomentsContext);
+  const {bleManagerEmitter} = useContext(BluetoothContext);
   const ws = useRef(null);
   const navigation = useNavigation();
 
@@ -26,7 +27,7 @@ const MomentsTab = () => {
     const language = 'en-US';
     const smart_format = true;
     const encoding = 'linear16';
-    const sample_rate = 16000;
+    const sample_rate = 8000;
 
     const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
     ws.current = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
@@ -63,8 +64,8 @@ const MomentsTab = () => {
   };
 
   const handleUpdateValueForCharacteristic = data => {
-    const uint8Array = new Uint8Array(data.value);
-    ws.current.send(uint8Array.buffer);
+    const array = new Uint8Array(data.value);
+    ws.current.send(array.buffer);
   };
 
   bleManagerEmitter.addListener(
@@ -90,7 +91,7 @@ const MomentsTab = () => {
 
   const startStreaming = () => {
     const options = {
-      sampleRate: 16000,
+      sampleRate: 8000,
       channels: 1,
       bitsPerSample: 16,
       bufferSize: 4096,
