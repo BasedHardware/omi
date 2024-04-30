@@ -90,22 +90,18 @@ Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> 
       user: currentUserReference,
       structuredMemory: structuredMemory,
       feedback: '',
-
       toShowToUserShowHide: FFAppState().isFeedbackUseful,
       emptyMemory: FFAppState().lastMemory == '',
       isUselessMemory: functions.memoryContainsNA(structuredMemory),
     ),
-    ...mapToFirestore({
-      'date': FieldValue.serverTimestamp(),
-      'vector': vector,
-    }),
+    ...mapToFirestore({'date': FieldValue.serverTimestamp()}),
   });
   return MemoriesRecord.getDocumentOnce(recordRef);
 }
 
 // Store vector data after memory record creation
 Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) async {
-  debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
+  // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
   await createPineconeVector(
