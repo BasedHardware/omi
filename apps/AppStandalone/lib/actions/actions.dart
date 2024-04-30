@@ -24,11 +24,10 @@ Future<void> onFinishAction(BuildContext context) async {
 
 // Update memory when finishing an action
 void updateLastMemory(String lastWords) {
-  FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
+  // FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
+  FFAppState().lastMemory = lastWords;
   debugPrint('FFAppState().lastMemory ${FFAppState().lastMemory}');
-  // ~ Should this join memories? or treat every memory isolated?
-  // ~ I'd say isolating each memory is best, ~ as for memories list, but also for retrieving chats.
-  // Eventually it'd be great to retrieve most recent memory and do a few tokens overlapping with the new one.
+  // TODO: retrieve most recent memory (previous) and do a few tokens overlapping with the new one.
 }
 
 // Process the creation of memory records
@@ -68,7 +67,6 @@ Future<void> saveFailureMemory(String structuredMemory) async {
 // Process structured memory when it's valid
 Future<void> processStructuredMemory(String structuredMemory) async {
   debugPrint('processStructuredMemory: $structuredMemory');
-  debugPrint('processStructuredMemory: ${functions.wordCount(FFAppState().lastMemory)}');
 
   logFirebaseEvent('memoryCreationBlock_backend_call', parameters: {
     'jsonBody': (structuredMemory),
@@ -131,6 +129,7 @@ Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) a
     memoryRecord.reference.id,
   );
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
+  // TODO: never triggers because `toShowToUserShowHide` is always 'Hide', because feedback logic was removed.
   if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
     logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
     if (currentUserReference != null) {
