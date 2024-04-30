@@ -272,25 +272,20 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                     }, memoriesRecordReference);
                                     logFirebaseEvent('Button_backend_call');
                                     _model.openAIVector =
-                                        await VectorizeCall.call(
-                                      input: _model.textController.text,
+                                        await getEmbeddingsFromInput(_model.textController.text,
                                     );
-                                    if ((_model.openAIVector?.succeeded ??
-                                        true)) {
+                                    if (_model.openAIVector != null) {
                                       logFirebaseEvent('Button_backend_call');
                                       _model.addedVector =
-                                          await CreateVectorPineconeCall.call(
-                                        id: _model.createdMemoryManually
-                                            ?.reference.id,
-                                        structuredMemory: _model
+                                          await createPineconeVector(
+                                         _model.openAIVector,
+                                         _model
                                             .createdMemoryManually
                                             ?.structuredMemory,
-                                        vectorList: VectorizeCall.embedding(
-                                          (_model.openAIVector?.jsonBody ?? ''),
-                                        ),
+                                         _model.createdMemoryManually
+                                            ?.reference.id,
                                       );
-                                      if (!(_model.addedVector?.succeeded ??
-                                          true)) {
+                                      if (_model.addedVector) {
                                         logFirebaseEvent(
                                             'Button_show_snack_bar');
                                         ScaffoldMessenger.of(context)

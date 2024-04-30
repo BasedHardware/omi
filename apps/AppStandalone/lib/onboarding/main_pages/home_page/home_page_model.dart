@@ -21,15 +21,15 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
   // Stores action output result for [Firestore Query - Query a collection] action in homePage widget.
   List<MemoriesRecord>? monthlyMemoriesQuery;
   // Stores action output result for [Backend Call - API (Summaries)] action in homePage widget.
-  ApiCallResponse? monthlySummary;
+  String? monthlySummary;
   // Stores action output result for [Backend Call - Create Document] action in homePage widget.
   SummariesRecord? monthlysummaryCreated;
   // Stores action output result for [Backend Call - API (Summaries)] action in homePage widget.
-  ApiCallResponse? weeklySummary;
+  String? weeklySummary;
   // Stores action output result for [Backend Call - Create Document] action in homePage widget.
   SummariesRecord? weeklysummaryCreated;
   // Stores action output result for [Backend Call - API (Summaries)] action in homePage widget.
-  ApiCallResponse? dailySummary;
+  String? dailySummary;
   // Stores action output result for [Backend Call - Create Document] action in homePage widget.
   SummariesRecord? summaryCreated;
   InstantTimer? instantTimerAction;
