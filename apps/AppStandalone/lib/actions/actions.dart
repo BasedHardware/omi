@@ -67,40 +67,6 @@ void changeAppStateMemoryCreating() {
   });
 }
 
-// Request feedback for the given memory
-Future<String> requestFeedback(String structuredMemory) async {
-  logFirebaseEvent('memoryCreationBlock_FEEDBACKapi');
-  return await getGPTFeedback(FFAppState().lastMemory, structuredMemory);
-}
-
-// Evaluate feedback usefulness
-Future<String> evaluateFeedback(String feedback) async {
-  logFirebaseEvent('memoryCreationBlock_custom_action');
-  logFirebaseEvent('memoryCreationBlock_backend_call');
-  return await isFeedbackUseful(FFAppState().lastMemory, feedback);
-}
-
-// Update app state after processing feedback
-void updateFinalAppState(String feedback, String isFeedbackUseful) {
-  logFirebaseEvent('memoryCreationBlock_update_app_state');
-  FFAppState().update(() {
-    FFAppState().feedback = feedback;
-    FFAppState().isFeedbackUseful = isFeedbackUseful;
-    FFAppState().chatHistory =
-        functions.saveChatHistory(FFAppState().chatHistory, functions.convertToJSONRole(feedback, 'assistant'));
-    FFAppState().memoryCreationProcessing = false;
-  });
-}
-
-// Update app state when feedback is empty
-void updateAppStateForEmptyFeedback() {
-  logFirebaseEvent('memoryCreationBlock_update_app_state');
-  FFAppState().update(() {
-    FFAppState().feedback = '';
-    FFAppState().isFeedbackUseful = 'Hide';
-  });
-}
-
 // Finalize memory record after processing feedback
 Future<void> finalizeMemoryRecord(String structuredMemory) async {
   var vector = await vectorizeMemory(structuredMemory);
@@ -123,7 +89,8 @@ Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> 
       memory: FFAppState().lastMemory,
       user: currentUserReference,
       structuredMemory: structuredMemory,
-      feedback: FFAppState().feedback,
+      feedback: '',
+
       toShowToUserShowHide: FFAppState().isFeedbackUseful,
       emptyMemory: FFAppState().lastMemory == '',
       isUselessMemory: functions.memoryContainsNA(structuredMemory),
@@ -133,26 +100,12 @@ Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> 
       'vector': vector,
     }),
   });
-  return MemoriesRecord.getDocumentFromData({
-    ...createMemoriesRecordData(
-      memory: FFAppState().lastMemory,
-      user: currentUserReference,
-      structuredMemory: structuredMemory,
-      feedback: FFAppState().feedback,
-      toShowToUserShowHide: FFAppState().isFeedbackUseful,
-      emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: functions.memoryContainsNA(structuredMemory),
-    ),
-    ...mapToFirestore({
-      'date': DateTime.now(),
-      'vector': vector,
-    }),
-  }, recordRef);
+  return MemoriesRecord.getDocumentOnce(recordRef);
 }
 
 // Store vector data after memory record creation
 Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) async {
-  // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
+  debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
   await createPineconeVector(
