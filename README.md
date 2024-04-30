@@ -9,7 +9,7 @@
 <div align="center">
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://github.com/BasedHardware/Friend) 
+[Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss)
 
 </h3>
 </div>
@@ -107,6 +107,8 @@ Follow these steps to get started with your Friend.
 # Install Firmware
 
 Follow these steps to install the firmware:
+
+We have uploaded a build of the firmware in ``firmware/Build``, that will always contain the most up to date build of the firmware. To use this firmware please download it and follow step 6 below. If you would like to build the firmware yourself please follow all the steps below.
 
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8?feature=shared)
 
