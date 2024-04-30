@@ -14,13 +14,14 @@ import {Colors} from 'react-native/Libraries/NewAppScreen';
 import {useBluetooth} from '../contexts/useBluetooth';
 
 const SettingsTab = () => {
-  const {
-    isScanning,
-    peripherals,
-    startScan,
-    togglePeripheralConnection,
-    retrieveConnected,
-  } = useBluetooth();
+  const {isScanning, peripherals, startScan, togglePeripheralConnection} =
+    useBluetooth();
+
+  useEffect(() => {
+    setTimeout(() => {
+      startScan();
+    }, 0);
+  }, []);
 
   const renderItem = ({item}) => {
     const backgroundColor = item.connected ? '#069400' : Colors.white;
@@ -41,10 +42,6 @@ const SettingsTab = () => {
     );
   };
 
-  useEffect(() => {
-    startScan();
-  }, []);
-
   return (
     <>
       <SafeAreaView style={styles.body}>
@@ -58,9 +55,7 @@ const SettingsTab = () => {
 
         {Array.from(peripherals.values()).length === 0 && (
           <View style={styles.row}>
-            <Text style={styles.noPeripherals}>
-              No Peripherals, press "Scan Bluetooth" above.
-            </Text>
+            <Text style={styles.noPeripherals}>Is your Friend turned On?</Text>
           </View>
         )}
 
@@ -168,7 +163,7 @@ const styles = StyleSheet.create({
   noPeripherals: {
     margin: 10,
     textAlign: 'center',
-    color: Colors.white,
+    color: Colors.black,
   },
 });
 

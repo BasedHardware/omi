@@ -187,7 +187,6 @@ export const useBluetooth = navigation => {
           }
           return map;
         });
-
       }
     } catch (error) {
       console.error(
