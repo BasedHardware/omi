@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Build the device
-nav_order: 1
+nav_order: 2
 ---
 
 # Build the device
