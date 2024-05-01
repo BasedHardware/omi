@@ -44,6 +44,7 @@ Future<dynamic> _gptApiCall({
   List<Map<String, String>> messages = const [],
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
+  bool stream = false,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
@@ -55,7 +56,7 @@ Future<dynamic> _gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    var bodyData = {'model': model, 'messages': messages};
+    var bodyData = {'model': model, 'messages': messages, 'stream': stream};
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
     }
@@ -138,4 +139,21 @@ Future<List> queryPineconeVectors(List<double>? vectorList) async {
   });
   var responseBody = await _pineconeApiCall(urlSuffix: 'query', body: body);
   return (responseBody['matches'])?.map((e) => e['metadata']).toList() ?? [];
+}
+
+Future qaStreamed(String? question, String? context, Map<String, String> chatHistory, void callback) async {
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    
+    Conversation History:
+    ${chatHistory.values.join('\n')}
+
+    Question: $question 
+    
+    Context: $context
+    
+    Answer:
+    ''';
+  // TODO: execute with streaming, and include a callback to add the new message to chat history
 }
