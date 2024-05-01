@@ -33,33 +33,16 @@ Open Source AI Wearable device that records everything you say, gives you proact
 - [Build the device](https://basedhardware.github.io/Friend/assembly/Build_the_device/)
 - [Install firmware](https://basedhardware.github.io/Friend/assembly/Install_firmware/)
 
+## More links:
+- [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
+- [Support](https://basedhardware.github.io/Friend/info/Support/)
 
-## Contributing
-
-[Join our Discord!](https://discord.gg/kEXXsnb5b3)
-We welcome contributions from the community! If you're interested in improving Friend, our current biggest goal is to combine both apps together (AppStandalone with AppWithWearable).
-
-- Standalone App brings great prompts and rich structure
-- AppWithWearable brings simple bluetooth connecting functionality
-
-## Support
-
-For open-source support, please open an issue on GitHub and/or ask in our [Discord Community](https://discord.gg/kEXXsnb5b3). For commercial support, license inquiries, or any other questions, please contact us directly at [team@whomane.com](mailto:team@whomane.com).
-
-## Disclaimer
-
-Please note that the Friend is a prototype project and is provided "as is", without warranty of any kind. Use of the device should comply with all local laws and regulations concerning privacy and data protection.
-
-Thank you for your interest in Friend, the open-source AI wearable. We're excited to see what you'll build with it!
-
-## Licensing
-
-Friend is available under MIT License
-
-
-
-#### Made by the Community, with -❤️-:
+## Made by the Community, with -❤️-:
 
 <a href="https://github.com/BasedHardware/Friend/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=BasedHardware/Friend" />
 </a>
+
+## Licensing
+
+Friend is available under MIT License
