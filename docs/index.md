@@ -22,3 +22,6 @@ Friend is an AI wearable device that records everything you say, giving you proa
 
 The first step to world-class documentation is setting up your editing environments.
 
+
+
+[Getting Started →](https://basedhardware.github.io/Friend/get_started/Setup/){: .btn .btn-purple }

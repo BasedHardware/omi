@@ -4,7 +4,7 @@ title: Getting Started
 nav_order: 1
 ---
 
-## Getting Started
+# Getting Started
 
 Follow these steps to get started with your Friend.
 
@@ -38,3 +38,6 @@ Follow these steps to get started with your Friend.
 - Don't have the device? [Clone this Flutterflow Project ](https://app.flutterflow.io/project/friend-0x9u40)
 - Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/project/friend-share-19bk3d)
 
+
+
+[Build the device →](https://basedhardware.github.io/Friend/assembly/Build_the_device/){: .btn .btn-purple }
