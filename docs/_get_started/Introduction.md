@@ -8,7 +8,7 @@ nav_order: 1
 
 Friend is an AI wearable device that records everything you say, giving you proactive feedback and advice. Use these docs to unlock the full potential of Friend and build using the power of recall.
 
-![Friend Image](../images/mainbanner.jpeg)
+<img src="../images/mainbanner.jpeg" alt="Friend Banner" width="100%">
 
 ## Features
 
