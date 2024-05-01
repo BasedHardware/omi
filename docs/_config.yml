@@ -1,5 +1,7 @@
 title: Friend
-
+description: Open Source AI Wearable device
+theme: just-the-docs
+url: https://basedhardware.github.io
 logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
 
@@ -23,10 +25,13 @@ just_the_docs:
     info:
       name: Info
 
-description: Open Source AI Wearable device
-theme: just-the-docs
-
-url: https://basedhardware.github.io
+callouts:
+  warning:
+    title: Warning
+    color: red
+  note:
+    title: Note
+    color: gray
 
 aux_links:
   Github: https://github.com/BasedHardware/Friend
@@ -34,7 +39,7 @@ aux_links:
 aux_links_new_tab: true
 
 nav_external_links:
-  - title: Discord Community
+  - title: 💬 Discord Community
     url: https://discord.gg/kEXXsnb5b3
     opens_in_new_tab: true
 
