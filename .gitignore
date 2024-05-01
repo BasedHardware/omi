@@ -85,5 +85,12 @@ apps/AppStandalone/lib/firebase_options.dart
 apps/AppStandalone/firebase.json
 apps/AppStandalone/android/app/google-services.json
 apps/AppStandalone/ios/Runner/GoogleService-Info.plist
+apps/AppStandalone/lib/env/env.g.dart
+apps/AppStandalone/ios/Flutter/flutter_export_environment.sh
+apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.h
+apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.m
+apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
+*/*xcschememanagement.plist
+*/android/app/google-services.json
 */ios/Runner/GoogleService-Info.plist
