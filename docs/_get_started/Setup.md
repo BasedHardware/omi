@@ -40,4 +40,4 @@ Follow these steps to get started with your Friend.
 
 
 
-[Build the device →](https://basedhardware.github.io/Friend/assembly/Build_the_device/){: .btn .btn-purple }
+[Next Step: Build the device →](https://basedhardware.github.io/Friend/assembly/Build_the_device/){: .btn .btn-purple }

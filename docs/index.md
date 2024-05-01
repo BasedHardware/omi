@@ -65,4 +65,4 @@ Folder "AppWithWearableReactNative": Wearable-connected version of the app that 
 
 
 
-[Getting Started →](https://basedhardware.github.io/Friend/get_started/Setup/){: .btn .btn-purple }
+[Next Step: Getting Started →](https://basedhardware.github.io/Friend/get_started/Setup/){: .btn .btn-purple }
