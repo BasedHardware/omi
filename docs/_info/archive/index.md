@@ -1,22 +1,23 @@
 ---
-title: Home
+title: Launch Readme
 layout: default
 nav_order: 1
 ---
 
-# Friend Documentation
+# Launch Readme, April 2024: Friend Documentation
+
 {: .no_toc }
 
 ## Table of contents
+
 {: .no_toc .text-delta }
 
 1. TOC
-{:toc}
+   {:toc}
 
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
 ![Frame 208](https://github.com/BasedHardware/Friend/assets/43514161/35340b43-9bd9-4759-81ae-5ffd6e057f32)
-
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -31,7 +32,6 @@ Friend is an AI wearable device that records everything you say, gives you proac
 - **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear.
 
 ## How it works
-
 
 <img src="./images/how_it_works.png" alt="how_it_works " width="300">
 
