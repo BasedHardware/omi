@@ -1,6 +1,6 @@
 title: Friend Documentation
 
-logo: "/images/just-the-docs.png"
+logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
 
 collections:
@@ -8,6 +8,11 @@ collections:
     permalink: "/:collection/:path/"
     output: true
     nav_fold: false
+
+just_the_docs:
+  collections:
+    guides:
+      name: Get Started
 
 description: Open Source AI Wearable device
 theme: just-the-docs
