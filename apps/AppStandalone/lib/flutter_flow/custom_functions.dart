@@ -95,8 +95,7 @@ String? documentsToText(List<MemoriesRecord> memories) {
         String formattedTime = timeFormat.format(obj.date!);
 
         // Escape double quotes and remove newline characters from the memory content
-        String memoryContent =
-            obj.structuredMemory.replaceAll('"', '\\"').replaceAll('\n', ' ');
+        String memoryContent = obj.structuredMemory.replaceAll('"', '\\"').replaceAll('\n', ' ');
 
         // Format each memory with formatted time and memory content
         return '$formattedTime $memoryContent';
@@ -114,10 +113,6 @@ DateTime? sinceYesterday() {
   DateTime now = DateTime.now();
   DateTime twentyFourHoursAgo = now.subtract(Duration(hours: 24));
   return twentyFourHoursAgo;
-}
-
-bool memoryContainsNA(String memory) {
-  return memory.contains("N/A");
 }
 
 String? limitTranscript(
@@ -144,34 +139,26 @@ dynamic updateSystemPromptMemories(
   String memoriesString,
   String currentConversation,
 ) {
-  // memoriesString = limitTranscript(memoriesString, 400000)!;
   memoriesString = limitTranscript(memoriesString, 400000)!; // for debug
 
   // Construct the system prompt as a Map
   Map<String, String> systemPrompt = {
     "role": "system",
-    "content":
-        "\n\n Your name is Comind and you are a harsh, toxic, honest mentor. BELOW ARE MY MEMORIES. My memories are interesting facts that I learned and everything that happened in my life. Personalize your answers in a specific concise way based on my MEMORIES:    " +
-            memoriesString +
-            "\n\n and these are few last things I mentioned: " +
-            currentConversation +
-            "\n\n We just had a conversation with you. This is our previous CONVERSATION. Respond to my question in a direct specific and concise manner in the end. Before answering the question, make sure you have all relevant context needed to answer the question . If you don't have enough context, ask me more questions. Once you asked questions, check if it's enough to answer my question. If enough, answer it, if not enough, ask more questions:  "
+    "content": '''
+    Your name is Comind and you are a harsh, toxic, honest mentor. BELOW ARE MY MEMORIES. 
+    My memories are interesting facts that I learned and everything that happened in my life. 
+    Personalize your answers in a specific concise way based on my MEMORIES:    $memoriesString 
+    \n\n and these are few last things I mentioned: $currentConversation \n\n We just had a conversation with you. 
+    This is our previous CONVERSATION. Respond to my question in a direct specific and concise manner in the end. 
+    Before answering the question, make sure you have all relevant context needed to answer the question . 
+    If you don't have enough context, ask me more questions. Once you asked questions, check if it's enough to answer my question. 
+    If enough, answer it, if not enough, ask more questions:  
+    '''
   };
-
-  // Map<String, String> systemPrompt = {"role": "system", "content": "bruh"};
-
-  // Construct the system prompt as a Map
-  // Map<String, String> systemPrompt = {"role": "system", "content": "hello"};
-
-  // if (chatHistory is List) {
-  //   chatHistory[0] = (systemPrompt);
-  //   return chatHistory;
-  // } else {
-  //   return [systemPrompt];
-  // }
-  return updateChatHistoryAtIndex(systemPrompt, 0, chatHistory);
-
-  // [{"role":"system", "content":"bruh"}, {"role":"system", "content":"bruh"}, {"role":"system", "content":"bruh"}]
+  debugPrint('updateSystemPromptMemories: $systemPrompt');
+  var updatedChat = updateChatHistoryAtIndex(systemPrompt, 0, chatHistory);
+  debugPrint('updateSystemPromptMemories: $updatedChat');
+  return updatedChat;
 }
 
 String? jsonEncodeString(String? regularString) {
@@ -223,15 +210,8 @@ dynamic saveChatHistory(
   if (chatHistory is! List) {
     chatHistory = [chatHistory];
   }
-
   // Add newChat to chatHistory
   chatHistory.add(newChat);
-
-  // // If chatHistory has more than 30 items, remove the item at index 1
-  // if (chatHistory.length > 30) {
-  //   chatHistory.removeAt(1);
-  // }
-
   return chatHistory;
 }
 
@@ -247,8 +227,7 @@ dynamic truncateChatHistory(dynamic ogChatHistory) {
   int chatLength = 3;
   if (ogChatHistory.length > chatLength) {
     // Keep the first item and the last 30 items
-    var truncatedChatHistory = [ogChatHistory.first] +
-        ogChatHistory.sublist(ogChatHistory.length - chatLength);
+    var truncatedChatHistory = [ogChatHistory.first] + ogChatHistory.sublist(ogChatHistory.length - chatLength);
     return truncatedChatHistory;
   }
   return ogChatHistory;

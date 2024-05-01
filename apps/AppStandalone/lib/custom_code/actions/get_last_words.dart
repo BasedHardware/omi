@@ -11,11 +11,7 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
-Future<String> getLastWords() async {
-  // Add your function code here!
-
-  // Add your function code here!
-
+String getLastWords() {
   /// MODIFY CODE ONLY BELOW THIS LINE
 
   String lastTranscript = FFAppState().lastTranscript;
@@ -34,10 +30,6 @@ Future<String> getLastWords() async {
     // Remove the first 'charCount' characters from the updated transcript
     lastWords = newestTranscript.substring(charCount).trim();
   }
-
-  // FFAppState().update(() {
-  //   FFAppState().lastMemory = lastMemory + " " + lastWords;
-  // });
 
   print("[LAST WORDS]: " + lastWords);
   print("[LAST TRANSCRIPT]: " + lastTranscript);
