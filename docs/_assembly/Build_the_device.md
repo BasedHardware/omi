@@ -1,10 +1,10 @@
 ---
 layout: default
-title: Building the device
+title: Build the device
 nav_order: 1
 ---
 
-# Building the device
+# Build the device
 
 If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
 
