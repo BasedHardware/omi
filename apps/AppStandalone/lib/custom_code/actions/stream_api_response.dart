@@ -8,6 +8,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'index.dart'; // Imports other custom actions
 import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import 'package:flutter/material.dart';
+import './streaming_models.dart';
 
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
@@ -22,9 +23,7 @@ dynamic chatHistory; // chatHistory but only action scope
 
 var _client;
 
-Future streamApiResponse(
-  Future<dynamic> Function()? callbackAction,
-) async {
+Future streamApiResponse(Future<dynamic> Function()? callbackAction,) async {
   // Add your function code here!
   _client = http.Client();
 
@@ -51,18 +50,13 @@ Future streamApiResponse(
   FFAppState().update(() {
     FFAppState().chatHistory = saveChatHistory(chatHistory, convertToJSONRole(responseString, "assistant"));
   });
-  // FFAppState().addToChatHistory(ChatResponseStruct(
-  //   author: 'assistant',
-  //   content: '',
-  // ));
 
-  // Stream Response
   StringBuffer buffer = StringBuffer();
 
   final http.StreamedResponse response = await _client.send(request);
 
   response.stream.listen(
-    (List<int> value) async {
+        (List<int> value) async {
       buffer.write(utf8.decode(value));
       String bufferString = buffer.toString();
 
@@ -126,11 +120,6 @@ void addToChatHistory(String data, callbackAction) {
         FFAppState().chatHistory = chatHistory;
       });
       callbackAction();
-    } else {
-      if (contentResponse.choices![0].message != null) {
-        String message = contentResponse.choices![0].message!.content!;
-        callbackAction();
-      }
     }
   }
 }
@@ -144,109 +133,4 @@ String getApiBody(dynamic chatHistory) {
     "stream": true,
   });
   return body;
-}
-
-class ContentResponse {
-  String? id;
-  String? object;
-  int? created;
-  String? model;
-  List<Choices>? choices;
-
-  ContentResponse({this.id, this.object, this.created, this.model, this.choices});
-
-  ContentResponse.fromJson(Map<String, dynamic> json) {
-    // Fixed method name and parameters
-    id = json['id']; // Fixed assignment syntax
-    object = json['object']; // Fixed assignment syntax
-    created = json['created'];
-    model = json['model'];
-
-    if (json['choices'] != null) {
-      choices = <Choices>[];
-      json['choices'].forEach((v) {
-        choices!.add(new Choices.fromJson(v));
-      });
-    }
-  }
-
-  //sc2
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['object'] = this.object;
-    data['created'] = this.created;
-    data['model'] = this.model;
-
-    if (this.choices != null) {
-      data['choices'] = this.choices!.map((v) => v.toJson()).toList();
-    }
-
-    return data;
-  }
-}
-
-class Choices {
-  int? index;
-  Delta? delta;
-  Message? message;
-  String? finishReason;
-
-  Choices({this.index, this.delta, this.message, this.finishReason}); // Fixed spacing
-
-  Choices.fromJson(Map<String, dynamic> json) {
-    String? a = json['message'].toString();
-    index = json['index'];
-    delta = json['delta'] != null ? new Delta.fromJson(json['delta']) : null;
-    message = json['message'] != null ? Message.fromJson(json['message']) : null; // Corrected
-    finishReason = json['finish_reason']; // Fixed assignment syntax
-  }
-
-  //sc1
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['index'] = this.index;
-
-    if (this.delta != null) {
-      data['delta'] = this.delta!.toJson();
-    }
-    data['finish_reason'] = this.finishReason;
-    return data;
-  }
-}
-
-class Delta {
-  String? content;
-
-  Delta({this.content});
-
-  Delta.fromJson(Map<String, dynamic> json) {
-    content = json['content'];
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['content'] = this.content;
-    return data;
-  }
-}
-
-class Message {
-  String? role;
-  String? content;
-
-  Message({this.role, this.content});
-
-  Message.fromJson(Map<String, dynamic> json) {
-    role = json['role'];
-    content = json['content'];
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['role'] = this.role;
-    data['content'] = this.content;
-    return data;
-  }
-// Add your function code here!
 }

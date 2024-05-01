@@ -95,27 +95,6 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
   return await executeGptPrompt(prompt);
 }
 
-Future<String> getGPTFeedback(String? memory, String? structuredMemory) async {
-  var prompt = '''
-    you are Comind, the harsh honest and direct AI mentor who observes the conversation the user is having. 
-    Based on the below conversation that your mdentee had with someone, respond with a message to your mentee in short sentences. 
-    Make it very specific, short, concise, straightforward and include examples. In your response, keep everything on the same 
-    line without \\n symbols, do not include quotes symbols. Ask clarifying questions. Conversation was taken with bad-quality microphone, 
-    so do not include anything about clarity, conciseness or simillar. Raw conversation: \\n\\"\\"\\"$memory\\"\\"\\" 
-    ''';
-  return await executeGptPrompt(prompt);
-}
-
-Future<String> voiceCommandRequest(String? memory, String? longTermMemory) async {
-  var prompt = '''
-    LONG TERM MEMORIES: \\"\\"\\"$longTermMemory\\"\\"\\"\\n\\n CONVERSATION: \\"\\"\\"$memory\\"\\"\\"\\n\\n 
-    Your name is Sama and you are harsh, funny, honest mentor who observes the conversation the user is having, 
-    and they have asked you a question. You respond as concisely as possible. Figure out the question asked in the 
-    latest sentence and return just your answer as best you can, concisely. \\n\\nYour answer: 
-    ''';
-  return await executeGptPrompt(prompt);
-}
-
 Future<String> requestSummary(String? structuredMemories) async {
   var prompt = '''
     Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 
@@ -194,4 +173,22 @@ Future<List<String>> testRequest(String? memory, String? structuredMemory) async
   var decoded = [jsonDecode(responseBody)];
   debugPrint('testRequest response: ${decoded.runtimeType} $decoded');
   return decoded.map<String>((e) => e.toString()).toList();
+}
+
+Future qaStreamed(String? question, String? context, Map<String, String> chatHistory, void callback) async {
+  // TODO: is it better to include chatHistory in messages, or in prompt?
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    
+    Conversation History:
+    ${chatHistory.values.join('\n')}
+
+    Question: $question 
+    
+    Context: $context
+    
+    Answer:
+    ''';
+  // TODO: execute with streaming, and include a callback to add the new message to chat history
 }
