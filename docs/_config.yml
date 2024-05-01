@@ -1,4 +1,14 @@
 title: Friend Documentation
+
+logo: "/images/just-the-docs.png"
+favicon_ico: "/images/favicon.ico"
+
+collections:
+  guides:
+    permalink: "/:collection/:path/"
+    output: true
+    nav_fold: false
+
 description: Open Source AI Wearable device
 theme: just-the-docs
 
@@ -10,7 +20,7 @@ aux_links:
 aux_links_new_tab: true
 
 nav_external_links:
-  - title: Discord
+  - title: Discord Community
     url: https://discord.gg/kEXXsnb5b3
     opens_in_new_tab: true
 

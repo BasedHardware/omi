@@ -1,23 +1,22 @@
-# Friend: Open-Source AI Wearable with 24h+ on single charge
-
-
-![Frame 208](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
-
-[![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 <div align="center">
+
+# **Friend**
+
+Open Source AI Wearable device that records everything you say, gives you proactive feedback and advice. 24h+ on single charge.
+
+![Friend Image](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
+
+[![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;&ensp;&ensp;
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
+[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Friend)](https://github.com/BasedHardware/Friend)
+
 <h3>
 
 [Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss)
 
 </h3>
+
 </div>
-
-
-Friend is an AI wearable device that records everything you say, gives you proactive feedback and advice.
-
-
 
 ## Features
 
@@ -108,7 +107,7 @@ Follow these steps to get started with your Friend.
 
 Follow these steps to install the firmware:
 
-We have uploaded a build of the firmware in ``firmware/Build``, that will always contain the most up to date build of the firmware. To use this firmware please download it and follow step 6 below. If you would like to build the firmware yourself please follow all the steps below.
+We have uploaded a build of the firmware in `firmware/Build`, that will always contain the most up to date build of the firmware. To use this firmware please download it and follow step 6 below. If you would like to build the firmware yourself please follow all the steps below.
 
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8?feature=shared)
 
