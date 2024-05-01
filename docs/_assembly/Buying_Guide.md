@@ -18,4 +18,4 @@ nav_order: 1
 
 - 3D-print design of the case is located [here](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs)
 
-[Next Step: Buying Guide →](https://basedhardware.github.io/Friend/assembly/Buying_Guide/){: .btn .btn-purple }
+[Next Step: Build the device →](https://basedhardware.github.io/Friend/assembly/Build_the_device/){: .btn .btn-purple }

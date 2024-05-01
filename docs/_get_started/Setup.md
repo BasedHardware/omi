@@ -39,5 +39,4 @@ Follow these steps to get started with your Friend.
 - Have the wearable device? [Copy this Flutterflow Project](https://app.flutterflow.io/project/friend-share-19bk3d)
 
 
-
-[Next Step: Build the device →](https://basedhardware.github.io/Friend/assembly/Build_the_device/){: .btn .btn-purple }
+[Next Step: Buying Guide →](https://basedhardware.github.io/Friend/assembly/Buying_Guide/){: .btn .btn-purple }
