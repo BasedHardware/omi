@@ -14,3 +14,5 @@ nav_order: 1
 - Wires. I didn't try [these ones ](https://www.amazon.com/dp/B09X4629C1)but they should work
 
 - 3D-print design of the case is located [here](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs)
+
+[Next Step: Buying Guide →](https://basedhardware.github.io/Friend/assembly/Buying_Guide/){: .btn .btn-purple }
