@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Introduction
+title: Contribution
 nav_order: 1
 ---
 
@@ -12,7 +12,7 @@ We welcome contributions from the community! If you are interested in improving 
 
 - AppWithWearable brings simple bluetooth connecting functionality
 
-![Friend Image](../images/discord_community_banner.png)
+<img src="../images/discord_community_banner.png" alt="discord_community_banner" width="100%">
 
 ### Join a community of builders
 
