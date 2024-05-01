@@ -1,13 +1,12 @@
-// Automatic FlutterFlow imports
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/env/env.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'dart:convert';
 import 'package:web_socket_channel/io.dart';
 
 const serverUrl =
@@ -18,73 +17,69 @@ late IOWebSocketChannel channel;
 const int sampleRate = 8000;
 const int channelCount = 1;
 const int sampleWidth = 2; // 2 bytes for 16-bit samples
-const int chunkSize = 200;
 
 // UUIDs for the specific service and characteristics
 const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) finalized_callback, void Function(String) interim_callback) async {
-  print('Websocket Opening');
+Future<void> _initStream(void Function(String) finalizedCallback, void Function(String) interimCallback) async {
+  debugPrint('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token ${Env.deepgramApiKey}'});
-  var is_finals = [];
-  var is_finalized = false;
+  var isFinals = [];
   channel.ready.then((_) {
     channel.stream.listen((event) {
-      print('Event from Stream: $event');
+      debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
       final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
-      final is_final = parsedJson['is_final'];
-      final speech_final = parsedJson['is_final'];
+      final isFinal = parsedJson['is_final'];
+      final speechFinal = parsedJson['is_final'];
 
-      print('Transcript: ${transcript}');
+      debugPrint('Transcript: $transcript');
       if (transcript.length > 0) {
-        if (speech_final) {
-          interim_callback(is_finals.join(' ') + (is_finals.length > 0 ? ' ' : '') + transcript);
-          finalized_callback('');
-          is_finals = [];
+        if (speechFinal) {
+          interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
+          finalizedCallback('');
+          isFinals = [];
         } else {
-          if (is_final) {
-            is_finals.add(transcript);
-            interim_callback(transcript);
+          if (isFinal) {
+            isFinals.add(transcript);
+            interimCallback(transcript);
           } else {
-            interim_callback(transcript);
+            interimCallback(transcript);
           }
         }
       }
       // Re-instantiate the Completer for next use
       // completer = Completer<String>();
     }, onError: (err) {
-      print('Websocket Error: ${err}');
-      // handle stream error
+      debugPrint('Websocket Error: $err');
     }, onDone: (() {
-      // stream on done callback...
-      print('Websocket Closed');
+      debugPrint('Websocket Closed');
     }), cancelOnError: true);
   }).onError((error, stackTrace) {
-    print("WebsocketChannel was unable to establishconnection");
+    debugPrint("WebsocketChannel was unable to establishconnection");
   });
 
   try {
     await channel.ready;
   } catch (e) {
     // handle exception here
-    print("Websocket was unable to establishconnection");
+    debugPrint("Websocket was unable to establishconnection");
   }
 }
 
 Future<String> bleReceiveWAV(
-    BTDeviceStruct btDevice, void Function(String) finalized_callback, void Function(String) interim_callback) async {
+    BTDeviceStruct btDevice, void Function(String) finalizedCallback, void Function(String) interimCallback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 
   try {
-    _initStream(finalized_callback, interim_callback);
+    _initStream(finalizedCallback, interimCallback);
     await device.connect();
-    print('Connected to device: ${device.id}');
+    debugPrint('Connected to device: ${device.id}');
     List<BluetoothService> services = await device.discoverServices();
-    print('Discovered ${services.length} services');
+    debugPrint('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
       if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
@@ -95,9 +90,9 @@ Future<String> bleReceiveWAV(
 
             if (isNotify) {
               await characteristic.setNotifyValue(true);
-              print('Subscribed to characteristic: ${characteristic.uuid.str128}');
-              List<int> wavData = [];
-              int samplesToRead = 150000;
+              debugPrint('Subscribed to characteristic: ${characteristic.uuid.str128}');
+              // List<int> wavData = [];
+              // int samplesToRead = 150000;
 
               characteristic.value.listen((value) {
                 if (value.isEmpty) return;
@@ -112,12 +107,12 @@ Future<String> bleReceiveWAV(
       }
     }
 
-    print('Desired characteristic not found');
+    debugPrint('Desired characteristic not found');
     if (!completer.isCompleted) {
       completer.complete(null);
     }
   } catch (e) {
-    print('Error receiving data: $e');
+    debugPrint('Error receiving data: $e');
     if (!completer.isCompleted) {
       completer.completeError(e);
     }
