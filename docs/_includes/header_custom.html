@@ -1,0 +1,15 @@
+<button class="btn js-toggle-dark-mode">☼</button>
+
+<script>
+  const toggleDarkMode = document.querySelector(".js-toggle-dark-mode");
+
+  jtd.addEvent(toggleDarkMode, "click", function () {
+    if (jtd.getTheme() === "light") {
+      jtd.setTheme("dark");
+      toggleDarkMode.textContent = "☼";
+    } else {
+      jtd.setTheme("light");
+      toggleDarkMode.textContent = "☾";
+    }
+  });
+</script>
