@@ -8,6 +8,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'index.dart'; // Imports other custom actions
 import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import 'package:flutter/material.dart';
+
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
@@ -28,12 +29,6 @@ Future streamApiResponse(
   _client = http.Client();
 
   chatHistory = FFAppState().chatHistory;
-  // FFAppState().update(() {
-  //   FFAppState().chatHistory =
-  //       saveChatHistory(chatHistory, convertToJSONRole(userPrompt, "user"));
-  // });
-
-  // Prepare Request
 
   final url = 'https://api.openai.com/v1/chat/completions';
   final headers = {
@@ -48,15 +43,13 @@ Future streamApiResponse(
     ..headers.addAll(headers)
     ..body = body;
 
-  debugPrint(
-      'Body: $body \n\nHeader: $headers\n\nRequest fed: ${request.body}');
+  debugPrint('Body: $body \n\nHeader: $headers\n\nRequest fed: ${request.body}');
 
   responseString = "";
   // Before streaming response, add an empty ChatResponse object to chatHistory
   chatHistory = FFAppState().chatHistory;
   FFAppState().update(() {
-    FFAppState().chatHistory = saveChatHistory(
-        chatHistory, convertToJSONRole(responseString, "assistant"));
+    FFAppState().chatHistory = saveChatHistory(chatHistory, convertToJSONRole(responseString, "assistant"));
   });
   // FFAppState().addToChatHistory(ChatResponseStruct(
   //   author: 'assistant',
@@ -76,10 +69,7 @@ Future streamApiResponse(
       // Check for a complete message (or more than one)
       if (bufferString.contains("data:")) {
         // Split the buffer by 'data:' delimiter
-        var jsonBlocks = bufferString
-            .split('data:')
-            .where((block) => block.isNotEmpty)
-            .toList();
+        var jsonBlocks = bufferString.split('data:').where((block) => block.isNotEmpty).toList();
 
         int processedBlocks = 0;
         for (var jsonBlock in jsonBlocks) {
@@ -112,35 +102,16 @@ Future streamApiResponse(
 
 bool isValidJson(String jsonString) {
   try {
-    // Try to parse the jsonString
     var decoded = json.decode(jsonString);
-    // If the parsing is successful, the JSON is valid
     return true;
-  } on FormatException {
-    // If a FormatException is thrown, the JSON is not valid
-    return false;
   } catch (e) {
-    // If any other exception is thrown, the JSON is not valid
     return false;
   }
 }
 
-// // need this func to escape special chars
-// void appendToResponseString(String content) {
-//   // Escape and encode the content
-//   String encodedContent = jsonEncode(content);
-
-//   // Since jsonEncode adds extra quotes, remove them
-//   encodedContent = encodedContent.substring(1, encodedContent.length - 1);
-
-//   // Append the encoded content to responseString
-//   responseString += encodedContent;
-// }
-
 void addToChatHistory(String data, callbackAction) {
   if (data.contains("content")) {
-    ContentResponse contentResponse =
-        ContentResponse.fromJson(jsonDecode(data));
+    ContentResponse contentResponse = ContentResponse.fromJson(jsonDecode(data));
 
     if (contentResponse.choices != null &&
         contentResponse.choices![0].delta != null &&
@@ -149,43 +120,18 @@ void addToChatHistory(String data, callbackAction) {
 
       responseString += jsonEncodeString(content)!;
 
-      chatHistory = updateChatHistoryAtIndex(
-          convertToJSONRole(responseString, "assistant"),
-          chatHistory.length - 1,
-          chatHistory);
+      chatHistory =
+          updateChatHistoryAtIndex(convertToJSONRole(responseString, "assistant"), chatHistory.length - 1, chatHistory);
       FFAppState().update(() {
         FFAppState().chatHistory = chatHistory;
       });
       callbackAction();
     } else {
-      // This handler is here in case  you want to send
-      // non streaming requests, which return a different
-      // structure response.
       if (contentResponse.choices![0].message != null) {
         String message = contentResponse.choices![0].message!.content!;
-        // FFAppState().updateChatHistoryAtIndex(
-        //   FFAppState().chatHistory.length - 1,
-        //   (e) {
-        //     return e..content = "$message";
-        //   },
-        // );
         callbackAction();
       }
     }
-  }
-}
-
-void printChatHistory() {
-  // Assuming 'myList' is your AppState variable and it's a list.
-  var list = FFAppState().chatHistory;
-
-  // Check if the list is not null.
-  if (list != null) {
-    // Print the entire list.
-    debugPrint("List contents: $list");
-  } else {
-    // If the list is null, print a message indicating that.
-    debugPrint("List is null");
   }
 }
 
@@ -207,8 +153,7 @@ class ContentResponse {
   String? model;
   List<Choices>? choices;
 
-  ContentResponse(
-      {this.id, this.object, this.created, this.model, this.choices});
+  ContentResponse({this.id, this.object, this.created, this.model, this.choices});
 
   ContentResponse.fromJson(Map<String, dynamic> json) {
     // Fixed method name and parameters
@@ -247,19 +192,13 @@ class Choices {
   Message? message;
   String? finishReason;
 
-  Choices(
-      {this.index,
-      this.delta,
-      this.message,
-      this.finishReason}); // Fixed spacing
+  Choices({this.index, this.delta, this.message, this.finishReason}); // Fixed spacing
 
   Choices.fromJson(Map<String, dynamic> json) {
     String? a = json['message'].toString();
     index = json['index'];
     delta = json['delta'] != null ? new Delta.fromJson(json['delta']) : null;
-    message = json['message'] != null
-        ? Message.fromJson(json['message'])
-        : null; // Corrected
+    message = json['message'] != null ? Message.fromJson(json['message']) : null; // Corrected
     finishReason = json['finish_reason']; // Fixed assignment syntax
   }
 
@@ -309,5 +248,5 @@ class Message {
     data['content'] = this.content;
     return data;
   }
-  // Add your function code here!
+// Add your function code here!
 }
