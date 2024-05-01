@@ -4,10 +4,14 @@ title: Buying Guide
 nav_order: 1
 ---
 
+### Buying Guide
+
+You have two options:
+
+1. Buying an assembled device:
 [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss){: .btn .btn-green .mr-4 }
 
-
-### Want to Assemble the Device yourself?
+2. Assemble the Device yourself with off-the-shelf components:
 
 - Board: Seeed Studio XIAO nRF52840 Sense | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon](https://amzn.to/3TZD1pO) and also [link for europe ](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-nrf52840-sense-tinyml-tensorflow-lite-imu-microphone-bluetooth5-0/) | <$15/unit
 
