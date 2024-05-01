@@ -2,7 +2,7 @@ import {useContext, useRef} from 'react';
 import {ListItem} from 'react-native-elements';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {TouchableOpacity, StyleSheet} from 'react-native';
-import {MomentsContext} from '../contexts/MomentsContext';
+import {MomentsContext} from '../../contexts/MomentsContext';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faTrash} from '@fortawesome/free-solid-svg-icons';
 

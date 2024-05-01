@@ -1,4 +1,4 @@
-import json
+import re
 import os
 import requests
 from pymongo import MongoClient
@@ -10,10 +10,10 @@ load_dotenv()
 
 # Google clouds file structure is different
 if os.getenv('LOCAL_DEV') == 'True':
-    from .MongoService import MongoService
+    from .MomentService import MomentService
     from .BossAgent import BossAgent
 else:
-    from MongoService import MongoService
+    from MomentService import MomentService
     from BossAgent import BossAgent
 
 mongo_uri = os.getenv('MONGO_URI')
@@ -31,24 +31,33 @@ def cors_preflight_response():
 
 def handle_fetch_moments():
     # Get all moments from the database
-    db_client = MongoService()
+    db_client = MomentService()
     moments_list = db_client.get_all_moments()
     return moments_list
 
 def handle_add_moment(request):
-    db_client = MongoService()
+    db_client = MomentService()
     boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
-    summary, title = boss_agent.summarize_moment(new_moment)
+    summary, title, action_items = boss_agent.extract_content(new_moment)
+
+    # Use regex to extract only the content within square brackets
+    action_items_cleaned = re.findall(r'\[.*?\]', action_items)
+    if action_items_cleaned:
+        action_items = action_items_cleaned[0]
+    else:
+        action_items = '[]' 
+
     new_moment['summary'] = summary
     new_moment['title'] = title
+    new_moment['actionItems'] = action_items
+
     db_client.add_moment(new_moment)
-    
     return new_moment
 
 def handle_delete_moment(request):
-    db_client = MongoService()
+    db_client = MomentService()
     data = request.json
     moment_id = data['id']
     db_client.delete_moment(moment_id)

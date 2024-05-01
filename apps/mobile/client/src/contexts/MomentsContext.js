@@ -38,7 +38,7 @@ export const MomentsProvider = ({children}) => {
 
     if (momentsData.length === 0) {
       try {
-        const response = await axios.get(`${BACKEND_URL}:30000/moments`);
+        const response = await axios.get(`${BACKEND_URL}:30001/moments`);
         if (response.status === 200 && response.data) {
           momentsData = response.data.moments;
           await updateLocalStorage(momentsData);
@@ -59,7 +59,7 @@ export const MomentsProvider = ({children}) => {
 
   const addMoment = async moment => {
     try {
-      const response = await axios.post(`${BACKEND_URL}:30000/moments`, {
+      const response = await axios.post(`${BACKEND_URL}:30001/moments`, {
         newMoment: moment,
       });
       if (response.status === 200 && response.data) {
@@ -80,7 +80,7 @@ export const MomentsProvider = ({children}) => {
 
   const deleteMoment = async moment => {
     try {
-      const response = await axios.delete(`${BACKEND_URL}:30000/moments`, {
+      const response = await axios.delete(`${BACKEND_URL}:30001/moments`, {
         data: {id: moment.id},
       });
       if (response.status === 200) {

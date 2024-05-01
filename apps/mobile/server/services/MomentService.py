@@ -3,12 +3,12 @@ from bson.objectid import ObjectId
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-class MongoService:
+class MomentService:
     _instance = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(MongoService, cls).__new__(cls)
+            cls._instance = super(MomentService, cls).__new__(cls)
         return cls._instance
 
     def __init__(self, mongo_uri=None, db_name='friend'):

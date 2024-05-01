@@ -23,11 +23,9 @@ const SettingsTab = () => {
         onPress={() => togglePeripheralConnection(item)}>
         <View style={[styles.row, {backgroundColor}]}>
           <Text style={styles.peripheralName}>
-            {item.name} - {item?.advertising?.localName}
+            {item?.advertising?.localName}
             {item.connecting && ' - Connecting...'}
           </Text>
-          <Text style={styles.rssi}>RSSI: {item.rssi}</Text>
-          <Text style={styles.peripheralId}>{item.id}</Text>
         </View>
       </TouchableHighlight>
     );

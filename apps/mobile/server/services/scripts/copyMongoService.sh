@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the source file
-SOURCE_FILE="../MongoService.py"
+SOURCE_FILE="../MomentService.py"
 
 # Define the target directories
 TARGET_DIRS=(
