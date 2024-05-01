@@ -1,0 +1,54 @@
+digraph uml {
+    rankdir=TB;
+    node [shape=box, fontname=Arial];
+
+    start [label="Start periodic action\n(120 sec intervals)"];
+    check_audio [label="Check audio\nExtract $lastWords"];
+    update_memory [label="Update $lastMemory state\nCombine previous and new $lastWords"];
+    check_new_info [label="If $lastWords not empty"];
+    create_memory [label="Create Memory Starts\n\n$lastMemory is send to GPT\nfor a structured text ($structuredMemory) \nIf nothing to structure, returns N/A"];
+
+    failure_memory [label="Failure memory"];
+    stored_in_firestore [label="Failed Memory get's stored in firestore"]
+    back_to_start [label="Process get's back to start"]
+
+    process_structured [label="Process $structuredMemory"];
+    vectorize_memory [label="Vectorize $structuredMemory\nOpenAIEmbeddings ~ $vector"];
+    store_memory [label="Store Memory in Firestore\n$lastMemory $structuredMemory\n$feedback $isFeedbackUseful"];
+    store_vector [label="Store $vector in pinecone\nwith $structuredMemory as metadata"];
+
+    last_memory_check [label="$lastMemory words > 1"];
+
+    creating_memory [label="FFAppState is set to creating memory `true`"];
+    request_feedback [label="Request $structuredMemory feedback to GPT\n$feedback"];
+    evaluate_feedback [label="Evaluate $feedback GPT\nGPT outputs Show or Hide if feedback is useful\n$isFeedbackUseful"];
+    creating_memory_false [label="FFAppState is set to creating memory `false`\nFeedback values also set to state"];
+
+    last_memory_words_empty [label="Set FAppState $isFeedbackUseful false\nand feedback to empty str"];
+
+    start -> check_audio;
+    check_audio -> update_memory;
+    update_memory -> check_new_info;
+
+    check_new_info -> create_memory;
+
+    create_memory -> failure_memory [label="== N/A"];
+    failure_memory -> stored_in_firestore
+    stored_in_firestore -> back_to_start
+
+    create_memory -> process_structured [label="Valid"];
+    process_structured -> last_memory_check;
+
+    creating_memory_false -> vectorize_memory;
+    last_memory_words_empty -> vectorize_memory;
+    vectorize_memory -> store_memory;
+    store_memory -> store_vector;
+
+    // Feedback loop
+    last_memory_check -> creating_memory [label="Yes"];
+    last_memory_check -> last_memory_words_empty [label="No"];
+    creating_memory -> request_feedback;
+    request_feedback -> evaluate_feedback;
+    evaluate_feedback -> creating_memory_false;
+
+}
