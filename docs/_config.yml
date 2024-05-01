@@ -4,6 +4,7 @@ theme: just-the-docs
 url: https://basedhardware.github.io
 logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
+color_scheme: dark
 
 collections:
   get_started:
