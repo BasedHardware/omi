@@ -15,4 +15,4 @@ Important: If you purchased an assembled device please skip this step
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8)
 2. In the nRF Connect Extension inside your VS Code, click “Open an existing application” and open the firmware folder from the root of this repo.
 
-<img src="https://basedhardware.github.io/Friend/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="500">
+<img src="https://basedhardware.github.io/Friend/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%">
