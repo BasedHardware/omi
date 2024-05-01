@@ -4,15 +4,24 @@ logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
 
 collections:
-  guides:
+  get_started:
     permalink: "/:collection/:path/"
     output: true
-    nav_fold: false
+  assembly:
+    permalink: "/:collection/:path/"
+    output: true
+  info:
+    permalink: "/:collection/:path/"
+    output: true
 
 just_the_docs:
   collections:
-    guides:
+    get_started:
       name: Get Started
+    assembly:
+      name: Assembly
+    info:
+      name: Info
 
 description: Open Source AI Wearable device
 theme: just-the-docs
