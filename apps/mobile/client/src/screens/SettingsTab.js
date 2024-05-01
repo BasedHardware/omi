@@ -1,4 +1,4 @@
-import React, {useContext} from 'react';
+import React, {useContext, useState, useEffect} from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -19,11 +19,10 @@ const SettingsTab = () => {
     const backgroundColor = item.connected ? '#069400' : Colors.white;
     return (
       <TouchableHighlight
-        underlayColor="#0082FC"
+        underlayColor="transparent"
         onPress={() => togglePeripheralConnection(item)}>
         <View style={[styles.row, {backgroundColor}]}>
           <Text style={styles.peripheralName}>
-            {/* completeLocalName (item.name) & shortAdvertisingName (advertising.localName) may not always be the same */}
             {item.name} - {item?.advertising?.localName}
             {item.connecting && ' - Connecting...'}
           </Text>
@@ -34,15 +33,25 @@ const SettingsTab = () => {
     );
   };
 
+  // Determine initial visibility of the scan button based on peripherals list
+  const [showScanButton, setShowScanButton] = useState(peripherals.size === 0);
+
+  // Update button visibility when peripherals list changes
+  useEffect(() => {
+    setShowScanButton(peripherals.size === 0);
+  }, [peripherals.size]);
+
   return (
     <>
       <SafeAreaView style={styles.body}>
         <View style={styles.buttonGroup}>
-          <Pressable style={styles.scanButton} onPress={startScan}>
-            <Text style={styles.scanButtonText}>
-              {isScanning ? 'Scanning...' : 'Scan Bluetooth'}
-            </Text>
-          </Pressable>
+          {showScanButton && (
+            <Pressable style={styles.scanButton} onPress={startScan}>
+              <Text style={styles.scanButtonText}>
+                {isScanning ? 'Scanning...' : 'Scan Bluetooth'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {Array.from(peripherals.values()).length === 0 && (

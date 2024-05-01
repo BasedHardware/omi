@@ -45,6 +45,8 @@ export const BluetoothProvider = ({children}) => {
   };
 
   useEffect(() => {
+    // Permissions then start BleManager
+    handleAndroidPermissions();
     // Initialize BleManager
     BleManager.start({showAlert: false})
       .then(() => {
@@ -69,6 +71,7 @@ export const BluetoothProvider = ({children}) => {
           ),
         ];
 
+        //
         setTimeout(() => {
           startScan();
         }, 1000);

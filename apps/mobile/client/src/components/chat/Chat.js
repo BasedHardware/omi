@@ -26,6 +26,7 @@ const Chat = ({route}) => {
   const {chat_name: chatName, chatId} = route.params;
   const nodeRef = useRef(null);
   const {messages} = useContext(ChatContext);
+  
 
   // scrolls chat window to the bottom
   useEffect(() => {

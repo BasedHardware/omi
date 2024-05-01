@@ -28,7 +28,7 @@ export const ChatProvider = ({children}) => {
       ? 'http://192.168.86.242:30000'
       : process.env.REACT_APP_BACKEND_URL_PROD;
 
-  // Used to add a new user message to the messages state
+  // Add a new user message to the messages state
   const addMessage = async (chatId, newMessage) => {
     setMessages(prevMessageParts => {
       return {
@@ -37,7 +37,6 @@ export const ChatProvider = ({children}) => {
       };
     });
 
-    // Perform the asynchronous storage operation after updating the state
     const updatedMessages = {
       ...messages,
       [chatId]: [...(messages[chatId] || []), newMessage],
@@ -52,7 +51,7 @@ export const ChatProvider = ({children}) => {
     }
   };
 
-  // Used to get the messages for a specific chat
+  // Get the messages for a specific chat
   // Sent in as chat history
   const getMessages = chatId => {
     return messages[chatId] || [];
@@ -62,6 +61,7 @@ export const ChatProvider = ({children}) => {
     if (!userId) {
       return;
     }
+
     try {
       const cachedChats = await EncryptedStorage.getItem('chatArray');
       if (cachedChats) {
@@ -76,37 +76,48 @@ export const ChatProvider = ({children}) => {
         }, {});
         setMessages(cachedMessages);
 
-        return parsedChats;
-      }
-
-      const response = await axios.get(`${chatUrl}/chat`, {
-        headers: {
-          'Content-Type': 'application/json',
-          userId: userId,
-        },
-      });
-
-      if (response.status !== 200)
-        throw new Error('Failed to load user conversations');
-
-      const data = response.data;
-      setChatArray(data);
-
-      const messagesFromData = data.reduce((acc, chat) => {
-        if (chat.messages) {
-          acc[chat.chatId] = chat.messages;
+        // Check if the messages object is empty and if so, fetch from the database
+        if (Object.values(cachedMessages).length === 0) {
+          return fetchChatsFromDB();
         }
-        return acc;
-      }, {});
-      setMessages(messagesFromData);
 
-      await EncryptedStorage.setItem('chatArray', JSON.stringify(data));
-      return data;
+        return parsedChats;
+      } else {
+        // No cached chats, fetch from the database
+        return fetchChatsFromDB();
+      }
     } catch (error) {
       console.error(error);
       showSnackbar(`Network or fetch error: ${error.message}`, 'error');
     }
   }, [chatUrl, setChatArray, setMessages, showSnackbar, userId]);
+
+  const fetchChatsFromDB = async () => {
+    console.log(userId, 'fetching chats');
+    const response = await axios.get(`${chatUrl}/chat`, {
+      headers: {
+        'Content-Type': 'application/json',
+        userId: userId,
+      },
+    });
+
+    if (response.status !== 200)
+      throw new Error('Failed to load user conversations');
+
+    const data = response.data;
+    setChatArray(data);
+
+    const messagesFromData = data.reduce((acc, chat) => {
+      if (chat.messages) {
+        acc[chat.chatId] = chat.messages;
+      }
+      return acc;
+    }, {});
+    setMessages(messagesFromData);
+
+    await EncryptedStorage.setItem('chatArray', JSON.stringify(data));
+    return data;
+  };
 
   // Needs a refactor to separate concerns
   const sendMessage = async (chatId, input) => {
@@ -141,7 +152,6 @@ export const ChatProvider = ({children}) => {
         throw new Error('Failed to send message');
       }
 
-      console.log('Response:', response);
       const reader = response.body.getReader();
       let completeMessage = '';
       while (true) {
@@ -149,8 +159,7 @@ export const ChatProvider = ({children}) => {
         if (done) {
           break;
         }
-        const decodedValue = new TextDecoder('utf-8').decode(value); // Split the decoded value by newline and filter out any empty lines
-        console.log('Decoded value:', value);
+        const decodedValue = new TextDecoder('utf-8').decode(value);
         const jsonChunks = decodedValue
           .split('\n')
           .filter(line => line.trim() !== '');
@@ -276,7 +285,8 @@ export const ChatProvider = ({children}) => {
         data: {chatId},
       });
 
-      if (response.status !== 200) throw new Error('Failed to delete conversation');
+      if (response.status !== 200)
+        throw new Error('Failed to delete conversation');
 
       setChatArray(prevChatArray => {
         const updatedChatArray = prevChatArray.filter(
@@ -353,9 +363,9 @@ export const ChatProvider = ({children}) => {
       })
       .catch(error => {
         console.error('Error fetching chats:', error);
-        setLoading(false); // Ensure loading is set to false even if there's an error
+        setLoading(false);
       });
-  }, [userId]); // Add userId as a dependency
+  }, [userId]);
 
   return (
     <ChatContext.Provider
