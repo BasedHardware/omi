@@ -28,10 +28,13 @@ just_the_docs:
 callouts:
   warning:
     title: Warning
+    color: yellow
+  error:
+    title: Alert
     color: red
   note:
     title: Note
-    color: gray
+    color: blue
 
 aux_links:
   Github: https://github.com/BasedHardware/Friend
