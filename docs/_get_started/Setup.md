@@ -8,4 +8,4 @@ nav_order: 1
 
 Follow these steps to get started with your Friend in under 5 minutes.
 
-<img src="./Friend/images/mainbanner.jpeg" alt="Friend Banner" width="100%">
+<img src="https://basedhardware.github.io/Friend/images/mainbanner.jpeg" alt="Friend Banner" width="100%">
