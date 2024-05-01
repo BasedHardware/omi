@@ -32,4 +32,8 @@ abstract class Env {
   static const String firebaseAppId = _Env.firebaseAppId;
   @EnviedField(varName: 'FIREBASE_MEASUREMENT_ID')
   static const String firebaseMeasurementId = _Env.firebaseMeasurementId;
+
+  // Revenue Cat (Optional)
+  @EnviedField(varName: 'REVENUECAT_API_KEY')
+  static const String? revenueCatAPIKey = _Env.revenueCatAPIKey;
 }
