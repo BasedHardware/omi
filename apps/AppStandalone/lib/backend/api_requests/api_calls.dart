@@ -104,7 +104,7 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
     ...
     ```
     ''';
-  return await executeGptPrompt(prompt);
+  return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
 Future<String> requestSummary(String? structuredMemories) async {
@@ -214,7 +214,8 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
         Conversation:
         ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
         USER:$lastMessage
-        '''.replaceAll('        ', '');
+        '''
+      .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
   var response = await gptApiCall(
       model: 'gpt-4-turbo',
@@ -244,7 +245,8 @@ String qaStreamedBody(String context, List<dynamic> chatHistory, void callback) 
     $context
     ```
     Answer:
-    '''.replaceAll('    ', '');
+    '''
+      .replaceAll('    ', '');
   debugPrint(prompt);
   var body = jsonEncode({
     "model": "gpt-4-turbo",

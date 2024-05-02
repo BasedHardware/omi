@@ -56,14 +56,7 @@ Future<void> saveFailureMemory(String structuredMemory) async {
       structuredMemory: structuredMemory,
       isEmpty: FFAppState().lastMemory == '',
       isUseless: true);
-  MemoryStorage.addMemory(memory, _savedMemoryCallback);
-}
-
-_savedMemoryCallback() async {
-  var newMemories = await MemoryStorage.getAllMemories();
-  FFAppState().update(() {
-    FFAppState().memories = newMemories;
-  });
+  MemoryStorage.addMemory(memory);
 }
 
 // Process structured memory when it's valid
@@ -100,7 +93,7 @@ Future<MemoryRecord> createMemoryRecord(String structuredMemory, List<double> ve
       structuredMemory: structuredMemory,
       isEmpty: FFAppState().lastMemory == '',
       isUseless: false);
-  MemoryStorage.addMemory(memory, _savedMemoryCallback);
+  MemoryStorage.addMemory(memory);
   return memory;
 }
 

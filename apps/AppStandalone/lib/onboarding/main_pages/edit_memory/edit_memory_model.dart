@@ -1,3 +1,5 @@
+import 'package:sama/backend/storage/memories.dart';
+
 import '/backend/backend.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'edit_memory_widget.dart' show EditMemoryWidget;
@@ -15,7 +17,7 @@ class EditMemoryModel extends FlutterFlowModel<EditMemoryWidget> {
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
   // Stores action output result for [Backend Call - Create Document] action in Button widget.
-  MemoriesRecord? createdMemoryManually;
+  MemoryRecord? createdMemoryManually;
   // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
   List<double>? openAIVector;
   // Stores action output result for [Backend Call - API (createVectorPinecone)] action in Button widget.
