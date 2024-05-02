@@ -1,4 +1,4 @@
-import 'package:sama/components/memories/memory_list_item.dart';
+import 'package:sama/onboarding/main_pages/home_page/memory_list_item.dart';
 import 'package:sama/onboarding/main_pages/home_page/bottom_buttons.dart';
 import 'package:sama/onboarding/main_pages/home_page/header_buttons.dart';
 import 'package:sama/onboarding/main_pages/home_page/summaries_buttons.dart';

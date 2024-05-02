@@ -671,11 +671,11 @@ class _ChatWidgetState extends State<ChatWidget> {
                                               ),
                                               showLoadingIndicator: true,
                                               onPressed: () async {
-                                                String ragContext =
-                                                    await _retrieveRAGContext(_model.textController.text);
+                                                // String ragContext =
+                                                //     await _retrieveRAGContext(_model.textController.text);
                                                 await uiUpdatesChatQA();
                                                 await actions.streamApiResponse(
-                                                  ragContext,
+                                                  '',
                                                   _callbackFunctionChatStreaming(),
                                                 );
 
