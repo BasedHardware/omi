@@ -223,12 +223,13 @@ bool? stringContainsString(
 }
 
 dynamic truncateChatHistory(dynamic ogChatHistory) {
-  // If chatHistory has more than 30 items, remove the item at index 1
-  int chatLength = 3;
-  if (ogChatHistory.length > chatLength) {
-    // Keep the first item and the last 30 items
-    var truncatedChatHistory = [ogChatHistory.first] + ogChatHistory.sublist(ogChatHistory.length - chatLength);
-    return truncatedChatHistory;
+  // keep the last 20 messages
+  // TODO: truncate to certain token length instead of messages count
+  int targetLength = 5;
+  if (ogChatHistory is List) {
+    if (ogChatHistory.length > targetLength) {
+      ogChatHistory = ogChatHistory.sublist(ogChatHistory.length - targetLength);
+    }
   }
   return ogChatHistory;
 }
@@ -244,6 +245,24 @@ dynamic updateChatHistoryAtIndex(
   // updates the chat history at a certain index
   if (chatHistory is List) {
     chatHistory[index] = (messageWithRole);
+    newChatHistory = chatHistory;
+  } else {
+    newChatHistory = [messageWithRole];
+  }
+  return newChatHistory;
+}
+
+dynamic appendToChatHistoryAtIndex(
+  dynamic messageWithRole,
+  int index,
+  dynamic chatHistory,
+) {
+  // take the chat history message at index, and append content to it
+  dynamic newChatHistory;
+
+  // updates the chat history at a certain index
+  if (chatHistory is List) {
+    chatHistory[index]['content'] += messageWithRole['content'];
     newChatHistory = chatHistory;
   } else {
     newChatHistory = [messageWithRole];
