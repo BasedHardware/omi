@@ -121,11 +121,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
                                                   onTap: () => widget.model.unfocusNode.canRequestFocus
                                                       ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
                                                       : FocusScope.of(context).unfocus(),
-                                                  // child: EditMemoryWidget(
-                                                  //   memory: widget.memory,
-                                                  // ),
+                                                  child: EditMemoryWidget(
+                                                    memory: widget.memory,
+                                                  ),
                                                 ),
-                                                // TODO: restore functionality
                                               );
                                             },
                                           ).then((value) => setState(() {}));
@@ -161,10 +160,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
                                                     onTap: () => widget.model.unfocusNode.canRequestFocus
                                                         ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
                                                         : FocusScope.of(context).unfocus(),
-                                                    // child: ConfirmDeletionWidget(
-                                                    //   memory: widget.memory.reference,
-                                                    // ),
-                                                    // TODO: restore functionality
+                                                    child: ConfirmDeletionWidget(
+                                                      memory: widget.memory,
+                                                    ),
                                                   ),
                                                 );
                                               },

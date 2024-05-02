@@ -1,3 +1,5 @@
+import 'package:sama/backend/storage/memories.dart';
+
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/backend.dart';
 import '/components/confirm_deletion_widget.dart';
@@ -63,8 +65,7 @@ class _TestWidgetState extends State<TestWidget> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Padding(
-                      padding:
-                          const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 8.0, 0.0),
+                      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 8.0, 0.0),
                       child: FFButtonWidget(
                         onPressed: () {
                           print('Button pressed ...');
@@ -76,21 +77,15 @@ class _TestWidgetState extends State<TestWidget> {
                         ),
                         options: FFButtonOptions(
                           height: 48.0,
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              8.0, 0.0, 0.0, 0.0),
-                          iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                              0.0, 0.0, 0.0, 0.0),
+                          padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                           color: const Color(0x1AF7F4F4),
-                          textStyle: FlutterFlowTheme.of(context)
-                              .titleSmall
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .titleSmallFamily,
+                          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .titleSmallFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                               ),
                           elevation: 3.0,
                           borderSide: const BorderSide(
@@ -108,21 +103,15 @@ class _TestWidgetState extends State<TestWidget> {
                       text: 'Memories',
                       options: FFButtonOptions(
                         height: 48.0,
-                        padding: const EdgeInsetsDirectional.fromSTEB(
-                            24.0, 0.0, 24.0, 0.0),
-                        iconPadding:
-                            const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                         color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context)
-                            .titleSmall
-                            .override(
-                              fontFamily:
-                                  FlutterFlowTheme.of(context).titleSmallFamily,
+                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                  FlutterFlowTheme.of(context)
-                                      .titleSmallFamily),
+                              useGoogleFonts:
+                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                             ),
                         elevation: 3.0,
                         borderSide: const BorderSide(
@@ -143,21 +132,15 @@ class _TestWidgetState extends State<TestWidget> {
                       ),
                       options: FFButtonOptions(
                         height: 48.0,
-                        padding:
-                            const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-                        iconPadding:
-                            const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                         color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context)
-                            .titleSmall
-                            .override(
-                              fontFamily:
-                                  FlutterFlowTheme.of(context).titleSmallFamily,
+                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                  FlutterFlowTheme.of(context)
-                                      .titleSmallFamily),
+                              useGoogleFonts:
+                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                             ),
                         elevation: 3.0,
                         borderSide: const BorderSide(
@@ -210,8 +193,7 @@ class _TestWidgetState extends State<TestWidget> {
                               ),
                             );
                           }
-                          List<MemoriesRecord> listViewMemoriesRecordList =
-                              snapshot.data!;
+                          List<MemoriesRecord> listViewMemoriesRecordList = snapshot.data!;
                           if (listViewMemoriesRecordList.isEmpty) {
                             return Center(
                               child: SizedBox(
@@ -228,11 +210,9 @@ class _TestWidgetState extends State<TestWidget> {
                             scrollDirection: Axis.vertical,
                             itemCount: listViewMemoriesRecordList.length,
                             itemBuilder: (context, listViewIndex) {
-                              final listViewMemoriesRecord =
-                                  listViewMemoriesRecordList[listViewIndex];
+                              final listViewMemoriesRecord = listViewMemoriesRecordList[listViewIndex];
                               return Padding(
-                                padding: const EdgeInsetsDirectional.fromSTEB(
-                                    12.0, 12.0, 12.0, 0.0),
+                                padding: const EdgeInsetsDirectional.fromSTEB(12.0, 12.0, 12.0, 0.0),
                                 child: Container(
                                   width: double.infinity,
                                   decoration: BoxDecoration(
@@ -240,195 +220,118 @@ class _TestWidgetState extends State<TestWidget> {
                                     borderRadius: BorderRadius.circular(24.0),
                                   ),
                                   child: Padding(
-                                    padding: const EdgeInsetsDirectional.fromSTEB(
-                                        8.0, 8.0, 8.0, 8.0),
+                                    padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 8.0, 8.0),
                                     child: SingleChildScrollView(
                                       child: Column(
                                         mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Padding(
-                                            padding:
-                                                const EdgeInsetsDirectional.fromSTEB(
-                                                    4.0, 0.0, 4.0, 0.0),
+                                            padding: const EdgeInsetsDirectional.fromSTEB(4.0, 0.0, 4.0, 0.0),
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: const Color(0xFF515253),
-                                                borderRadius:
-                                                    BorderRadius.circular(24.0),
+                                                borderRadius: BorderRadius.circular(24.0),
                                               ),
                                               child: Padding(
-                                                padding: const EdgeInsetsDirectional
-                                                    .fromSTEB(
-                                                        0.0, 4.0, 0.0, 4.0),
+                                                padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
                                                 child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.max,
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
+                                                  mainAxisSize: MainAxisSize.max,
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
                                                     Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
+                                                      mainAxisSize: MainAxisSize.min,
                                                       children: [
                                                         Padding(
                                                           padding:
-                                                              const EdgeInsetsDirectional
-                                                                  .fromSTEB(
-                                                                      8.0,
-                                                                      0.0,
-                                                                      0.0,
-                                                                      0.0),
+                                                              const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
                                                           child: FaIcon(
-                                                            FontAwesomeIcons
-                                                                .solidClock,
-                                                            color: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .secondary,
+                                                            FontAwesomeIcons.solidClock,
+                                                            color: FlutterFlowTheme.of(context).secondary,
                                                             size: 16.0,
                                                           ),
                                                         ),
                                                         Padding(
                                                           padding:
-                                                              const EdgeInsetsDirectional
-                                                                  .fromSTEB(
-                                                                      4.0,
-                                                                      4.0,
-                                                                      8.0,
-                                                                      4.0),
+                                                              const EdgeInsetsDirectional.fromSTEB(4.0, 4.0, 8.0, 4.0),
                                                           child: Text(
-                                                            dateTimeFormat(
-                                                                'jm',
-                                                                listViewMemoriesRecord
-                                                                    .date!),
-                                                            style: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodyMedium,
+                                                            dateTimeFormat('jm', listViewMemoriesRecord.date!),
+                                                            style: FlutterFlowTheme.of(context).bodyMedium,
                                                           ),
                                                         ),
                                                       ],
                                                     ),
                                                     Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.max,
+                                                      mainAxisSize: MainAxisSize.max,
                                                       children: [
                                                         Builder(
-                                                          builder: (context) =>
-                                                              Padding(
-                                                            padding:
-                                                                const EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        0.0,
-                                                                        0.0,
-                                                                        8.0,
-                                                                        0.0),
+                                                          builder: (context) => Padding(
+                                                            padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                0.0, 0.0, 8.0, 0.0),
                                                             child: InkWell(
-                                                              splashColor: Colors
-                                                                  .transparent,
-                                                              focusColor: Colors
-                                                                  .transparent,
-                                                              hoverColor: Colors
-                                                                  .transparent,
-                                                              highlightColor:
-                                                                  Colors
-                                                                      .transparent,
+                                                              splashColor: Colors.transparent,
+                                                              focusColor: Colors.transparent,
+                                                              hoverColor: Colors.transparent,
+                                                              highlightColor: Colors.transparent,
                                                               onTap: () async {
-                                                                logFirebaseEvent(
-                                                                    'TEST_PAGE_Icon_5cigllip_ON_TAP');
-                                                                logFirebaseEvent(
-                                                                    'Icon_share');
-                                                                await Share
-                                                                    .share(
+                                                                logFirebaseEvent('TEST_PAGE_Icon_5cigllip_ON_TAP');
+                                                                logFirebaseEvent('Icon_share');
+                                                                await Share.share(
                                                                   '${listViewMemoriesRecord.structuredMemory} Created with https://www.aisama.co/',
-                                                                  sharePositionOrigin:
-                                                                      getWidgetBoundingBox(
-                                                                          context),
+                                                                  sharePositionOrigin: getWidgetBoundingBox(context),
                                                                 );
-                                                                logFirebaseEvent(
-                                                                    'Icon_haptic_feedback');
-                                                                HapticFeedback
-                                                                    .lightImpact();
+                                                                logFirebaseEvent('Icon_haptic_feedback');
+                                                                HapticFeedback.lightImpact();
                                                               },
                                                               child: FaIcon(
-                                                                FontAwesomeIcons
-                                                                    .share,
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .secondaryText,
+                                                                FontAwesomeIcons.share,
+                                                                color: FlutterFlowTheme.of(context).secondaryText,
                                                                 size: 24.0,
                                                               ),
                                                             ),
                                                           ),
                                                         ),
                                                         Align(
-                                                          alignment:
-                                                              const AlignmentDirectional(
-                                                                  1.0, -1.0),
+                                                          alignment: const AlignmentDirectional(1.0, -1.0),
                                                           child: Builder(
-                                                            builder:
-                                                                (context) =>
-                                                                    Padding(
-                                                              padding:
-                                                                  const EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0.0,
-                                                                          0.0,
-                                                                          5.0,
-                                                                          0.0),
+                                                            builder: (context) => Padding(
+                                                              padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                  0.0, 0.0, 5.0, 0.0),
                                                               child: InkWell(
-                                                                splashColor: Colors
-                                                                    .transparent,
-                                                                focusColor: Colors
-                                                                    .transparent,
-                                                                hoverColor: Colors
-                                                                    .transparent,
-                                                                highlightColor:
-                                                                    Colors
-                                                                        .transparent,
-                                                                onTap:
-                                                                    () async {
-                                                                  logFirebaseEvent(
-                                                                      'TEST_PAGE_Icon_cr2gc5g2_ON_TAP');
-                                                                  logFirebaseEvent(
-                                                                      'Icon_alert_dialog');
+                                                                splashColor: Colors.transparent,
+                                                                focusColor: Colors.transparent,
+                                                                hoverColor: Colors.transparent,
+                                                                highlightColor: Colors.transparent,
+                                                                onTap: () async {
+                                                                  logFirebaseEvent('TEST_PAGE_Icon_cr2gc5g2_ON_TAP');
+                                                                  logFirebaseEvent('Icon_alert_dialog');
                                                                   await showDialog(
-                                                                    context:
-                                                                        context,
-                                                                    builder:
-                                                                        (dialogContext) {
+                                                                    context: context,
+                                                                    builder: (dialogContext) {
                                                                       return Dialog(
-                                                                        elevation:
-                                                                            0,
-                                                                        insetPadding:
-                                                                            EdgeInsets.zero,
-                                                                        backgroundColor:
-                                                                            Colors.transparent,
-                                                                        alignment:
-                                                                            const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                                                        child:
-                                                                            GestureDetector(
-                                                                          onTap: () => _model.unfocusNode.canRequestFocus
-                                                                              ? FocusScope.of(context).requestFocus(_model.unfocusNode)
-                                                                              : FocusScope.of(context).unfocus(),
-                                                                          child:
-                                                                              ConfirmDeletionWidget(
-                                                                            memory:
-                                                                                listViewMemoriesRecord.reference,
+                                                                        elevation: 0,
+                                                                        insetPadding: EdgeInsets.zero,
+                                                                        backgroundColor: Colors.transparent,
+                                                                        alignment: const AlignmentDirectional(0.0, 0.0)
+                                                                            .resolve(Directionality.of(context)),
+                                                                        child: GestureDetector(
+                                                                          onTap: () =>
+                                                                              _model.unfocusNode.canRequestFocus
+                                                                                  ? FocusScope.of(context)
+                                                                                      .requestFocus(_model.unfocusNode)
+                                                                                  : FocusScope.of(context).unfocus(),
+                                                                          child: ConfirmDeletionWidget(
+                                                                            memory: MemoryRecord.fromJson(
+                                                                                {}), // FIXME: Handle new MemoryRecord object
                                                                           ),
                                                                         ),
                                                                       );
                                                                     },
-                                                                  ).then((value) =>
-                                                                      setState(
-                                                                          () {}));
+                                                                  ).then((value) => setState(() {}));
                                                                 },
                                                                 child: Icon(
                                                                   Icons.delete,
-                                                                  color: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .secondaryText,
+                                                                  color: FlutterFlowTheme.of(context).secondaryText,
                                                                   size: 24.0,
                                                                 ),
                                                               ),
@@ -443,31 +346,17 @@ class _TestWidgetState extends State<TestWidget> {
                                             ),
                                           ),
                                           Padding(
-                                            padding:
-                                                const EdgeInsetsDirectional.fromSTEB(
-                                                    8.0, 4.0, 0.0, 8.0),
+                                            padding: const EdgeInsetsDirectional.fromSTEB(8.0, 4.0, 0.0, 8.0),
                                             child: SelectionArea(
                                                 child: Text(
-                                              listViewMemoriesRecord
-                                                  .structuredMemory,
-                                              style:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        useGoogleFonts: GoogleFonts
-                                                                .asMap()
-                                                            .containsKey(
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodyMediumFamily),
-                                                        lineHeight: 1.5,
-                                                      ),
+                                              listViewMemoriesRecord.structuredMemory,
+                                              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                    fontWeight: FontWeight.w500,
+                                                    useGoogleFonts: GoogleFonts.asMap()
+                                                        .containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                    lineHeight: 1.5,
+                                                  ),
                                             )),
                                           ),
                                         ],
@@ -508,21 +397,15 @@ class _TestWidgetState extends State<TestWidget> {
                         options: FFButtonOptions(
                           width: MediaQuery.sizeOf(context).width * 0.44,
                           height: 52.0,
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              24.0, 0.0, 24.0, 0.0),
-                          iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                              0.0, 0.0, 0.0, 0.0),
+                          padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                           color: FlutterFlowTheme.of(context).primaryText,
-                          textStyle: FlutterFlowTheme.of(context)
-                              .titleSmall
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .titleSmallFamily,
+                          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                 color: FlutterFlowTheme.of(context).primary,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .titleSmallFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                               ),
                           elevation: 3.0,
                           borderSide: const BorderSide(
@@ -544,21 +427,15 @@ class _TestWidgetState extends State<TestWidget> {
                         options: FFButtonOptions(
                           width: MediaQuery.sizeOf(context).width * 0.44,
                           height: 52.0,
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              24.0, 0.0, 24.0, 0.0),
-                          iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                              0.0, 0.0, 0.0, 0.0),
+                          padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                           color: const Color(0x1AF7F4F4),
-                          textStyle: FlutterFlowTheme.of(context)
-                              .titleSmall
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .titleSmallFamily,
+                          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .titleSmallFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                               ),
                           elevation: 3.0,
                           borderSide: const BorderSide(

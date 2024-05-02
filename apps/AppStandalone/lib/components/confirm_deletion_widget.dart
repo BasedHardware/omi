@@ -1,3 +1,5 @@
+import 'package:sama/backend/storage/memories.dart';
+
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -12,7 +14,7 @@ class ConfirmDeletionWidget extends StatefulWidget {
     required this.memory,
   });
 
-  final DocumentReference? memory;
+  final MemoryRecord memory;
 
   @override
   State<ConfirmDeletionWidget> createState() => _ConfirmDeletionWidgetState();
@@ -128,7 +130,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                             logFirebaseEvent(
                                 'CONFIRM_DELETION_COMP_DELETE_BTN_ON_TAP');
                             logFirebaseEvent('Button_backend_call');
-                            await widget.memory!.delete();
+                            await MemoryStorage.deleteMemory(widget.memory.id);
                             logFirebaseEvent(
                                 'Button_close_dialog,_drawer,_etc');
                             Navigator.pop(context);

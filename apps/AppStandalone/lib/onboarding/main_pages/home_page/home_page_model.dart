@@ -36,23 +36,6 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
   // Model for StartStopRecording component.
   late StartStopRecordingModel startStopRecordingModel;
 
-  /// Query cache managers for this widget.
-
-  final _allmemoriesManager = StreamRequestManager<List<MemoriesRecord>>();
-  Stream<List<MemoriesRecord>> allmemories({
-    String? uniqueQueryKey,
-    bool? overrideCache,
-    required Stream<List<MemoriesRecord>> Function() requestFn,
-  }) =>
-      _allmemoriesManager.performRequest(
-        uniqueQueryKey: uniqueQueryKey,
-        overrideCache: overrideCache,
-        requestFn: requestFn,
-      );
-  void clearAllmemoriesCache() => _allmemoriesManager.clear();
-  void clearAllmemoriesCacheKey(String? uniqueKey) =>
-      _allmemoriesManager.clearRequest(uniqueKey);
-
   /// Initialization and disposal methods.
 
   @override
@@ -68,8 +51,6 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
     startStopRecordingModel.dispose();
 
     /// Dispose query cache managers for this widget.
-
-    clearAllmemoriesCache();
   }
 
   /// Action blocks are added here.
