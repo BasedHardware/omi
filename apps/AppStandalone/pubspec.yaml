@@ -94,7 +94,7 @@ dependencies:
   sign_in_with_apple_web: 1.0.1
   smooth_page_indicator: 1.1.0
   speech_to_text: 6.6.0-dev
-  sqflite: 2.2.6
+  sqflite: ^2.3.3+1
   storage_client: 1.5.4
   stream_transform: 2.1.0
   timeago: 3.2.2
@@ -111,6 +111,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.0
   envied: ^0.5.3
+  path: ^1.9.0
+  uuid: ^4.4.0
 
 dependency_overrides:
   http: 1.2.0
