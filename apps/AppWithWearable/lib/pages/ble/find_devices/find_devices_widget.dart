@@ -129,7 +129,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
         // No matching device found, continue scanning
       }
 
-      await Future.delayed(Duration(seconds: 5));
+      await Future.delayed(Duration(seconds: 2));
 
     }
   }
