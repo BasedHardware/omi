@@ -222,7 +222,7 @@ bool? stringContainsString(
   return string!.contains(substring!);
 }
 
-List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, int count=5) {
+List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, {int count = 5}) {
   // TODO: truncate to certain token length instead of messages count
   if (ogChatHistory is List) {
     if (ogChatHistory.length > count) {

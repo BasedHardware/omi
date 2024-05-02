@@ -676,16 +676,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                                                 await uiUpdatesChatQA();
                                                 await actions.streamApiResponse(
                                                   ragContext,
-                                                  () async {
-                                                    logFirebaseEvent('_update_app_state');
-                                                    setState(() {});
-                                                    logFirebaseEvent('_scroll_to');
-                                                    await _model.listViewController?.animateTo(
-                                                      _model.listViewController!.position.maxScrollExtent,
-                                                      duration: const Duration(milliseconds: 100),
-                                                      curve: Curves.ease,
-                                                    );
-                                                  },
+                                                  _callbackFunctionChatStreaming(),
                                                 );
 
                                                 setState(() {});
@@ -754,5 +745,24 @@ class _ChatWidgetState extends State<ChatWidget> {
     setState(() {
       _model.textController?.clear();
     });
+  }
+
+  _callbackFunctionChatStreaming() {
+    return (String content) async {
+      var chatHistory = FFAppState().chatHistory;
+      var newChatHistory =
+          appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
+      FFAppState().update(() {
+        FFAppState().chatHistory = newChatHistory;
+      });
+      logFirebaseEvent('_update_app_state');
+      setState(() {});
+      logFirebaseEvent('_scroll_to');
+      await _model.listViewController?.animateTo(
+        _model.listViewController!.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.ease,
+      );
+    };
   }
 }

@@ -22,7 +22,7 @@ initAssistantResponse() {
 
 Future streamApiResponse(
   String context,
-  Future<dynamic> Function()? callbackAction,
+  Future<dynamic> Function(String) callback,
 ) async {
   var _client = http.Client();
   final url = 'https://api.openai.com/v1/chat/completions';
@@ -32,18 +32,18 @@ Future streamApiResponse(
     'OpenAI-Organization': Env.openAIOrganization,
   };
 
-  // Create Request
-  String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), ()=> {});
+  String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
 
   initAssistantResponse();
-
-  StringBuffer buffer = StringBuffer();
-
   final http.StreamedResponse response = await _client.send(request);
+  _listStream(response, callback);
+}
 
+_listStream(response, callback) {
+  StringBuffer buffer = StringBuffer();
   response.stream.listen(
     (List<int> value) async {
       buffer.write(utf8.decode(value));
@@ -57,7 +57,7 @@ Future streamApiResponse(
         int processedBlocks = 0;
         for (var jsonBlock in jsonBlocks) {
           if (isValidJson(jsonBlock)) {
-            addToChatHistory(jsonBlock, callbackAction);
+            handlePartialResponseContent(jsonBlock, callback);
             processedBlocks++;
           } else {
             bufferString = 'data: ' + jsonBlock;
@@ -70,14 +70,9 @@ Future streamApiResponse(
           print('Partial message in queue: $bufferString');
         }
       }
-    }, // Need to add handling for non-streaming responses
-
-    onError: (error) {
-      debugPrint('Stream error: $error');
     },
-    onDone: () {
-      debugPrint('Stream completed');
-    },
+    onError: (error) => debugPrint('Stream error: $error'),
+    onDone: () => debugPrint('Stream completed'),
   );
 }
 
@@ -90,22 +85,14 @@ bool isValidJson(String jsonString) {
   }
 }
 
-void addToChatHistory(String data, callbackAction) {
+void handlePartialResponseContent(String data, Future<dynamic> Function(String) callback) {
   if (data.contains("content")) {
     ContentResponse contentResponse = ContentResponse.fromJson(jsonDecode(data));
-
     if (contentResponse.choices != null &&
         contentResponse.choices![0].delta != null &&
         contentResponse.choices![0].delta!.content != null) {
       String content = jsonEncodeString(contentResponse.choices![0].delta!.content!)!;
-
-      var chatHistory = FFAppState().chatHistory;
-      var newChatHistory =
-          appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
-      FFAppState().update(() {
-        FFAppState().chatHistory = newChatHistory;
-      });
-      callbackAction();
+      callback(content);
     }
   }
 }
