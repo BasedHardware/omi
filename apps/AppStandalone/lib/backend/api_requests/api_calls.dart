@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:sama/backend/storage/memories.dart';
 import '../../env/env.dart';
 import 'package:http/http.dart' as http;
 
@@ -243,6 +244,32 @@ String qaStreamedBody(String context, List<dynamic> chatHistory, void callback) 
     Context:
     ``` 
     $context
+    ```
+    Answer:
+    '''
+      .replaceAll('    ', '');
+  debugPrint(prompt);
+  var body = jsonEncode({
+    "model": "gpt-4-turbo",
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
+    "stream": true,
+  });
+  return body;
+}
+
+String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHistory, void callback) {
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the list of stored user audio transcript memories to answer the question. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    
+    Conversation History:
+    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
+
+    Memories:
+    ```
+    ${memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n')}
     ```
     Answer:
     '''

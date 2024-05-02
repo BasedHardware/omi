@@ -32,7 +32,9 @@ Future streamApiResponse(
     'OpenAI-Organization': Env.openAIOrganization,
   };
 
-  String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
+  // String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
+  String body =
+      qaStreamedFullMemories(FFAppState().memories, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
