@@ -222,13 +222,11 @@ bool? stringContainsString(
   return string!.contains(substring!);
 }
 
-dynamic truncateChatHistory(dynamic ogChatHistory) {
-  // keep the last 20 messages
+List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, int count=5) {
   // TODO: truncate to certain token length instead of messages count
-  int targetLength = 5;
   if (ogChatHistory is List) {
-    if (ogChatHistory.length > targetLength) {
-      ogChatHistory = ogChatHistory.sublist(ogChatHistory.length - targetLength);
+    if (ogChatHistory.length > count) {
+      return ogChatHistory.sublist(ogChatHistory.length - count);
     }
   }
   return ogChatHistory;
