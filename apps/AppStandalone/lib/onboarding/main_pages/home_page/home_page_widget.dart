@@ -266,7 +266,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
           }, summariesRecordReference3);
           logFirebaseEvent('homePage_backend_call');
 
-          await currentUserReference!.update({
+          await currentUserReference?.update({
             ...mapToFirestore(
               {
                 'summaries':
