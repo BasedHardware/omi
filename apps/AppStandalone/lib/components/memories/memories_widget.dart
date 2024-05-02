@@ -66,9 +66,11 @@ class _MemoriesWidgetState extends State<MemoriesWidget> {
           itemCount: memories.length,
           itemBuilder: (context, listViewIndex) {
             final memory = memories[listViewIndex];
-            return MemoryListItem(
-              memory: memory,
-            );
+            return Container(child: Text('Hi'));
+            // return MemoryListItem(
+            //   memory: memory,
+            //   model: null,
+            // );
           },
         );
       },

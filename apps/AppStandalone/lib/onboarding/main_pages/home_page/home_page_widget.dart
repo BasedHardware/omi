@@ -1,4 +1,3 @@
-import 'package:sama/backend/storage/memories.dart';
 import 'package:sama/components/memories/memory_list_item.dart';
 import 'package:sama/onboarding/main_pages/home_page/bottom_buttons.dart';
 import 'package:sama/onboarding/main_pages/home_page/header_buttons.dart';
@@ -33,19 +32,11 @@ class _HomePageWidgetState extends State<HomePageWidget> {
   late HomePageModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  late Future<List<MemoryRecord>> _memoryList;
-
-  Future<void> _refreshMemories() async {
-    setState(() {
-      _memoryList = MemoryStorage.getAllMemories();
-    });
-  }
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => HomePageModel());
-    _memoryList = MemoryStorage.getAllMemories();
 
     logFirebaseEvent('screen_view', parameters: {'screen_name': 'homePage'});
     // On page load action.
@@ -389,45 +380,24 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                   color: const Color(0x00E0E3E7),
                                 ),
                               ),
-                              child: FutureBuilder<List<MemoryRecord>>(
-                                future: _memoryList,
-                                builder: (context, snapshot) {
-                                  // Customize what your widget looks like when it's loading.
-                                  if (!snapshot.hasData || snapshot.connectionState == ConnectionState.waiting) {
-                                    return Center(
-                                      child: SizedBox(
-                                        width: 50.0,
-                                        height: 50.0,
-                                        child: CircularProgressIndicator(
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            FlutterFlowTheme.of(context).primary,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  List<MemoryRecord> memories = snapshot.data!;
-                                  if (memories.isEmpty) {
-                                    return Center(
+                              child: FFAppState().memories.isEmpty
+                                  ? Center(
                                       child: SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 1.0,
                                         height: MediaQuery.sizeOf(context).height * 0.4,
                                         child: const EmptyMemoriesWidget(),
                                       ),
-                                    );
-                                  }
-                                  return ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    primary: false,
-                                    shrinkWrap: true,
-                                    scrollDirection: Axis.vertical,
-                                    itemCount: memories.length,
-                                    itemBuilder: (context, listViewIndex) {
-                                      return MemoryListItem(memory: memories[listViewIndex], model: _model);
-                                    },
-                                  );
-                                },
-                              ),
+                                    )
+                                  : ListView.builder(
+                                      padding: EdgeInsets.zero,
+                                      primary: false,
+                                      shrinkWrap: true,
+                                      scrollDirection: Axis.vertical,
+                                      itemCount: FFAppState().memories.length,
+                                      itemBuilder: (context, index) {
+                                        return MemoryListItem(memory: FFAppState().memories[index], model: _model);
+                                      },
+                                    ),
                             ),
                           ),
                         ],

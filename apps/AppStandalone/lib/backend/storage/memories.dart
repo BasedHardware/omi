@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:sama/flutter_flow/flutter_flow_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MemoryRecord {
@@ -44,17 +46,20 @@ class MemoryRecord {
 class MemoryStorage {
   static const String _storageKey = 'memories';
 
-  static Future<void> addMemory(MemoryRecord memory) async {
+  static Future<void> addMemory(MemoryRecord memory, VoidCallback onCompleted) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     allMemories.add(jsonEncode(memory.toJson()));
     await prefs.setStringList(_storageKey, allMemories);
+    onCompleted();
   }
 
   static Future<List<MemoryRecord>> getAllMemories() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    return allMemories.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    List<MemoryRecord> memories =
+        allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    return memories.where((memory) => !memory.isUseless).toList();
   }
 
   static Future<void> updateMemory(int index, MemoryRecord updatedMemory) async {
