@@ -33,7 +33,7 @@ Future streamApiResponse(
   };
 
   // Create Request
-  String body = qaStreamedBody(context, truncateChatHistory(FFAppState().chatHistory), ()=> {});
+  String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), ()=> {});
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;

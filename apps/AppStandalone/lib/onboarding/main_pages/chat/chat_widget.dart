@@ -1,4 +1,5 @@
 import 'package:sama/custom_code/actions/stream_api_response.dart';
+import 'package:sama/flutter_flow/custom_functions.dart';
 
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/api_requests/api_calls.dart';
@@ -723,7 +724,8 @@ class _ChatWidgetState extends State<ChatWidget> {
   }
 
   Future<String> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion = await determineRequiresContext(message, FFAppState().chatHistory);
+    String? betterContextQuestion =
+        await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
     debugPrint('_retrieveRAGContext: $betterContextQuestion');
     if (betterContextQuestion == null) {
       return '';

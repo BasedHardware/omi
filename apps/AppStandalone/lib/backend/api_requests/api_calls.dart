@@ -210,13 +210,9 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
       },
     }
   ];
-  var chatHistory2 = chatHistory;
-  if (chatHistory2.length > 5) {
-    chatHistory2 = chatHistory.sublist(chatHistory.length - 5);
-  }
   String message = '''
         Conversation:
-        ${chatHistory2.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
+        ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
         USER:$lastMessage
         '''.replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
