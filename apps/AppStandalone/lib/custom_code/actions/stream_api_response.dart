@@ -2,33 +2,29 @@
 import '/backend/backend.dart';
 import '/backend/schema/structs/index.dart';
 import '/backend/schema/enums/enums.dart';
+import 'package:sama/backend/api_requests/api_calls.dart';
 import '/actions/actions.dart' as action_blocks;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'index.dart'; // Imports other custom actions
-import '/flutter_flow/custom_functions.dart'; // Imports custom functions
+import 'index.dart';
+import '/flutter_flow/custom_functions.dart';
 import 'package:flutter/material.dart';
 import './streaming_models.dart';
-
-// Begin custom action code
-// DO NOT REMOVE OR MODIFY THE CODE ABOVE!
-
 import 'dart:convert';
-import 'package:http/http.dart' as http; // Fixed the import
+import 'package:http/http.dart' as http;
 import "../../env/env.dart";
 
-// Global variable defined here
-String responseString = "";
-dynamic chatHistory; // chatHistory but only action scope
+initAssistantResponse() {
+  FFAppState().update(() {
+    FFAppState().chatHistory = saveChatHistory(FFAppState().chatHistory, convertToJSONRole("", "assistant"));
+  });
+}
 
-var _client;
-
-Future streamApiResponse(Future<dynamic> Function()? callbackAction,) async {
-  // Add your function code here!
-  _client = http.Client();
-
-  chatHistory = FFAppState().chatHistory;
-
+Future streamApiResponse(
+  String context,
+  Future<dynamic> Function()? callbackAction,
+) async {
+  var _client = http.Client();
   final url = 'https://api.openai.com/v1/chat/completions';
   final headers = {
     'Content-Type': 'application/json',
@@ -37,26 +33,19 @@ Future streamApiResponse(Future<dynamic> Function()? callbackAction,) async {
   };
 
   // Create Request
-  String body = getApiBody(truncateChatHistory(chatHistory));
+  String body = qaStreamedBody(context, truncateChatHistory(FFAppState().chatHistory), ()=> {});
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
 
-  debugPrint('Body: $body \n\nHeader: $headers\n\nRequest fed: ${request.body}');
-
-  responseString = "";
-  // Before streaming response, add an empty ChatResponse object to chatHistory
-  chatHistory = FFAppState().chatHistory;
-  FFAppState().update(() {
-    FFAppState().chatHistory = saveChatHistory(chatHistory, convertToJSONRole(responseString, "assistant"));
-  });
+  initAssistantResponse();
 
   StringBuffer buffer = StringBuffer();
 
   final http.StreamedResponse response = await _client.send(request);
 
   response.stream.listen(
-        (List<int> value) async {
+    (List<int> value) async {
       buffer.write(utf8.decode(value));
       String bufferString = buffer.toString();
 
@@ -84,11 +73,9 @@ Future streamApiResponse(Future<dynamic> Function()? callbackAction,) async {
     }, // Need to add handling for non-streaming responses
 
     onError: (error) {
-      // Handle any errors that occur during streaming
       debugPrint('Stream error: $error');
     },
     onDone: () {
-      // Handle when streaming is finished
       debugPrint('Stream completed');
     },
   );
@@ -110,27 +97,16 @@ void addToChatHistory(String data, callbackAction) {
     if (contentResponse.choices != null &&
         contentResponse.choices![0].delta != null &&
         contentResponse.choices![0].delta!.content != null) {
-      String content = contentResponse.choices![0].delta!.content!;
+      String content = jsonEncodeString(contentResponse.choices![0].delta!.content!)!;
 
-      responseString += jsonEncodeString(content)!;
-
-      chatHistory =
-          updateChatHistoryAtIndex(convertToJSONRole(responseString, "assistant"), chatHistory.length - 1, chatHistory);
+      var chatHistory = FFAppState().chatHistory;
+      var newChatHistory =
+          appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
       FFAppState().update(() {
-        FFAppState().chatHistory = chatHistory;
+        FFAppState().chatHistory = newChatHistory;
       });
       callbackAction();
     }
   }
 }
-
-String getApiBody(dynamic chatHistory) {
-  // Added return type 'String'
-  String body;
-  body = jsonEncode({
-    "model": "gpt-4-1106-preview",
-    "messages": chatHistory,
-    "stream": true,
-  });
-  return body;
-}
+// TODO: remove ``Great job activating me! I'll passively listen to your voice and will``
