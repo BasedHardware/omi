@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:sama/backend/storage/memories.dart';
+import 'package:uuid/uuid.dart';
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/backend.dart';
@@ -49,30 +51,18 @@ Future<String> structureMemory() async {
 
 // Save failure memory when structured memory contains NA
 Future<void> saveFailureMemory(String structuredMemory) async {
-  logFirebaseEvent('memoryCreationBlock_backend_call');
-  await MemoriesRecord.collection.doc().set({
-    ...createMemoriesRecordData(
-      memory: FFAppState().lastMemory,
-      user: currentUserReference,
+  MemoryStorage.addMemory(MemoryRecord(
+      id: const Uuid().v4(),
+      date: DateTime.now(),
+      rawMemory: FFAppState().lastMemory,
       structuredMemory: structuredMemory,
-      feedback: '',
-      toShowToUserShowHide: 'Hide',
-      emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: true,
-    ),
-    ...mapToFirestore({'date': FieldValue.serverTimestamp()}),
-  });
+      isEmpty: FFAppState().lastMemory == '',
+      isUseless: true));
 }
 
 // Process structured memory when it's valid
 Future<void> processStructuredMemory(String structuredMemory) async {
   debugPrint('processStructuredMemory: $structuredMemory');
-
-  logFirebaseEvent('memoryCreationBlock_backend_call', parameters: {
-    'jsonBody': (structuredMemory),
-    'memory': FFAppState().lastMemory,
-    'user': currentUserReference,
-  });
   changeAppStateMemoryCreating();
   await finalizeMemoryRecord(structuredMemory);
   changeAppStateMemoryCreating();
@@ -88,60 +78,50 @@ void changeAppStateMemoryCreating() {
 
 // Finalize memory record after processing feedback
 Future<void> finalizeMemoryRecord(String structuredMemory) async {
-  var vector = await vectorizeMemory(structuredMemory);
+  List<double> vector = await getEmbeddingsFromInput(structuredMemory);
   logFirebaseEvent('memoryCreationBlock_backend_call');
-  var memoryRecord = await createMemoryRecord(structuredMemory, vector);
+  MemoryRecord memoryRecord = await createMemoryRecord(structuredMemory, vector);
   logFirebaseEvent('memoryCreationBlock_backend_call');
   await storeVectorData(memoryRecord, vector);
 }
 
-// Call vectorization API for structured memory
-Future<List<double>> vectorizeMemory(String structuredMemory) async {
-  return await getEmbeddingsFromInput(structuredMemory);
-}
-
 // Create memory record
-Future<MemoriesRecord> createMemoryRecord(String structuredMemory, List<double> vector) async {
-  var recordRef = MemoriesRecord.collection.doc();
-  await recordRef.set({
-    ...createMemoriesRecordData(
-      memory: FFAppState().lastMemory,
-      user: currentUserReference,
+Future<MemoryRecord> createMemoryRecord(String structuredMemory, List<double> vector) async {
+  var memory = MemoryRecord(
+      id: const Uuid().v4(),
+      date: DateTime.now(),
+      rawMemory: FFAppState().lastMemory,
       structuredMemory: structuredMemory,
-      feedback: '',
-      toShowToUserShowHide: FFAppState().isFeedbackUseful,
-      emptyMemory: FFAppState().lastMemory == '',
-      isUselessMemory: false,
-    ),
-    ...mapToFirestore({'date': FieldValue.serverTimestamp()}),
-  });
-  return MemoriesRecord.getDocumentOnce(recordRef);
+      isEmpty: FFAppState().lastMemory == '',
+      isUseless: false);
+  MemoryStorage.addMemory(memory);
+  return memory;
 }
 
 // Store vector data after memory record creation
-Future<void> storeVectorData(MemoriesRecord memoryRecord, List<double> vector) async {
+Future<void> storeVectorData(MemoryRecord memoryRecord, List<double> vector) async {
   // debugPrint('storeVectorData: memoryRecord -> $memoryRecord');
   // debugPrint('storeVectorData: vectorResponse -> ${vectorResponse.jsonBody}');
 
   await createPineconeVector(
     vector,
     memoryRecord.structuredMemory,
-    memoryRecord.reference.id,
+    memoryRecord.id,
   );
   // debugPrint('storeVectorData VectorAdded: ${vectorAdded.statusCode} ${vectorAdded.jsonBody}');
   // TODO: never triggers because `toShowToUserShowHide` is always 'Hide', because feedback logic was removed.
-  if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
-    logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
-    if (currentUserReference != null) {
-      triggerPushNotification(
-        notificationTitle: 'Sama',
-        notificationText: FFAppState().feedback,
-        userRefs: [currentUserReference!],
-        initialPageName: 'chat',
-        parameterData: {},
-      );
-    }
-  }
+  // if (memoryRecord.toShowToUserShowHide == 'Show' && !memoryRecord.emptyMemory && !memoryRecord.isUselessMemory) {
+  //   logFirebaseEvent('memoryCreationBlock_trigger_push_notific');
+  //   if (currentUserReference != null) {
+  //     triggerPushNotification(
+  //       notificationTitle: 'Sama',
+  //       notificationText: FFAppState().feedback,
+  //       userRefs: [currentUserReference!],
+  //       initialPageName: 'chat',
+  //       parameterData: {},
+  //     );
+  //   }
+  // }
 }
 
 // Fetch latest valid memories
