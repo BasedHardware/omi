@@ -24,9 +24,7 @@ Future<void> onFinishAction(BuildContext context) async {
   triggerFinishNotification();
 }
 
-// Update memory when finishing an action
 void updateLastMemory(String lastWords) {
-  // FFAppState().lastMemory = '${FFAppState().lastMemory} $lastWords';
   FFAppState().lastMemory = lastWords;
   debugPrint('FFAppState().lastMemory ${FFAppState().lastMemory}');
   // TODO: retrieve most recent memory (previous) and do a few tokens overlapping with the new one.
@@ -51,13 +49,21 @@ Future<String> structureMemory() async {
 
 // Save failure memory when structured memory contains NA
 Future<void> saveFailureMemory(String structuredMemory) async {
-  MemoryStorage.addMemory(MemoryRecord(
+  MemoryRecord memory = MemoryRecord(
       id: const Uuid().v4(),
       date: DateTime.now(),
       rawMemory: FFAppState().lastMemory,
       structuredMemory: structuredMemory,
       isEmpty: FFAppState().lastMemory == '',
-      isUseless: true));
+      isUseless: true);
+  MemoryStorage.addMemory(memory, _savedMemoryCallback);
+}
+
+_savedMemoryCallback() async {
+  var newMemories = await MemoryStorage.getAllMemories();
+  FFAppState().update(() {
+    FFAppState().memories = newMemories;
+  });
 }
 
 // Process structured memory when it's valid
@@ -94,7 +100,7 @@ Future<MemoryRecord> createMemoryRecord(String structuredMemory, List<double> ve
       structuredMemory: structuredMemory,
       isEmpty: FFAppState().lastMemory == '',
       isUseless: false);
-  MemoryStorage.addMemory(memory);
+  MemoryStorage.addMemory(memory, _savedMemoryCallback);
   return memory;
 }
 
