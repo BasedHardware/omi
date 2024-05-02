@@ -20,78 +20,76 @@ class HomePageBottomButtons extends StatefulWidget {
 class _HomePageBottomButtonsState extends State<HomePageBottomButtons> {
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8.0, 0.0, 10.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Align(
-              alignment: const AlignmentDirectional(0.0, -1.0),
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 24.0, 0.0),
-                child: wrapWithModel(
-                  model: widget.model.startStopRecordingModel,
-                  updateCallback: () => setState(() {}),
-                  child: const StartStopRecordingWidget(),
-                ),
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8.0, 0.0, 10.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Align(
+            alignment: const AlignmentDirectional(0.0, -1.0),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 24.0, 0.0),
+              child: wrapWithModel(
+                model: widget.model.startStopRecordingModel,
+                updateCallback: () => setState(() {}),
+                child: const StartStopRecordingWidget(),
               ),
             ),
-            Column(
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                Align(
-                  alignment: const AlignmentDirectional(0.0, -1.0),
-                  child: Builder(
-                    builder: (context) => FFButtonWidget(
-                      onPressed: () async {
-                        logFirebaseEvent('HOME_PAGE_PAGE_ADD_BTN_ON_TAP');
-                        logFirebaseEvent('Button_alert_dialog');
-                        await showDialog(
-                          context: context,
-                          builder: (dialogContext) {
-                            return Dialog(
-                              elevation: 0,
-                              insetPadding: EdgeInsets.zero,
-                              backgroundColor: Colors.transparent,
-                              alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                              child: GestureDetector(
-                                onTap: () => widget.model.unfocusNode.canRequestFocus
-                                    ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
-                                    : FocusScope.of(context).unfocus(),
-                                child: const EditMemoryWidget(),
-                              ),
-                            );
-                          },
-                        ).then((value) => setState(() {}));
-                      },
-                      text: 'Add',
-                      icon: const Icon(
-                        Icons.add_box,
-                        size: 25.0,
-                      ),
-                      options: FFButtonOptions(
-                        height: 44.0,
-                        padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
-                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                        color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                              color: FlutterFlowTheme.of(context).primaryText,
-                              fontWeight: FontWeight.bold,
-                              useGoogleFonts:
-                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Align(
+                alignment: const AlignmentDirectional(0.0, -1.0),
+                child: Builder(
+                  builder: (context) => FFButtonWidget(
+                    onPressed: () async {
+                      logFirebaseEvent('HOME_PAGE_PAGE_ADD_BTN_ON_TAP');
+                      logFirebaseEvent('Button_alert_dialog');
+                      await showDialog(
+                        context: context,
+                        builder: (dialogContext) {
+                          return Dialog(
+                            elevation: 0,
+                            insetPadding: EdgeInsets.zero,
+                            backgroundColor: Colors.transparent,
+                            alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                            child: GestureDetector(
+                              onTap: () => widget.model.unfocusNode.canRequestFocus
+                                  ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
+                                  : FocusScope.of(context).unfocus(),
+                              child: const EditMemoryWidget(),
                             ),
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
+                          );
+                        },
+                      ).then((value) => setState(() {}));
+                    },
+                    text: 'Add',
+                    icon: const Icon(
+                      Icons.add_box,
+                      size: 25.0,
+                    ),
+                    options: FFButtonOptions(
+                      height: 44.0,
+                      padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                      iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                      color: const Color(0x1AF7F4F4),
+                      textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                            fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                            color: FlutterFlowTheme.of(context).primaryText,
+                            fontWeight: FontWeight.bold,
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+                          ),
+                      borderRadius: BorderRadius.circular(8.0),
                     ),
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
