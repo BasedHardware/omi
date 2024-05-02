@@ -23,12 +23,19 @@ Future<http.Response?> makeApiCall({
 }
 
 // Function to extract content from the API response.
-dynamic extractContentFromResponse(http.Response? response, {bool isEmbedding = false}) {
+dynamic extractContentFromResponse(http.Response? response,
+    {bool isEmbedding = false, bool isFunctionCalling = false}) {
   if (response != null && response.statusCode == 200) {
     var data = jsonDecode(response.body);
     if (isEmbedding) {
       var embedding = data['data'][0]['embedding'];
       return embedding;
+    }
+    var message = data['choices'][0]['message'];
+    if (isFunctionCalling && message['tool_calls'] != null) {
+      debugPrint('message $message');
+      debugPrint('message ${message['tool_calls'].runtimeType}');
+      return message['tool_calls'];
     }
     return data['choices'][0]['message']['content'];
   } else {
@@ -44,6 +51,7 @@ Future<dynamic> gptApiCall({
   List<Map<String, String>> messages = const [],
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
+  List tools = const [],
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
@@ -58,12 +66,16 @@ Future<dynamic> gptApiCall({
     var bodyData = {'model': model, 'messages': messages};
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
+    } else if (tools.isNotEmpty) {
+      bodyData['tools'] = tools;
+      bodyData['tool_choice'] = 'auto';
     }
     body = jsonEncode(bodyData);
   }
 
   var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
-  return extractContentFromResponse(response, isEmbedding: urlSuffix == 'embeddings');
+  return extractContentFromResponse(response,
+      isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
 }
 
 Future<String> executeGptPrompt(String? prompt) async {
@@ -175,20 +187,75 @@ Future<List<String>> testRequest(String? memory, String? structuredMemory) async
   return decoded.map<String>((e) => e.toString()).toList();
 }
 
-Future qaStreamed(String? question, String? context, Map<String, String> chatHistory, void callback) async {
-  // TODO: is it better to include chatHistory in messages, or in prompt?
+Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatHistory) async {
+  var tools = [
+    {
+      "type": "function",
+      "function": {
+        "name": "retrieve_rag_context",
+        "description": "Retrieve pieces of user memories as context.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": '''
+              Based on the current conversation, determine if the message is a question and if there's 
+              context that needs to be retrieved from the user recorded audio memories in order to answer that question.
+              If that's the case, return the question better parsed so that retrieved pieces of context are better.
+              ''',
+            },
+          },
+        },
+      },
+    }
+  ];
+  var chatHistory2 = chatHistory;
+  if (chatHistory2.length > 5) {
+    chatHistory2 = chatHistory.sublist(chatHistory.length - 5);
+  }
+  String message = '''
+        Conversation:
+        ${chatHistory2.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
+        USER:$lastMessage
+        '''.replaceAll('        ', '');
+  debugPrint('determineRequiresContext message: $message');
+  var response = await gptApiCall(
+      model: 'gpt-4-turbo',
+      messages: [
+        {"role": "user", "content": message}
+      ],
+      tools: tools);
+  if (response.toString().contains('retrieve_rag_context')) {
+    var args = jsonDecode(response[0]['function']['arguments']);
+    return args['question'];
+  }
+  return null;
+}
+
+String qaStreamedBody(String context, List<dynamic> chatHistory, void callback) {
+  // TODO: if context is empty, should go to a different prompt.
   var prompt = '''
     You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
     If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    If the message doesn't require context, it will be empty, so answer the question casually.
     
     Conversation History:
-    ${chatHistory.values.join('\n')}
+    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
 
-    Question: $question 
-    
-    Context: $context
-    
+    Context:
+    ``` 
+    $context
+    ```
     Answer:
-    ''';
-  // TODO: execute with streaming, and include a callback to add the new message to chat history
+    '''.replaceAll('    ', '');
+  debugPrint(prompt);
+  var body = jsonEncode({
+    "model": "gpt-4-turbo",
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
+    "stream": true,
+  });
+  return body;
 }
