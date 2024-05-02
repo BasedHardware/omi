@@ -20,6 +20,7 @@ class FFAppState extends ChangeNotifier {
 
   Future initializePersistedState() async {
     prefs = await SharedPreferences.getInstance();
+    // prefs.clear();
     _safeInit(() {
       _speechWasActivatedByUser =
           prefs.getBool('ff_speechWasActivatedByUser') ??
