@@ -12,7 +12,7 @@ Open Source AI Wearable device that records everything you say, gives you proact
 
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss)
+[Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://www.kickstarter.com/projects/kodjima333/friend-open-source-ai-wearable-recording-device?ref=7wc2iz)
 
 </h3>
 
