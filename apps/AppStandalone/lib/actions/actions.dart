@@ -32,12 +32,13 @@ void updateLastMemory(String lastWords) {
 
 // Process the creation of memory records
 Future<void> memoryCreationBlock(BuildContext context) async {
+  changeAppStateMemoryCreating();
   var structuredMemory = await structureMemory();
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(structuredMemory);
   } else {
-    await processStructuredMemory(structuredMemory);
+    await finalizeMemoryRecord(structuredMemory);
   }
 }
 
@@ -59,14 +60,6 @@ Future<void> saveFailureMemory(String structuredMemory) async {
   MemoryStorage.addMemory(memory);
 }
 
-// Process structured memory when it's valid
-Future<void> processStructuredMemory(String structuredMemory) async {
-  debugPrint('processStructuredMemory: $structuredMemory');
-  changeAppStateMemoryCreating();
-  await finalizeMemoryRecord(structuredMemory);
-  changeAppStateMemoryCreating();
-}
-
 // Update app state when starting memory processing
 void changeAppStateMemoryCreating() {
   logFirebaseEvent('memoryCreationBlock_update_app_state');
@@ -77,15 +70,14 @@ void changeAppStateMemoryCreating() {
 
 // Finalize memory record after processing feedback
 Future<void> finalizeMemoryRecord(String structuredMemory) async {
+  MemoryRecord memoryRecord = await createMemoryRecord(structuredMemory);
+  changeAppStateMemoryCreating();
   List<double> vector = await getEmbeddingsFromInput(structuredMemory);
-  logFirebaseEvent('memoryCreationBlock_backend_call');
-  MemoryRecord memoryRecord = await createMemoryRecord(structuredMemory, vector);
-  logFirebaseEvent('memoryCreationBlock_backend_call');
   await storeVectorData(memoryRecord, vector);
 }
 
 // Create memory record
-Future<MemoryRecord> createMemoryRecord(String structuredMemory, List<double> vector) async {
+Future<MemoryRecord> createMemoryRecord(String structuredMemory) async {
   var memory = MemoryRecord(
       id: const Uuid().v4(),
       date: DateTime.now(),

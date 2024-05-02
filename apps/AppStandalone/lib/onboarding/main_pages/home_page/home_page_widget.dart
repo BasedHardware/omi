@@ -360,50 +360,52 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                 HomePageSummariesButtons(
                   model: _model,
                 ),
-                Stack(
-                  alignment: const AlignmentDirectional(0.0, 1.0),
-                  children: [
-                    SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (FFAppState().memoryCreationProcessing) MemoryProcessing(),
-                          Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 4.0, 16.0, 0.0),
-                            child: Container(
-                              width: double.infinity,
-                              height: MediaQuery.sizeOf(context).height * 0.7,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12.0),
-                                shape: BoxShape.rectangle,
-                                border: Border.all(
-                                  color: const Color(0x00E0E3E7),
+                Expanded(
+                  child: Stack(
+                    alignment: const AlignmentDirectional(0.0, 1.0),
+                    children: [
+                      SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (FFAppState().memoryCreationProcessing) MemoryProcessing(),
+                            Padding(
+                              padding: const EdgeInsetsDirectional.fromSTEB(16.0, 4.0, 16.0, 0.0),
+                              child: Container(
+                                width: double.infinity,
+                                height: MediaQuery.sizeOf(context).height * 0.7,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12.0),
+                                  shape: BoxShape.rectangle,
+                                  border: Border.all(
+                                    color: const Color(0x00E0E3E7),
+                                  ),
                                 ),
-                              ),
-                              child: FFAppState().memories.isEmpty
-                                  ? Center(
-                                      child: SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 1.0,
-                                        height: MediaQuery.sizeOf(context).height * 0.4,
-                                        child: const EmptyMemoriesWidget(),
+                                child: FFAppState().memories.isEmpty
+                                    ? Center(
+                                        child: SizedBox(
+                                          width: MediaQuery.sizeOf(context).width * 1.0,
+                                          height: MediaQuery.sizeOf(context).height * 0.4,
+                                          child: const EmptyMemoriesWidget(),
+                                        ),
+                                      )
+                                    : ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        primary: false,
+                                        shrinkWrap: true,
+                                        scrollDirection: Axis.vertical,
+                                        itemCount: FFAppState().memories.length,
+                                        itemBuilder: (context, index) {
+                                          return MemoryListItem(memory: FFAppState().memories[index], model: _model);
+                                        },
                                       ),
-                                    )
-                                  : ListView.builder(
-                                      padding: EdgeInsets.zero,
-                                      primary: false,
-                                      shrinkWrap: true,
-                                      scrollDirection: Axis.vertical,
-                                      itemCount: FFAppState().memories.length,
-                                      itemBuilder: (context, index) {
-                                        return MemoryListItem(memory: FFAppState().memories[index], model: _model);
-                                      },
-                                    ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 HomePageBottomButtons(model: _model),
               ],
