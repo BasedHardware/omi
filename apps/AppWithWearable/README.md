@@ -1,4 +1,4 @@
-# Friend Private
+# Friend
 
 A new Flutter project.
 
