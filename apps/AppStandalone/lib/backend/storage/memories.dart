@@ -106,20 +106,18 @@ class MemoryStorage {
   static Future<List<MemoryRecord>> getMemoriesOfLastWeek() async {
     DateTime now = DateTime.now();
     DateTime lastWeekStart = now.subtract(Duration(days: now.weekday + 6));
-    DateTime lastWeekEnd = now.subtract(Duration(days: now.weekday));
     List<MemoryRecord> allMemories = await getAllMemories();
     return allMemories
-        .where((memory) => memory.date.isAfter(lastWeekStart) && memory.date.isBefore(lastWeekEnd))
+        .where((memory) => memory.date.isAfter(lastWeekStart) && memory.date.isBefore(now))
         .toList();
   }
 
   static Future<List<MemoryRecord>> getMemoriesOfLastMonth() async {
     DateTime now = DateTime.now();
     DateTime lastMonthStart = DateTime(now.year, now.month - 1, 1);
-    DateTime lastMonthEnd = DateTime(now.year, now.month, 0);
     List<MemoryRecord> allMemories = await getAllMemories();
     return allMemories
-        .where((memory) => memory.date.isAfter(lastMonthStart) && memory.date.isBefore(lastMonthEnd))
+        .where((memory) => memory.date.isAfter(lastMonthStart) && memory.date.isBefore(now))
         .toList();
   }
 

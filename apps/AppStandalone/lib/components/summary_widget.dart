@@ -11,10 +11,12 @@ export 'summary_model.dart';
 class SummaryWidget extends StatefulWidget {
   const SummaryWidget({
     super.key,
-    this.summary,
+    required this.summary,
+    required this.type,
   });
 
-  final SummariesRecord? summary;
+  final String? summary;
+  final SummaryType type;
 
   @override
   State<SummaryWidget> createState() => _SummaryWidgetState();
@@ -76,11 +78,11 @@ class _SummaryWidgetState extends State<SummaryWidget> {
               children: [
                 Text(
                   () {
-                    if (widget.summary?.type == SummaryType.daily) {
+                    if (widget.type == SummaryType.daily) {
                       return 'Your Daily Summary';
-                    } else if (widget.summary?.type == SummaryType.weekly) {
+                    } else if (widget.type == SummaryType.weekly) {
                       return 'Your Weekly Summary';
-                    } else if (widget.summary?.type == SummaryType.monthly) {
+                    } else if (widget.type == SummaryType.monthly) {
                       return 'Your Monthly Summary';
                     } else {
                       return 'Nothing yet :(';
@@ -96,7 +98,7 @@ class _SummaryWidgetState extends State<SummaryWidget> {
                     child: Text(
                       widget.summary != null
                           ? valueOrDefault<String>(
-                              widget.summary?.summary,
+                              widget.summary,
                               'Oops... We don\'t have memories yet! Come back tomorrow and don\'t forget to activate the recording!',
                             )
                           : 'Oops... We don\'t have memories yet! Come back tomorrow and don\'t forget to activate the recording!',
