@@ -3,7 +3,7 @@ import {BluetoothContext} from '../contexts/BluetoothContext';
 import {MomentsContext} from '../contexts/MomentsContext';
 import BleManager from 'react-native-ble-manager';
 import LiveAudioStream from 'react-native-live-audio-stream';
-import base64 from 'base-64';
+import base64 from 'react-native-base64';
 import {DEEPGRAM_API_KEY} from '@env';
 
 const useAudioStreamer = () => {
@@ -46,7 +46,15 @@ const useAudioStreamer = () => {
   }, [bleManagerEmitter]);
 
   // Event handlers and helpers for WebSocket
-  const configureWebSocket = url => {
+  const configureWebSocket = () => {
+    const urlParams = {
+      model: 'nova-2',
+      language: 'en-US',
+      smart_format: true,
+      encoding: 'linear16',
+      sample_rate: 8000,
+    };
+    const url = `wss://api.deepgram.com/v1/listen?${urlParams.toString()}`;
     wsRef.current = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
 
     wsRef.current.onopen = () => {
@@ -73,7 +81,9 @@ const useAudioStreamer = () => {
       if (transcribedWord) {
         clearTimeout(silenceTimerRef.current);
         isSilenceTimerActiveRef.current = false;
-        setStreamingTranscript(prev => `${prev} ${transcribedWord}`);
+        setStreamingTranscript(
+          prevTranscript => prevTranscript + ' ' + transcribedWord,
+        );
       } else {
         if (!isSilenceTimerActiveRef.current) {
           silenceTimerRef.current = setTimeout(() => {
@@ -135,12 +145,14 @@ const useAudioStreamer = () => {
 
     LiveAudioStream.init(options);
     LiveAudioStream.on('data', base64String => {
+      console.log('Received data:', base64String);
       const binaryString = base64.decode(base64String);
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      console.log(bytes.buffer);
       wsRef.current.send(bytes.buffer);
     });
 
@@ -170,20 +182,12 @@ const useAudioStreamer = () => {
     const connectedDevices = await BleManager.getConnectedPeripherals([
       serviceUUID,
     ]);
+
     if (connectedDevices.length > 0) {
       peripheralIdRef.current = connectedDevices[0].id;
-      const urlParams = {
-        model: 'nova-2',
-        language: 'en-US',
-        smart_format: true,
-        encoding: 'linear16',
-        sample_rate: 8000,
-      };
-      const url = `wss://api.deepgram.com/v1/listen?${urlParams.toString()}`;
-      configureWebSocket(url);
+      configureWebSocket();
     } else {
-      peripheralIdRef.current = null;
-      startPhoneStreaming();
+      configureWebSocket();
     }
   };
 
@@ -194,6 +198,6 @@ const useAudioStreamer = () => {
     streamingTranscript,
     createMoment,
   };
-}
+};
 
 export default useAudioStreamer;
