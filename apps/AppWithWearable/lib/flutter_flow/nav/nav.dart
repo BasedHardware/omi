@@ -56,7 +56,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? HomePageWidget(),
+              : entryPage ?? HomePageWidget(), // TODO: restore back to WelcomeWidget when done with the PR
         ),
         FFRoute(
           name: 'welcome',
