@@ -1,9 +1,6 @@
-import '/backend/api_requests/api_calls.dart';
-import '/backend/backend.dart';
 import '/components/start_stop_recording_widget.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
-import '/flutter_flow/request_manager.dart';
 
 import 'home_page_widget.dart' show HomePageWidget;
 import 'package:flutter/material.dart';
@@ -17,7 +14,6 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
 
   final unfocusNode = FocusNode();
   // Stores action output result for [Backend Call - Create Document] action in homePage widget.
-  SummariesRecord? summaryCreated;
   InstantTimer? instantTimerAction;
   // Model for StartStopRecording component.
   late StartStopRecordingModel startStopRecordingModel;
