@@ -64,7 +64,7 @@ class _HomePageHeaderButtonsState extends State<HomePageHeaderButtons> {
                 },
                 child: FFButtonWidget(
                   onPressed: () async {
-                    context.pushNamed('chat');
+                    context.pushNamed('chatPage');
                   },
                   text: 'Chat ↗',
                   options: FFButtonOptions(
