@@ -79,35 +79,6 @@ bool voiceCommand(
   return false;
 }
 
-String? documentsToText(List<MemoriesRecord> memories) {
-  // Create a DateFormat for formatting the time
-  final timeFormat = DateFormat('h:mma');
-
-  // Map each memory record to a formatted string
-  List<String> formattedMemories = memories
-      .map((obj) {
-        // Check for a null date and skip if null
-        if (obj.date == null) {
-          return null;
-        }
-
-        // Format the date to a more readable time format
-        String formattedTime = timeFormat.format(obj.date!);
-
-        // Escape double quotes and remove newline characters from the memory content
-        String memoryContent = obj.structuredMemory.replaceAll('"', '\\"').replaceAll('\n', ' ');
-
-        // Format each memory with formatted time and memory content
-        return '$formattedTime $memoryContent';
-      })
-      .where((item) => item != null) // Filter out any null records
-      .cast<String>() // Cast to a non-nullable String
-      .toList();
-
-  // Join all the formatted memory strings into one large string separated by spaces
-  return formattedMemories.join(' ');
-}
-
 DateTime? sinceYesterday() {
   // function that returns DateTime of 24 hours ago from now
   DateTime now = DateTime.now();
