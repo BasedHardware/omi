@@ -1,6 +1,5 @@
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'package:friend_private/pages/home_page/empty_memories.dart';
 import 'package:friend_private/pages/home_page/header_buttons.dart';
 import 'package:friend_private/pages/home_page/home_page_model.dart';
@@ -76,10 +75,10 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                 height: MediaQuery.sizeOf(context).height * 1.0,
                 child: Stack(
                   children: [
-                    const Align(
-                      alignment: AlignmentDirectional(0.0, 0.0),
-                      child: BlurBotWidget(),
-                    ),
+                    // const Align(
+                    //   alignment: AlignmentDirectional(0.0, 0.0),
+                    //   child: BlurBotWidget(),
+                    // ),
                     Column(
                       mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.start,
