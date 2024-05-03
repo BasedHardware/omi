@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -23,39 +23,45 @@ const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) finalizedCallback, void Function(String) interimCallback) async {
-  debugPrint('Websocket Opening');
-  channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token ${Env.deepgramApiKey}'});
-  var isFinals = [];
+Future<void> _initStream(void Function(String) finalized_callback, void Function(String) interim_callback) async {
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('deepgramApiKey') ?? '';
+
+  print('Websocket Opening');
+  channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
+  var is_finals = [];
+  var is_finalized = false;
   channel.ready.then((_) {
     channel.stream.listen((event) {
       debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
       final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
-      final isFinal = parsedJson['is_final'];
-      final speechFinal = parsedJson['is_final'];
+      final is_final = parsedJson['is_final'];
+      final speech_final = parsedJson['is_final'];
 
-      debugPrint('Transcript: $transcript');
+      print('Transcript: ${transcript}');
       if (transcript.length > 0) {
-        if (speechFinal) {
-          interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
-          finalizedCallback('');
-          isFinals = [];
+        if (speech_final) {
+          interim_callback(is_finals.join(' ') + (is_finals.length > 0 ? ' ' : '') + transcript);
+          finalized_callback('');
+          is_finals = [];
         } else {
-          if (isFinal) {
-            isFinals.add(transcript);
-            interimCallback(transcript);
+          if (is_final) {
+            is_finals.add(transcript);
+            interim_callback(transcript);
           } else {
-            interimCallback(transcript);
+            interim_callback(transcript);
           }
         }
       }
       // Re-instantiate the Completer for next use
       // completer = Completer<String>();
     }, onError: (err) {
-      debugPrint('Websocket Error: $err');
+      print('Websocket Error: ${err}');
+      // handle stream error
     }, onDone: (() {
-      debugPrint('Websocket Closed');
+      // stream on done callback...
+      print('Websocket Closed');
     }), cancelOnError: true);
   }).onError((error, stackTrace) {
     debugPrint("WebsocketChannel was unable to establishconnection");
@@ -65,17 +71,17 @@ Future<void> _initStream(void Function(String) finalizedCallback, void Function(
     await channel.ready;
   } catch (e) {
     // handle exception here
-    debugPrint("Websocket was unable to establishconnection");
+    print("Websocket was unable to establishconnection");
   }
 }
 
 Future<String> bleReceiveWAV(
-    BTDeviceStruct btDevice, void Function(String) finalizedCallback, void Function(String) interimCallback) async {
+    BTDeviceStruct btDevice, void Function(String) finalized_callback, void Function(String) interim_callback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 
   try {
-    _initStream(finalizedCallback, interimCallback);
+    _initStream(finalized_callback, interim_callback);
     await device.connect();
     debugPrint('Connected to device: ${device.id}');
     List<BluetoothService> services = await device.discoverServices();

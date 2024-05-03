@@ -15,7 +15,6 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:permission_handler/permission_handler.dart';
 
-
 class WelcomeWidget extends StatefulWidget {
   const WelcomeWidget({super.key});
 
@@ -23,10 +22,12 @@ class WelcomeWidget extends StatefulWidget {
   State<WelcomeWidget> createState() => _WelcomeWidgetState();
 }
 
-class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProviderStateMixin {
+class _WelcomeWidgetState extends State<WelcomeWidget>
+    with SingleTickerProviderStateMixin {
   late WelcomeModel _model;
   late AnimationController _animationController;
   late Animation<double> _animation;
+  late Animation<double> _bounceAnimation;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -44,7 +45,16 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
       duration: Duration(seconds: 1),
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: pi / 8.2, end: pi / 9).animate(_animationController);
+    _animation = Tween<double>(begin: pi / 200, end: pi / 200)
+        .animate(_animationController);
+
+    // Initialize the bounce animation
+    _bounceAnimation = Tween<double>(begin: 0, end: 10).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
@@ -89,15 +99,18 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                       moveDuration: Duration(milliseconds: 0),
                     ),
                     child: AnimatedBuilder(
-                      animation: _animation,
+                      animation: _bounceAnimation,
                       builder: (context, child) {
-                        return Transform.rotate(
-                          angle: _animation.value,
-                          child: Image.asset(
-                            'assets/images/hero_image.png',
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
+                        return Transform.translate(
+                          offset: Offset(0, -_bounceAnimation.value),
+                          child: Transform.rotate(
+                            angle: _animation.value,
+                            child: Image.asset(
+                              'assets/images/hero_image.png',
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
                           ),
                         );
                       },

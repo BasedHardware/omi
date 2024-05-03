@@ -51,8 +51,6 @@ dependencies:
   lottie: 3.1.0
   web_socket_channel: ^2.4.0
   flutter_tilt: any
-  envied: ^0.5.4+1
-  build_runner: ^2.4.9
   path: ^1.9.0
   uuid: ^4.4.0
 
@@ -67,7 +65,6 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   lints: 3.0.0
-  envied_generator: ^0.5.4+1
   flutter_test:
     sdk: flutter
 
