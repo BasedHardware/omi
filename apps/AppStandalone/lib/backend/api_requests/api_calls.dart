@@ -123,7 +123,7 @@ Future<String> requestSummary(List<MemoryRecord> memories) async {
     Write the final output only and make it very short and concise, less than 200 symbols total as bullet-points. 
     Make it interesting with an insight, specific, professional and simple to read:
     ``` 
-    ${memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n')}
+    ${MemoryRecord.memoriesToString(memories)}
     ``` 
     ''';
   return await executeGptPrompt(prompt);
@@ -272,7 +272,7 @@ String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHis
 
     Memories:
     ```
-    ${memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n')}
+    ${MemoryRecord.memoriesToString(memories)}
     ```
     Answer:
     '''
