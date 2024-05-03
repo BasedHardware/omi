@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:sama/backend/storage/memories.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../env/env.dart';
 import 'package:http/http.dart' as http;
 
@@ -81,9 +82,17 @@ Future<dynamic> gptApiCall({
 
 Future<String> executeGptPrompt(String? prompt) async {
   if (prompt == null) return '';
-  return await gptApiCall(model: 'gpt-4-turbo', messages: [
+
+  var prefs = await SharedPreferences.getInstance();
+  var promptBase64 = base64Encode(utf8.encode(prompt));
+  var cachedResponse = prefs.getString(promptBase64);
+  if (cachedResponse != null) return cachedResponse;
+
+  String response = await gptApiCall(model: 'gpt-4-turbo', messages: [
     {'role': 'system', 'content': prompt}
   ]);
+  prefs.setString(promptBase64, response);
+  return response;
 }
 
 Future<String> generateTitleAndSummaryForMemory(String? memory) async {
@@ -108,20 +117,14 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
-Future<String> requestSummary(String? structuredMemories) async {
+Future<String> requestSummary(List<MemoryRecord> memories) async {
   var prompt = '''
     Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 
     Write the final output only and make it very short and concise, less than 200 symbols total as bullet-points. 
-    Make it interesting with an insight, specific, professional and simple to read: $structuredMemories. 
-    ''';
-  return await executeGptPrompt(prompt);
-}
-
-Future<String> isFeedbackUseful(String? feedback, String? memory) async {
-  var prompt = '''
-    You are a mentor of a busy entrepreneur. Below is a conversation that your mentee had \\"$memory\\". 
-    You provided the following feedback: \\"$feedback\\". Determine if the feedback is actually insightful and 
-    important to the mentee's life or not. Return only Show or Hide. If important, return Show. If not, return Hide.
+    Make it interesting with an insight, specific, professional and simple to read:
+    ``` 
+    ${memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n')}
+    ``` 
     ''';
   return await executeGptPrompt(prompt);
 }
