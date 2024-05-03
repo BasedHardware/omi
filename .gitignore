@@ -94,3 +94,10 @@ apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginR
 */*xcschememanagement.plist
 */android/app/google-services.json
 */ios/Runner/GoogleService-Info.plist
+
+#Solidworks models
+*.SLDPRT
+*.SLDASM
+**/classic_triangle/old outdated history (but gold)/
+**/classic_triangle/assembly/
+**/classic_triangle/misc/

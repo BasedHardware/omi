@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../env/env.dart';
 import 'package:http/http.dart' as http;
 
 Future<http.Response?> makeApiCall({
@@ -56,9 +55,11 @@ Future<dynamic> gptApiCall({
   List tools = const [],
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
   final headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Authorization': 'Bearer ${Env.openAIApiKey}',
+    'Authorization': 'Bearer $apiKey',
   };
   final String body;
   if (urlSuffix == 'embeddings') {

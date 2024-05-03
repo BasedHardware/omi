@@ -1,4 +1,5 @@
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/custom_functions.dart';
@@ -6,7 +7,6 @@ import 'package:flutter/material.dart';
 import './streaming_models.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import "../../env/env.dart";
 
 initAssistantResponse() {
   FFAppState().update(() {
@@ -20,9 +20,11 @@ Future streamApiResponse(
 ) async {
   var client = http.Client();
   const url = 'https://api.openai.com/v1/chat/completions';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
   final headers = {
     'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${Env.openAIApiKey}',
+    'Authorization': 'Bearer $apiKey',
   };
 
   // String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory));
