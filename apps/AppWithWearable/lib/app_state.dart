@@ -347,6 +347,7 @@ class FFAppState extends ChangeNotifier {
     _inputContent = _value;
   }
 
+  // TODO: migrate chatHistory to a model, and storage like MemoryRecord
   dynamic _chatHistory = jsonDecode('[{\"role\":\"system\",\"content\":\"empty\"}]');
 
   dynamic get chatHistory => _chatHistory;

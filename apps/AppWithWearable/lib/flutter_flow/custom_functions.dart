@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+
 DateTime? sinceLastMonth() {
   // function that returns DateTime of 24 hours ago from now
   DateTime now = DateTime.now();
@@ -122,7 +124,7 @@ String? jsonEncodeString(String? regularString) {
   if (regularString == null) return null;
 
   String encodedString = jsonEncode(regularString);
-  print("DEBUGJSON: " + encodedString);
+  debugPrint("jsonEncodeString: $encodedString");
 
   // Remove the first and last character which are the double quotes
   if (encodedString.length > 1) {
@@ -137,8 +139,7 @@ dynamic truncateChatHistory(dynamic ogChatHistory) {
   int chatLength = 3;
   if (ogChatHistory.length > chatLength) {
     // Keep the first item and the last 30 items
-    var truncatedChatHistory = [ogChatHistory.first] +
-        ogChatHistory.sublist(ogChatHistory.length - chatLength);
+    var truncatedChatHistory = [ogChatHistory.first] + ogChatHistory.sublist(ogChatHistory.length - chatLength);
     return truncatedChatHistory;
   }
   return ogChatHistory;
@@ -149,4 +150,30 @@ bool? stringContainsString(
   String? substring,
 ) {
   return string!.contains(substring!);
+}
+
+List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, {int count = 5}) {
+  // TODO: truncate to certain token length instead of messages count
+  if (ogChatHistory.length > count) {
+    return ogChatHistory.sublist(ogChatHistory.length - count);
+  }
+  return ogChatHistory;
+}
+
+dynamic appendToChatHistoryAtIndex(
+  dynamic messageWithRole,
+  int index,
+  dynamic chatHistory,
+) {
+  // take the chat history message at index, and append content to it
+  dynamic newChatHistory;
+
+  // updates the chat history at a certain index
+  if (chatHistory is List) {
+    chatHistory[index]['content'] += messageWithRole['content'];
+    newChatHistory = chatHistory;
+  } else {
+    newChatHistory = [messageWithRole];
+  }
+  return newChatHistory;
 }

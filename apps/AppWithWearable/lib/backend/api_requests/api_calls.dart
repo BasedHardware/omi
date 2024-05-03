@@ -133,7 +133,7 @@ Future<List<double>> getEmbeddingsFromInput(String? input) async {
   return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
 }
 
-String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHistory, void callback) {
+String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHistory) {
   var prompt = '''
     You are an assistant for question-answering tasks. Use the list of stored user audio transcript memories to answer the question. 
     If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
