@@ -55,11 +55,11 @@ class _HomePageWidgetState extends State<HomePageWidget> {
             child: Stack(
               children: [
                 Align(
-                  alignment: AlignmentDirectional(0.0, 0.0),
+                  alignment: const AlignmentDirectional(0.0, 0.0),
                   child: wrapWithModel(
                     model: _model.blurModel,
                     updateCallback: () => setState(() {}),
-                    child: BlurBotWidget(),
+                    child: const BlurBotWidget(),
                   ),
                 ),
                 Column(
@@ -67,8 +67,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Padding(
-                      padding:
-                          EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 0.0),
+                      padding: const EdgeInsetsDirectional.fromSTEB(20.0, 20.0, 20.0, 0.0),
                       child: Row(
                         mainAxisSize: MainAxisSize.max,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -78,33 +77,26 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                               await launchURL('https://discord.gg/EPDPMZgBgf');
                             },
                             text: '',
-                            icon: Icon(
+                            icon: const Icon(
                               Icons.discord_sharp,
                               size: 24.0,
                             ),
                             options: FFButtonOptions(
                               width: 44.0,
                               height: 44.0,
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  8.0, 0.0, 0.0, 0.0),
-                              iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 0.0),
-                              color: Color(0x1AF7F4F4),
-                              textStyle: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    fontFamily: FlutterFlowTheme.of(context)
-                                        .titleSmallFamily,
+                              padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                              iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                              color: const Color(0x1AF7F4F4),
+                              textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                     color: Colors.white,
                                     letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(
-                                            FlutterFlowTheme.of(context)
-                                                .titleSmallFamily),
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                   ),
                               elevation: 3.0,
-                              borderSide: BorderSide(
+                              borderSide: const BorderSide(
                                 color: Colors.transparent,
                                 width: 1.0,
                               ),
@@ -119,27 +111,20 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                             options: FFButtonOptions(
                               width: MediaQuery.sizeOf(context).width * 0.25,
                               height: 44.0,
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  12.0, 0.0, 12.0, 0.0),
-                              iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 0.0),
-                              color: Color(0x00151619),
-                              textStyle: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    fontFamily: FlutterFlowTheme.of(context)
-                                        .titleSmallFamily,
-                                    color: Color(0xFFF7F4F4),
+                              padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
+                              iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                              color: const Color(0x00151619),
+                              textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                                    color: const Color(0xFFF7F4F4),
                                     fontSize: 16.0,
                                     letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(
-                                            FlutterFlowTheme.of(context)
-                                                .titleSmallFamily),
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                   ),
                               elevation: 0.0,
-                              borderSide: BorderSide(
+                              borderSide: const BorderSide(
                                 color: Colors.transparent,
                                 width: 0.0,
                               ),
@@ -151,33 +136,26 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                               await launchURL('https://discord.gg/EPDPMZgBgf');
                             },
                             text: '',
-                            icon: Icon(
+                            icon: const Icon(
                               Icons.settings,
                               size: 24.0,
                             ),
                             options: FFButtonOptions(
                               width: 44.0,
                               height: 44.0,
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  8.0, 0.0, 0.0, 0.0),
-                              iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 0.0),
-                              color: Color(0x1AF7F4F4),
-                              textStyle: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    fontFamily: FlutterFlowTheme.of(context)
-                                        .titleSmallFamily,
+                              padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+                              iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                              color: const Color(0x1AF7F4F4),
+                              textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                     color: Colors.white,
                                     letterSpacing: 0.0,
                                     fontWeight: FontWeight.bold,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(
-                                            FlutterFlowTheme.of(context)
-                                                .titleSmallFamily),
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                   ),
                               elevation: 3.0,
-                              borderSide: BorderSide(
+                              borderSide: const BorderSide(
                                 color: Colors.transparent,
                                 width: 1.0,
                               ),
@@ -188,10 +166,9 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                       ),
                     ),
                     Align(
-                      alignment: AlignmentDirectional(0.0, -0.88),
+                      alignment: const AlignmentDirectional(0.0, -0.88),
                       child: Padding(
-                        padding:
-                            EdgeInsetsDirectional.fromSTEB(0.0, 20.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 20.0, 0.0, 0.0),
                         child: Row(
                           mainAxisSize: MainAxisSize.max,
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -204,26 +181,19 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                               options: FFButtonOptions(
                                 width: 112.0,
                                 height: 40.0,
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    24.0, 0.0, 24.0, 0.0),
-                                iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 0.0, 0.0, 0.0),
-                                color: Color(0x1AF7F4F4),
-                                textStyle: FlutterFlowTheme.of(context)
-                                    .titleSmall
-                                    .override(
-                                      fontFamily: FlutterFlowTheme.of(context)
-                                          .titleSmallFamily,
-                                      color: Color(0xFFF7F4F4),
+                                padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                                iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                                color: const Color(0x1AF7F4F4),
+                                textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                      fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                                      color: const Color(0xFFF7F4F4),
                                       letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
-                                          .containsKey(
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmallFamily),
+                                          .containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                     ),
                                 elevation: 3.0,
-                                borderSide: BorderSide(
+                                borderSide: const BorderSide(
                                   color: Colors.transparent,
                                   width: 1.0,
                                 ),
@@ -238,27 +208,19 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                               options: FFButtonOptions(
                                 width: 112.0,
                                 height: 40.0,
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    24.0, 0.0, 24.0, 0.0),
-                                iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 0.0, 0.0, 0.0),
-                                color: Color(0x1AF7F4F4),
-                                textStyle: FlutterFlowTheme.of(context)
-                                    .titleSmall
-                                    .override(
-                                      fontFamily: FlutterFlowTheme.of(context)
-                                          .titleSmallFamily,
-                                      color: FlutterFlowTheme.of(context)
-                                          .primaryText,
+                                padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                                iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                                color: const Color(0x1AF7F4F4),
+                                textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                      fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                                      color: FlutterFlowTheme.of(context).primaryText,
                                       letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
-                                          .containsKey(
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmallFamily),
+                                          .containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                     ),
                                 elevation: 3.0,
-                                borderSide: BorderSide(
+                                borderSide: const BorderSide(
                                   color: Colors.transparent,
                                   width: 1.0,
                                 ),
@@ -273,27 +235,19 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                               options: FFButtonOptions(
                                 width: 112.0,
                                 height: 40.0,
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    24.0, 0.0, 24.0, 0.0),
-                                iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 0.0, 0.0, 0.0),
-                                color: Color(0x1AF7F4F4),
-                                textStyle: FlutterFlowTheme.of(context)
-                                    .titleSmall
-                                    .override(
-                                      fontFamily: FlutterFlowTheme.of(context)
-                                          .titleSmallFamily,
-                                      color: FlutterFlowTheme.of(context)
-                                          .primaryText,
+                                padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                                iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                                color: const Color(0x1AF7F4F4),
+                                textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                      fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                                      color: FlutterFlowTheme.of(context).primaryText,
                                       letterSpacing: 0.0,
                                       fontWeight: FontWeight.bold,
                                       useGoogleFonts: GoogleFonts.asMap()
-                                          .containsKey(
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmallFamily),
+                                          .containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                     ),
                                 elevation: 3.0,
-                                borderSide: BorderSide(
+                                borderSide: const BorderSide(
                                   color: Colors.transparent,
                                   width: 1.0,
                                 ),
@@ -310,8 +264,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(
-                                16.0, 4.0, 16.0, 0.0),
+                            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 4.0, 16.0, 0.0),
                             child: Container(
                               width: double.infinity,
                               height: MediaQuery.sizeOf(context).height * 0.7,
@@ -319,12 +272,11 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                 borderRadius: BorderRadius.circular(12.0),
                                 shape: BoxShape.rectangle,
                                 border: Border.all(
-                                  color: Color(0x00E0E3E7),
+                                  color: const Color(0x00E0E3E7),
                                 ),
                               ),
                               child: Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 12.0, 0.0, 0.0),
+                                padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 0.0),
                                 child: ListView(
                                   padding: EdgeInsets.zero,
                                   primary: false,
@@ -332,145 +284,88 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                   scrollDirection: Axis.vertical,
                                   children: [
                                     Padding(
-                                      padding: EdgeInsetsDirectional.fromSTEB(
-                                          0.0, 12.0, 0.0, 0.0),
+                                      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 0.0),
                                       child: Container(
                                         width: double.infinity,
                                         decoration: BoxDecoration(
-                                          color: Color(0x26000000),
-                                          borderRadius:
-                                              BorderRadius.circular(24.0),
+                                          color: const Color(0x26000000),
+                                          borderRadius: BorderRadius.circular(24.0),
                                         ),
                                         child: Align(
-                                          alignment:
-                                              AlignmentDirectional(0.0, 0.0),
+                                          alignment: const AlignmentDirectional(0.0, 0.0),
                                           child: Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    8.0, 8.0, 8.0, 8.0),
+                                            padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 8.0, 8.0),
                                             child: SingleChildScrollView(
                                               child: Column(
                                                 mainAxisSize: MainAxisSize.max,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.center,
                                                 children: [
                                                   Align(
-                                                    alignment:
-                                                        AlignmentDirectional(
-                                                            0.0, 0.0),
+                                                    alignment: const AlignmentDirectional(0.0, 0.0),
                                                     child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  4.0,
-                                                                  0.0,
-                                                                  4.0,
-                                                                  0.0),
+                                                      padding: const EdgeInsetsDirectional.fromSTEB(4.0, 0.0, 4.0, 0.0),
                                                       child: Container(
-                                                        width:
-                                                            MediaQuery.sizeOf(
-                                                                        context)
-                                                                    .width *
-                                                                0.28,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0x33FFFFFF),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      24.0),
+                                                        width: MediaQuery.sizeOf(context).width * 0.28,
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0x33FFFFFF),
+                                                          borderRadius: BorderRadius.circular(24.0),
                                                         ),
-                                                        alignment:
-                                                            AlignmentDirectional(
-                                                                0.0, 0.0),
+                                                        alignment: const AlignmentDirectional(0.0, 0.0),
                                                         child: Align(
-                                                          alignment:
-                                                              AlignmentDirectional(
-                                                                  0.0, 0.0),
+                                                          alignment: const AlignmentDirectional(0.0, 0.0),
                                                           child: Padding(
-                                                            padding:
-                                                                EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        0.0,
-                                                                        4.0,
-                                                                        0.0,
-                                                                        4.0),
+                                                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
                                                             child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              mainAxisAlignment:
-                                                                  MainAxisAlignment
-                                                                      .center,
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              mainAxisAlignment: MainAxisAlignment.center,
                                                               children: [
                                                                 Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  mainAxisAlignment:
-                                                                      MainAxisAlignment
-                                                                          .center,
+                                                                  mainAxisSize: MainAxisSize.min,
+                                                                  mainAxisAlignment: MainAxisAlignment.center,
                                                                   children: [
                                                                     Align(
-                                                                      alignment:
-                                                                          AlignmentDirectional(
-                                                                              0.0,
-                                                                              0.0),
-                                                                      child:
-                                                                          Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            4.0,
-                                                                            4.0,
-                                                                            8.0,
-                                                                            4.0),
-                                                                        child:
-                                                                            Text(
+                                                                      alignment: const AlignmentDirectional(0.0, 0.0),
+                                                                      child: Padding(
+                                                                        padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                            4.0, 4.0, 8.0, 4.0),
+                                                                        child: Text(
                                                                           '7:39pm',
                                                                           style: FlutterFlowTheme.of(context)
                                                                               .bodyMedium
                                                                               .override(
-                                                                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                fontFamily: FlutterFlowTheme.of(context)
+                                                                                    .bodyMediumFamily,
                                                                                 letterSpacing: 0.0,
-                                                                                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                useGoogleFonts: GoogleFonts.asMap()
+                                                                                    .containsKey(
+                                                                                        FlutterFlowTheme.of(context)
+                                                                                            .bodyMediumFamily),
                                                                               ),
                                                                         ),
                                                                       ),
                                                                     ),
                                                                     Builder(
-                                                                      builder:
-                                                                          (context) =>
-                                                                              Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            0.0,
-                                                                            0.0,
-                                                                            10.0,
-                                                                            0.0),
-                                                                        child:
-                                                                            InkWell(
-                                                                          splashColor:
-                                                                              Colors.transparent,
-                                                                          focusColor:
-                                                                              Colors.transparent,
-                                                                          hoverColor:
-                                                                              Colors.transparent,
-                                                                          highlightColor:
-                                                                              Colors.transparent,
-                                                                          onTap:
-                                                                              () async {
+                                                                      builder: (context) => Padding(
+                                                                        padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                            0.0, 0.0, 10.0, 0.0),
+                                                                        child: InkWell(
+                                                                          splashColor: Colors.transparent,
+                                                                          focusColor: Colors.transparent,
+                                                                          hoverColor: Colors.transparent,
+                                                                          highlightColor: Colors.transparent,
+                                                                          onTap: () async {
                                                                             await Share.share(
                                                                               '',
-                                                                              sharePositionOrigin: getWidgetBoundingBox(context),
+                                                                              sharePositionOrigin:
+                                                                                  getWidgetBoundingBox(context),
                                                                             );
                                                                             HapticFeedback.lightImpact();
                                                                           },
-                                                                          child:
-                                                                              FaIcon(
+                                                                          child: FaIcon(
                                                                             FontAwesomeIcons.share,
-                                                                            color:
-                                                                                FlutterFlowTheme.of(context).secondaryText,
-                                                                            size:
-                                                                                20.0,
+                                                                            color: FlutterFlowTheme.of(context)
+                                                                                .secondaryText,
+                                                                            size: 20.0,
                                                                           ),
                                                                         ),
                                                                       ),
@@ -485,43 +380,21 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                     ),
                                                   ),
                                                   Align(
-                                                    alignment:
-                                                        AlignmentDirectional(
-                                                            -1.0, 0.0),
+                                                    alignment: const AlignmentDirectional(-1.0, 0.0),
                                                     child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  8.0,
-                                                                  0.0,
-                                                                  8.0),
+                                                      padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 0.0, 8.0),
                                                       child: SelectionArea(
                                                           child: Text(
                                                         '- Sentence about what happened.\n- Second sentence about specific insight',
-                                                        textAlign:
-                                                            TextAlign.start,
-                                                        style:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .override(
-                                                                  fontFamily: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodyMediumFamily,
-                                                                  letterSpacing:
-                                                                      0.0,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  useGoogleFonts: GoogleFonts
-                                                                          .asMap()
-                                                                      .containsKey(
-                                                                          FlutterFlowTheme.of(context)
-                                                                              .bodyMediumFamily),
-                                                                  lineHeight:
-                                                                      1.5,
-                                                                ),
+                                                        textAlign: TextAlign.start,
+                                                        style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                              fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                              letterSpacing: 0.0,
+                                                              fontWeight: FontWeight.bold,
+                                                              useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                                                  FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                              lineHeight: 1.5,
+                                                            ),
                                                       )),
                                                     ),
                                                   ),
@@ -533,145 +406,88 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                       ),
                                     ),
                                     Padding(
-                                      padding: EdgeInsetsDirectional.fromSTEB(
-                                          0.0, 12.0, 0.0, 0.0),
+                                      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 0.0),
                                       child: Container(
                                         width: double.infinity,
                                         decoration: BoxDecoration(
-                                          color: Color(0x27000000),
-                                          borderRadius:
-                                              BorderRadius.circular(24.0),
+                                          color: const Color(0x27000000),
+                                          borderRadius: BorderRadius.circular(24.0),
                                         ),
                                         child: Align(
-                                          alignment:
-                                              AlignmentDirectional(0.0, 0.0),
+                                          alignment: const AlignmentDirectional(0.0, 0.0),
                                           child: Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    8.0, 8.0, 8.0, 8.0),
+                                            padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 8.0, 8.0),
                                             child: SingleChildScrollView(
                                               child: Column(
                                                 mainAxisSize: MainAxisSize.max,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.center,
                                                 children: [
                                                   Align(
-                                                    alignment:
-                                                        AlignmentDirectional(
-                                                            0.0, 0.0),
+                                                    alignment: const AlignmentDirectional(0.0, 0.0),
                                                     child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  4.0,
-                                                                  0.0,
-                                                                  4.0,
-                                                                  0.0),
+                                                      padding: const EdgeInsetsDirectional.fromSTEB(4.0, 0.0, 4.0, 0.0),
                                                       child: Container(
-                                                        width:
-                                                            MediaQuery.sizeOf(
-                                                                        context)
-                                                                    .width *
-                                                                0.28,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0x32FFFFFF),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      24.0),
+                                                        width: MediaQuery.sizeOf(context).width * 0.28,
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0x32FFFFFF),
+                                                          borderRadius: BorderRadius.circular(24.0),
                                                         ),
-                                                        alignment:
-                                                            AlignmentDirectional(
-                                                                0.0, 0.0),
+                                                        alignment: const AlignmentDirectional(0.0, 0.0),
                                                         child: Align(
-                                                          alignment:
-                                                              AlignmentDirectional(
-                                                                  0.0, 0.0),
+                                                          alignment: const AlignmentDirectional(0.0, 0.0),
                                                           child: Padding(
-                                                            padding:
-                                                                EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        0.0,
-                                                                        4.0,
-                                                                        0.0,
-                                                                        4.0),
+                                                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
                                                             child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              mainAxisAlignment:
-                                                                  MainAxisAlignment
-                                                                      .center,
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              mainAxisAlignment: MainAxisAlignment.center,
                                                               children: [
                                                                 Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  mainAxisAlignment:
-                                                                      MainAxisAlignment
-                                                                          .center,
+                                                                  mainAxisSize: MainAxisSize.min,
+                                                                  mainAxisAlignment: MainAxisAlignment.center,
                                                                   children: [
                                                                     Align(
-                                                                      alignment:
-                                                                          AlignmentDirectional(
-                                                                              0.0,
-                                                                              0.0),
-                                                                      child:
-                                                                          Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            4.0,
-                                                                            4.0,
-                                                                            8.0,
-                                                                            4.0),
-                                                                        child:
-                                                                            Text(
+                                                                      alignment: const AlignmentDirectional(0.0, 0.0),
+                                                                      child: Padding(
+                                                                        padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                            4.0, 4.0, 8.0, 4.0),
+                                                                        child: Text(
                                                                           '7:39pm',
                                                                           style: FlutterFlowTheme.of(context)
                                                                               .bodyMedium
                                                                               .override(
-                                                                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                                                fontFamily: FlutterFlowTheme.of(context)
+                                                                                    .bodyMediumFamily,
                                                                                 letterSpacing: 0.0,
-                                                                                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                                                useGoogleFonts: GoogleFonts.asMap()
+                                                                                    .containsKey(
+                                                                                        FlutterFlowTheme.of(context)
+                                                                                            .bodyMediumFamily),
                                                                               ),
                                                                         ),
                                                                       ),
                                                                     ),
                                                                     Builder(
-                                                                      builder:
-                                                                          (context) =>
-                                                                              Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            0.0,
-                                                                            0.0,
-                                                                            10.0,
-                                                                            0.0),
-                                                                        child:
-                                                                            InkWell(
-                                                                          splashColor:
-                                                                              Colors.transparent,
-                                                                          focusColor:
-                                                                              Colors.transparent,
-                                                                          hoverColor:
-                                                                              Colors.transparent,
-                                                                          highlightColor:
-                                                                              Colors.transparent,
-                                                                          onTap:
-                                                                              () async {
+                                                                      builder: (context) => Padding(
+                                                                        padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                            0.0, 0.0, 10.0, 0.0),
+                                                                        child: InkWell(
+                                                                          splashColor: Colors.transparent,
+                                                                          focusColor: Colors.transparent,
+                                                                          hoverColor: Colors.transparent,
+                                                                          highlightColor: Colors.transparent,
+                                                                          onTap: () async {
                                                                             await Share.share(
                                                                               '',
-                                                                              sharePositionOrigin: getWidgetBoundingBox(context),
+                                                                              sharePositionOrigin:
+                                                                                  getWidgetBoundingBox(context),
                                                                             );
                                                                             HapticFeedback.lightImpact();
                                                                           },
-                                                                          child:
-                                                                              FaIcon(
+                                                                          child: FaIcon(
                                                                             FontAwesomeIcons.share,
-                                                                            color:
-                                                                                FlutterFlowTheme.of(context).secondaryText,
-                                                                            size:
-                                                                                20.0,
+                                                                            color: FlutterFlowTheme.of(context)
+                                                                                .secondaryText,
+                                                                            size: 20.0,
                                                                           ),
                                                                         ),
                                                                       ),
@@ -686,43 +502,21 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                     ),
                                                   ),
                                                   Align(
-                                                    alignment:
-                                                        AlignmentDirectional(
-                                                            -1.0, 0.0),
+                                                    alignment: const AlignmentDirectional(-1.0, 0.0),
                                                     child: Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  8.0,
-                                                                  0.0,
-                                                                  8.0),
+                                                      padding: const EdgeInsetsDirectional.fromSTEB(8.0, 8.0, 0.0, 8.0),
                                                       child: SelectionArea(
                                                           child: Text(
                                                         '- Sentence about what happened.\n- Second sentence about specific insight',
-                                                        textAlign:
-                                                            TextAlign.start,
-                                                        style:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .override(
-                                                                  fontFamily: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodyMediumFamily,
-                                                                  letterSpacing:
-                                                                      0.0,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  useGoogleFonts: GoogleFonts
-                                                                          .asMap()
-                                                                      .containsKey(
-                                                                          FlutterFlowTheme.of(context)
-                                                                              .bodyMediumFamily),
-                                                                  lineHeight:
-                                                                      1.5,
-                                                                ),
+                                                        textAlign: TextAlign.start,
+                                                        style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                              fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                              letterSpacing: 0.0,
+                                                              fontWeight: FontWeight.bold,
+                                                              useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                                                  FlutterFlowTheme.of(context).bodyMediumFamily),
+                                                              lineHeight: 1.5,
+                                                            ),
                                                       )),
                                                     ),
                                                   ),

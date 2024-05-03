@@ -8,7 +8,6 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 
 export 'package:go_router/go_router.dart';
-
 export 'serialization_util.dart';
 
 const kTransitionInfoKey = '__transition_info__';
@@ -57,7 +56,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? WelcomeWidget(),
+              : entryPage ?? HomePageWidget(),
         ),
         FFRoute(
           name: 'welcome',
