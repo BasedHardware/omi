@@ -24,8 +24,7 @@ class RecordingStoppedWidget extends StatefulWidget {
   State<RecordingStoppedWidget> createState() => _RecordingStoppedWidgetState();
 }
 
-class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
-    with TickerProviderStateMixin {
+class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget> with TickerProviderStateMixin {
   late RecordingStoppedModel _model;
 
   final animationsMap = {
@@ -101,16 +100,14 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                 Align(
                   alignment: const AlignmentDirectional(1.0, -1.0),
                   child: Padding(
-                    padding:
-                        const EdgeInsetsDirectional.fromSTEB(0.0, 10.0, 10.0, 0.0),
+                    padding: const EdgeInsetsDirectional.fromSTEB(0.0, 10.0, 10.0, 0.0),
                     child: InkWell(
                       splashColor: Colors.transparent,
                       focusColor: Colors.transparent,
                       hoverColor: Colors.transparent,
                       highlightColor: Colors.transparent,
                       onTap: () async {
-                        logFirebaseEvent(
-                            'RECORDING_STOPPED_Icon_4fdwwmpg_ON_TAP');
+                        logFirebaseEvent('RECORDING_STOPPED_Icon_4fdwwmpg_ON_TAP');
                         logFirebaseEvent('Icon_close_dialog,_drawer,_etc');
                         Navigator.pop(context);
                         logFirebaseEvent('Icon_action_block');
@@ -131,8 +128,7 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(
-                            0.0, 12.0, 0.0, 12.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 12.0),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8.0),
                           child: Image.asset(
@@ -144,38 +140,28 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(
-                            0.0, 12.0, 0.0, 12.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 12.0, 0.0, 12.0),
                         child: Text(
                           'Recording Stopped',
-                          style: FlutterFlowTheme.of(context)
-                              .bodyMedium
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .bodyMediumFamily,
+                          style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                                 fontSize: 20.0,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .bodyMediumFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                               ),
                         ),
                       ),
                       Padding(
-                        padding:
-                            const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 24.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 24.0),
                         child: Text(
                           'Start the recording to add your memories.',
-                          style: FlutterFlowTheme.of(context)
-                              .bodyMedium
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .bodyMediumFamily,
+                          style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                                 fontSize: 14.0,
                                 fontWeight: FontWeight.w500,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .bodyMediumFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                               ),
                         ),
                       ),
@@ -191,52 +177,11 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                     child: Builder(
                       builder: (context) => FFButtonWidget(
                         onPressed: () async {
-                          logFirebaseEvent(
-                              'RECORDING_STOPPED_COMP_RECORD_BTN_ON_TAP');
-                          if (!FFAppState()
-                              .firstIntroNotificationWasAlreadyCreated) {
+                          logFirebaseEvent('RECORDING_STOPPED_COMP_RECORD_BTN_ON_TAP');
+                          if (!FFAppState().firstIntroNotificationWasAlreadyCreated) {
                             logFirebaseEvent('Button_backend_call');
-
-                            var memoriesRecordReference =
-                                MemoriesRecord.collection.doc();
-                            await memoriesRecordReference.set({
-                              ...createMemoriesRecordData(
-                                user: currentUserReference,
-                                feedback:
-                                    'Great job activating me! I\'ll passively listen to your voice and will send you feedback. Just like this! Say \"Hey Sama, <any command>\" whenever you want a question answered.',
-                                toShowToUserShowHide: 'Show',
-                                emptyMemory: false,
-                                isUselessMemory: false,
-                                structuredMemory:
-                                    'Great job activating me! I\'ll passively listen to your voice and will send you  memories. Just like this!',
-                              ),
-                              ...mapToFirestore(
-                                {
-                                  'date': FieldValue.serverTimestamp(),
-                                },
-                              ),
-                            });
-                            _model.createdIntroNotifCopy =
-                                MemoriesRecord.getDocumentFromData({
-                              ...createMemoriesRecordData(
-                                user: currentUserReference,
-                                feedback:
-                                    'Great job activating me! I\'ll passively listen to your voice and will send you feedback. Just like this! Say \"Hey Sama, <any command>\" whenever you want a question answered.',
-                                toShowToUserShowHide: 'Show',
-                                emptyMemory: false,
-                                isUselessMemory: false,
-                                structuredMemory:
-                                    'Great job activating me! I\'ll passively listen to your voice and will send you  memories. Just like this!',
-                              ),
-                              ...mapToFirestore(
-                                {
-                                  'date': DateTime.now(),
-                                },
-                              ),
-                            }, memoriesRecordReference);
                             logFirebaseEvent('Button_update_app_state');
-                            FFAppState()
-                                .firstIntroNotificationWasAlreadyCreated = true;
+                            FFAppState().firstIntroNotificationWasAlreadyCreated = true;
                           }
                           logFirebaseEvent('Button_request_permissions');
                           await requestPermission(microphonePermission);
@@ -281,12 +226,10 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                                 elevation: 0,
                                 insetPadding: EdgeInsets.zero,
                                 backgroundColor: Colors.transparent,
-                                alignment: const AlignmentDirectional(0.0, 0.0)
-                                    .resolve(Directionality.of(context)),
+                                alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                                 child: SizedBox(
                                   height: 500.0,
-                                  width:
-                                      MediaQuery.sizeOf(context).width * 0.85,
+                                  width: MediaQuery.sizeOf(context).width * 0.85,
                                   child: const StartedRecordingWidget(),
                                 ),
                               );
@@ -312,14 +255,11 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                             callback: (timer) async {
                               if (!FFAppState().isSpeechRunning &&
                                   FFAppState().speechWasActivatedByUser &&
-                                  (FFAppState().testCountRunsOfNotifications <=
-                                      5)) {
-                                logFirebaseEvent(
-                                    'Button_trigger_push_notification');
+                                  (FFAppState().testCountRunsOfNotifications <= 5)) {
+                                logFirebaseEvent('Button_trigger_push_notification');
                                 triggerPushNotification(
                                   notificationTitle: 'Sama',
-                                  notificationText:
-                                      'Recording is disabled! Please restart audio recording',
+                                  notificationText: 'Recording is disabled! Please restart audio recording',
                                   userRefs: [currentUserReference!],
                                   initialPageName: 'chat',
                                   parameterData: {},
@@ -327,9 +267,7 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                                 logFirebaseEvent('Button_update_app_state');
                                 setState(() {
                                   FFAppState().testCountRunsOfNotifications =
-                                      FFAppState()
-                                              .testCountRunsOfNotifications +
-                                          1;
+                                      FFAppState().testCountRunsOfNotifications + 1;
                                 });
                               }
                             },
@@ -345,21 +283,15 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                         ),
                         options: FFButtonOptions(
                           height: 44.0,
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              24.0, 0.0, 24.0, 0.0),
-                          iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                              0.0, 0.0, 0.0, 0.0),
+                          padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+                          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                           color: const Color(0x1AF7F4F4),
-                          textStyle: FlutterFlowTheme.of(context)
-                              .titleSmall
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .titleSmallFamily,
+                          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                 color: FlutterFlowTheme.of(context).primaryText,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .titleSmallFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                               ),
                           elevation: 3.0,
                           borderSide: const BorderSide(
@@ -367,8 +299,7 @@ class _RecordingStoppedWidgetState extends State<RecordingStoppedWidget>
                           ),
                           borderRadius: BorderRadius.circular(24.0),
                         ),
-                      ).animateOnPageLoad(
-                          animationsMap['buttonOnPageLoadAnimation']!),
+                      ).animateOnPageLoad(animationsMap['buttonOnPageLoadAnimation']!),
                     ),
                   ),
               ],
