@@ -39,6 +39,9 @@ class MemoryRecord {
       isUseless: json['isUseless'],
     );
   }
+
+  static String memoriesToString(List<MemoryRecord> memories) =>
+      memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n');
 }
 
 _savedMemoryCallback() async {
@@ -107,18 +110,14 @@ class MemoryStorage {
     DateTime now = DateTime.now();
     DateTime lastWeekStart = now.subtract(Duration(days: now.weekday + 6));
     List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories
-        .where((memory) => memory.date.isAfter(lastWeekStart) && memory.date.isBefore(now))
-        .toList();
+    return allMemories.where((memory) => memory.date.isAfter(lastWeekStart) && memory.date.isBefore(now)).toList();
   }
 
   static Future<List<MemoryRecord>> getMemoriesOfLastMonth() async {
     DateTime now = DateTime.now();
     DateTime lastMonthStart = DateTime(now.year, now.month - 1, 1);
     List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories
-        .where((memory) => memory.date.isAfter(lastMonthStart) && memory.date.isBefore(now))
-        .toList();
+    return allMemories.where((memory) => memory.date.isAfter(lastMonthStart) && memory.date.isBefore(now)).toList();
   }
 
   static bool isSameDay(DateTime a, DateTime b) {
