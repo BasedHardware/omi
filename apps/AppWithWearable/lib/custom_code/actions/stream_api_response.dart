@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http; // Fixed the import
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import '/flutter_flow/flutter_flow_util.dart';
@@ -31,12 +32,14 @@ Future streamApiResponse(
   // Prepare Request
 
   final url = 'https://api.openai.com/v1/chat/completions';
+
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
+
   final headers = {
     'Content-Type': 'application/json',
-    'Authorization':
-        'Bearer <key>',
+    'Authorization': 'Bearer $apiKey',
   };
-
   // Create Request
   String body = getApiBody(truncateChatHistory(chatHistory));
   var request = http.Request("POST", Uri.parse(url))
