@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
@@ -27,6 +29,9 @@ class ConnectDeviceWidget extends StatefulWidget {
 
 class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   late ConnectDeviceModel _model;
+  final _deepgramApiKeyController = TextEditingController();
+  final _openaiApiKeyController = TextEditingController();
+  bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -35,6 +40,29 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     super.initState();
     _model = createModel(context, () => ConnectDeviceModel());
 
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Check if the API keys are set
+      final prefs = await SharedPreferences.getInstance();
+      final deepgramApiKey = prefs.getString('deepgramApiKey');
+      final openaiApiKey = prefs.getString('openaiApiKey');
+
+      if (deepgramApiKey != null &&
+          deepgramApiKey.isNotEmpty &&
+          openaiApiKey != null &&
+          openaiApiKey.isNotEmpty) {
+        // If both API keys are set, initialize the page and enable the DeviceDataWidget
+        _initializePage();
+        setState(() {
+          _areApiKeysSet = true;
+        });
+      } else {
+        // If any of the API keys are not set, show the settings bottom sheet
+        _showSettingsBottomSheet();
+      }
+    });
+  }
+
+  void _initializePage() {
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       setState(() {
@@ -53,15 +81,229 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         startImmediately: true,
       );
     });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
   @override
   void dispose() {
     _model.dispose();
-
+    _deepgramApiKeyController.dispose();
+    _openaiApiKeyController.dispose();
     super.dispose();
+  }
+
+  String _obscureApiKey(String apiKey) {
+    if (apiKey.length <= 3) {
+      return apiKey;
+    } else {
+      final obscuredKey = '*' * (apiKey.length - 3);
+      return apiKey.substring(0, 3) + obscuredKey;
+    }
+  }
+
+  Future<void> _showSettingsBottomSheet() async {
+    // Load API keys from shared preferences
+    final prefs = await SharedPreferences.getInstance();
+    final deepgramApiKey = prefs.getString('deepgramApiKey') ?? '';
+    final openaiApiKey = prefs.getString('openaiApiKey') ?? '';
+
+    _deepgramApiKeyController.text = _obscureApiKey(deepgramApiKey);
+    _openaiApiKeyController.text = _obscureApiKey(openaiApiKey);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20.0),
+          topRight: Radius.circular(20.0),
+        ),
+      ),
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setModalState) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.6,
+                  padding: EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            fontSize: 20.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 16.0),
+                        Text(
+                          'Deepgram API Key is used for converting speech to text.',
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 8.0),
+                        TextField(
+                          controller: _deepgramApiKeyController,
+                          decoration: InputDecoration(
+                            labelText: 'Deepgram API Key',
+                            labelStyle: TextStyle(color: Colors.white),
+                            border: OutlineInputBorder(),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white),
+                              borderRadius:
+                                  const BorderRadius.all(Radius.circular(20.0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white),
+                            ),
+                          ),
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        SizedBox(height: 8.0),
+                        TextButton(
+                          onPressed: () {
+                            launch(
+                                'https://developers.deepgram.com/docs/create-additional-api-keys');
+                          },
+                          child: Text(
+                            'How to generate a Deepgram API key?',
+                            style: TextStyle(
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 16.0),
+                        Text(
+                          'OpenAI API Key is used for chat.',
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 8.0),
+                        TextField(
+                          controller: _openaiApiKeyController,
+                          decoration: InputDecoration(
+                            labelText: 'OpenAI API Key',
+                            labelStyle: TextStyle(color: Colors.white),
+                            border: OutlineInputBorder(),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white),
+                              borderRadius:
+                                  const BorderRadius.all(Radius.circular(20.0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white),
+                            ),
+                          ),
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        SizedBox(height: 8.0),
+                        TextButton(
+                          onPressed: () {
+                            launch('https://platform.openai.com/api-keys');
+                          },
+                          child: Text(
+                            'How to generate an OpenAI API key?',
+                            style: TextStyle(
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 16.0),
+                        ElevatedButton(
+                          onPressed: () {
+                            String deepgramApiKey =
+                                _deepgramApiKeyController.text;
+                            String openaiApiKey = _openaiApiKeyController.text;
+
+                            if (deepgramApiKey.isNotEmpty &&
+                                 openaiApiKey.isNotEmpty) {
+                              _saveApiKeys(deepgramApiKey, openaiApiKey);
+                              Navigator.pop(context);
+                            } else {
+                              // Show a popup dialog if either of the API keys is empty
+                              showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    title: Text('Error'),
+                                    content:
+                                        Text('Please provide both API keys'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                        },
+                                        child: Text('OK'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            }
+                          },
+                          style: ButtonStyle(
+                            backgroundColor:
+                                MaterialStateProperty.all<Color>(Colors.white),
+                            shape: MaterialStateProperty.all<
+                                RoundedRectangleBorder>(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20.0),
+                              ),
+                            ),
+                            overlayColor:
+                                MaterialStateProperty.resolveWith<Color>(
+                              (Set<MaterialState> states) {
+                                if (states.contains(MaterialState.pressed)) {
+                                  return Colors.grey[200]!;
+                                }
+                                return Colors.transparent;
+                              },
+                            ),
+                          ),
+                          child: Text(
+                            'Save',
+                            style: TextStyle(color: Colors.black),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+// Set the obscured API keys in the text fields
+    setState(() {
+      _deepgramApiKeyController.text = _obscureApiKey(deepgramApiKey);
+      _openaiApiKeyController.text = _obscureApiKey(openaiApiKey);
+    });
+  }
+
+  void _saveApiKeys(String deepgramApiKey, String openaiApiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('deepgramApiKey', deepgramApiKey);
+    await prefs.setString('openaiApiKey', openaiApiKey);
+
+// Initialize the page and enable the DeviceDataWidget after saving the API keys
+    _initializePage();
+    setState(() {
+      _areApiKeysSet = true;
+    });
   }
 
   @override
@@ -97,7 +339,16 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                   ),
             ),
           ),
-          actions: [],
+          actions: [
+            IconButton(
+              icon: Icon(
+                Icons.settings,
+                color: Colors.white,
+                size: 30,
+              ),
+              onPressed: _showSettingsBottomSheet,
+            ),
+          ],
           centerTitle: false,
           elevation: 2.0,
         ),
@@ -197,15 +448,17 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                   Expanded(
                     child: Align(
                       alignment: AlignmentDirectional(0.0, 0.0),
-                      child: wrapWithModel(
-                        model: _model.deviceDataModel,
-                        updateCallback: () => setState(() {}),
-                        updateOnChange: true,
-                        child: DeviceDataWidget(
-                          btdevice:
-                              BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
-                        ),
-                      ),
+                      child: _areApiKeysSet
+                          ? wrapWithModel(
+                              model: _model.deviceDataModel,
+                              updateCallback: () => setState(() {}),
+                              updateOnChange: true,
+                              child: DeviceDataWidget(
+                                btdevice: BTDeviceStruct.maybeFromMap(
+                                    widget.btdevice!)!,
+                              ),
+                            )
+                          : SizedBox.shrink(),
                     ),
                   ),
                 ]

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -12,7 +13,6 @@ import 'package:flutter/material.dart';
 
 const serverUrl =
     'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
-const apiKey = 'DEEPGRAM_API_KEY';
 
 late IOWebSocketChannel channel;
 
@@ -27,12 +27,16 @@ const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid =
     "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) finalized_callback, void Function(String) interim_callback) async {
+Future<void> _initStream(void Function(String) finalized_callback,
+    void Function(String) interim_callback) async {
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('deepgramApiKey') ?? '';
+
   print('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl),
       headers: {'Authorization': 'Token $apiKey'});
-   var is_finals = [];
-   var is_finalized = false;
+  var is_finals = [];
+  var is_finalized = false;
   channel.ready.then((_) {
     channel.stream.listen((event) {
       print('Event from Stream: $event');
@@ -42,13 +46,15 @@ Future<void> _initStream(void Function(String) finalized_callback, void Function
       final speech_final = parsedJson['is_final'];
 
       print('Transcript: ${transcript}');
-      if(transcript.length > 0){
+      if (transcript.length > 0) {
         if (speech_final) {
-          interim_callback(is_finals.join(' ') + (is_finals.length > 0 ? ' ' : '') + transcript);
+          interim_callback(is_finals.join(' ') +
+              (is_finals.length > 0 ? ' ' : '') +
+              transcript);
           finalized_callback('');
           is_finals = [];
         } else {
-          if(is_final) {
+          if (is_final) {
             is_finals.add(transcript);
             interim_callback(transcript);
           } else {
@@ -58,17 +64,13 @@ Future<void> _initStream(void Function(String) finalized_callback, void Function
       }
       // Re-instantiate the Completer for next use
       // completer = Completer<String>();
-    },onError: (err){
+    }, onError: (err) {
       print('Websocket Error: ${err}');
-    // handle stream error
-    },
-    onDone: (() {
-     // stream on done callback... 
+      // handle stream error
+    }, onDone: (() {
+      // stream on done callback...
       print('Websocket Closed');
-    }),
-    cancelOnError: true
-    );
-
+    }), cancelOnError: true);
   }).onError((error, stackTrace) {
     print("WebsocketChannel was unable to establishconnection");
   });
@@ -78,12 +80,12 @@ Future<void> _initStream(void Function(String) finalized_callback, void Function
   } catch (e) {
     // handle exception here
     print("Websocket was unable to establishconnection");
-
   }
 }
 
-Future<String> bleReceiveWAV(
-    BTDeviceStruct btDevice, void Function(String) finalized_callback, void Function(String) interim_callback) async {
+Future<String> bleReceiveWAV(BTDeviceStruct btDevice,
+    void Function(String) finalized_callback,
+    void Function(String) interim_callback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 
@@ -116,8 +118,6 @@ Future<String> bleReceiveWAV(
                 value.removeRange(0, 3);
                 channel.sink.add(value);
               });
-
-
 
               return completer.future;
             }
@@ -179,21 +179,21 @@ Uint8List buildWavHeader(int dataLength) {
   byteData.setUint8(13, 0x6D); // 'm'
   byteData.setUint8(14, 0x74); // 't'
   byteData.setUint8(15, 0x20); // ' '
-  byteData.setUint32(16, 16, Endian.little);
-  byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
-  byteData.setUint16(22, channelCount, Endian.little);
-  byteData.setUint32(24, sampleRate, Endian.little);
-  byteData.setUint32(
-      28, sampleRate * channelCount * sampleWidth, Endian.little);
-  byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
-  byteData.setUint16(34, sampleWidth * 8, Endian.little);
+byteData.setUint32(16, 16, Endian.little);
+byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
+byteData.setUint16(22, channelCount, Endian.little);
+byteData.setUint32(24, sampleRate, Endian.little);
+byteData.setUint32(
+28, sampleRate * channelCount * sampleWidth, Endian.little);
+byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
+byteData.setUint16(34, sampleWidth * 8, Endian.little);
 
-  // data chunk
-  byteData.setUint8(36, 0x64); // 'd'
-  byteData.setUint8(37, 0x61); // 'a'
-  byteData.setUint8(38, 0x74); // 't'
-  byteData.setUint8(39, 0x61); // 'a'
-  byteData.setUint32(40, dataLength, Endian.little);
+// data chunk
+byteData.setUint8(36, 0x64); // 'd'
+byteData.setUint8(37, 0x61); // 'a'
+byteData.setUint8(38, 0x74); // 't'
+byteData.setUint8(39, 0x61); // 'a'
+byteData.setUint32(40, dataLength, Endian.little);
 
-  return byteData.buffer.asUint8List();
+return byteData.buffer.asUint8List();
 }
