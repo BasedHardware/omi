@@ -1,15 +1,17 @@
 import {useState, useRef, useEffect, useContext} from 'react';
 import {BluetoothContext} from '../contexts/BluetoothContext';
+import {MomentsContext} from '../contexts/MomentsContext';
 import BleManager from 'react-native-ble-manager';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import base64 from 'base-64';
 import {DEEPGRAM_API_KEY} from '@env';
 
-function useAudioStreamer() {
+const useAudioStreamer = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [streamingTranscript, setStreamingTranscript] = useState('');
   const wsRef = useRef(null);
   const {bleManagerEmitter} = useContext(BluetoothContext);
+  const {moments, setMoments, addMoment} = useContext(MomentsContext);
 
   // Constants for UUIDs
   const serviceUUID = '19B10000-E8F2-537E-4F6C-D104768A1214';
@@ -75,7 +77,7 @@ function useAudioStreamer() {
       } else {
         if (!isSilenceTimerActiveRef.current) {
           silenceTimerRef.current = setTimeout(() => {
-            handleCreateMoment();
+            createMoment();
             restartRecording();
           }, 5000); // consider adjusting time as needed
 
@@ -85,8 +87,19 @@ function useAudioStreamer() {
     };
   };
 
-  const handleCreateMoment = () => {
-    console.log('Moment created'); // Replace with actual implementation
+  const createMoment = async () => {
+    console.log('Creating moment', streamingTranscript);
+    try {
+      const newMoment = {
+        text: streamingTranscript,
+        date: new Date(),
+      };
+      setMoments([...moments, newMoment]);
+      await addMoment(newMoment);
+      setStreamingTranscript('');
+    } catch (error) {
+      console.error('Error creating moment', error);
+    }
   };
 
   const restartRecording = () => {
@@ -143,6 +156,11 @@ function useAudioStreamer() {
         wsRef.current.send(JSON.stringify({type: 'CloseStream'}));
         wsRef.current.close();
       }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+        isSilenceTimerActiveRef.current = false;
+      }
     } catch (error) {
       console.error('Failed to stop recording:', error);
     }
@@ -154,13 +172,13 @@ function useAudioStreamer() {
     ]);
     if (connectedDevices.length > 0) {
       peripheralIdRef.current = connectedDevices[0].id;
-      const urlParams = new URLSearchParams({
+      const urlParams = {
         model: 'nova-2',
         language: 'en-US',
         smart_format: true,
         encoding: 'linear16',
         sample_rate: 8000,
-      });
+      };
       const url = `wss://api.deepgram.com/v1/listen?${urlParams.toString()}`;
       configureWebSocket(url);
     } else {
@@ -174,6 +192,7 @@ function useAudioStreamer() {
     stopRecording,
     isRecording,
     streamingTranscript,
+    createMoment,
   };
 }
 
