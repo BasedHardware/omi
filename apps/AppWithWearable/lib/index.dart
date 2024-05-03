@@ -1,6 +1,7 @@
 // Export pages
 export '/chat_page/chat_page_widget.dart' show ChatPageWidget;
 export '/pages/home_page/home_page_widget.dart' show HomePageWidget;
+// export 'package:friend_private/home_page/home_page_widget.dart' show HomePageWidget;
 export '/onboarding/permission_page/permission_page_widget.dart'
     show PermissionPageWidget;
 export '/onboarding/welcome/welcome_widget.dart' show WelcomeWidget;

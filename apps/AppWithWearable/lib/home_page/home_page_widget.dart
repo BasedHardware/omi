@@ -21,21 +21,18 @@ class HomePageWidget extends StatefulWidget {
 
 class _HomePageWidgetState extends State<HomePageWidget> {
   late HomePageModel _model;
-
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => HomePageModel());
-
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
   }
 
   @override
   void dispose() {
     _model.dispose();
-
     super.dispose();
   }
 
@@ -314,7 +311,8 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                         child: Align(
                                                           alignment: const AlignmentDirectional(0.0, 0.0),
                                                           child: Padding(
-                                                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
+                                                            padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                0.0, 4.0, 0.0, 4.0),
                                                             child: Row(
                                                               mainAxisSize: MainAxisSize.min,
                                                               mainAxisAlignment: MainAxisAlignment.center,
@@ -436,7 +434,8 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                                         child: Align(
                                                           alignment: const AlignmentDirectional(0.0, 0.0),
                                                           child: Padding(
-                                                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
+                                                            padding: const EdgeInsetsDirectional.fromSTEB(
+                                                                0.0, 4.0, 0.0, 4.0),
                                                             child: Row(
                                                               mainAxisSize: MainAxisSize.min,
                                                               mainAxisAlignment: MainAxisAlignment.center,
