@@ -85,6 +85,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                 child: Row(
                   mainAxisSize: MainAxisSize.max,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     FFButtonWidget(
                       onPressed: () async {
@@ -117,36 +118,7 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                       ),
                     ),
                     const Text('Chat'),
-                    FFButtonWidget(
-                      onPressed: () async {
-                        context.pushNamed('settingsPage');
-                      },
-                      text: '',
-                      icon: const Icon(
-                        Icons.settings_sharp,
-                        size: 24.0,
-                      ),
-                      options: FFButtonOptions(
-                        width: 44.0,
-                        height: 44.0,
-                        padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                        color: const Color(0x1AF7F4F4),
-                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                              fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              useGoogleFonts:
-                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                            ),
-                        elevation: 3.0,
-                        borderSide: const BorderSide(
-                          color: Colors.transparent,
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.circular(48.0),
-                      ),
-                    ),
+                    const SizedBox(width: 32),
                   ],
                 ),
               ),
