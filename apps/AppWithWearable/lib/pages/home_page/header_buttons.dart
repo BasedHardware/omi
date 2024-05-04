@@ -25,35 +25,7 @@ class _HomePageHeaderButtonsState extends State<HomePageHeaderButtons> {
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // FFButtonWidget(
-              //   onPressed: () async {
-              //     await launchURL('https://discord.gg/EPDPMZgBgf');
-              //   },
-              //   text: '',
-              //   icon: const Icon(
-              //     Icons.discord_sharp,
-              //     size: 24.0,
-              //   ),
-              //   options: FFButtonOptions(
-              //     width: 44.0,
-              //     height: 44.0,
-              //     padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-              //     iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-              //     color: const Color(0x1AF7F4F4),
-              //     textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-              //           fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-              //           color: Colors.white,
-              //           fontWeight: FontWeight.bold,
-              //           useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-              //         ),
-              //     elevation: 3.0,
-              //     borderSide: const BorderSide(
-              //       color: Colors.transparent,
-              //       width: 1.0,
-              //     ),
-              //     borderRadius: BorderRadius.circular(24.0),
-              //   ),
-              // ),
+
               FFButtonWidget(
                 onPressed: () async {
                   context.safePop();
@@ -84,50 +56,15 @@ class _HomePageHeaderButtonsState extends State<HomePageHeaderButtons> {
                   borderRadius: BorderRadius.circular(24.0),
                 ),
               ),
-              InkWell(
-                splashColor: Colors.transparent,
-                focusColor: Colors.transparent,
-                hoverColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-                onLongPress: () async {
-                  context.pushNamed('testNew');
-                },
-                child: FFButtonWidget(
-                  onPressed: () async {
-                    context.pushNamed('chatPage');
-                  },
-                  text: 'Chat ↗',
-                  options: FFButtonOptions(
-                    width: MediaQuery.sizeOf(context).width * 0.25,
-                    height: 44.0,
-                    padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
-                    iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                    color: FlutterFlowTheme.of(context).primary,
-                    textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                          fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                          color: const Color(0xFFF7F4F4),
-                          fontSize: 16.0,
-                          fontWeight: FontWeight.bold,
-                          useGoogleFonts:
-                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                        ),
-                    elevation: 0.0,
-                    borderSide: const BorderSide(
-                      color: Colors.transparent,
-                      width: 0.0,
-                    ),
-                    borderRadius: BorderRadius.circular(24.0),
-                  ),
-                ),
-              ),
+              const Text('Memories'),
               FFButtonWidget(
                 onPressed: () async {
-                  context.pushNamed('settingsPage');
+                  context.pushNamed('chatPage');
                 },
                 text: '',
                 icon: const Icon(
-                  Icons.settings_sharp,
-                  size: 24.0,
+                  Icons.chat_bubble_rounded,
+                  size: 20.0,
                 ),
                 options: FFButtonOptions(
                   width: 44.0,
