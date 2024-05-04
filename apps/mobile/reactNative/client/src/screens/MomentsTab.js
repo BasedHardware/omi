@@ -4,8 +4,7 @@ import {View, Text, StyleSheet, FlatList} from 'react-native';
 import {Button} from 'react-native-elements';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {MomentsContext} from '../contexts/MomentsContext';
-import BleManager from 'react-native-ble-manager';
-import useAudioStream from '../contexts/useAudioStreamer';
+import useAudioStream from '../contexts/useAudioStream';
 import MomentListItem from '../components/moments/MomentsListItem';
 
 const MomentsTab = () => {
