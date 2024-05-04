@@ -2,7 +2,6 @@
 import '/backend/backend.dart';
 import '/backend/schema/structs/index.dart';
 import '/backend/schema/enums/enums.dart';
-import '/backend/supabase/supabase.dart';
 import '/actions/actions.dart' as action_blocks;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -40,6 +39,7 @@ Future streamApiResponse(
   final headers = {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ${Env.openAIApiKey}',
+    'OpenAI-Organization': Env.openAIOrganization,
   };
 
   // Create Request

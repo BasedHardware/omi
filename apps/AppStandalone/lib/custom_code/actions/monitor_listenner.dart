@@ -2,7 +2,6 @@
 import '/backend/backend.dart';
 import '/backend/schema/structs/index.dart';
 import '/backend/schema/enums/enums.dart';
-import '/backend/supabase/supabase.dart';
 import '/actions/actions.dart' as action_blocks;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -24,15 +23,18 @@ Future monitorListenner() async {
         FFAppState().latestUse = now;
       }
       if (now.difference(FFAppState().latestUse!).inMinutes > 5) {
-        triggerPushNotification(
-          notificationTitle: 'Sama',
-          notificationText:
-              'Recording is disabled. Please restart audio recording',
-          notificationSound: 'default',
-          userRefs: [currentUserReference!],
-          initialPageName: 'homePage',
-          parameterData: {},
-        );
+        if (currentUserReference != null) {
+          triggerPushNotification(
+            notificationTitle: 'Sama',
+            notificationText:
+            'Recording is disabled. Please restart audio recording',
+            notificationSound: 'default',
+            userRefs: [currentUserReference!],
+            initialPageName: 'homePage',
+            parameterData: {},
+          );
+        }
+
       }
     }
   });

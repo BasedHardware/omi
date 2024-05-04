@@ -8,36 +8,30 @@ import 'auth/firebase_auth/firebase_user_provider.dart';
 import 'auth/firebase_auth/auth_util.dart';
 
 import 'backend/push_notifications/push_notifications_util.dart';
-import '/backend/supabase/supabase.dart';
 import 'backend/firebase/firebase_config.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'flutter_flow/revenue_cat_util.dart' as revenue_cat;
+import 'env/env.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
   await initFirebase();
-
-  // Start initial custom actions code
   await actions.listLocales();
-  // End initial custom actions code
-
-  await SupaFlow.initialize();
 
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
 
-  await revenue_cat.initialize(
-    "appl_JPKRWySpHefazirKDsmnCBqLuno",
-    "",
-    debugLogEnabled: true,
-    loadDataAfterLaunch: true,
-  );
+  if (Env.revenueCatAPIKey != null && Env.revenueCatAPIKey!.isNotEmpty) {
+    await revenue_cat.initialize(
+      Env.revenueCatAPIKey ?? '',
+      "",
+      debugLogEnabled: true,
+      loadDataAfterLaunch: true,
+    );
+  }
 
-  // Start final custom actions code
   await actions.monitorListenner();
-  // End final custom actions code
-
   runApp(ChangeNotifierProvider(
     create: (context) => appState,
     child: const MyApp(),
@@ -51,8 +45,7 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) =>
-      context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   final Widget? entryPage;
 }
@@ -81,7 +74,7 @@ class _MyAppState extends State<MyApp> {
     jwtTokenStream.listen((_) {});
     Future.delayed(
       const Duration(milliseconds: 1000),
-      () => _appStateNotifier.stopShowingSplashImage(),
+          () => _appStateNotifier.stopShowingSplashImage(),
     );
   }
 
@@ -92,7 +85,8 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
-  void setThemeMode(ThemeMode mode) => setState(() {
+  void setThemeMode(ThemeMode mode) =>
+      setState(() {
         _themeMode = mode;
       });
 

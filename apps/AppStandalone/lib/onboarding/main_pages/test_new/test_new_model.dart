@@ -17,7 +17,7 @@ class TestNewModel extends FlutterFlowModel<TestNewWidget> {
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
   // Stores action output result for [Backend Call - API (test)] action in Button widget.
-  ApiCallResponse? devided;
+  List<String>? devided;
 
   /// Query cache managers for this widget.
 
