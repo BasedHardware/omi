@@ -37,7 +37,7 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 10), () {
+    _timer = Timer(const Duration(seconds: 30), () {
       debugPrint('Creating memory from whispers');
       String whispers = FFAppState().whispers.join(' ');
       debugPrint('FFAppState().whispers: ${FFAppState().whispers}');
