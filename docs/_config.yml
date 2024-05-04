@@ -1,8 +1,47 @@
-title: Friend Documentation
+title: Friend Docs
 description: Open Source AI Wearable device
 theme: just-the-docs
-
 url: https://basedhardware.github.io
+logo: "/images/logo.png"
+favicon_ico: "/images/favicon.ico"
+color_scheme: dark
+
+collections:
+  get_started:
+    permalink: "/:collection/:path/"
+    output: true
+  assembly:
+    permalink: "/:collection/:path/"
+    output: true
+  info:
+    permalink: "/:collection/:path/"
+    output: true
+
+just_the_docs:
+  collections:
+    get_started:
+      name: Get Started
+    assembly:
+      name: Assembly
+    info:
+      name: Info
+
+callouts:
+  warning:
+    title: Warning
+    color: yellow
+  error:
+    title: Alert
+    color: red
+  note:
+    title: Note
+    color: blue
+
+
+mermaid:
+  # Version of mermaid library
+  # Pick an available version from https://cdn.jsdelivr.net/npm/mermaid/
+  version: "9.1.3"
 
 aux_links:
   Github: https://github.com/BasedHardware/Friend
@@ -10,10 +49,10 @@ aux_links:
 aux_links_new_tab: true
 
 nav_external_links:
-  - title: Discord
+  - title: 💬 | Discord
     url: https://discord.gg/kEXXsnb5b3
     opens_in_new_tab: true
 
-  - title: GitHub
+  - title: 🧑‍💻 | GitHub
     url: https://github.com/BasedHardware/Friend
     opens_in_new_tab: true

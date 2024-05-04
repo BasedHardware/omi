@@ -72,9 +72,24 @@ hs_err_pid*
 #Servers
 backend/app-server/dist
 src/recordings
-apps/AppWithWearable/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
-apps/AppWithWearable/ios/Flutter/flutter_export_environment.sh
-apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
-apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
-apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
-apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+
+#Apps
+apps/mobile/flutter/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+apps/mobile/flutter/ios/Flutter/flutter_export_environment.sh
+apps/mobile/flutter/ios/Runner/GeneratedPluginRegistrant.h
+apps/mobile/flutter/ios/Runner/GeneratedPluginRegistrant.m
+apps/mobile/flutter/macos/Flutter/ephemeral/flutter_export_environment.sh
+apps/mobile/flutter/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+
+
+*/*xcschememanagement.plist
+*/android/app/google-services.json
+*/ios/Runner/GoogleService-Info.plist
+
+#Solidworks models
+*.SLDPRT
+*.SLDASM
+**/classic_triangle/old outdated history (but gold)/
+**/classic_triangle/assembly/
+**/classic_triangle/misc/
+**/step-versions/
