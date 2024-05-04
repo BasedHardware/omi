@@ -1,4 +1,3 @@
-import '/components/start_stop_recording_widget.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 
@@ -13,29 +12,16 @@ class HomePageModel extends FlutterFlowModel<HomePageWidget> {
   ///  State fields for stateful widgets in this page.
 
   final unfocusNode = FocusNode();
+
   // Stores action output result for [Backend Call - Create Document] action in homePage widget.
   InstantTimer? instantTimerAction;
-  // Model for StartStopRecording component.
-  late StartStopRecordingModel startStopRecordingModel;
-
-  /// Initialization and disposal methods.
 
   @override
-  void initState(BuildContext context) {
-    startStopRecordingModel =
-        createModel(context, () => StartStopRecordingModel());
-  }
+  void initState(BuildContext context) {}
 
   @override
   void dispose() {
     unfocusNode.dispose();
     instantTimerAction?.cancel();
-    startStopRecordingModel.dispose();
-
-    /// Dispose query cache managers for this widget.
   }
-
-  /// Action blocks are added here.
-
-  /// Additional helper methods are added here.
 }

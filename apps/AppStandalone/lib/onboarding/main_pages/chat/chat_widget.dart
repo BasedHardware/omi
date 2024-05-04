@@ -1,3 +1,6 @@
+import 'package:sama/custom_code/actions/stream_api_response.dart';
+import 'package:sama/flutter_flow/custom_functions.dart';
+
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/backend.dart';
@@ -668,54 +671,12 @@ class _ChatWidgetState extends State<ChatWidget> {
                                               ),
                                               showLoadingIndicator: true,
                                               onPressed: () async {
-                                                logFirebaseEvent('CHAT_PAGE_send_rounded_ICN_ON_TAP');
-                                                logFirebaseEvent('IconButton_firestore_query');
-
-                                                logFirebaseEvent('IconButton_backend_call');
-                                                _model.vector = await getEmbeddingsFromInput(
-                                                  _model.textController.text,
-                                                );
-                                                logFirebaseEvent('IconButton_backend_call');
-                                                _model.simillarVectors =
-                                                    await queryPineconeVectors(_model.vector ?? []);
-                                                logFirebaseEvent('IconButton_update_app_state');
-                                                setState(() {
-                                                  // FFAppState().test = (_model.simillarVectors?.bodyText ?? '');
-                                                  FFAppState().testlist = _model.simillarVectors!
-                                                      .map((e) => e.toString())
-                                                      .toList()
-                                                      .cast<String>();
-                                                });
-                                                logFirebaseEvent('IconButton_update_app_state');
-                                                logFirebaseEvent('IconButton_update_app_state');
-                                                setState(() {
-                                                  FFAppState().chatHistory = functions.saveChatHistory(
-                                                      FFAppState().chatHistory,
-                                                      functions.convertToJSONRole(
-                                                          _model.textController.text, 'user')!)!;
-                                                });
-                                                logFirebaseEvent('IconButton_scroll_to');
-                                                await _model.listViewController?.animateTo(
-                                                  _model.listViewController!.position.maxScrollExtent,
-                                                  duration: const Duration(milliseconds: 100),
-                                                  curve: Curves.ease,
-                                                );
-                                                logFirebaseEvent('IconButton_clear_text_fields_pin_codes');
-                                                setState(() {
-                                                  _model.textController?.clear();
-                                                });
-                                                logFirebaseEvent('IconButton_custom_action');
+                                                // String ragContext =
+                                                //     await _retrieveRAGContext(_model.textController.text);
+                                                await uiUpdatesChatQA();
                                                 await actions.streamApiResponse(
-                                                  () async {
-                                                    logFirebaseEvent('_update_app_state');
-                                                    setState(() {});
-                                                    logFirebaseEvent('_scroll_to');
-                                                    await _model.listViewController?.animateTo(
-                                                      _model.listViewController!.position.maxScrollExtent,
-                                                      duration: const Duration(milliseconds: 100),
-                                                      curve: Curves.ease,
-                                                    );
-                                                  },
+                                                  '',
+                                                  _callbackFunctionChatStreaming(),
                                                 );
 
                                                 setState(() {});
@@ -751,5 +712,57 @@ class _ChatWidgetState extends State<ChatWidget> {
         ),
       ),
     );
+  }
+
+  Future<String> _retrieveRAGContext(String message) async {
+    String? betterContextQuestion =
+        await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
+    debugPrint('_retrieveRAGContext: $betterContextQuestion');
+    if (betterContextQuestion == null) {
+      return '';
+    }
+    List<double> vectorizedMessage = await getEmbeddingsFromInput(
+      message,
+    );
+    List foundVectors = await queryPineconeVectors(vectorizedMessage);
+    String context = '';
+    for (var element in foundVectors) {
+      context += element['structuredMemory'] + '\n';
+    }
+    return context;
+  }
+
+  uiUpdatesChatQA() async {
+    setState(() {
+      FFAppState().chatHistory = functions.saveChatHistory(
+          FFAppState().chatHistory, functions.convertToJSONRole(_model.textController.text, 'user')!)!;
+    });
+    await _model.listViewController?.animateTo(
+      _model.listViewController!.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.ease,
+    );
+    setState(() {
+      _model.textController?.clear();
+    });
+  }
+
+  _callbackFunctionChatStreaming() {
+    return (String content) async {
+      var chatHistory = FFAppState().chatHistory;
+      var newChatHistory =
+          appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
+      FFAppState().update(() {
+        FFAppState().chatHistory = newChatHistory;
+      });
+      logFirebaseEvent('_update_app_state');
+      setState(() {});
+      logFirebaseEvent('_scroll_to');
+      await _model.listViewController?.animateTo(
+        _model.listViewController!.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.ease,
+      );
+    };
   }
 }

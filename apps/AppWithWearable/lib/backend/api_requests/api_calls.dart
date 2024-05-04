@@ -1,204 +1,161 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:friend_private/backend/storage/memories.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
-import '/flutter_flow/flutter_flow_util.dart';
-import 'api_manager.dart';
-
-export 'api_manager.dart' show ApiCallResponse;
-
-
-/// Start deepgram Group Code
-
-class DeepgramGroup {
-  static String baseUrl = 'https://api.deepgram.com/v1';
-  static Map<String, String> headers = {};
-  static ListenCall listenCall = ListenCall();
-}
-
-class ListenCall {
-  Future<ApiCallResponse> call({
-    String? url = '',
-  }) async {
-    final ffApiRequestBody = '''
-{"url":"${url}"}''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'listen',
-      apiUrl: '${DeepgramGroup.baseUrl}/listen?model=nova-2&smart_format=true',
-      callType: ApiCallType.POST,
-      headers: {},
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-}
-
-/// End deepgram Group Code
-
-/// Start Mistral AI API Group Code
-
-class MistralAIAPIGroup {
-  static String baseUrl = 'https://api.mistral.ai/v1';
-  static Map<String, String> headers = {};
-  static CreateChatCompletionCall createChatCompletionCall =
-      CreateChatCompletionCall();
-  static CreateEmbeddingCall createEmbeddingCall = CreateEmbeddingCall();
-  static ListModelsCall listModelsCall = ListModelsCall();
-}
-
-class CreateChatCompletionCall {
-  Future<ApiCallResponse> call() async {
-    final ffApiRequestBody = '''
-""''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'createChatCompletion',
-      apiUrl: '${MistralAIAPIGroup.baseUrl}/chat/completions',
-      callType: ApiCallType.POST,
-      headers: {},
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-}
-
-class CreateEmbeddingCall {
-  Future<ApiCallResponse> call() async {
-    final ffApiRequestBody = '''
-{
-  "model": "mistral-embed",
-  "input": [
-    ""
-  ],
-  "encoding_format": "float"
-}''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'createEmbedding',
-      apiUrl: '${MistralAIAPIGroup.baseUrl}/embeddings',
-      callType: ApiCallType.POST,
-      headers: {},
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-}
-
-class ListModelsCall {
-  Future<ApiCallResponse> call() async {
-    return ApiManager.instance.makeApiCall(
-      callName: 'listModels',
-      apiUrl: '${MistralAIAPIGroup.baseUrl}/models',
-      callType: ApiCallType.GET,
-      headers: {},
-      params: {},
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-}
-
-/// End Mistral AI API Group Code
-
-/// Start OpenAI  Group Code
-
-class OpenAIGroup {
-  static String baseUrl = 'https://api.openai.com/v1';
-  static Map<String, String> headers = {
-    'Content-Type': 'application/json',
-  };
-  static SendFullPromptCall sendFullPromptCall = SendFullPromptCall();
-}
-
-class SendFullPromptCall {
-  Future<ApiCallResponse> call({
-    String? apiKey = '',
-    dynamic promptJson,
-  }) async {
-    final prompt = _serializeJson(promptJson);
-    final ffApiRequestBody = '''
-{
-  "model": "gpt-3.5-turbo",
-  "messages": ${prompt}
-}''';
-    return ApiManager.instance.makeApiCall(
-      callName: 'Send Full Prompt',
-      apiUrl: '${OpenAIGroup.baseUrl}/chat/completions',
-      callType: ApiCallType.POST,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${apiKey}',
-      },
-      params: {},
-      body: ffApiRequestBody,
-      bodyType: BodyType.JSON,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-}
-
-/// End OpenAI  Group Code
-
-class WhisperDCall {
-  static Future<ApiCallResponse> call({
-    FFUploadedFile? file,
-    String? key = '',
-  }) async {
-    return ApiManager.instance.makeApiCall(
-      callName: 'WHISPER D',
-      apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
-      callType: ApiCallType.POST,
-      headers: {
-        'Authorization':
-            'Bearer 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',
-        'Content-Type': 'multipart/form-data',
-      },
-      params: {
-        'file': file,
-        'model': "whisper-1",
-      },
-      bodyType: BodyType.MULTIPART,
-      returnBody: true,
-      encodeBodyUtf8: false,
-      decodeUtf8: false,
-      cache: false,
-      alwaysAllowBody: false,
-    );
-  }
-
-  static dynamic text(dynamic response) => getJsonField(
-        response,
-        r'''$.text''',
-      );
-}
-
-
-String _serializeJson(dynamic jsonVar, [bool isList = false]) {
-  jsonVar ??= (isList ? [] : {});
+Future<http.Response?> makeApiCall({
+  required String url,
+  required Map<String, String> headers,
+  required String body,
+  required String method,
+}) async {
   try {
-    return json.encode(jsonVar);
-  } catch (_) {
-    return isList ? '[]' : '{}';
+    if (method == 'POST') {
+      return await http.post(Uri.parse(url), headers: headers, body: body);
+    } else if (method == 'GET') {
+      return await http.get(Uri.parse(url), headers: headers);
+    }
+    return null;
+  } catch (e) {
+    debugPrint('HTTP request failed: $e');
+    return null;
   }
+}
+
+// Function to extract content from the API response.
+dynamic extractContentFromResponse(http.Response? response,
+    {bool isEmbedding = false, bool isFunctionCalling = false}) {
+  if (response != null && response.statusCode == 200) {
+    var data = jsonDecode(response.body);
+    if (isEmbedding) {
+      var embedding = data['data'][0]['embedding'];
+      return embedding;
+    }
+    var message = data['choices'][0]['message'];
+    if (isFunctionCalling && message['tool_calls'] != null) {
+      debugPrint('message $message');
+      debugPrint('message ${message['tool_calls'].runtimeType}');
+      return message['tool_calls'];
+    }
+    return data['choices'][0]['message']['content'];
+  } else {
+    debugPrint('Error fetching data: ${response?.statusCode}');
+    return null;
+  }
+}
+
+// A general call function for the GPT API.
+Future<dynamic> gptApiCall({
+  required String model,
+  String urlSuffix = 'chat/completions',
+  List<Map<String, String>> messages = const [],
+  String contentToEmbed = '',
+  bool jsonResponseFormat = false,
+  List tools = const [],
+}) async {
+  final url = 'https://api.openai.com/v1/$urlSuffix';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
+  final headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Authorization': 'Bearer $apiKey',
+  };
+  final String body;
+  if (urlSuffix == 'embeddings') {
+    body = jsonEncode({'model': model, 'input': contentToEmbed});
+  } else {
+    var bodyData = {'model': model, 'messages': messages};
+    if (jsonResponseFormat) {
+      bodyData['response_format'] = {'type': 'json_object'};
+    } else if (tools.isNotEmpty) {
+      bodyData['tools'] = tools;
+      bodyData['tool_choice'] = 'auto';
+    }
+    body = jsonEncode(bodyData);
+  }
+
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  return extractContentFromResponse(response,
+      isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
+}
+
+Future<String> executeGptPrompt(String? prompt) async {
+  if (prompt == null) return '';
+
+  var prefs = await SharedPreferences.getInstance();
+  var promptBase64 = base64Encode(utf8.encode(prompt));
+  var cachedResponse = prefs.getString(promptBase64);
+  if (cachedResponse != null) return cachedResponse;
+
+  String response = await gptApiCall(model: 'gpt-4-turbo', messages: [
+    {'role': 'system', 'content': prompt}
+  ]);
+  prefs.setString(promptBase64, response);
+  return response;
+}
+
+Future<String> generateTitleAndSummaryForMemory(String? memory) async {
+  var prompt = '''
+    Generate a title and a summary for the following recording chunk of a conversation.
+    For the title, use the most important topic or the most important action-item in the conversation.
+    For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
+    action-items in very concise short points in second person (use bullet points). 
+    
+    Is possible that the conversation is empty or is useless, in that case output "N/A".
+    Here is the recording ```$memory```.
+    
+    Remember to output using the following format:
+    ```
+    Title: ... 
+    Summary:
+    - Action item 1
+    - Action item 2
+    ...
+    ```
+    ''';
+  return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
+}
+
+Future<String> requestSummary(List<MemoryRecord> memories) async {
+  var prompt = '''
+    Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 
+    Write the final output only and make it very short and concise, less than 200 symbols total as bullet-points. 
+    Make it interesting with an insight, specific, professional and simple to read:
+    ``` 
+    ${MemoryRecord.memoriesToString(memories)}
+    ``` 
+    ''';
+  return await executeGptPrompt(prompt);
+}
+
+Future<List<double>> getEmbeddingsFromInput(String? input) async {
+  var vector = await gptApiCall(model: 'text-embedding-3-small', urlSuffix: 'embeddings', contentToEmbed: input ?? '');
+  return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
+}
+
+String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHistory) {
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the list of stored user audio transcript memories to answer the question. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    
+    Conversation History:
+    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
+
+    Memories:
+    ```
+    ${MemoryRecord.memoriesToString(memories)}
+    ```
+    Answer:
+    '''
+      .replaceAll('    ', '');
+  debugPrint(prompt);
+  var body = jsonEncode({
+    "model": "gpt-4-turbo",
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
+    "stream": true,
+  });
+  return body;
 }

@@ -8,7 +8,6 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 
 export 'package:go_router/go_router.dart';
-
 export 'serialization_util.dart';
 
 const kTransitionInfoKey = '__transition_info__';
@@ -17,6 +16,7 @@ class AppStateNotifier extends ChangeNotifier {
   AppStateNotifier._();
 
   static AppStateNotifier? _instance;
+
   static AppStateNotifier get instance => _instance ??= AppStateNotifier._();
 
   bool showSplashImage = true;
@@ -27,8 +27,7 @@ class AppStateNotifier extends ChangeNotifier {
   }
 }
 
-GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
-    GoRouter(
+GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) => GoRouter(
       initialLocation: '/',
       debugLogDiagnostics: true,
       refreshListenable: appStateNotifier,
@@ -57,7 +56,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? WelcomeWidget(),
+              : entryPage ?? WelcomeWidget(), // TODO: restore back to WelcomeWidget when done with the PR
         ),
         FFRoute(
           name: 'welcome',
@@ -95,23 +94,14 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           builder: (context, params) => FindDevicesWidget(),
         ),
         FFRoute(
-          name: 'homePage',
-          path: '/homePage',
+          name: 'memoriesPage',
+          path: '/memoriesPage',
           builder: (context, params) => HomePageWidget(),
         ),
         FFRoute(
           name: 'chatPage',
           path: '/chatPage',
-          builder: (context, params) => ChatPageWidget(
-            daily: params.getParam(
-              'daily',
-              ParamType.bool,
-            ),
-            test: params.getParam(
-              'test',
-              ParamType.String,
-            ),
-          ),
+          builder: (context, params) => ChatPageWidget(),
         ),
         FFRoute(
           name: 'scanDevices',
@@ -133,9 +123,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
 
 extension NavParamExtensions on Map<String, String?> {
   Map<String, String> get withoutNulls => Map.fromEntries(
-        entries
-            .where((e) => e.value != null)
-            .map((e) => MapEntry(e.key, e.value!)),
+        entries.where((e) => e.value != null).map((e) => MapEntry(e.key, e.value!)),
       );
 }
 
@@ -152,12 +140,13 @@ extension NavigationExtensions on BuildContext {
 }
 
 extension _GoRouterStateExtensions on GoRouterState {
-  Map<String, dynamic> get extraMap =>
-      extra != null ? extra as Map<String, dynamic> : {};
+  Map<String, dynamic> get extraMap => extra != null ? extra as Map<String, dynamic> : {};
+
   Map<String, dynamic> get allParams => <String, dynamic>{}
     ..addAll(pathParameters)
     ..addAll(queryParameters)
     ..addAll(extraMap);
+
   TransitionInfo get transitionInfo => extraMap.containsKey(kTransitionInfoKey)
       ? extraMap[kTransitionInfoKey] as TransitionInfo
       : TransitionInfo.appDefault();
@@ -174,17 +163,16 @@ class FFParameters {
   // Parameters are empty if the params map is empty or if the only parameter
   // present is the special extra parameter reserved for the transition info.
   bool get isEmpty =>
-      state.allParams.isEmpty ||
-      (state.extraMap.length == 1 &&
-          state.extraMap.containsKey(kTransitionInfoKey));
-  bool isAsyncParam(MapEntry<String, dynamic> param) =>
-      asyncParams.containsKey(param.key) && param.value is String;
+      state.allParams.isEmpty || (state.extraMap.length == 1 && state.extraMap.containsKey(kTransitionInfoKey));
+
+  bool isAsyncParam(MapEntry<String, dynamic> param) => asyncParams.containsKey(param.key) && param.value is String;
+
   bool get hasFutures => state.allParams.entries.any(isAsyncParam);
+
   Future<bool> completeFutures() => Future.wait(
         state.allParams.entries.where(isAsyncParam).map(
           (param) async {
-            final doc = await asyncParams[param.key]!(param.value)
-                .onError((_, __) => null);
+            final doc = await asyncParams[param.key]!(param.value).onError((_, __) => null);
             if (doc != null) {
               futureParamValues[param.key] = doc;
               return true;
@@ -258,9 +246,7 @@ class FFRoute {
                   key: state.pageKey,
                   child: child,
                   transitionDuration: transitionInfo.duration,
-                  transitionsBuilder:
-                      (context, animation, secondaryAnimation, child) =>
-                          PageTransition(
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) => PageTransition(
                     type: transitionInfo.transitionType,
                     duration: transitionInfo.duration,
                     reverseDuration: transitionInfo.duration,
@@ -297,6 +283,7 @@ class TransitionInfo {
 
 class RootPageContext {
   const RootPageContext(this.isRootPage, [this.errorRoute]);
+
   final bool isRootPage;
   final String? errorRoute;
 
@@ -304,9 +291,7 @@ class RootPageContext {
     final rootPageContext = context.read<RootPageContext?>();
     final isRootPage = rootPageContext?.isRootPage ?? false;
     final location = GoRouter.of(context).location;
-    return isRootPage &&
-        location != '/' &&
-        location != rootPageContext?.errorRoute;
+    return isRootPage && location != '/' && location != rootPageContext?.errorRoute;
   }
 
   static Widget wrap(Widget child, {String? errorRoute}) => Provider.value(
