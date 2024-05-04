@@ -324,10 +324,10 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
             hoverColor: Colors.transparent,
             highlightColor: Colors.transparent,
             onTap: () async {
-              context.pushNamed('chatPage');
+              context.pushNamed('memoriesPage');
             },
             child: Text(
-              'Chat',
+              'Memories',
               style: FlutterFlowTheme.of(context).headlineMedium.override(
                     fontFamily:
                         FlutterFlowTheme.of(context).headlineMediumFamily,

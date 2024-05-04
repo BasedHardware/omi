@@ -23,36 +23,48 @@ const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) finalizedCallback, void Function(String) interimCallback) async {
+Future<void> _initStream(void Function(String) speechFinalCallback, void Function(String) interimCallback) async {
   final prefs = await SharedPreferences.getInstance();
   final apiKey = prefs.getString('deepgramApiKey') ?? '';
 
   debugPrint('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
-  var isFinals = [];
+  // var isFinals = [];
   channel.ready.then((_) {
     channel.stream.listen((event) {
       debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
       final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
-      final isFinal = parsedJson['is_final'];
+      // final isFinal = parsedJson['is_final'];
       final speechFinal = parsedJson['is_final'];
 
-      debugPrint('Transcript: $transcript');
+      // if (transcript.length > 0) {
+      //   debugPrint('~~Transcript: $transcript isFinal: $isFinal speechFinal: $speechFinal');
+      //   if (speechFinal) {
+      //     debugPrint('isFinals.join(' '): ${isFinals.join(' ')}');
+      //     interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
+      //     finalizedCallback('');
+      //     isFinals = [];
+      //   } else {
+      //     if (isFinal) {
+      //       debugPrint('~~ isFinal but it was not speechFinal ~~');
+      //       isFinals.add(transcript);
+      //       interimCallback(transcript);
+      //     } else {
+      //       interimCallback(transcript);
+      //     }
+      //   }
+      // }
       if (transcript.length > 0) {
+        debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
         if (speechFinal) {
-          interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
-          finalizedCallback('');
-          isFinals = [];
+          interimCallback(transcript);
+          speechFinalCallback('');
         } else {
-          if (isFinal) {
-            isFinals.add(transcript);
-            interimCallback(transcript);
-          } else {
-            interimCallback(transcript);
-          }
+          interimCallback(transcript);
         }
       }
+
       // Re-instantiate the Completer for next use
       // completer = Completer<String>();
     }, onError: (err) {
@@ -75,12 +87,12 @@ Future<void> _initStream(void Function(String) finalizedCallback, void Function(
 }
 
 Future<String> bleReceiveWAV(
-    BTDeviceStruct btDevice, void Function(String) finalizedCallback, void Function(String) interimCallback) async {
+    BTDeviceStruct btDevice, void Function(String) speechFinalCallback, void Function(String) interimCallback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 
   try {
-    _initStream(finalizedCallback, interimCallback);
+    _initStream(speechFinalCallback, interimCallback);
     await device.connect();
     debugPrint('Connected to device: ${device.id}');
     List<BluetoothService> services = await device.discoverServices();

@@ -56,7 +56,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? HomePageWidget(), // TODO: restore back to WelcomeWidget when done with the PR
+              : entryPage ?? WelcomeWidget(), // TODO: restore back to WelcomeWidget when done with the PR
         ),
         FFRoute(
           name: 'welcome',
@@ -94,8 +94,8 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           builder: (context, params) => FindDevicesWidget(),
         ),
         FFRoute(
-          name: 'homePage',
-          path: '/homePage',
+          name: 'memoriesPage',
+          path: '/memoriesPage',
           builder: (context, params) => HomePageWidget(),
         ),
         FFRoute(
