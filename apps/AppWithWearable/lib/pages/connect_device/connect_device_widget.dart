@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -318,25 +319,29 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         appBar: AppBar(
           backgroundColor: FlutterFlowTheme.of(context).primary,
           automaticallyImplyLeading: false,
-          title: InkWell(
-            splashColor: Colors.transparent,
-            focusColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            onTap: () async {
+          title: FFButtonWidget(
+            onPressed: () async {
               context.pushNamed('memoriesPage');
             },
-            child: Text(
-              'Memories',
-              style: FlutterFlowTheme.of(context).headlineMedium.override(
-                    fontFamily:
-                        FlutterFlowTheme.of(context).headlineMediumFamily,
-                    color: Colors.white,
-                    fontSize: 22.0,
-                    letterSpacing: 0.0,
-                    useGoogleFonts: GoogleFonts.asMap().containsKey(
-                        FlutterFlowTheme.of(context).headlineMediumFamily),
-                  ),
+            text: 'Memories ↗',
+            options: FFButtonOptions(
+              padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
+              iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+              color: FlutterFlowTheme.of(context).primary,
+              textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                color: const Color(0xFFF7F4F4),
+                fontSize: 18.0,
+                fontWeight: FontWeight.bold,
+                useGoogleFonts:
+                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+              ),
+              elevation: 0.0,
+              borderSide: const BorderSide(
+                color: Colors.transparent,
+                width: 0.0,
+              ),
+              borderRadius: BorderRadius.circular(24.0),
             ),
           ),
           actions: [
