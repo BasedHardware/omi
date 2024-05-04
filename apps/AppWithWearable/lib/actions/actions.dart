@@ -9,26 +9,6 @@ Future<void> processTranscriptContent(String content) async {
   if (content.isNotEmpty) await memoryCreationBlock(content);
 }
 
-String getLastWords() {
-  String lastTranscript = FFAppState().lastTranscript;
-  String newestTranscript = FFAppState().stt;
-
-  FFAppState().update(() {
-    FFAppState().lastTranscript = newestTranscript;
-  });
-
-  int charCount = lastTranscript.length;
-  String lastWords = '';
-  if (newestTranscript.length > charCount) {
-    lastWords = newestTranscript.substring(charCount).trim();
-  }
-
-  debugPrint("[LAST WORDS]: $lastWords");
-  debugPrint("[LAST TRANSCRIPT]: $lastTranscript");
-  debugPrint("[NEWEST TRANSCRIPT]: $newestTranscript");
-  return lastWords;
-}
-
 // Process the creation of memory records
 Future<void> memoryCreationBlock(String rawMemory) async {
   changeAppStateMemoryCreating();
