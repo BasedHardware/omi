@@ -10,6 +10,7 @@
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
+#include "btutils.h"
 #include "lib/battery/battery.h"
 
 //
