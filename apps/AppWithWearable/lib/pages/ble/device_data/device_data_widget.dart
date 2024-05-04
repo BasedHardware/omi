@@ -97,11 +97,11 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
     context.watch<FFAppState>();
 
     return Align(
-      alignment: AlignmentDirectional(0.0, 0.0),
+      alignment: const AlignmentDirectional(0.0, 0.0),
       child: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(),
+        decoration: const BoxDecoration(),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.max,
@@ -115,11 +115,11 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
                     shrinkWrap: true,
                     scrollDirection: Axis.vertical,
                     itemCount: whispersList.length,
-                    separatorBuilder: (_, __) => SizedBox(height: 16.0),
+                    separatorBuilder: (_, __) => const SizedBox(height: 16.0),
                     itemBuilder: (context, whispersListIndex) {
                       final whispersListItem = whispersList[whispersListIndex];
                       return Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
                         child: Text(
                           whispersListItem,
                           style: FlutterFlowTheme
@@ -141,7 +141,7 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
                   );
                 },
               ),
-            ].divide(SizedBox(height: 16.0)),
+            ].divide(const SizedBox(height: 16.0)),
           ),
         ),
       ),
