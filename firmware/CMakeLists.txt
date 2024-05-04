@@ -12,6 +12,10 @@ target_sources(app PRIVATE
     src/led.c
     src/audio.c
     src/codec.c
+    src/lib/battery/battery.c
+)
+
+target_sources_ifdef(CONFIG_CODEC_OPUS app PRIVATE
     src/lib/opus-1.2.1/A2NLSF.c
     src/lib/opus-1.2.1/CNG.c
     src/lib/opus-1.2.1/HP_variable_cutoff.c
@@ -142,7 +146,6 @@ target_sources(app PRIVATE
     src/lib/opus-1.2.1/vq.c
     src/lib/opus-1.2.1/warped_autocorrelation_FIX.c
     src/lib/opus-1.2.1/arm/celt_pitch_xcorr_arm_gcc.s
-    src/lib/battery/battery.c
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DARM_MATH_CM4")

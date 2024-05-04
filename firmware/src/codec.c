@@ -4,7 +4,7 @@
 #include "config.h"
 #include "utils.h"
 #ifdef CODEC_OPUS
-#include "lib/pus-1.2.1/opus.h"
+#include "lib/opus-1.2.1/opus.h"
 #endif
 
 //
