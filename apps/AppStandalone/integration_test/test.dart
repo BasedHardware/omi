@@ -13,7 +13,6 @@ import 'package:provider/provider.dart';
 import 'package:sama/backend/firebase/firebase_config.dart';
 import 'package:sama/auth/firebase_auth/auth_util.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:sama/backend/supabase/supabase.dart';
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +20,6 @@ void main() async {
   testWidgets('newTest', (WidgetTester tester) async {
     _overrideOnError();
     await initFirebase();
-    await SupaFlow.initialize();
     await authManager.signOut();
 
     FFAppState.reset();
