@@ -5,12 +5,8 @@ import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 // Perform actions periodically
-Future<void> processRecentWords() async {
-  String lastWords = getLastWords();
-  if (lastWords.isNotEmpty) {
-    FFAppState().lastMemory = lastWords; // why not .update(() => ...
-    await memoryCreationBlock();
-  }
+Future<void> processTranscriptContent(String content) async {
+  if (content.isNotEmpty) await memoryCreationBlock(content);
 }
 
 String getLastWords() {
@@ -34,30 +30,25 @@ String getLastWords() {
 }
 
 // Process the creation of memory records
-Future<void> memoryCreationBlock() async {
+Future<void> memoryCreationBlock(String rawMemory) async {
   changeAppStateMemoryCreating();
-  var structuredMemory = await structureMemory();
+  var structuredMemory = await generateTitleAndSummaryForMemory(rawMemory);
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
-    await saveFailureMemory(structuredMemory);
+    await saveFailureMemory(rawMemory, structuredMemory);
   } else {
-    await finalizeMemoryRecord(structuredMemory);
+    await finalizeMemoryRecord(rawMemory, structuredMemory);
   }
 }
 
-// Call to the API to get structured memory
-Future<String> structureMemory() async {
-  return await generateTitleAndSummaryForMemory(FFAppState().lastMemory);
-}
-
 // Save failure memory when structured memory contains NA
-Future<void> saveFailureMemory(String structuredMemory) async {
+Future<void> saveFailureMemory(String rawMemory, String structuredMemory) async {
   MemoryRecord memory = MemoryRecord(
       id: const Uuid().v4(),
       date: DateTime.now(),
-      rawMemory: FFAppState().lastMemory,
+      rawMemory: rawMemory,
       structuredMemory: structuredMemory,
-      isEmpty: FFAppState().lastMemory == '',
+      isEmpty: rawMemory == '',
       isUseless: true);
   MemoryStorage.addMemory(memory);
 }
@@ -70,20 +61,21 @@ void changeAppStateMemoryCreating() {
 }
 
 // Finalize memory record after processing feedback
-Future<void> finalizeMemoryRecord(String structuredMemory) async {
-  await createMemoryRecord(structuredMemory);
+Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory) async {
+  await createMemoryRecord(rawMemory, structuredMemory);
   changeAppStateMemoryCreating();
 }
 
 // Create memory record
-Future<MemoryRecord> createMemoryRecord(String structuredMemory) async {
+Future<MemoryRecord> createMemoryRecord(String rawMemory, String structuredMemory) async {
   var memory = MemoryRecord(
       id: const Uuid().v4(),
       date: DateTime.now(),
-      rawMemory: FFAppState().lastMemory,
+      rawMemory: rawMemory,
       structuredMemory: structuredMemory,
-      isEmpty: FFAppState().lastMemory == '',
+      isEmpty: rawMemory == '',
       isUseless: false);
   MemoryStorage.addMemory(memory);
+  debugPrint('createMemoryRecord added memory: ${memory.id}');
   return memory;
 }

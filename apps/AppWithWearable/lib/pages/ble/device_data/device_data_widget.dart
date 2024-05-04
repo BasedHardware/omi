@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/actions/actions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -25,11 +28,25 @@ class DeviceDataWidget extends StatefulWidget {
 
 class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   late DeviceDataModel _model;
+  Timer? _timer;
 
   @override
   void setState(VoidCallback callback) {
     super.setState(callback);
     _model.onUpdate();
+  }
+
+  _initiateTimer() {
+    _timer = Timer(const Duration(seconds: 10), () {
+      debugPrint('Creating memory from whispers');
+      String whispers = FFAppState().whispers.join(' ');
+      debugPrint('FFAppState().whispers: ${FFAppState().whispers}');
+      processTranscriptContent(whispers);
+      setState(() {
+        FFAppState().whispers = [];
+        _model.whispers = [];
+      });
+    });
   }
 
   @override
@@ -39,43 +56,30 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
 
     // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-            print('Checking for transcript');
-      _model.wav = await actions.bleReceiveWAV(
-        widget.btdevice!,
-        (String receivedData) {
-          print("Deepgram Finalized Callback received: $receivedData");
-          setState(() {
-            _model.addToWhispers(receivedData);
-          });
-          setState(() {
-            FFAppState().addToWhispers(receivedData);
-          });
-          // You can perform any action using receivedData here
-        },
-        (String receivedData) {
-          print("Deepgram Interim Callback received: $receivedData");
+      debugPrint('Checking for transcript');
+      _model.wav = await actions.bleReceiveWAV(widget.btdevice!, (String receivedData) {
+        debugPrint("Deepgram Finalized Callback received"); // it's always empty string
+        setState(() {
+          _model.addToWhispers(receivedData);
+          FFAppState().addToWhispers(receivedData);
+        });
+        _initiateTimer();
+      }, (String transcript) {
+        _timer?.cancel();
 
-          // We dont have any whispers yet so we need to create the first one to update
-          if(_model.whispers.length == 0){
-            setState(() {
-              _model.addToWhispers(receivedData);
-            });
-            setState(() {
-              FFAppState().addToWhispers(receivedData);
-            });
-          } else {
-               setState(() {
-              _model.updateWhispersAtIndex(_model.whispers.length-1, receivedData);
-            });
-            setState(() {
-              FFAppState().updateWhispersAtIndex(_model.whispers.length-1, receivedData);
-            });
-          }
-        
-
+        // We dont have any whispers yet so we need to create the first one to update
+        if (_model.whispers.isEmpty) {
+          setState(() {
+            _model.addToWhispers(transcript);
+            FFAppState().addToWhispers(transcript);
+          });
+        } else {
+          setState(() {
+            _model.updateWhispersAtIndex(_model.whispers.length - 1, transcript);
+            FFAppState().updateWhispersAtIndex(_model.whispers.length - 1, transcript);
+          });
         }
-      );
-      
+      });
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
@@ -88,9 +92,9 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
     super.dispose();
   }
 
- @override
-Widget build(BuildContext context) {
-  context.watch<FFAppState>();
+  @override
+  Widget build(BuildContext context) {
+    context.watch<FFAppState>();
 
     return Align(
       alignment: AlignmentDirectional(0.0, 0.0),
@@ -115,20 +119,22 @@ Widget build(BuildContext context) {
                     itemBuilder: (context, whispersListIndex) {
                       final whispersListItem = whispersList[whispersListIndex];
                       return Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(
-                            16.0, 0.0, 16.0, 0.0),
+                        padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
                         child: Text(
                           whispersListItem,
-                          style: FlutterFlowTheme.of(context)
+                          style: FlutterFlowTheme
+                              .of(context)
                               .bodyMedium
                               .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .bodyMediumFamily,
-                                letterSpacing: 0.0,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .bodyMediumFamily),
-                              ),
+                            fontFamily: FlutterFlowTheme
+                                .of(context)
+                                .bodyMediumFamily,
+                            letterSpacing: 0.0,
+                            useGoogleFonts:
+                            GoogleFonts.asMap().containsKey(FlutterFlowTheme
+                                .of(context)
+                                .bodyMediumFamily),
+                          ),
                         ),
                       );
                     },

@@ -25,13 +25,42 @@ class _HomePageHeaderButtonsState extends State<HomePageHeaderButtons> {
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // FFButtonWidget(
+              //   onPressed: () async {
+              //     await launchURL('https://discord.gg/EPDPMZgBgf');
+              //   },
+              //   text: '',
+              //   icon: const Icon(
+              //     Icons.discord_sharp,
+              //     size: 24.0,
+              //   ),
+              //   options: FFButtonOptions(
+              //     width: 44.0,
+              //     height: 44.0,
+              //     padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
+              //     iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+              //     color: const Color(0x1AF7F4F4),
+              //     textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+              //           fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+              //           color: Colors.white,
+              //           fontWeight: FontWeight.bold,
+              //           useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+              //         ),
+              //     elevation: 3.0,
+              //     borderSide: const BorderSide(
+              //       color: Colors.transparent,
+              //       width: 1.0,
+              //     ),
+              //     borderRadius: BorderRadius.circular(24.0),
+              //   ),
+              // ),
               FFButtonWidget(
                 onPressed: () async {
-                  await launchURL('https://discord.gg/EPDPMZgBgf');
+                  context.safePop();
                 },
                 text: '',
                 icon: const Icon(
-                  Icons.discord_sharp,
+                  Icons.arrow_back_rounded,
                   size: 24.0,
                 ),
                 options: FFButtonOptions(
@@ -41,11 +70,12 @@ class _HomePageHeaderButtonsState extends State<HomePageHeaderButtons> {
                   iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                   color: const Color(0x1AF7F4F4),
                   textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                      ),
+                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    useGoogleFonts:
+                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+                  ),
                   elevation: 3.0,
                   borderSide: const BorderSide(
                     color: Colors.transparent,
