@@ -72,6 +72,8 @@ hs_err_pid*
 #Servers
 backend/app-server/dist
 src/recordings
+
+#Apps
 apps/AppWithWearable/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 apps/AppWithWearable/ios/Flutter/flutter_export_environment.sh
 apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
@@ -79,14 +81,17 @@ apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
 apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
 apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
 
-apps/AppStandalone/ios/Runner/RunnerDebug.entitlements
-apps/AppStandalone/ios/Runner/Runner.entitlements
 apps/AppStandalone/lib/firebase_options.dart
 apps/AppStandalone/firebase.json
 apps/AppStandalone/android/app/google-services.json
 apps/AppStandalone/ios/Runner/GoogleService-Info.plist
-#apps/AppStandalone/ios/Runner.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+apps/AppStandalone/lib/env/env.g.dart
+apps/AppStandalone/ios/Flutter/flutter_export_environment.sh
+apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.h
+apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.m
+apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
+*/*xcschememanagement.plist
 */android/app/google-services.json
 */ios/Runner/GoogleService-Info.plist
 
