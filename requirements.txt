@@ -1,0 +1,4 @@
+dspy-ai[mongodb]
+pymongo[srv]==4.6.3
+functions-framework==3.5.0
+load-dotenv==0.1.0
