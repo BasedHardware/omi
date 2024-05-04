@@ -21,6 +21,7 @@
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/native-stack": "^6.9.26",
     "axios": "^1.6.8",
+    "js-tiktoken": "^1.0.11",
     "react": "18.2.0",
     "react-native": "0.73.7",
     "react-native-base64": "^0.2.1",
@@ -64,7 +65,6 @@
     "node": ">=18"
   },
   "overrides": {
-    "web-streams-polyfill": "3.3.3"
+    "web-streams-polyfill": "^3.3.3"
   }
-  
 }

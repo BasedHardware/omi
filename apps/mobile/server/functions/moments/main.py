@@ -31,12 +31,16 @@ def cors_preflight_response():
 
 def handle_fetch_moments():
     # Get all moments from the database
-    db_client = MomentService()
-    moments_list = db_client.get_all_moments()
+    moment_service = MomentService()
+    moments_list = moment_service.get_all_moments()
     return moments_list
 
 def handle_add_moment(request):
-    db_client = MomentService()
+    """
+    This function handles the addition of a new moment.
+    
+    """
+    moment_service = MomentService()
     boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
@@ -52,15 +56,38 @@ def handle_add_moment(request):
     new_moment['summary'] = summary
     new_moment['title'] = title
     new_moment['actionItems'] = action_items
+    transcript = new_moment['transcript']
 
-    db_client.add_moment(new_moment)
+    new_moment = moment_service.add_moment(new_moment)
+    # Create the first snapshot for the moment
+    action_items_str = "Action Items:\n" + "\n".join(action_items)
+    combined_content = transcript + '\n' + action_items_str
+    snapshot_data = new_moment.copy()
+    snapshot_data['embeddings'] = boss_agent.embed_content(combined_content)
+    moment_service.create_snapshot(snapshot_data)
+    
     return new_moment
 
+def handle_update_moment(request):
+    boss_agent = BossAgent()
+    moment_service = MomentService()
+    data = request.json
+    current_moment = data['moment']
+    moment_id = current_moment['id']
+    # Find all snapshots for the moment
+    previous_snapshot = moment_service.get_previous_snapshot(moment_id)
+    summary, title, action_items = boss_agent.extract_content(current_moment)
+    current_snapshot = {'momentId': moment_id, 'summary': summary, 'title': title, 'actionItems': action_items}
+    # diff the current snapshot with the previous snapshot
+    new_snapshot = boss_agent.diff_snapshots(previous_snapshot, current_snapshot)
+    # Each snapshot should be embedded individually.
+    upated_moment = boss_agent.update_moment(moment, summary, title, action_items)
+
 def handle_delete_moment(request):
-    db_client = MomentService()
+    moment_service = MomentService()
     data = request.json
     moment_id = data['id']
-    db_client.delete_moment(moment_id)
+    moment_service.delete_moment(moment_id)
     return 'Moment Deleted'
 
 def moments(request):
@@ -75,6 +102,10 @@ def moments(request):
        if request.method == 'POST':
             new_moment = handle_add_moment(request)
             return jsonify({'moment': new_moment}), 200, headers
+       
+       if request.method == 'PUT':
+            updated_moment = handle_update_moment(request)
+            return jsonify({'moment': updated_moment}), 200, headers
        
        if request.method == 'DELETE':
             handle_delete_moment(request)

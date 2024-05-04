@@ -4,6 +4,24 @@ from openai import OpenAI
 import dspy
 from dotenv import load_dotenv
 
+class ActionItems(dspy.Signature):
+    """From the content, extract actions to be taken as an array of strings,
+    Examples: Multiple - ["Call John", "Send email to Mary", "Schedule a meeting with the team"] ,
+    Single - ["Call John"], None - [].
+    """
+    
+    content = dspy.InputField()
+    actions = dspy.OutputField()
+
+class DocumentContent(dspy.Signature):
+    """From the content, extract the title and summary of the document.
+    The title should be kept concise.
+    """
+
+    document = dspy.InputField()
+    title = dspy.OutputField()
+    summary = dspy.OutputField()
+    
 class BossAgent:
     _instance = None
 
@@ -35,12 +53,18 @@ class BossAgent:
                 print(f"Failed to initialize dspy: {e}")
                 self.lm = None
 
-    def summarize_moment(self, moment):
+    def extract_content(self, moment):
         self._initialize_dspy()
+        content = moment['text']
+        print(f"Extracting content from: {content}")
+
         if self.lm:
-            generate_summary_prompt = dspy.ChainOfThought('content -> content_title, content_summary')
-            prediction = generate_summary_prompt(content=moment['text'])
-            return prediction.content_summary, prediction.content_title
+            extract_actions = dspy.Predict(ActionItems)
+            actions_pred = extract_actions(content=content)
+            generate_summary_prompt = dspy.ChainOfThought(DocumentContent)
+            content_pred = generate_summary_prompt(document=content)
+            
+            return content_pred.summary, content_pred.title, actions_pred.actions
         else:
             print("dspy is not initialized.")
             return None

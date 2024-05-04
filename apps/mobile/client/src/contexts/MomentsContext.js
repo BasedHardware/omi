@@ -78,6 +78,28 @@ export const MomentsProvider = ({children}) => {
     }
   };
 
+  const updateMoment = async moment => {
+    try {
+      const response = await axios.put(`${BACKEND_URL}:30001/moments`, {
+        moment,
+      });
+      if (response.status === 200 && response.data) {
+        // const moments = (await fetchMomentsFromLocalStorage()) || [];
+        // const index = moments.findIndex(item => item.id === moment.id);
+        // moments[index] = response.data.moment;
+        // await updateLocalStorage(moments);
+        // setMoments(moments);
+      } else {
+        console.log(
+          'Request succeeded but with a non-200 status code:',
+          response.status,
+        );
+      }
+    } catch (error) {
+      logError('Error updating moment:', error);
+    }
+  };
+
   const deleteMoment = async moment => {
     try {
       const response = await axios.delete(`${BACKEND_URL}:30001/moments`, {
@@ -109,6 +131,7 @@ export const MomentsProvider = ({children}) => {
         fetchMoments,
         deleteMoment,
         addMoment,
+        updateMoment,
       }}>
       {children}
     </MomentsContext.Provider>

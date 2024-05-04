@@ -1,122 +1,179 @@
 import {useState, useRef, useEffect, useContext} from 'react';
-import {BluetoothContext} from '../contexts/BluetoothContext';
-import {MomentsContext} from '../contexts/MomentsContext';
-import BleManager from 'react-native-ble-manager';
+import {getEncoding} from 'js-tiktoken';
+import {DEEPGRAM_API_KEY} from '@env';
+import {BluetoothContext} from './BluetoothContext';
+import {MomentsContext} from './MomentsContext';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import base64 from 'react-native-base64';
-import {DEEPGRAM_API_KEY} from '@env';
+import BleManager from 'react-native-ble-manager';
 
-const useAudioStreamer = () => {
+const useAudioStream = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [streamingTranscript, setStreamingTranscript] = useState('');
-  const wsRef = useRef(null);
+  const [lastWasSilence, setLastWasSilence] = useState(true);
+  const [tokenCount, setTokenCount] = useState(0);
+  const ws = useRef(null);
+  const currentMomentRef = useRef(null);
+  const silenceTimer = useRef(null);
   const {bleManagerEmitter} = useContext(BluetoothContext);
-  const {moments, setMoments, addMoment} = useContext(MomentsContext);
-
-  // Constants for UUIDs
+  const {setMoments, addMoment, updateMoment} = useContext(MomentsContext);
   const serviceUUID = '19B10000-E8F2-537E-4F6C-D104768A1214';
   const audioCharacteristicUUID = '19B10001-E8F2-537E-4F6C-D104768A1214';
 
-  // Ref for peripheral ID for reuse
-  const peripheralIdRef = useRef(null);
-
-  // Refs for managing state of silences
-  const silenceTimerRef = useRef(null);
-  const isSilenceTimerActiveRef = useRef(false);
-
-  // Function to initialize event listeners
   useEffect(() => {
-    const handleUpdateValueForCharacteristic = data => {
-      const array = new Uint8Array(data.value);
-      const audioData = array.subarray(3);
-      wsRef.current.send(audioData.buffer);
-    };
-
+    // Add listener for Bluetooth data updates
     bleManagerEmitter.addListener(
       'BleManagerDidUpdateValueForCharacteristic',
       handleUpdateValueForCharacteristic,
     );
 
     return () => {
-      bleManagerEmitter.removeListener(
+      clearTimeout(silenceTimer.current);
+      bleManagerEmitter.removeAllListeners(
         'BleManagerDidUpdateValueForCharacteristic',
-        handleUpdateValueForCharacteristic,
       );
+      if (ws.current) {
+        ws.current.close();
+      }
     };
-  }, [bleManagerEmitter]);
+  }, []);
 
-  // Event handlers and helpers for WebSocket
-  const configureWebSocket = () => {
-    const urlParams = {
-      model: 'nova-2',
-      language: 'en-US',
-      smart_format: true,
-      encoding: 'linear16',
-      sample_rate: 8000,
-    };
-    const url = `wss://api.deepgram.com/v1/listen?${urlParams.toString()}`;
-    wsRef.current = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
+  const countTokens = text => {
+    const encoding = getEncoding('gpt2');
+    return encoding.encode(text).length;
+  };
 
-    wsRef.current.onopen = () => {
+  const createOrUpdateMoment = async transcript => {
+    if (currentMomentRef.current) {
+      console.log('Updating moment', transcript);
+      try {
+        const momentId = currentMomentRef.current.id;
+        await updateMoment({id: momentId, transcript});
+      } catch (error) {
+        console.error('Error updating moment', error);
+      }
+    } else {
+      console.log('Creating new moment', transcript);
+      try {
+        const newMoment = {
+          transcript,
+          date: new Date(),
+        };
+        await addMoment(newMoment);
+        currentMomentRef.current = newMoment;
+      } catch (error) {
+        console.error('Error creating moment', error);
+      }
+    }
+  };
+
+  const handleUpdateValueForCharacteristic = data => {
+    const array = new Uint8Array(data.value);
+    ws.current.send(array.buffer);
+  };
+
+  const resetSilenceTimer = transcript => {
+    clearTimeout(silenceTimer.current);
+    silenceTimer.current = setTimeout(() => {
+      createMoment(transcript);
+      setLastWasSilence(true);
+      setStreamingTranscript('');
+    }, 5000);
+  };
+
+  const startRecording = async () => {
+    // Check for connected Bluetooth peripherals
+    const connectedPeripherals = await BleManager.getConnectedPeripherals([
+      serviceUUID,
+    ]);
+    if (connectedPeripherals.length > 0) {
+      // If theres a connected device then we stream from it
+      initWebSocket(connectedPeripherals[0].id);
+    } else {
+      // If no connected device then we stream from phone
+      initWebSocket();
+    }
+  };
+
+  const initWebSocket = async peripheralId => {
+    const model = 'nova-2';
+    const language = 'en-US';
+    const smart_format = true;
+    const encoding = 'linear16';
+    const sample_rate = 8000;
+
+    const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=${smart_format}&encoding=${encoding}&sample_rate=${sample_rate}`;
+    ws.current = new WebSocket(url, ['token', DEEPGRAM_API_KEY]);
+
+    ws.current.onopen = () => {
       console.log('WebSocket connection opened');
-      if (peripheralIdRef.current) {
-        startBluetoothStreaming(peripheralIdRef.current);
+      if (peripheralId) {
+        startBluetoothStreaming(peripheralId);
       } else {
         startPhoneStreaming();
       }
     };
-
-    wsRef.current.onerror = error => {
-      console.error('WebSocket error:', error);
-    };
-
-    wsRef.current.onclose = () => {
-      console.log('WebSocket connection closed');
-    };
-
-    wsRef.current.onmessage = event => {
+    ws.current.onmessage = event => {
       const dataObj = JSON.parse(event.data);
       const transcribedWord = dataObj?.channel?.alternatives?.[0]?.transcript;
-
       if (transcribedWord) {
-        clearTimeout(silenceTimerRef.current);
-        isSilenceTimerActiveRef.current = false;
-        setStreamingTranscript(
-          prevTranscript => prevTranscript + ' ' + transcribedWord,
-        );
-      } else {
-        if (!isSilenceTimerActiveRef.current) {
-          silenceTimerRef.current = setTimeout(() => {
-            createMoment();
-            restartRecording();
-          }, 5000); // consider adjusting time as needed
+        const tokens = countTokens(transcribedWord);
+        setTokenCount(prev => prev + tokens);
+        setStreamingTranscript(prev => {
+          const updatedTranscript = prev + ' ' + transcribedWord;
+          if (lastWasSilence) {
+            resetSilenceTimer(updatedTranscript);
+            setLastWasSilence(false);
+          }
+          return updatedTranscript;
+        });
 
-          isSilenceTimerActiveRef.current = true;
+        if (tokenCount >= 500) {
+          createOrUpdateMoment(streamingTranscript);
+          setStreamingTranscript('');
+          setTokenCount(0);
+        }
+      } else {
+        console.log('Silence detected');
+        if (!lastWasSilence) {
+          resetSilenceTimer();
+          setLastWasSilence(true);
         }
       }
     };
   };
 
-  const createMoment = async () => {
-    console.log('Creating moment', streamingTranscript);
-    try {
-      const newMoment = {
-        text: streamingTranscript,
-        date: new Date(),
-      };
-      setMoments([...moments, newMoment]);
-      await addMoment(newMoment);
-      setStreamingTranscript('');
-    } catch (error) {
-      console.error('Error creating moment', error);
-    }
+  const startPhoneStreaming = () => {
+    const options = {
+      sampleRate: 8000,
+      channels: 1,
+      bitsPerSample: 16,
+      bufferSize: 4096,
+    };
+    LiveAudioStream.init(options);
+    LiveAudioStream.on('data', base64String => {
+      const binaryString = base64.decode(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      ws.current.send(bytes.buffer);
+    });
+    LiveAudioStream.start();
+    setIsRecording(true);
   };
 
-  const restartRecording = () => {
-    if (peripheralIdRef.current) {
-      startBluetoothStreaming(peripheralIdRef.current);
-    } else {
-      startPhoneStreaming();
+  const stopRecording = () => {
+    LiveAudioStream.stop();
+    if (ws.current) {
+      ws.current.send(JSON.stringify({type: 'CloseStream'}));
+      ws.current.close();
+    }
+    setIsRecording(false);
+
+    if (streamingTranscript) {
+      createMoment(streamingTranscript);
+      setStreamingTranscript('');
     }
   };
 
@@ -127,77 +184,38 @@ const useAudioStreamer = () => {
       audioCharacteristicUUID,
     )
       .then(() => {
-        console.log(`Started notification on ${serviceUUID}`);
+        console.log('Started notification on ' + serviceUUID);
         setIsRecording(true);
       })
       .catch(error => {
-        console.log('Notification error:', error);
+        console.log('Notification error', error);
       });
   };
 
-  const startPhoneStreaming = () => {
-    const options = {
-      sampleRate: 8000,
-      channels: 1,
-      bitsPerSample: 16,
-      bufferSize: 4096,
-    };
-
-    LiveAudioStream.init(options);
-    LiveAudioStream.on('data', base64String => {
-      console.log('Received data:', base64String);
-      const binaryString = base64.decode(base64String);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      console.log(bytes.buffer);
-      wsRef.current.send(bytes.buffer);
-    });
-
-    LiveAudioStream.start();
-    setIsRecording(true);
-  };
-
-  const stopRecording = async () => {
+  const createMoment = async transcript => {
+    console.log('Creating moment', transcript);
     try {
-      LiveAudioStream.stop();
-      setIsRecording(false);
-      if (wsRef.current) {
-        wsRef.current.send(JSON.stringify({type: 'CloseStream'}));
-        wsRef.current.close();
-      }
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-        isSilenceTimerActiveRef.current = false;
-      }
+      const newMoment = {
+        text: transcript,
+        date: new Date(),
+      };
+
+      addMoment(newMoment);
+
+      setMoments(currentMoments => [...currentMoments, newMoment]);
     } catch (error) {
-      console.error('Failed to stop recording:', error);
-    }
-  };
-
-  const startRecording = async () => {
-    const connectedDevices = await BleManager.getConnectedPeripherals([
-      serviceUUID,
-    ]);
-
-    if (connectedDevices.length > 0) {
-      peripheralIdRef.current = connectedDevices[0].id;
-      configureWebSocket();
-    } else {
-      configureWebSocket();
+      console.error('Error creating moment', error);
     }
   };
 
   return {
-    startRecording,
-    stopRecording,
     isRecording,
     streamingTranscript,
+    initWebSocket,
+    stopRecording,
     createMoment,
+    startRecording,
   };
 };
 
-export default useAudioStreamer;
+export default useAudioStream;

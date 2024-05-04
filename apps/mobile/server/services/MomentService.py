@@ -45,13 +45,44 @@ class MomentService:
             print("MongoDB connection is not initialized.")
             return []
 
+    def get_previous_snapshot(self, moment_id):
+        self._initialize_client()
+        print(f"Getting previous snapshot for moment: {moment_id}")
+        if self.db is not None:
+            snapshots_collection = self.db['snapshots']
+            snapshots = list(snapshots_collection.find({'momentId': moment_id}))
+            if len(snapshots) > 0:
+                most_recent_snapshot = snapshots[-1]
+                most_recent_snapshot['id'] = str(most_recent_snapshot.pop('_id'))
+                return most_recent_snapshot
+            else:
+                return None
+        else:
+            print("MongoDB connection is not initialized.")
+            return None
+    
+    def create_snapshot(self, snapshot_data):
+        print(f"Creating snapshot: {snapshot_data}")
+        self._initialize_client()
+        if self.db is not None:
+            snapshots_collection = self.db['snapshots']
+            snapshots_collection.insert_one(snapshot_data)
+            # Convert _id to string and rename it to id
+            snapshot_data['id'] = str(snapshot_data.pop('_id'))
+            return snapshot_data
+        else:
+            print("MongoDB connection is not initialized.")
+            return None
+        
     def add_moment(self, moment_data):
+        print(f"Adding moment: {moment_data}")
         self._initialize_client()
         if self.db is not None:
             moments_collection = self.db['moments']
             moments_collection.insert_one(moment_data)
             # Convert _id to string and rename it to id
             moment_data['id'] = str(moment_data.pop('_id'))
+            self.create_snapshot(moment_data)
             return moment_data
         else:
             print("MongoDB connection is not initialized.")

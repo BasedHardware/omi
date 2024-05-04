@@ -4,19 +4,24 @@ import {View, Text, StyleSheet, FlatList} from 'react-native';
 import {Button} from 'react-native-elements';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {MomentsContext} from '../contexts/MomentsContext';
-import useAudioStreamer from '../contexts/useAudioStreamer';
+import BleManager from 'react-native-ble-manager';
+import useAudioStream from '../contexts/useAudioStreamer';
 import MomentListItem from '../components/moments/MomentsListItem';
 
 const MomentsTab = () => {
   const {moments} = useContext(MomentsContext);
-  const {startRecording, stopRecording, isRecording, streamingTranscript} =
-    useAudioStreamer();
+  const {
+    isRecording,
+    streamingTranscript,
+    stopRecording,
+    startRecording,
+  } = useAudioStream();
 
   const navigation = useNavigation();
 
   const handleStopRecording = async () => {
-    await stopRecording();
-    await createMoment();
+    stopRecording();
+    
   };
 
   const handlePress = item => {
