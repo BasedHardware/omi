@@ -15,6 +15,14 @@ import 'connect_device_model.dart';
 
 export 'connect_device_model.dart';
 
+enum TtsProvider {
+  whisper('Whisper'),
+  deepgram('Deepgram');
+
+  const TtsProvider(this.name);
+  final String name;
+}
+
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
     super.key,
@@ -31,6 +39,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   late ConnectDeviceModel _model;
   final _deepgramApiKeyController = TextEditingController();
   final _openaiApiKeyController = TextEditingController();
+  final _ttsController = TextEditingController();
   bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -43,14 +52,22 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Check if the API keys are set
       final prefs = await SharedPreferences.getInstance();
+      final ttsProvider = prefs.getString('ttsProvider');
       final deepgramApiKey = prefs.getString('deepgramApiKey');
       final openaiApiKey = prefs.getString('openaiApiKey');
 
-      if (deepgramApiKey != null &&
-          deepgramApiKey.isNotEmpty &&
-          openaiApiKey != null &&
-          openaiApiKey.isNotEmpty) {
-        // If both API keys are set, initialize the page and enable the DeviceDataWidget
+      if (
+          // deepgram + chatgpt
+          (deepgramApiKey != null &&
+                  deepgramApiKey.isNotEmpty &&
+                  openaiApiKey != null &&
+                  openaiApiKey.isNotEmpty) ||
+              // whisper + chatgpt
+              (ttsProvider != null &&
+                  ttsProvider == TtsProvider.whisper &&
+                  openaiApiKey != null &&
+                  openaiApiKey.isNotEmpty)) {
+        // If all necessary API keys are set, initialize the page and enable the DeviceDataWidget
         _initializePage();
         setState(() {
           _areApiKeysSet = true;
@@ -88,6 +105,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     _model.dispose();
     _deepgramApiKeyController.dispose();
     _openaiApiKeyController.dispose();
+    _ttsController.dispose();
     super.dispose();
   }
 
@@ -103,11 +121,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   Future<void> _showSettingsBottomSheet() async {
     // Load API keys from shared preferences
     final prefs = await SharedPreferences.getInstance();
+    final ttsProvider = prefs.getString('ttsProvider');
     final deepgramApiKey = prefs.getString('deepgramApiKey') ?? '';
     final openaiApiKey = prefs.getString('openaiApiKey') ?? '';
 
     _deepgramApiKeyController.text = _obscureApiKey(deepgramApiKey);
     _openaiApiKeyController.text = _obscureApiKey(openaiApiKey);
+    _ttsController.text = ttsProvider ?? TtsProvider.deepgram.name;
 
     await showModalBottomSheet(
       context: context,
@@ -130,12 +150,12 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                 ),
                 child: Container(
                   height: MediaQuery.of(context).size.height * 0.6,
-                  padding: EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16.0),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
+                        const Text(
                           'Settings',
                           style: TextStyle(
                             fontSize: 20.0,
@@ -143,48 +163,104 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             color: Colors.white,
                           ),
                         ),
+                        const SizedBox(height: 16.0),
+                        Theme(
+                          data: Theme.of(context).copyWith(
+                            canvasColor: Colors.blue.shade200,
+                            focusColor: Colors.pink,
+                            cardColor: Colors.pink,
+                            dialogBackgroundColor: Colors.pink,
+                            highlightColor: Colors.pink,
+                            hoverColor: Colors.pink,
+                            indicatorColor: Colors.pink,
+                            menuButtonTheme: MenuButtonThemeData(
+                              style: ButtonStyle(
+                                backgroundColor:
+                                    MaterialStateProperty.all<Color>(
+                                        Colors.pink),
+                                foregroundColor:
+                                    MaterialStateProperty.all<Color>(
+                                        Colors.pink),
+                              ),
+                            ),
+                          ),
+                          child: DropdownMenu<TtsProvider>(
+                            controller: _ttsController,
+                            label: const Text('Text to Speech Provider',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                )),
+                            textStyle: const TextStyle(
+                                color: Colors.white,
+                                backgroundColor: Colors.black),
+                            menuStyle: MenuStyle(
+                              backgroundColor: MaterialStateProperty.all<Color>(
+                                  Colors.black),
+                            ),
+                            dropdownMenuEntries:
+                                TtsProvider.values.map((TtsProvider value) {
+                              return DropdownMenuEntry<TtsProvider>(
+                                value: value,
+                                label: value.name,
+                                style: MenuItemButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.black,
+                                  iconColor: Colors.black,
+                                ),
+                              );
+                            }).toList(),
+                            onSelected: (value) => {
+                              setModalState(() {
+                                _ttsController.text = value!.name;
+                              }),
+                            },
+                          ),
+                        ),
+                        if (_ttsController.text == TtsProvider.deepgram.name)
+                          Column(children: [
+                            const SizedBox(height: 16.0),
+                            const Text(
+                              'Deepgram API Key is used for converting speech to text.',
+                              style: TextStyle(
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8.0),
+                            TextField(
+                              controller: _deepgramApiKeyController,
+                              decoration: InputDecoration(
+                                labelText: 'Deepgram API Key',
+                                labelStyle: TextStyle(color: Colors.white),
+                                border: OutlineInputBorder(),
+                                enabledBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: Colors.white),
+                                  borderRadius: const BorderRadius.all(
+                                      Radius.circular(20.0)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: Colors.white),
+                                ),
+                              ),
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 8.0),
+                            TextButton(
+                              onPressed: () {
+                                launch(
+                                    'https://developers.deepgram.com/docs/create-additional-api-keys');
+                              },
+                              child: Text(
+                                'How to generate a Deepgram API key?',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ]),
                         SizedBox(height: 16.0),
                         Text(
-                          'Deepgram API Key is used for converting speech to text.',
-                          style: TextStyle(
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 8.0),
-                        TextField(
-                          controller: _deepgramApiKeyController,
-                          decoration: InputDecoration(
-                            labelText: 'Deepgram API Key',
-                            labelStyle: TextStyle(color: Colors.white),
-                            border: OutlineInputBorder(),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.white),
-                              borderRadius:
-                                  const BorderRadius.all(Radius.circular(20.0)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.white),
-                            ),
-                          ),
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        SizedBox(height: 8.0),
-                        TextButton(
-                          onPressed: () {
-                            launch(
-                                'https://developers.deepgram.com/docs/create-additional-api-keys');
-                          },
-                          child: Text(
-                            'How to generate a Deepgram API key?',
-                            style: TextStyle(
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 16.0),
-                        Text(
-                          'OpenAI API Key is used for chat.',
+                          'OpenAI API Key is used for chat ${(_ttsController.text == TtsProvider.whisper.name) ? 'and text to speech' : ''}.',
                           style: TextStyle(
                             color: Colors.white,
                           ),
@@ -220,16 +296,24 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             ),
                           ),
                         ),
-                        SizedBox(height: 16.0),
+                        const SizedBox(height: 16.0),
                         ElevatedButton(
                           onPressed: () {
+                            String ttsProvider = _ttsController.text;
                             String deepgramApiKey =
                                 _deepgramApiKeyController.text;
                             String openaiApiKey = _openaiApiKeyController.text;
 
-                            if (deepgramApiKey.isNotEmpty &&
-                                 openaiApiKey.isNotEmpty) {
-                              _saveApiKeys(deepgramApiKey, openaiApiKey);
+                            bool deepgramSetupComplete;
+                            if (ttsProvider == TtsProvider.deepgram.name) {
+                              deepgramSetupComplete = deepgramApiKey.isNotEmpty;
+                            } else {
+                              deepgramSetupComplete = true;
+                            }
+                            final openAiSetupComplete = openaiApiKey.isNotEmpty;
+                            if (deepgramSetupComplete && openAiSetupComplete) {
+                              _saveSettings(
+                                  ttsProvider, deepgramApiKey, openaiApiKey);
                               Navigator.pop(context);
                             } else {
                               // Show a popup dialog if either of the API keys is empty
@@ -294,8 +378,10 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     });
   }
 
-  void _saveApiKeys(String deepgramApiKey, String openaiApiKey) async {
+  void _saveSettings(
+      String ttsProvider, String deepgramApiKey, String openaiApiKey) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ttsProvider', ttsProvider);
     await prefs.setString('deepgramApiKey', deepgramApiKey);
     await prefs.setString('openaiApiKey', openaiApiKey);
 
