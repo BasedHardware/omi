@@ -51,6 +51,8 @@ dependencies:
   lottie: 3.1.0
   web_socket_channel: ^2.4.0
   flutter_tilt: any
+  path: ^1.9.0
+  uuid: ^4.4.0
 
 dependency_overrides:
   http: 1.2.0
@@ -60,10 +62,9 @@ dev_dependencies:
   flutter_launcher_icons: 0.13.1
   flutter_lints: 3.0.0
   image: 4.0.17
-  integration_test: 
+  integration_test:
     sdk: flutter
   lints: 3.0.0
-
   flutter_test:
     sdk: flutter
 

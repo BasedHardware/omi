@@ -79,35 +79,6 @@ bool voiceCommand(
   return false;
 }
 
-String? documentsToText(List<MemoriesRecord> memories) {
-  // Create a DateFormat for formatting the time
-  final timeFormat = DateFormat('h:mma');
-
-  // Map each memory record to a formatted string
-  List<String> formattedMemories = memories
-      .map((obj) {
-        // Check for a null date and skip if null
-        if (obj.date == null) {
-          return null;
-        }
-
-        // Format the date to a more readable time format
-        String formattedTime = timeFormat.format(obj.date!);
-
-        // Escape double quotes and remove newline characters from the memory content
-        String memoryContent = obj.structuredMemory.replaceAll('"', '\\"').replaceAll('\n', ' ');
-
-        // Format each memory with formatted time and memory content
-        return '$formattedTime $memoryContent';
-      })
-      .where((item) => item != null) // Filter out any null records
-      .cast<String>() // Cast to a non-nullable String
-      .toList();
-
-  // Join all the formatted memory strings into one large string separated by spaces
-  return formattedMemories.join(' ');
-}
-
 DateTime? sinceYesterday() {
   // function that returns DateTime of 24 hours ago from now
   DateTime now = DateTime.now();
@@ -222,13 +193,12 @@ bool? stringContainsString(
   return string!.contains(substring!);
 }
 
-dynamic truncateChatHistory(dynamic ogChatHistory) {
-  // If chatHistory has more than 30 items, remove the item at index 1
-  int chatLength = 3;
-  if (ogChatHistory.length > chatLength) {
-    // Keep the first item and the last 30 items
-    var truncatedChatHistory = [ogChatHistory.first] + ogChatHistory.sublist(ogChatHistory.length - chatLength);
-    return truncatedChatHistory;
+List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, {int count = 5}) {
+  // TODO: truncate to certain token length instead of messages count
+  if (ogChatHistory is List) {
+    if (ogChatHistory.length > count) {
+      return ogChatHistory.sublist(ogChatHistory.length - count);
+    }
   }
   return ogChatHistory;
 }
@@ -244,6 +214,24 @@ dynamic updateChatHistoryAtIndex(
   // updates the chat history at a certain index
   if (chatHistory is List) {
     chatHistory[index] = (messageWithRole);
+    newChatHistory = chatHistory;
+  } else {
+    newChatHistory = [messageWithRole];
+  }
+  return newChatHistory;
+}
+
+dynamic appendToChatHistoryAtIndex(
+  dynamic messageWithRole,
+  int index,
+  dynamic chatHistory,
+) {
+  // take the chat history message at index, and append content to it
+  dynamic newChatHistory;
+
+  // updates the chat history at a certain index
+  if (chatHistory is List) {
+    chatHistory[index]['content'] += messageWithRole['content'];
     newChatHistory = chatHistory;
   } else {
     newChatHistory = [messageWithRole];
