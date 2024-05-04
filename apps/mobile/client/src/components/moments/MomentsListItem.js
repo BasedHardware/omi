@@ -53,7 +53,7 @@ const MomentListItem = ({item, onItemPress}) => {
         <ListItem key={item.id} bottomDivider containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>
-              {item.text.substring(0, 30) + '...'}
+              {item.transcript.substring(0, 30) + '...'}
             </ListItem.Title>
             <ListItem.Subtitle>{formatDate(item.date)}</ListItem.Subtitle>
           </ListItem.Content>

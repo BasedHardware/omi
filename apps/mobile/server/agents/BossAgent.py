@@ -55,7 +55,7 @@ class BossAgent:
 
     def extract_content(self, moment):
         self._initialize_dspy()
-        content = moment['text']
+        content = moment['transcript']
         print(f"Extracting content from: {content}")
 
         if self.lm:

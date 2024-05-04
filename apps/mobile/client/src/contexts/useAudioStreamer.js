@@ -1,5 +1,5 @@
 import {useState, useRef, useEffect, useContext} from 'react';
-import {getEncoding} from 'js-tiktoken';
+import jsTokens from 'js-tokens';
 import {DEEPGRAM_API_KEY} from '@env';
 import {BluetoothContext} from './BluetoothContext';
 import {MomentsContext} from './MomentsContext';
@@ -39,8 +39,9 @@ const useAudioStream = () => {
   }, []);
 
   const countTokens = text => {
-    const encoding = getEncoding('gpt2');
-    return encoding.encode(text).length;
+    const token_count = Array.from(jsTokens(text)).length;
+    console.log('Counting tokens', token_count);
+    return token_count;
   };
 
   const createOrUpdateMoment = async transcript => {
@@ -133,6 +134,7 @@ const useAudioStream = () => {
           setStreamingTranscript('');
           setTokenCount(0);
         }
+        
       } else {
         console.log('Silence detected');
         if (!lastWasSilence) {
@@ -196,7 +198,7 @@ const useAudioStream = () => {
     console.log('Creating moment', transcript);
     try {
       const newMoment = {
-        text: transcript,
+        transcript,
         date: new Date(),
       };
 

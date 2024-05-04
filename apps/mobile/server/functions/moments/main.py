@@ -44,6 +44,7 @@ def handle_add_moment(request):
     boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
+    print(new_moment)
     summary, title, action_items = boss_agent.extract_content(new_moment)
 
     # Use regex to extract only the content within square brackets
