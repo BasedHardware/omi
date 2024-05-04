@@ -41,6 +41,9 @@ class FFAppState extends ChangeNotifier {
         }
       }
     });
+    _safeInit(() async => {
+          memories = await MemoryStorage.getAllMemories(),
+        });
   }
 
   void update(VoidCallback callback) {
