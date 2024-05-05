@@ -36,20 +36,20 @@ const useAudioStream = () => {
   const createOrUpdateMoment = async transcript => {
     if (currentMomentRef.current) {
       try {
-        const momentId = currentMomentRef.current.id;
-        await updateMoment({id: momentId, transcript});
+        const momentId = currentMomentRef.current.momentId;
+        console.log(currentMomentRef.current)
+        await updateMoment({momentId, transcript});
       } catch (error) {
         console.error('Error updating moment', error);
       }
     } else {
-      console.log('Creating new moment', transcript);
       try {
         const newMoment = {
           transcript,
           date: new Date(),
         };
         const newMomentId = await addMoment(newMoment);
-        newMoment.id = newMomentId;
+        newMoment.momentId = newMomentId;
         currentMomentRef.current = newMoment;
       } catch (error) {
         console.error('Error creating moment', error);

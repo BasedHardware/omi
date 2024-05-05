@@ -4,7 +4,6 @@ import {Card} from 'react-native-elements';
 
 const MomentDetailScreen = ({route}) => {
   const {transcript, summary, title, actionItems} = route.params;
-  console.log(actionItems);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -16,7 +15,7 @@ const MomentDetailScreen = ({route}) => {
         <Card.Divider />
         <Text style={styles.title}>Action Items</Text>
         <Text style={styles.actionItems}>
-          {JSON.parse(actionItems).map((item, index) => (
+          {actionItems.map((item, index) => (
             <Text key={index} style={styles.actionItemsText}>
               • {item}
               {'\n'}

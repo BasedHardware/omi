@@ -49,7 +49,7 @@ const MomentListItem = ({item, onItemPress}) => {
         onPress={() => onItemPress(item)}
         activeOpacity={0.6}
         style={styles.touchable}>
-        <ListItem key={item.id} bottomDivider containerStyle={styles.listItem}>
+        <ListItem key={item.momentId} bottomDivider containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>
               {item.transcript.substring(0, 30) + '...'}

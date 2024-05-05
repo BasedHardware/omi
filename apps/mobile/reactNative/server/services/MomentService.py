@@ -78,11 +78,39 @@ class MomentService:
             moments_collection = self.db['moments']
             moments_collection.insert_one(moment_data)
             # Convert _id to string and rename it to id
-            moment_data['id'] = str(moment_data.pop('_id'))
+            moment_data['momentId'] = str(moment_data.pop('_id'))
             return moment_data
         else:
             print("MongoDB connection is not initialized.")
             return None
+    
+    def update_moment(self, moment_data):
+        self._initialize_client()
+        if self.db is not None:
+            moments_collection = self.db['moments']
+            moment_id = moment_data['momentId']
+
+            # Fetch the current transcript
+            current_moment = moments_collection.find_one({'_id': ObjectId(moment_id)})
+            if current_moment:
+                current_transcript = current_moment.get('transcript', '')
+                new_transcript = current_transcript + moment_data['transcript']
+
+                update_data = {
+                    '$set': {
+                        'actionItems': moment_data['actionItems'],
+                        'summary': moment_data['summary'],
+                        'transcript': new_transcript 
+                    }
+                }
+                result = moments_collection.update_one({'_id': ObjectId(moment_id)}, update_data)
+                return result.modified_count
+            else:
+                print("Moment not found.")
+                return 0
+        else:
+            print("MongoDB connection is not initialized.")
+            return 0
         
     def delete_moment(self, moment_id):
         self._initialize_client()

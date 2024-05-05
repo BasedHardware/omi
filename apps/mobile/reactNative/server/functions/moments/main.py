@@ -1,6 +1,6 @@
 import re
 import os
-import requests
+import json
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from flask import jsonify
@@ -43,28 +43,16 @@ def handle_add_moment(request):
     boss_agent = BossAgent()
     data = request.json
     new_moment = data['newMoment']
-    summary, title, action_items = boss_agent.extract_content(new_moment)
+    new_moment = {**new_moment, **boss_agent.extract_content(new_moment)}
 
-    # Use regex to extract only the content within square brackets
-    action_items_cleaned = re.findall(r'\[.*?\]', action_items)
-    if action_items_cleaned:
-        action_items = action_items_cleaned[0]
-    else:
-        action_items = '[]'
-
-    new_moment['summary'] = summary
-    new_moment['title'] = title
-    new_moment['actionItems'] = action_items
-    transcript = new_moment['transcript']
-
+    # Add the moment to the database
     new_moment = moment_service.add_moment(new_moment)
+    
     # Create the first snapshot for the moment
-    action_items_str = "Action Items:\n" + "\n".join(action_items)
-    combined_content = transcript + '\n' + action_items_str + '\n' + summary
+    action_items_str = "Action Items:\n" + "\n".join(new_moment['actionItems'])
+    combined_content = f"Transcript: {new_moment['transcript']}\n{action_items_str}\nSummary: {new_moment['summary']}"
     snapshot_data = new_moment.copy()
-    snapshot_data['embeddings'] = boss_agent.embed_content(combined_content)
-    snapshot_data['momentId'] = snapshot_data['id']
-    del snapshot_data['id']
+    snapshot_data['embeddings'] = boss_agent.embed_content(combined_content) 
     moment_service.create_snapshot(snapshot_data)
     
     return new_moment
@@ -73,23 +61,30 @@ def handle_update_moment(request):
     boss_agent = BossAgent()
     moment_service = MomentService()
     data = request.json
+
     current_moment = data['moment']
-    moment_id = current_moment['id']
-    # Get the previous snapshot for the moment
+    print(current_moment)
+    moment_id = current_moment['momentId']
+    current_snapshot = {**current_moment, **boss_agent.extract_content(current_moment)}
+    current_snapshot['momentId'] = moment_id
     previous_snapshot = moment_service.get_previous_snapshot(moment_id)
-    summary, title, action_items = boss_agent.extract_content(current_moment)
-    current_snapshot = {'momentId': moment_id, 'summary': summary, 'title': title, 'actionItems': action_items}
-    action_items_str = "Action Items:\n" + "\n".join(action_items)
-    combined_content = current_moment['transcript'] + '\n' + action_items_str + '\n' + summary
+
+    # Combine and embed the current snapshot
+    action_items_str = "Action Items:\n" + "\n".join(current_snapshot['actionItems'])
+    combined_content = f"Transcript: {current_moment['transcript']}\n{action_items_str}\nSummary: {current_snapshot['summary']}"
     current_snapshot['embeddings'] = boss_agent.embed_content(combined_content)
+    
+    # Create snapshot in the db
     moment_service.create_snapshot(current_snapshot)
 
     # diff the current snapshot with the previous snapshot
     new_snapshot = boss_agent.diff_snapshots(previous_snapshot, current_snapshot)
-    # Each snapshot should be embedded individually.
-    
-    # I need to replace the summary and title and then update action items and transcript
 
+    new_snapshot['momentId'] = moment_id
+    new_snapshot['transcript'] = current_moment['transcript']
+
+    moment_service.update_moment(new_snapshot)
+    
     return new_snapshot
 
 def handle_delete_moment(request):

@@ -67,7 +67,7 @@ export const MomentsProvider = ({children}) => {
         moments.push(response.data.moment);
         await updateLocalStorage(moments);
         setMoments(moments);
-        return response.data.moment.id;
+        return response.data.moment.momentId;
       } else {
         console.log(
           'Request succeeded but with a non-200 status code:',
@@ -86,11 +86,13 @@ export const MomentsProvider = ({children}) => {
       });
       if (response.status === 200 && response.data) {
         console.log('Moment updated:', response.data.moment);
-        // const moments = (await fetchMomentsFromLocalStorage()) || [];
-        // const index = moments.findIndex(item => item.id === moment.id);
-        // moments[index] = response.data.moment;
-        // await updateLocalStorage(moments);
-        // setMoments(moments);
+        const moments = (await fetchMomentsFromLocalStorage()) || [];
+        const index = moments.findIndex(item => item.momentId === moment.momentId);
+        console.log('Index:', index);
+        console.log('Moments:', moments[index]);
+        moments[index] = response.data.moment;
+        await updateLocalStorage(moments);
+        setMoments(moments);
       } else {
         console.log(
           'Request succeeded but with a non-200 status code:',
