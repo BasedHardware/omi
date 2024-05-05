@@ -1,8 +1,8 @@
 import {useState, useRef, useEffect, useContext} from 'react';
 import jsTokens from 'js-tokens';
 import {DEEPGRAM_API_KEY} from '@env';
-import {BluetoothContext} from './BluetoothContext';
-import {MomentsContext} from './MomentsContext';
+import {BluetoothContext} from '../contexts/BluetoothContext';
+import {MomentsContext} from '../contexts/MomentsContext';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import base64 from 'react-native-base64';
 import BleManager from 'react-native-ble-manager';
