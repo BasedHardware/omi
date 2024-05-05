@@ -56,8 +56,7 @@ class BossAgent:
     def extract_content(self, moment):
         self._initialize_dspy()
         content = moment['transcript']
-        print(f"Extracting content from: {content}")
-
+        
         if self.lm:
             extract_actions = dspy.Predict(ActionItems)
             actions_pred = extract_actions(content=content)
@@ -70,7 +69,6 @@ class BossAgent:
             return None
    
     def diff_snapshots(self, previous_snapshot, current_snapshot):
-        print(f"Diffing snapshots: {previous_snapshot} and {current_snapshot}")
         self._initialize_dspy()
         prev_title = f"Previous Title: {previous_snapshot['title']}"
         prev_summary = f"Previous Summary: {previous_snapshot['summary']}"
@@ -82,11 +80,11 @@ class BossAgent:
         combined_curr = f"{curr_title}\n{curr_summary}\n{curr_action_items}"
 
         generate_diff_prompt = dspy.ChainOfThought('current_snapshot, previous_snapshot -> new_snapshot')
-        new_snapshot = generate_diff_prompt(current_snapshot=combined_curr, previous_snapshot=combined_prev)
+        new_snapshot_pred = generate_diff_prompt(current_snapshot=combined_curr, previous_snapshot=combined_prev)
+        new_snapshot = new_snapshot_pred.new_snapshot
         return new_snapshot
 
     def embed_content(self, content):
-        print(f"Embedding content: {content}")
         response = self.openai_client.embeddings.create(
             input=content,
             model="text-embedding-3-small",
@@ -112,7 +110,7 @@ class BossAgent:
                     'type': 'stream',
                 }
                 yield stream_obj
-    
+
     def manage_chat(self, chat_history, new_user_message):
         """
         Takes a chat object extracts x amount of tokens and returns a message

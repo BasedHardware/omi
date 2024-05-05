@@ -7,7 +7,6 @@ import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faTrash} from '@fortawesome/free-solid-svg-icons';
 
 const MomentListItem = ({item, onItemPress}) => {
-  console.log('MomentListItem', item);
   const {deleteMoment} = useContext(MomentsContext);
   const swipeableRef = useRef(null);
   const touchableRef = useRef(null);

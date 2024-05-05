@@ -11,7 +11,7 @@ const MomentsTab = () => {
   const {moments} = useContext(MomentsContext);
   const {
     isRecording,
-    streamingTranscript,
+    displayTranscript,
     stopRecording,
     startRecording,
   } = useAudioStream();
@@ -27,7 +27,7 @@ const MomentsTab = () => {
     navigation.navigate('Moment Details', {
       title: item.title,
       summary: item.summary,
-      transcript: item.text,
+      transcript: item.transcript,
       actionItems: item.actionItems,
     });
   };
@@ -41,7 +41,7 @@ const MomentsTab = () => {
           buttonStyle={styles.recordButton}
         />
         <View style={styles.transcriptContainer}>
-          <Text style={styles.transcriptText}>{streamingTranscript}</Text>
+          <Text style={styles.transcriptText}>{displayTranscript}</Text>
         </View>
         <FlatList
           data={moments}

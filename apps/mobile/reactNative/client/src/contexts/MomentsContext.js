@@ -67,6 +67,7 @@ export const MomentsProvider = ({children}) => {
         moments.push(response.data.moment);
         await updateLocalStorage(moments);
         setMoments(moments);
+        return response.data.moment.id;
       } else {
         console.log(
           'Request succeeded but with a non-200 status code:',
@@ -84,6 +85,7 @@ export const MomentsProvider = ({children}) => {
         moment,
       });
       if (response.status === 200 && response.data) {
+        console.log('Moment updated:', response.data.moment);
         // const moments = (await fetchMomentsFromLocalStorage()) || [];
         // const index = moments.findIndex(item => item.id === moment.id);
         // moments[index] = response.data.moment;
