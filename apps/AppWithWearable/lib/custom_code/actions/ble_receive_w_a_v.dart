@@ -29,7 +29,7 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
 
   debugPrint('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
-  // var isFinals = [];
+
   channel.ready.then((_) {
     channel.stream.listen((event) {
       debugPrint('Event from Stream: $event');
@@ -39,7 +39,6 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
 
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
-        debugPrint(jsonEncode(parsedJson));
         if (speechFinal) {
           interimCallback(transcript);
           speechFinalCallback('');
@@ -47,9 +46,6 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
           interimCallback(transcript);
         }
       }
-
-      // Re-instantiate the Completer for next use
-      // completer = Completer<String>();
     }, onError: (err) {
       debugPrint('Websocket Error: $err');
       // handle stream error

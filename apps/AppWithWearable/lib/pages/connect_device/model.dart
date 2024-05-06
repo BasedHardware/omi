@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur/blur_widget.dart';
-import '/pages/ble/device_data/device_data_widget.dart';
+import '/pages/ble/device_data/page.dart';
 import 'page.dart' show ConnectDeviceWidget;
 
 class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
@@ -19,13 +19,10 @@ class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
   int? updatedRssi;
   // Model for blur component.
   late BlurModel blurModel;
-  // Model for deviceData component.
-  late DeviceDataModel deviceDataModel;
 
   @override
   void initState(BuildContext context) {
     blurModel = createModel(context, () => BlurModel());
-    deviceDataModel = createModel(context, () => DeviceDataModel());
   }
 
   @override
@@ -33,6 +30,5 @@ class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
     unfocusNode.dispose();
     rssiUpdateTimer?.cancel();
     blurModel.dispose();
-    deviceDataModel.dispose();
   }
 }
