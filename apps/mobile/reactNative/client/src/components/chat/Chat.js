@@ -12,21 +12,10 @@ import MessageInput from './MessageInput';
 import UserMessage from './UserMessage';
 import ChatBar from './ChatBar';
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1, // This makes the container use all available space
-    flexDirection: 'column',
-  },
-  messagesContainer: {
-    flex: 1, // This makes the ScrollView expand to fill the space between ChatBar and MessageInput
-  },
-});
-
 const Chat = ({route}) => {
   const {chat_name: chatName, chatId} = route.params;
   const nodeRef = useRef(null);
   const {messages} = useContext(ChatContext);
-  
 
   // scrolls chat window to the bottom
   useEffect(() => {
@@ -69,5 +58,15 @@ const Chat = ({route}) => {
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  messagesContainer: {
+    flex: 1,
+  },
+});
 
 export default Chat;

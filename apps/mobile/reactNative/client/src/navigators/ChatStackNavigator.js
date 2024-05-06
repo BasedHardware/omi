@@ -4,22 +4,15 @@ import ChatTab from '../screens/ChatTab';
 
 const Stack = createNativeStackNavigator();
 
-const logoutButton = () => (
-  <Button onPress={() => signOut()} title="">
-    <FontAwesomeIcon icon={faSignOutAlt} size={24} color="#000" />
-  </Button>
-);
-
 const ChatStackNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="Chat">
-      <Stack.Screen name="Chat" component={ChatTab} />
+    <Stack.Navigator initialRouteName="ChatMain" screenOptions={{headerStyle: {backgroundColor: '#000'}}}>
       <Stack.Screen
-        name="Chat Room"
-        component={Chat}
-        options={{title: ''}}
-        headerRight={logoutButton}
+        name="ChatMain"
+        component={ChatTab}
+        options={{title: 'Chat', headerShown: false}}
       />
+      <Stack.Screen name="Chat Room" component={Chat} options={{title: ''}} />
     </Stack.Navigator>
   );
 };

@@ -6,7 +6,7 @@ const MomentDetailScreen = ({route}) => {
   const {transcript, summary, title, actionItems} = route.params;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={{backgroundColor: '#000'}} contentContainerStyle={styles.container}>
       <Card containerStyle={styles.card}>
         <Card.Title style={styles.title}>{title}</Card.Title>
         <Card.Divider />
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 10,
-    backgroundColor: '#f0f0f0', // Light grey background
+    backgroundColor: '#000', // Light grey background
   },
   card: {
     borderRadius: 10,

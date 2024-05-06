@@ -7,9 +7,19 @@ const Stack = createNativeStackNavigator();
 
 const MomentsStackNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="Moments">
-      <Stack.Screen name="Moments" component={MomentsTab} />
-      <Stack.Screen name="Moment Details" component={MomentDetailScreen} />
+    <Stack.Navigator
+      initialRouteName="MomentsMain"
+      screenOptions={{headerStyle: {backgroundColor: '#000'}}}>
+      <Stack.Screen
+        name="MomentsMain"
+        component={MomentsTab}
+        options={{title: 'Moments', headerShown: false}}
+      />
+      <Stack.Screen
+        name="Moment Details"
+        component={MomentDetailScreen}
+        options={{title: ''}}
+      />
     </Stack.Navigator>
   );
 };

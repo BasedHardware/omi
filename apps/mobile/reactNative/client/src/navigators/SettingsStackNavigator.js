@@ -11,19 +11,21 @@ const logoutButton = signOut => (
   <Button
     buttonStyle={{backgroundColor: 'transparent'}}
     onPress={() => signOut()}
-    icon={<FontAwesomeIcon icon={faSignOutAlt} size={24} color="#000" />}
+    icon={<FontAwesomeIcon icon={faSignOutAlt} size={24} color="#fff" />}
   />
 );
 
 const SettingsStackNavigator = () => {
   const {signOut} = useContext(AuthContext);
   return (
-    <Stack.Navigator initialRouteName="Settings">
+    <Stack.Navigator initialRouteName="SettingsMain" screenOptions={{headerStyle: {backgroundColor: '#000'}}}>
       <Stack.Screen
-        name="Settings"
+        name="SettingsMain"
         component={SettingsTab}
         options={{
           headerRight: () => logoutButton(signOut),
+          title: 'Settings',
+          headerTintColor: '#fff',
         }}
       />
     </Stack.Navigator>

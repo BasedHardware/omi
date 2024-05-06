@@ -49,10 +49,13 @@ const MomentListItem = ({item, onItemPress}) => {
         onPress={() => onItemPress(item)}
         activeOpacity={0.6}
         style={styles.touchable}>
-        <ListItem key={item.momentId} bottomDivider containerStyle={styles.listItem}>
+        <ListItem
+          key={item.momentId}
+          bottomDivider
+          containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>
-              {item.transcript.substring(0, 30) + '...'}
+              {item.title.substring(0, 30) + '...'}
             </ListItem.Title>
             <ListItem.Subtitle>{formatDate(item.date)}</ListItem.Subtitle>
           </ListItem.Content>
@@ -65,6 +68,7 @@ const MomentListItem = ({item, onItemPress}) => {
 
 const styles = StyleSheet.create({
   listItem: {
+    backgroundColor: '#f9f9f9',
     borderRadius: 10,
     marginVertical: 8,
     overflow: 'hidden',

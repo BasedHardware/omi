@@ -41,7 +41,7 @@ const SettingsTab = () => {
 
   return (
     <>
-      <SafeAreaView style={styles.body}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.buttonGroup}>
           {showScanButton && (
             <Pressable style={styles.scanButton} onPress={startScan}>
@@ -81,12 +81,6 @@ const boxShadow = {
 };
 
 const styles = StyleSheet.create({
-  engine: {
-    position: 'absolute',
-    right: 10,
-    bottom: 0,
-    color: Colors.black,
-  },
   buttonGroup: {
     flexDirection: 'row',
     width: '100%',
@@ -107,51 +101,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
     color: Colors.white,
   },
-  body: {
-    backgroundColor: '#fff',
+  container: {
+    backgroundColor: '#000',
     flex: 1,
-  },
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.black,
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-    color: Colors.dark,
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-  footer: {
-    color: Colors.dark,
-    fontSize: 12,
-    fontWeight: '600',
-    padding: 4,
-    paddingRight: 12,
-    textAlign: 'right',
   },
   peripheralName: {
     fontSize: 16,
     textAlign: 'center',
     padding: 10,
-  },
-  rssi: {
-    fontSize: 12,
-    textAlign: 'center',
-    padding: 2,
-  },
-  peripheralId: {
-    fontSize: 12,
-    textAlign: 'center',
-    padding: 2,
-    paddingBottom: 20,
   },
   row: {
     marginLeft: 10,

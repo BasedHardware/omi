@@ -45,7 +45,6 @@ const ChatListItem = ({item, onItemPress}) => {
           containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>{item.chat_name}</ListItem.Title>
-            <ListItem.Subtitle>{item.model}</ListItem.Subtitle>
           </ListItem.Content>
           <ListItem.Chevron />
         </ListItem>

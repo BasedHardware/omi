@@ -6,21 +6,17 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {MomentsContext} from '../contexts/MomentsContext';
 import useAudioStream from '../hooks/useAudioStream';
 import MomentListItem from '../components/moments/MomentsListItem';
+import {SafeAreaView} from 'react-native-safe-area-context';
 
 const MomentsTab = () => {
   const {moments} = useContext(MomentsContext);
-  const {
-    isRecording,
-    displayTranscript,
-    stopRecording,
-    startRecording,
-  } = useAudioStream();
+  const {isRecording, displayTranscript, stopRecording, startRecording} =
+    useAudioStream();
 
   const navigation = useNavigation();
 
   const handleStopRecording = async () => {
     stopRecording();
-    
   };
 
   const handlePress = item => {
@@ -34,7 +30,7 @@ const MomentsTab = () => {
 
   return (
     <GestureHandlerRootView style={{flex: 1}}>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Button
           title={isRecording ? 'Stop' : 'Record'}
           onPress={isRecording ? handleStopRecording : startRecording}
@@ -51,7 +47,7 @@ const MomentsTab = () => {
           )}
           style={{flex: 1}}
         />
-      </View>
+      </SafeAreaView>
     </GestureHandlerRootView>
   );
 };
@@ -59,14 +55,14 @@ const MomentsTab = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5FCFF',
+    backgroundColor: '#000',
   },
-  contentContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   recordButton: {
     padding: 20,
+    margin: 20,
+    width: 200,
+    alignSelf: 'center',
     backgroundColor: 'red',
     borderRadius: 50,
   },
@@ -75,12 +71,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   transcriptContainer: {
-    marginTop: 20,
+    height: 200,
+    maxHeight: 200,
+    margin: 20,
     padding: 10,
     borderWidth: 1,
     borderColor: '#cccccc',
     borderRadius: 5,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f9f9f9',
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.2,

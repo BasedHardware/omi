@@ -1,4 +1,3 @@
-import {StyleSheet} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import MomentsStackNavigator from '../navigators/MomentsStackNavigator';
 import SettingsStackNavigator from '../navigators/SettingsStackNavigator';
@@ -16,11 +15,11 @@ const MainScreen = () => {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: {backgroundColor: '#000'},
+        tabBarStyle: {backgroundColor: '#000', borderTopWidth: 0},
         headerShown: false,
       }}>
       <Tab.Screen
-        name="Chat Tab"
+        name="Chat"
         component={ChatStackNavigator}
         options={{
           tabBarIcon: ({color}) => (
@@ -29,7 +28,7 @@ const MainScreen = () => {
         }}
       />
       <Tab.Screen
-        name="Moments Tab"
+        name="Moments"
         component={MomentsStackNavigator}
         options={{
           tabBarIcon: props => {
@@ -44,7 +43,7 @@ const MainScreen = () => {
         }}
       />
       <Tab.Screen
-        name="Settings Tab"
+        name="Settings"
         component={SettingsStackNavigator}
         options={{
           tabBarIcon: props => {
@@ -57,14 +56,5 @@ const MainScreen = () => {
     </Tab.Navigator>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 10,
-  },
-});
 
 export default MainScreen;

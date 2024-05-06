@@ -8,6 +8,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faPlus} from '@fortawesome/free-solid-svg-icons';
 import {ChatContext} from '../contexts/ChatContext';
 import NewChatModal from '../components/chat/NewChatModal';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const ChatTab = () => {
   const {chatArray} = useContext(ChatContext);
@@ -24,9 +25,10 @@ const ChatTab = () => {
 
   return (
     <GestureHandlerRootView>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <View style={{height: 20}} />
         <Button
-          icon={<FontAwesomeIcon icon={faPlus} size={24} color="#000" />}
+          icon={<FontAwesomeIcon icon={faPlus} size={24} color="#fff" />}
           title="Create Chat"
           buttonStyle={styles.button}
           titleStyle={styles.buttonText}
@@ -44,7 +46,7 @@ const ChatTab = () => {
           )}
           style={{flex: 1}}
         />
-      </View>
+      </SafeAreaView>
     </GestureHandlerRootView>
   );
 };
@@ -52,13 +54,13 @@ const ChatTab = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginTop: 20,
+    backgroundColor: '#000',
   },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderColor: '#000',
+    borderColor: '#fff',
     borderWidth: 2,
     padding: 10,
     borderRadius: 5,
@@ -68,7 +70,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   buttonText: {
-    color: '#000',
+    color: '#fff',
     marginLeft: 10,
   },
 });
