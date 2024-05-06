@@ -10,7 +10,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'package:web_socket_channel/io.dart';
 
 const serverUrl =
-    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=es&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
+    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
 
 late IOWebSocketChannel channel;
 
@@ -34,11 +34,15 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
     channel.stream.listen((event) {
       debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
-      final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
+      final data = parsedJson['channel']['alternatives'][0];
+      final transcript = data['transcript'];
       final speechFinal = parsedJson['is_final'];
 
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
+        // data['words'].forEach((word) {
+        //   debugPrint('Word: ${word['word']}');
+        // });
         if (speechFinal) {
           interimCallback(transcript);
           speechFinalCallback('');
@@ -87,8 +91,6 @@ Future<String> bleReceiveWAV(
             if (isNotify) {
               await characteristic.setNotifyValue(true);
               debugPrint('Subscribed to characteristic: ${characteristic.uuid.str128}');
-              // List<int> wavData = [];
-              // int samplesToRead = 150000;
 
               characteristic.value.listen((value) {
                 if (value.isEmpty) return;
