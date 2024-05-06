@@ -41,14 +41,6 @@ export const ChatProvider = ({children}) => {
       ...messages,
       [chatId]: [...(messages[chatId] || []), newMessage],
     };
-    try {
-      await EncryptedStorage.setItem(
-        'messages',
-        JSON.stringify(updatedMessages),
-      );
-    } catch (error) {
-      console.error('Failed to save messages:', error);
-    }
   };
 
   // Get the messages for a specific chat
@@ -238,27 +230,6 @@ export const ChatProvider = ({children}) => {
 
       return newMessagesState;
     });
-
-    // Save updated messages to local storage
-    try {
-      const updatedMessages = {
-        ...messages,
-        [chatId]: [
-          ...(messages[chatId] || []).slice(0, -1),
-          {
-            content: completeMessage,
-            message_from: 'agent',
-            type: 'database',
-          },
-        ],
-      };
-      await EncryptedStorage.setItem(
-        'messages',
-        JSON.stringify(updatedMessages),
-      );
-    } catch (error) {
-      console.error('Failed to save messages:', error);
-    }
   };
 
   const clearChat = async chatId => {
