@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   noPeripherals: {
     margin: 10,
     textAlign: 'center',
-    color: Colors.black,
+    color: Colors.white,
   },
 });
 

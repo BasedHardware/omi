@@ -24,7 +24,7 @@ export const useBluetoothManager = () => {
   const [peripherals, setPeripherals] = useState(new Map());
 
   useEffect(() => {
-    // Permissions and initialization
+    // Permissions and initializations
     handlePermissionsAndStart();
     return () => {
       // Cleanup
@@ -33,10 +33,12 @@ export const useBluetoothManager = () => {
   }, []);
 
   const handlePermissionsAndStart = async () => {
-    await handleAndroidPermissions();
+    handleAndroidPermissions();
     await BleManager.start({showAlert: false});
     setupListeners();
-    startScan();
+    setTimeout(() => {
+      startScan();
+    }, 1);
   };
 
   const handleAndroidPermissions = () => {
