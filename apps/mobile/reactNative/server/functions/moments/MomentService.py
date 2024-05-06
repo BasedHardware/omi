@@ -103,8 +103,8 @@ class MomentService:
                         'transcript': new_transcript 
                     }
                 }
-                result = moments_collection.update_one({'_id': ObjectId(moment_id)}, update_data)
-                return result.modified_count
+                moments_collection.update_one({'_id': ObjectId(moment_id)}, update_data)
+                return new_transcript
             else:
                 print("Moment not found.")
                 return 0

@@ -63,7 +63,6 @@ def handle_update_moment(request):
     data = request.json
 
     current_moment = data['moment']
-    print(current_moment)
     moment_id = current_moment['momentId']
     current_snapshot = {**current_moment, **boss_agent.extract_content(current_moment)}
     current_snapshot['momentId'] = moment_id
@@ -83,7 +82,8 @@ def handle_update_moment(request):
     new_snapshot['momentId'] = moment_id
     new_snapshot['transcript'] = current_moment['transcript']
 
-    moment_service.update_moment(new_snapshot)
+    new_transcript = moment_service.update_moment(new_snapshot)
+    new_snapshot['transcript'] = new_transcript
     
     return new_snapshot
 

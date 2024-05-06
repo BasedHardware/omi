@@ -1,6 +1,6 @@
-import React, {useContext} from 'react';
+import {useContext, useRef, useEffect} from 'react';
 import {useNavigation} from '@react-navigation/native';
-import {View, Text, StyleSheet, FlatList} from 'react-native';
+import {ScrollView, Text, StyleSheet, FlatList} from 'react-native';
 import {Button} from 'react-native-elements';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {MomentsContext} from '../contexts/MomentsContext';
@@ -13,7 +13,12 @@ const MomentsTab = () => {
   const {isRecording, displayTranscript, stopRecording, startRecording} =
     useAudioStream();
 
+  const scrollViewRef = useRef(null);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    scrollViewRef.current?.scrollToEnd({animated: true});
+  }, [displayTranscript]);
 
   const handleStopRecording = async () => {
     stopRecording();
@@ -36,9 +41,9 @@ const MomentsTab = () => {
           onPress={isRecording ? handleStopRecording : startRecording}
           buttonStyle={styles.recordButton}
         />
-        <View style={styles.transcriptContainer}>
+        <ScrollView ref={scrollViewRef} style={styles.transcriptContainer}>
           <Text style={styles.transcriptText}>{displayTranscript}</Text>
-        </View>
+        </ScrollView>
         <FlatList
           data={moments}
           keyExtractor={(item, index) => index.toString()}
