@@ -24,8 +24,8 @@ void main() async {
   });
 
   testWidgets('newTest', (WidgetTester tester) async {
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: 'kodjima33+sama@gmail.com', password: '123456');
+    // await FirebaseAuth.instance.signInWithEmailAndPassword(
+    //     email: 'kodjima33+sama@gmail.com', password: '123456');
     await tester.pumpWidget(ChangeNotifierProvider(
       create: (context) => FFAppState(),
       child: MyApp(),

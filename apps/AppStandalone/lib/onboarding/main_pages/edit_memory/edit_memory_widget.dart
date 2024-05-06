@@ -1,3 +1,6 @@
+import 'package:sama/backend/storage/memories.dart';
+import 'package:uuid/uuid.dart';
+
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/backend.dart';
@@ -8,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'edit_memory_model.dart';
-export 'edit_memory_model.dart';
 
 class EditMemoryWidget extends StatefulWidget {
   const EditMemoryWidget({
@@ -16,7 +18,7 @@ class EditMemoryWidget extends StatefulWidget {
     this.memory,
   });
 
-  final MemoriesRecord? memory;
+  final MemoryRecord? memory;
 
   @override
   State<EditMemoryWidget> createState() => _EditMemoryWidgetState();
@@ -36,8 +38,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
     super.initState();
     _model = createModel(context, () => EditMemoryModel());
 
-    _model.textController ??=
-        TextEditingController(text: widget.memory?.structuredMemory);
+    _model.textController ??= TextEditingController(text: widget.memory?.structuredMemory);
     _model.textFieldFocusNode ??= FocusNode();
 
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
@@ -123,21 +124,18 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                       ),
                     ),
                     style: FlutterFlowTheme.of(context).bodyMedium.override(
-                          fontFamily:
-                              FlutterFlowTheme.of(context).bodyMediumFamily,
+                          fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                           fontSize: 16.0,
-                          useGoogleFonts: GoogleFonts.asMap().containsKey(
-                              FlutterFlowTheme.of(context).bodyMediumFamily),
+                          useGoogleFonts:
+                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                         ),
                     maxLines: null,
                     minLines: 1,
                     keyboardType: TextInputType.multiline,
-                    validator:
-                        _model.textControllerValidator.asValidator(context),
+                    validator: _model.textControllerValidator.asValidator(context),
                   ),
                   Padding(
-                    padding:
-                        const EdgeInsetsDirectional.fromSTEB(24.0, 12.0, 24.0, 0.0),
+                    padding: const EdgeInsetsDirectional.fromSTEB(24.0, 12.0, 24.0, 0.0),
                     child: Row(
                       mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -146,26 +144,22 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                         Align(
                           alignment: const AlignmentDirectional(0.0, 0.0),
                           child: Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(
-                                0.0, 0.0, 0.0, 10.0),
+                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 10.0),
                             child: InkWell(
                               splashColor: Colors.transparent,
                               focusColor: Colors.transparent,
                               hoverColor: Colors.transparent,
                               highlightColor: Colors.transparent,
                               onTap: () async {
-                                logFirebaseEvent(
-                                    'EDIT_MEMORY_COMP_Icon_jqhk5lng_ON_TAP');
-                                logFirebaseEvent(
-                                    'Icon_close_dialog,_drawer,_etc');
+                                logFirebaseEvent('EDIT_MEMORY_COMP_Icon_jqhk5lng_ON_TAP');
+                                logFirebaseEvent('Icon_close_dialog,_drawer,_etc');
                                 Navigator.pop(context);
                                 logFirebaseEvent('Icon_backend_call');
-                                await widget.memory!.reference.delete();
+                                await MemoryStorage.deleteMemory(widget.memory!.id);
                               },
                               child: FaIcon(
                                 FontAwesomeIcons.trash,
-                                color:
-                                    FlutterFlowTheme.of(context).secondaryText,
+                                color: FlutterFlowTheme.of(context).secondaryText,
                                 size: 24.0,
                               ),
                             ),
@@ -175,41 +169,29 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                           mainAxisSize: MainAxisSize.max,
                           children: [
                             Padding(
-                              padding: const EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 12.0, 0.0),
+                              padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
                               child: FFButtonWidget(
                                 onPressed: () async {
-                                  logFirebaseEvent(
-                                      'EDIT_MEMORY_COMP_CANCEL_BTN_ON_TAP');
-                                  logFirebaseEvent(
-                                      'Button_close_dialog,_drawer,_etc');
+                                  logFirebaseEvent('EDIT_MEMORY_COMP_CANCEL_BTN_ON_TAP');
+                                  logFirebaseEvent('Button_close_dialog,_drawer,_etc');
                                   Navigator.pop(context);
                                   if (widget.memory?.structuredMemory == '') {
                                     logFirebaseEvent('Button_backend_call');
-                                    await widget.memory!.reference.delete();
+                                    await MemoryStorage.deleteMemory(widget.memory!.id);
                                   }
                                 },
                                 text: 'Cancel',
                                 options: FFButtonOptions(
                                   height: 40.0,
-                                  padding: const EdgeInsetsDirectional.fromSTEB(
-                                      20.0, 0.0, 20.0, 0.0),
-                                  iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                                      0.0, 0.0, 0.0, 0.0),
-                                  color: FlutterFlowTheme.of(context)
-                                      .secondaryBackground,
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyLarge
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyLargeFamily,
-                                        color: FlutterFlowTheme.of(context)
-                                            .primary,
+                                  padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
+                                  iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                                  color: FlutterFlowTheme.of(context).secondaryBackground,
+                                  textStyle: FlutterFlowTheme.of(context).bodyLarge.override(
+                                        fontFamily: FlutterFlowTheme.of(context).bodyLargeFamily,
+                                        color: FlutterFlowTheme.of(context).primary,
                                         fontWeight: FontWeight.bold,
                                         useGoogleFonts: GoogleFonts.asMap()
-                                            .containsKey(
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyLargeFamily),
+                                            .containsKey(FlutterFlowTheme.of(context).bodyLargeFamily),
                                       ),
                                   elevation: 0.0,
                                   borderRadius: BorderRadius.circular(40.0),
@@ -219,112 +201,62 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                             if (!_model.textFieldEmpty)
                               FFButtonWidget(
                                 onPressed: () async {
-                                  logFirebaseEvent(
-                                      'EDIT_MEMORY_COMP_SAVE_BTN_ON_TAP');
-                                  logFirebaseEvent(
-                                      'Button_close_dialog,_drawer,_etc');
+                                  logFirebaseEvent('EDIT_MEMORY_COMP_SAVE_BTN_ON_TAP');
+                                  logFirebaseEvent('Button_close_dialog,_drawer,_etc');
                                   Navigator.pop(context);
                                   if ((widget.memory != null) == true) {
                                     logFirebaseEvent('Button_backend_call');
-
-                                    await widget.memory!.reference
-                                        .update(createMemoriesRecordData(
-                                      structuredMemory:
-                                          _model.textController.text,
-                                    ));
+                                    await MemoryStorage.updateMemory(widget.memory!.id, _model.textController.text);
                                   } else {
                                     logFirebaseEvent('Button_backend_call');
+                                    var memory = MemoryRecord(
+                                        id: const Uuid().v4(),
+                                        date: DateTime.now(),
+                                        rawMemory: 'User-added memory',
+                                        structuredMemory: _model.textController.text,
+                                        isEmpty: false,
+                                        isUseless: false);
+                                    await MemoryStorage.addMemory(memory);
 
-                                    var memoriesRecordReference =
-                                        MemoriesRecord.collection.doc();
-                                    await memoriesRecordReference.set({
-                                      ...createMemoriesRecordData(
-                                        user: currentUserReference,
-                                        structuredMemory:
-                                            _model.textController.text,
-                                        memory: 'User-added memory',
-                                        emptyMemory: false,
-                                        toShowToUserShowHide: 'Show',
-                                        isUselessMemory: false,
-                                      ),
-                                      ...mapToFirestore(
-                                        {
-                                          'date': FieldValue.serverTimestamp(),
-                                        },
-                                      ),
-                                    });
-                                    _model.createdMemoryManually =
-                                        MemoriesRecord.getDocumentFromData({
-                                      ...createMemoriesRecordData(
-                                        user: currentUserReference,
-                                        structuredMemory:
-                                            _model.textController.text,
-                                        memory: 'User-added memory',
-                                        emptyMemory: false,
-                                        toShowToUserShowHide: 'Show',
-                                        isUselessMemory: false,
-                                      ),
-                                      ...mapToFirestore(
-                                        {
-                                          'date': DateTime.now(),
-                                        },
-                                      ),
-                                    }, memoriesRecordReference);
+                                    _model.createdMemoryManually = memory;
                                     logFirebaseEvent('Button_backend_call');
-                                    _model.openAIVector =
-                                        await getEmbeddingsFromInput(_model.textController.text,
+                                    _model.openAIVector = await getEmbeddingsFromInput(
+                                      _model.textController.text,
                                     );
                                     if (_model.openAIVector != null) {
                                       logFirebaseEvent('Button_backend_call');
-                                      _model.addedVector =
-                                          await createPineconeVector(
-                                         _model.openAIVector,
-                                         _model
-                                            .createdMemoryManually
-                                            ?.structuredMemory,
-                                         _model.createdMemoryManually
-                                            ?.reference.id,
+                                      _model.addedVector = await createPineconeVector(
+                                        _model.openAIVector,
+                                        _model.createdMemoryManually?.structuredMemory,
+                                        _model.createdMemoryManually?.id,
                                       );
                                       if (_model.addedVector) {
-                                        logFirebaseEvent(
-                                            'Button_show_snack_bar');
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        logFirebaseEvent('Button_show_snack_bar');
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               'error',
                                               style: TextStyle(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary,
+                                                color: FlutterFlowTheme.of(context).primary,
                                               ),
                                             ),
-                                            duration:
-                                                const Duration(milliseconds: 4000),
-                                            backgroundColor:
-                                                FlutterFlowTheme.of(context)
-                                                    .secondary,
+                                            duration: const Duration(milliseconds: 4000),
+                                            backgroundColor: FlutterFlowTheme.of(context).secondary,
                                           ),
                                         );
                                       }
                                     } else {
                                       logFirebaseEvent('Button_show_snack_bar');
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             'error',
                                             style: TextStyle(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
+                                              color: FlutterFlowTheme.of(context).primary,
                                             ),
                                           ),
-                                          duration:
-                                              const Duration(milliseconds: 4000),
-                                          backgroundColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .secondary,
+                                          duration: const Duration(milliseconds: 4000),
+                                          backgroundColor: FlutterFlowTheme.of(context).secondary,
                                         ),
                                       );
                                     }
@@ -335,23 +267,15 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                 text: 'Save',
                                 options: FFButtonOptions(
                                   height: 40.0,
-                                  padding: const EdgeInsetsDirectional.fromSTEB(
-                                      20.0, 0.0, 20.0, 0.0),
-                                  iconPadding: const EdgeInsetsDirectional.fromSTEB(
-                                      0.0, 0.0, 0.0, 0.0),
+                                  padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
+                                  iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                                   color: const Color(0xFF379700),
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyLarge
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyLargeFamily,
-                                        color: FlutterFlowTheme.of(context)
-                                            .primary,
+                                  textStyle: FlutterFlowTheme.of(context).bodyLarge.override(
+                                        fontFamily: FlutterFlowTheme.of(context).bodyLargeFamily,
+                                        color: FlutterFlowTheme.of(context).primary,
                                         fontWeight: FontWeight.bold,
                                         useGoogleFonts: GoogleFonts.asMap()
-                                            .containsKey(
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyLargeFamily),
+                                            .containsKey(FlutterFlowTheme.of(context).bodyLargeFamily),
                                       ),
                                   elevation: 0.0,
                                   borderRadius: BorderRadius.circular(40.0),

@@ -1,8 +1,8 @@
 import '/flutter_flow/flutter_flow_util.dart';
-import 'memories_widget.dart' show MemoriesWidget;
+import 'confirm_deletion_widget.dart' show ConfirmDeletionWidget;
 import 'package:flutter/material.dart';
 
-class MemoriesModel extends FlutterFlowModel<MemoriesWidget> {
+class ConfirmDeletionModel extends FlutterFlowModel<ConfirmDeletionWidget> {
   /// Initialization and disposal methods.
 
   @override

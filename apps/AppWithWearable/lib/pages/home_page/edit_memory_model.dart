@@ -1,22 +1,29 @@
-import '/backend/api_requests/api_calls.dart';
-import '/backend/backend.dart';
+import 'package:friend_private/backend/storage/memories.dart';
+
 import '/flutter_flow/flutter_flow_util.dart';
-import 'import_apple_widget.dart' show ImportAppleWidget;
+import 'edit_memory_widget.dart' show EditMemoryWidget;
 import 'package:flutter/material.dart';
 
-class ImportAppleModel extends FlutterFlowModel<ImportAppleWidget> {
+class EditMemoryModel extends FlutterFlowModel<EditMemoryWidget> {
+  ///  Local state fields for this component.
+
+  bool textFieldEmpty = false;
+
   ///  State fields for stateful widgets in this component.
 
   // State field(s) for TextField widget.
   FocusNode? textFieldFocusNode;
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
-  // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
-  List<double>? vectorized;
+
   // Stores action output result for [Backend Call - Create Document] action in Button widget.
-  MemoriesRecord? createdMemoryManually;
+  MemoryRecord? createdMemoryManually;
+
+  // Stores action output result for [Backend Call - API (Vectorize)] action in Button widget.
+  List<double>? openAIVector;
+
   // Stores action output result for [Backend Call - API (createVectorPinecone)] action in Button widget.
-  bool? addedVector;
+  dynamic addedVector;
 
   /// Initialization and disposal methods.
 
@@ -30,12 +37,6 @@ class ImportAppleModel extends FlutterFlowModel<ImportAppleWidget> {
   }
 
   /// Action blocks are added here.
-
-  Future popupclosing(BuildContext context) async {
-    logFirebaseEvent('popupclosing_update_app_state');
-    FFAppState().RecordingPopupIsShown = false;
-    FFAppState().speechWasActivatedByUser = false;
-  }
 
   /// Additional helper methods are added here.
 }
