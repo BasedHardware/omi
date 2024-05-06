@@ -14,7 +14,11 @@ const Tab = createBottomTabNavigator();
 
 const MainScreen = () => {
   return (
-    <Tab.Navigator>
+    <Tab.Navigator
+      screenOptions={{
+        tabBarStyle: {backgroundColor: '#000'},
+        headerShown: false,
+      }}>
       <Tab.Screen
         name="Chat Tab"
         component={ChatStackNavigator}
@@ -22,7 +26,6 @@ const MainScreen = () => {
           tabBarIcon: ({color}) => (
             <FontAwesomeIcon icon={faComment} size={24} color={color} />
           ),
-          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -38,7 +41,6 @@ const MainScreen = () => {
               />
             );
           },
-          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -50,7 +52,6 @@ const MainScreen = () => {
               <FontAwesomeIcon icon={faCog} size={24} color={props.color} />
             );
           },
-          headerShown: false,
         }}
       />
     </Tab.Navigator>

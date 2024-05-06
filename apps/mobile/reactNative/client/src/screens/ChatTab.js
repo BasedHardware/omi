@@ -7,7 +7,6 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faPlus} from '@fortawesome/free-solid-svg-icons';
 import {ChatContext} from '../contexts/ChatContext';
-
 import NewChatModal from '../components/chat/NewChatModal';
 
 const ChatTab = () => {
