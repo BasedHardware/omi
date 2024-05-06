@@ -22,15 +22,13 @@ class FindDevicesWidget extends StatefulWidget {
   _FindDevicesWidgetState createState() => _FindDevicesWidgetState();
 }
 
-class _FindDevicesWidgetState extends State<FindDevicesWidget>
-    with SingleTickerProviderStateMixin {
+class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTickerProviderStateMixin {
   late FindDevicesModel _model;
   late AnimationController _animationController;
   late Animation<double> _animation;
   BTDeviceStruct? _friendDevice;
   String _stringStatus1 = 'Looking for Friend wearable';
-  String _stringStatus2 =
-      'Locating your Friend device. Keep it near your phone for pairing';
+  String _stringStatus2 = 'Locating your Friend device. Keep it near your phone for pairing';
   bool _isConnected = false;
 
   @override
@@ -74,13 +72,11 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
       _model.fetchedConnectedDevices = await actions.ble0getConnectedDevices();
       setState(() {
         _model.isFetchingConnectedDevices = false;
-        _model.connectedDevices =
-            _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
+        _model.connectedDevices = _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
       });
       _model.devices = await actions.ble0findDevices();
       setState(() {
-        _model.connectedDevices =
-            _model.devices!.toList().cast<BTDeviceStruct>();
+        _model.connectedDevices = _model.devices!.toList().cast<BTDeviceStruct>();
         _model.isFetchingDevices = false;
       });
     } else {
@@ -104,8 +100,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
     while (true) {
       _model.devicesScanCopy = await actions.ble0findDevices();
       setState(() {
-        _model.foundDevices =
-            _model.devicesScanCopy!.toList().cast<BTDeviceStruct>();
+        _model.foundDevices = _model.devicesScanCopy!.toList().cast<BTDeviceStruct>();
       });
 
       try {
@@ -121,8 +116,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
           _isConnected = true;
           _friendDevice = friendDevice;
           _stringStatus1 = 'Friend Wearable';
-          _stringStatus2 =
-              'Successfully connected and ready to accelerate your journey with AI';
+          _stringStatus2 = 'Successfully connected and ready to accelerate your journey with AI';
         });
         break;
       } catch (e) {
@@ -130,11 +124,11 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
       }
 
       await Future.delayed(Duration(seconds: 2));
-
     }
   }
 
   void _navigateToConnecting() {
+    if (_friendDevice == null) return;
     context.pushNamed(
       'connectDevice',
       queryParameters: {
@@ -164,6 +158,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
         return 450.0; // iPhone 14 Pro Max and larger devices
       }
     }
+
     final gifSize = getGifSize(screenHeight);
 
     return Scaffold(
@@ -184,8 +179,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                           fontSize: 30.0,
                           letterSpacing: 0.0,
                           fontWeight: FontWeight.w700,
-                          useGoogleFonts:
-                              GoogleFonts.asMap().containsKey('SF Pro Display'),
+                          useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
                           lineHeight: 1.2,
                         ),
                     textAlign: TextAlign.center,
@@ -196,8 +190,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                   duration: Duration(milliseconds: 500),
                   opacity: _isConnected ? 1.0 : 0.0,
                   child: Padding(
-                    padding:
-                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
+                    padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.transparent,
@@ -270,16 +263,13 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                           children: [
                             Text(
                               _stringStatus1,
-                              style: FlutterFlowTheme.of(context)
-                                  .bodyMedium
-                                  .override(
+                              style: FlutterFlowTheme.of(context).bodyMedium.override(
                                     fontFamily: 'SF Pro Display',
                                     color: Colors.white,
                                     fontSize: 32.0,
                                     letterSpacing: 0.0,
                                     fontWeight: FontWeight.w700,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey('SF Pro Display'),
+                                    useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
                                     lineHeight: 1.2,
                                   ),
                               textAlign: TextAlign.center,
@@ -306,21 +296,15 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget>
                                   text: 'Continue',
                                   options: FFButtonOptions(
                                     height: 50,
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 30),
-                                    color:
-                                        FlutterFlowTheme.of(context).secondary,
-                                    textStyle: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .copyWith(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
+                                    padding: EdgeInsets.symmetric(horizontal: 30),
+                                    color: FlutterFlowTheme.of(context).secondary,
+                                    textStyle: FlutterFlowTheme.of(context).titleSmall.copyWith(
+                                          color: FlutterFlowTheme.of(context).primary,
                                           fontSize: 24,
                                           fontWeight: FontWeight.w600,
                                         ),
                                     borderSide: BorderSide(
-                                      color: FlutterFlowTheme.of(context)
-                                          .secondary,
+                                      color: FlutterFlowTheme.of(context).secondary,
                                       width: 1,
                                     ),
                                     borderRadius: BorderRadius.circular(30),

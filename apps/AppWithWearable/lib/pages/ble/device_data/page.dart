@@ -25,17 +25,33 @@ class DeviceDataWidget extends StatefulWidget {
 
 class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   Timer? _timer;
-  List<String> whispers = [];
-  List<String> whispersDiarized = [];
+  List<String> whispers = [''];
+  List<Map<int, String>> whispersDiarized = [{}];
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 30), () {
+    _timer = Timer(const Duration(seconds: 5), () {
       debugPrint('Creating memory from whispers');
-      String whispers = this.whispers.join(' ');
+      String whispers = this.whispers.join(' ').trim();
       debugPrint('whispers: ${this.whispers.join(' ')}');
+      String transcript = '';
+      // go through each speaker starting at 0
+      int maxSpeakersCount =
+          whispersDiarized.map((e) => e.keys.length).reduce((value, element) => value > element ? value : element);
+      for (var part in whispersDiarized) {
+        for (int speaker = 0; speaker < maxSpeakersCount; speaker++) {
+          if (part.containsKey(speaker)) {
+            // TODO: if previous speaker is the same, don't add speaker name.
+            transcript += 'Speaker $speaker: ${part[speaker]!} ';
+          }
+        }
+        transcript += '\n';
+      }
+      debugPrint('transcript: ${transcript.trim()}');
+      debugPrint('whispersDiarized: $whispersDiarized');
       processTranscriptContent(whispers);
       setState(() {
-        this.whispers = [];
+        this.whispers = [''];
+        whispersDiarized = [{}];
       });
     });
   }
@@ -43,29 +59,22 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   @override
   void initState() {
     super.initState();
-
-    // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await actions.bleReceiveWAV(widget.btDevice!, (_) {
-        debugPrint("Deepgram Finalized Callback received"); // it's always empty string
+        debugPrint("Deepgram Finalized Callback received");
         setState(() {
-          // Add space for a new entry
-          whispers.add('');
+          whispers.add(''); // Add space for a new entry
+          whispersDiarized.add({});
         });
         _initiateTimer();
-      }, (String transcript) {
+      }, (String transcript, Map<int, String> transcriptBySpeaker) {
         _timer?.cancel();
-
-        // We dont have any whispers yet so we need to create the first one to update
-        if (whispers.isEmpty) {
-          setState(() {
-            whispers.add(transcript);
+        setState(() {
+          whispers[whispers.length - 1] = transcript;
+          transcriptBySpeaker.forEach((speaker, transcript) {
+            whispersDiarized[whispersDiarized.length - 1][speaker] = transcript;
           });
-        } else {
-          setState(() {
-            whispers[whispers.length - 1] = transcript;
-          });
-        }
+        });
       });
     });
 
