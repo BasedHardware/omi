@@ -10,7 +10,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'package:web_socket_channel/io.dart';
 
 const serverUrl =
-    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
+    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=es&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
 
 late IOWebSocketChannel channel;
 
@@ -35,28 +35,11 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
       debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
       final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
-      // final isFinal = parsedJson['is_final'];
       final speechFinal = parsedJson['is_final'];
 
-      // if (transcript.length > 0) {
-      //   debugPrint('~~Transcript: $transcript isFinal: $isFinal speechFinal: $speechFinal');
-      //   if (speechFinal) {
-      //     debugPrint('isFinals.join(' '): ${isFinals.join(' ')}');
-      //     interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
-      //     finalizedCallback('');
-      //     isFinals = [];
-      //   } else {
-      //     if (isFinal) {
-      //       debugPrint('~~ isFinal but it was not speechFinal ~~');
-      //       isFinals.add(transcript);
-      //       interimCallback(transcript);
-      //     } else {
-      //       interimCallback(transcript);
-      //     }
-      //   }
-      // }
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
+        debugPrint(jsonEncode(parsedJson));
         if (speechFinal) {
           interimCallback(transcript);
           speechFinalCallback('');
