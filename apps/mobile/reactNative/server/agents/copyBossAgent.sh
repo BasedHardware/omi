@@ -6,6 +6,7 @@ SOURCE_FILE="BossAgent.py"
 # Define the target directories
 TARGET_DIRS=(
     "../functions/moments"
+    "../functions/chat"
 )
 
 # Loop through each target directory and copy the source file to it

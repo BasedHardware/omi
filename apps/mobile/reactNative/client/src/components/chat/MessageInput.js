@@ -13,7 +13,6 @@ import {ChatContext} from '../../contexts/ChatContext';
 const MessageInput = ({chatId}) => {
   const {sendMessage} = useContext(ChatContext);
   const [input, setInput] = useState('');
-  console.log(chatId);
   const handleSendMessage = () => {
     if (input.trim()) {
       sendMessage(chatId, input);

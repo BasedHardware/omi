@@ -7,7 +7,6 @@ import SyntaxHighlighter from 'react-native-syntax-highlighter';
 import {prism} from 'react-syntax-highlighter/styles/prism';
 
 const AgentMessage = ({message}) => {
-  console.log('AgentMessage', message);
 
   return (
     <View style={[styles.messageContainer, {backgroundColor: 'darkgray'}]}>
@@ -20,7 +19,6 @@ const AgentMessage = ({message}) => {
 
       <View style={styles.messageContent}>
         {message.map((msg, index) => {
-          console.log(`Rendering message ${index}:`, msg);
           if (msg.type === 'text') {
             return <Text key={`text${index}`}>{msg.content}</Text>;
           } else if (msg.type === 'code') {

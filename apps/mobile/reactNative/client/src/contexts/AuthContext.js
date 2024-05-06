@@ -25,7 +25,6 @@ export const AuthProvider = ({children}) => {
       }
 
       users[userId] = userInfo;
-      console.log('Users:', users);
 
       await EncryptedStorage.setItem('users', JSON.stringify(users));
       setIsAuthorized(true);
@@ -60,11 +59,10 @@ export const AuthProvider = ({children}) => {
     }
 
     const users = JSON.parse(usersJson);
-    console.log('Users:', users);
     const user = Object.values(users).find(user => user.email === email);
 
     if (!user) {
-      console.log('User not found');
+      console.error('User not found');
       showSnackbar('User not found', 'error');
       return;
     }
@@ -90,7 +88,6 @@ export const AuthProvider = ({children}) => {
         const users = JSON.parse(usersJson);
         const loggedInUser = Object.values(users).find(user => user.isLoggedIn);
         if (loggedInUser) {
-          console.log('User is logged in:', loggedInUser.userId);
           setUserId(loggedInUser.userId);
           setIsAuthorized(true);
           setLoggedIn(true);

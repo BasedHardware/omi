@@ -19,6 +19,7 @@ const ChatTab = () => {
     navigation.navigate('Chat Room', {
       chat_name: item.chat_name,
       chatId: item.chatId,
+      messages: item.messages,
     });
   };
 

@@ -65,6 +65,7 @@ export const ChatProvider = ({children}) => {
     try {
       const cachedChats = await EncryptedStorage.getItem('chatArray');
       if (cachedChats) {
+        console.log('Loading chats from cache');
         const parsedChats = JSON.parse(cachedChats);
         setChatArray(parsedChats);
 
@@ -119,9 +120,7 @@ export const ChatProvider = ({children}) => {
     return data;
   };
 
-  // Needs a refactor to separate concerns
   const sendMessage = async (chatId, input) => {
-    // Optimistic update
     const userMessage = {
       content: input,
       message_from: 'user',
@@ -131,7 +130,6 @@ export const ChatProvider = ({children}) => {
     addMessage(chatId, userMessage);
 
     const chatHistory = await getMessages(chatId);
-
     const dataPacket = {
       chatId,
       userMessage,
@@ -139,87 +137,127 @@ export const ChatProvider = ({children}) => {
     };
 
     try {
-      const response = await fetch(`${chatUrl}/chat/messages`, {
-        reactNative: {textStreaming: true},
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dataPacket),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
-
-      const reader = response.body.getReader();
-      let completeMessage = '';
-      while (true) {
-        const {done, value} = await reader.read();
-        if (done) {
-          break;
-        }
-        const decodedValue = new TextDecoder('utf-8').decode(value);
-        const jsonChunks = decodedValue
-          .split('\n')
-          .filter(line => line.trim() !== '');
-
-        const messages = jsonChunks.map(chunk => {
-          const messageObj = JSON.parse(chunk);
-          processToken(
-            messageObj,
-            setInsideCodeBlock,
-            insideCodeBlock,
-            setMessages,
-            chatId,
-            ignoreNextTokenRef,
-            languageRef,
-          );
-          return messageObj.content;
-        });
-        completeMessage += messages.join('');
-      }
-      // While streaming an array of objects is being built for the stream.
-      // This sets that array to a message object in the state
-      setMessages(prevMessages => {
-        const updatedMessages = prevMessages[chatId].slice(0, -1);
-        updatedMessages.push({
-          content: completeMessage,
-          message_from: 'agent',
-          type: 'database',
-        });
-
-        const newMessagesState = {
-          ...prevMessages,
-          [chatId]: updatedMessages,
-        };
-
-        return newMessagesState;
-      });
-
-      // Perform the asynchronous storage operation after updating the state
-      try {
-        const updatedMessages = {
-          ...messages,
-          [chatId]: [
-            ...(messages[chatId] || []).slice(0, -1),
-            {
-              content: completeMessage,
-              message_from: 'agent',
-              type: 'database',
-            },
-          ],
-        };
-        await EncryptedStorage.setItem(
-          'messages',
-          JSON.stringify(updatedMessages),
-        );
-      } catch (error) {
-        console.error('Failed to save messages:', error);
-      }
+      const response = await sendUserMessage(dataPacket);
+      await handleStreamingResponse(response, chatId);
     } catch (error) {
       console.error(error);
       showSnackbar(`Network or fetch error: ${error.message}`, 'error');
+    }
+  };
+
+  const sendUserMessage = async dataPacket => {
+    const response = await fetch(`${chatUrl}/chat/messages`, {
+      reactNative: {textStreaming: true},
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(dataPacket),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send message');
+    }
+    return response;
+  };
+
+  const handleStreamingResponse = async (response, chatId) => {
+    const reader = response.body.getReader();
+    let completeMessage = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      const decodedValue = new TextDecoder('utf-8').decode(value);
+      const jsonChunks = decodedValue
+        .split('\n')
+        .filter(line => line.trim() !== '');
+
+      const messages = jsonChunks.map(chunk => {
+        const messageObj = JSON.parse(chunk);
+        processToken(
+          messageObj,
+          setInsideCodeBlock,
+          insideCodeBlock,
+          setMessages,
+          chatId,
+          ignoreNextTokenRef,
+          languageRef,
+        );
+        return messageObj.content;
+      });
+      completeMessage += messages.join('');
+    }
+    await updateMessagesStateAndStorage(chatId, completeMessage);
+  };
+
+  const updateMessagesStateAndStorage = async (chatId, completeMessage) => {
+    // Update messages state
+    setMessages(prevMessages => {
+      const updatedMessages = [
+        ...(prevMessages[chatId] || []).slice(0, -1),
+        {
+          content: completeMessage,
+          message_from: 'agent',
+          type: 'database',
+        },
+      ];
+
+      const newMessagesState = {
+        ...prevMessages,
+        [chatId]: updatedMessages,
+      };
+
+      // Update chatArray state to reflect the new messages
+      setChatArray(prevChatArray => {
+        const updatedChatArray = prevChatArray.map(chat => {
+          if (chat.chatId === chatId) {
+            return {
+              ...chat,
+              messages: updatedMessages,
+            };
+          }
+          return chat;
+        });
+
+        // Save updated chatArray to local storage
+        (async () => {
+          try {
+            await EncryptedStorage.setItem(
+              'chatArray',
+              JSON.stringify(updatedChatArray),
+            );
+          } catch (error) {
+            console.error('Failed to save chat array:', error);
+          }
+        })();
+
+        return updatedChatArray;
+      });
+
+      return newMessagesState;
+    });
+
+    // Save updated messages to local storage
+    try {
+      const updatedMessages = {
+        ...messages,
+        [chatId]: [
+          ...(messages[chatId] || []).slice(0, -1),
+          {
+            content: completeMessage,
+            message_from: 'agent',
+            type: 'database',
+          },
+        ],
+      };
+      await EncryptedStorage.setItem(
+        'messages',
+        JSON.stringify(updatedMessages),
+      );
+    } catch (error) {
+      console.error('Failed to save messages:', error);
     }
   };
 
@@ -315,7 +353,6 @@ export const ChatProvider = ({children}) => {
   };
 
   const createChat = async (model, chatName, userId) => {
-    console.log('createChat', model, chatName, userId);
     try {
       const response = await axios.post(
         `${chatUrl}/chat`,

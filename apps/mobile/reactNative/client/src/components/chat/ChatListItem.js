@@ -39,7 +39,10 @@ const ChatListItem = ({item, onItemPress}) => {
         onPress={() => onItemPress(item)}
         activeOpacity={0.6}
         style={styles.touchable}>
-        <ListItem key={item.id} bottomDivider containerStyle={styles.listItem}>
+        <ListItem
+          key={item.chatId}
+          bottomDivider
+          containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>{item.chat_name}</ListItem.Title>
             <ListItem.Subtitle>{item.model}</ListItem.Subtitle>
