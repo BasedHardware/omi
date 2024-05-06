@@ -4,15 +4,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
-import 'package:friend_private/pages/home_page/confirm_deletion_widget.dart';
-import 'package:friend_private/pages/home_page/edit_memory_widget.dart';
-import 'package:friend_private/pages/home_page/home_page_model.dart';
+import 'package:friend_private/pages/memories/model.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'confirm_deletion_widget.dart';
+import 'edit_memory_widget.dart';
+
 class MemoryListItem extends StatefulWidget {
   final MemoryRecord memory;
-  final HomePageModel model;
+  final MemoriesPageModel model;
 
   const MemoryListItem({super.key, required this.memory, required this.model});
 

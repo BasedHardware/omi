@@ -12,9 +12,9 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import '/pages/ble/device_data/device_data_widget.dart';
-import 'connect_device_model.dart';
+import 'model.dart';
 
-export 'connect_device_model.dart';
+export 'model.dart';
 
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
