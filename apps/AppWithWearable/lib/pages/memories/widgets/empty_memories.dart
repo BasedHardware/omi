@@ -90,6 +90,7 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
                                         GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).labelMediumFamily),
                                   ),
                             ),
+                            const SizedBox(width: 4),
                           ],
                         ),
                       ],
