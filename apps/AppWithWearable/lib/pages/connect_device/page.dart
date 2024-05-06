@@ -19,10 +19,10 @@ export 'model.dart';
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
     super.key,
-    required this.btdevice,
+    required this.btDevice,
   });
 
-  final dynamic btdevice;
+  final dynamic btDevice;
 
   @override
   State<ConnectDeviceWidget> createState() => _ConnectDeviceWidgetState();
@@ -64,13 +64,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       setState(() {
-        _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btdevice)?.rssi;
+        _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btDevice)?.rssi;
       });
       _model.rssiUpdateTimer = InstantTimer.periodic(
         duration: const Duration(milliseconds: 2000),
         callback: (timer) async {
           _model.updatedRssi = await actions.ble0getRssi(
-            BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
+            BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
           );
           setState(() {
             _model.currentRssi = _model.updatedRssi;
@@ -381,19 +381,19 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
               const SizedBox(height: 8),
               Center(
                   child: Text(
-                BTDeviceStruct.maybeFromMap(widget.btdevice)?.name ?? '-',
+                BTDeviceStruct.maybeFromMap(widget.btDevice)?.name ?? '-',
                 style: _getTextStyle(),
               )),
               const SizedBox(height: 8),
               Center(
                   child: Text(
-                BTDeviceStruct.maybeFromMap(widget.btdevice)?.id ?? '-',
+                BTDeviceStruct.maybeFromMap(widget.btDevice)?.id ?? '-',
                 style: _getTextStyle(),
               )),
               const SizedBox(height:32),
               _areApiKeysSet
                   ? DeviceDataWidget(
-                      btDevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
+                      btDevice: BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
                     )
                   : const SizedBox.shrink(),
             ]),

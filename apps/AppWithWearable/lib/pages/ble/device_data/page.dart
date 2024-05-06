@@ -26,21 +26,22 @@ class DeviceDataWidget extends StatefulWidget {
 
 class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   Timer? _timer;
-  List<String> whispers = [''];
+
+  // List<String> whispers = [''];
   List<Map<int, String>> whispersDiarized = [{}];
 
   String _buildDiarizedTranscriptMessage() {
-    String transcript = '';
-    // go through each speaker starting at 0
-    int maxSpeakersCount = whispersDiarized
+    int totalSpeakers = whispersDiarized
         .map((e) => e.keys.isEmpty ? 0 : ((e.keys).max + 1))
         .reduce((value, element) => value > element ? value : element);
 
-    debugPrint('Speakers count: $maxSpeakersCount');
+    debugPrint('Speakers count: $totalSpeakers');
+
+    String transcript = '';
     for (int partIdx = 0; partIdx < whispersDiarized.length; partIdx++) {
       var part = whispersDiarized[partIdx];
       if (part.isEmpty) continue;
-      for (int speaker = 0; speaker < maxSpeakersCount; speaker++) {
+      for (int speaker = 0; speaker < totalSpeakers; speaker++) {
         if (part.containsKey(speaker)) {
           // This part and previous have only 1 speaker, and is the same
           if (partIdx > 0 &&
@@ -59,16 +60,12 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 5), () {
+    _timer = Timer(const Duration(seconds: 30), () {
       debugPrint('Creating memory from whispers');
-      // String whispers = this.whispers.join(' ').trim();
-      // debugPrint('whispers: ${this.whispers.join(' ')}');
       String transcript = _buildDiarizedTranscriptMessage();
-      debugPrint('transcript: \n${transcript.trim()}');
-      debugPrint('whispersDiarized: $whispersDiarized');
+      debugPrint('Transcript: \n${transcript.trim()}');
       processTranscriptContent(transcript);
       setState(() {
-        whispers = [''];
         whispersDiarized = [{}];
       });
     });
@@ -81,17 +78,17 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
       await actions.bleReceiveWAV(widget.btDevice!, (_) {
         debugPrint("Deepgram Finalized Callback received");
         setState(() {
-          whispers.add(''); // Add space for a new entry
           whispersDiarized.add({});
         });
         _initiateTimer();
       }, (String transcript, Map<int, String> transcriptBySpeaker) {
         _timer?.cancel();
+        var copy = whispersDiarized[whispersDiarized.length - 1];
+        transcriptBySpeaker.forEach((speaker, transcript) {
+          copy[speaker] = transcript;
+        });
         setState(() {
-          whispers[whispers.length - 1] = transcript;
-          transcriptBySpeaker.forEach((speaker, transcript) {
-            whispersDiarized[whispersDiarized.length - 1][speaker] = transcript;
-          });
+          whispersDiarized[whispersDiarized.length - 1] = copy;
         });
       });
     });
@@ -102,26 +99,32 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
-
+    var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
+    // debugPrint('filteredNotEmptyWhispers ${filteredNotEmptyWhispers.length}');
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: whispers.length,
+      itemCount: filteredNotEmptyWhispers.length,
       physics: const NeverScrollableScrollPhysics(),
-      // TODO: use speaker diarization instead, maybe a sublist?
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
-      itemBuilder: (context, whispersListIndex) {
-        final whispersListItem = whispers[whispersListIndex];
+      itemBuilder: (context, idx) {
+        final data = filteredNotEmptyWhispers[idx];
+        String transcriptItem = '';
+        for (int speaker = 0; speaker < data.length; speaker++) {
+          if (data.containsKey(speaker)) {
+            transcriptItem += 'Speaker $speaker: ${data[speaker]!} ';
+          }
+        }
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
           child: Text(
-            whispersListItem,
+            transcriptItem,
             style: FlutterFlowTheme.of(context).bodyMedium.override(
-              fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-              letterSpacing: 0.0,
-              useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-            ),
+                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                  letterSpacing: 0.0,
+                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                ),
           ),
         );
       },
