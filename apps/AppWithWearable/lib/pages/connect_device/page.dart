@@ -430,7 +430,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                               updateCallback: () => setState(() {}),
                               updateOnChange: true,
                               child: DeviceDataWidget(
-                                btdevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
+                                btDevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
                               ),
                             )
                           : const SizedBox.shrink(),

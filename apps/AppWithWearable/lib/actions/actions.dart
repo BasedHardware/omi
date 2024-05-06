@@ -16,6 +16,7 @@ Future<void> memoryCreationBlock(String rawMemory) async {
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);
+    changeAppStateMemoryCreating();
   } else {
     await finalizeMemoryRecord(rawMemory, structuredMemory);
   }

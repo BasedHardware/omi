@@ -17,10 +17,10 @@ export 'device_data_model.dart';
 class DeviceDataWidget extends StatefulWidget {
   const DeviceDataWidget({
     super.key,
-    required this.btdevice,
+    required this.btDevice,
   });
 
-  final BTDeviceStruct? btdevice;
+  final BTDeviceStruct? btDevice;
 
   @override
   State<DeviceDataWidget> createState() => _DeviceDataWidgetState();
@@ -56,8 +56,7 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
 
     // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      debugPrint('Checking for transcript');
-      _model.wav = await actions.bleReceiveWAV(widget.btdevice!, (String receivedData) {
+      _model.wav = await actions.bleReceiveWAV(widget.btDevice!, (String receivedData) {
         debugPrint("Deepgram Finalized Callback received"); // it's always empty string
         setState(() {
           _model.addToWhispers(receivedData);
