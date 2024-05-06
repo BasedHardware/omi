@@ -1,9 +1,7 @@
-import 'package:sama/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:uuid/uuid.dart';
 
-import '/auth/firebase_auth/auth_util.dart';
 import '/backend/api_requests/api_calls.dart';
-import '/backend/backend.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -151,10 +149,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                               hoverColor: Colors.transparent,
                               highlightColor: Colors.transparent,
                               onTap: () async {
-                                logFirebaseEvent('EDIT_MEMORY_COMP_Icon_jqhk5lng_ON_TAP');
-                                logFirebaseEvent('Icon_close_dialog,_drawer,_etc');
                                 Navigator.pop(context);
-                                logFirebaseEvent('Icon_backend_call');
                                 await MemoryStorage.deleteMemory(widget.memory!.id);
                               },
                               child: FaIcon(
@@ -172,11 +167,8 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
                               child: FFButtonWidget(
                                 onPressed: () async {
-                                  logFirebaseEvent('EDIT_MEMORY_COMP_CANCEL_BTN_ON_TAP');
-                                  logFirebaseEvent('Button_close_dialog,_drawer,_etc');
                                   Navigator.pop(context);
                                   if (widget.memory?.structuredMemory == '') {
-                                    logFirebaseEvent('Button_backend_call');
                                     await MemoryStorage.deleteMemory(widget.memory!.id);
                                   }
                                 },
@@ -201,14 +193,10 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                             if (!_model.textFieldEmpty)
                               FFButtonWidget(
                                 onPressed: () async {
-                                  logFirebaseEvent('EDIT_MEMORY_COMP_SAVE_BTN_ON_TAP');
-                                  logFirebaseEvent('Button_close_dialog,_drawer,_etc');
                                   Navigator.pop(context);
                                   if ((widget.memory != null) == true) {
-                                    logFirebaseEvent('Button_backend_call');
                                     await MemoryStorage.updateMemory(widget.memory!.id, _model.textController.text);
                                   } else {
-                                    logFirebaseEvent('Button_backend_call');
                                     var memory = MemoryRecord(
                                         id: const Uuid().v4(),
                                         date: DateTime.now(),
@@ -217,49 +205,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                         isEmpty: false,
                                         isUseless: false);
                                     await MemoryStorage.addMemory(memory);
-
                                     _model.createdMemoryManually = memory;
-                                    logFirebaseEvent('Button_backend_call');
-                                    _model.openAIVector = await getEmbeddingsFromInput(
-                                      _model.textController.text,
-                                    );
-                                    if (_model.openAIVector != null) {
-                                      logFirebaseEvent('Button_backend_call');
-                                      _model.addedVector = await createPineconeVector(
-                                        _model.openAIVector,
-                                        _model.createdMemoryManually?.structuredMemory,
-                                        _model.createdMemoryManually?.id,
-                                      );
-                                      if (_model.addedVector) {
-                                        logFirebaseEvent('Button_show_snack_bar');
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'error',
-                                              style: TextStyle(
-                                                color: FlutterFlowTheme.of(context).primary,
-                                              ),
-                                            ),
-                                            duration: const Duration(milliseconds: 4000),
-                                            backgroundColor: FlutterFlowTheme.of(context).secondary,
-                                          ),
-                                        );
-                                      }
-                                    } else {
-                                      logFirebaseEvent('Button_show_snack_bar');
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'error',
-                                            style: TextStyle(
-                                              color: FlutterFlowTheme.of(context).primary,
-                                            ),
-                                          ),
-                                          duration: const Duration(milliseconds: 4000),
-                                          backgroundColor: FlutterFlowTheme.of(context).secondary,
-                                        ),
-                                      );
-                                    }
                                   }
 
                                   setState(() {});

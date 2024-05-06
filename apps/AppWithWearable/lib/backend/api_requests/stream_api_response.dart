@@ -1,18 +1,12 @@
-// Automatic FlutterFlow imports
-import '/backend/backend.dart';
-import '/backend/schema/structs/index.dart';
-import '/backend/schema/enums/enums.dart';
-import 'package:sama/backend/api_requests/api_calls.dart';
-import '/actions/actions.dart' as action_blocks;
-import '/flutter_flow/flutter_flow_theme.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '/flutter_flow/flutter_flow_util.dart';
-import 'index.dart';
 import '/flutter_flow/custom_functions.dart';
 import 'package:flutter/material.dart';
 import './streaming_models.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import "../../env/env.dart";
 
 initAssistantResponse() {
   FFAppState().update(() {
@@ -24,23 +18,23 @@ Future streamApiResponse(
   String context,
   Future<dynamic> Function(String) callback,
 ) async {
-  var _client = http.Client();
-  final url = 'https://api.openai.com/v1/chat/completions';
+  var client = http.Client();
+  const url = 'https://api.openai.com/v1/chat/completions';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
   final headers = {
     'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${Env.openAIApiKey}',
-    'OpenAI-Organization': Env.openAIOrganization,
+    'Authorization': 'Bearer $apiKey',
   };
 
-  // String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
-  String body =
-      qaStreamedFullMemories(FFAppState().memories, retrieveMostRecentMessages(FFAppState().chatHistory), () => {});
+  // String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory));
+  String body = qaStreamedFullMemories(FFAppState().memories, retrieveMostRecentMessages(FFAppState().chatHistory));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
 
   initAssistantResponse();
-  final http.StreamedResponse response = await _client.send(request);
+  final http.StreamedResponse response = await client.send(request);
   _listStream(response, callback);
 }
 
@@ -62,7 +56,7 @@ _listStream(response, callback) {
             handlePartialResponseContent(jsonBlock, callback);
             processedBlocks++;
           } else {
-            bufferString = 'data: ' + jsonBlock;
+            bufferString = 'data: $jsonBlock';
           }
         }
         buffer.clear();
@@ -80,7 +74,7 @@ _listStream(response, callback) {
 
 bool isValidJson(String jsonString) {
   try {
-    var decoded = json.decode(jsonString);
+    json.decode(jsonString);
     return true;
   } catch (e) {
     return false;
@@ -98,4 +92,3 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
     }
   }
 }
-// TODO: remove ``Great job activating me! I'll passively listen to your voice and will``

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -46,10 +47,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
       final deepgramApiKey = prefs.getString('deepgramApiKey');
       final openaiApiKey = prefs.getString('openaiApiKey');
 
-      if (deepgramApiKey != null &&
-          deepgramApiKey.isNotEmpty &&
-          openaiApiKey != null &&
-          openaiApiKey.isNotEmpty) {
+      if (deepgramApiKey != null && deepgramApiKey.isNotEmpty && openaiApiKey != null && openaiApiKey.isNotEmpty) {
         // If both API keys are set, initialize the page and enable the DeviceDataWidget
         _initializePage();
         setState(() {
@@ -69,7 +67,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btdevice)?.rssi;
       });
       _model.rssiUpdateTimer = InstantTimer.periodic(
-        duration: Duration(milliseconds: 2000),
+        duration: const Duration(milliseconds: 2000),
         callback: (timer) async {
           _model.updatedRssi = await actions.ble0getRssi(
             BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
@@ -113,7 +111,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.black,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20.0),
           topRight: Radius.circular(20.0),
@@ -130,12 +128,12 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                 ),
                 child: Container(
                   height: MediaQuery.of(context).size.height * 0.6,
-                  padding: EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16.0),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
+                        const Text(
                           'Settings',
                           style: TextStyle(
                             fontSize: 20.0,
@@ -143,38 +141,36 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             color: Colors.white,
                           ),
                         ),
-                        SizedBox(height: 16.0),
-                        Text(
+                        const SizedBox(height: 16.0),
+                        const Text(
                           'Deepgram API Key is used for converting speech to text.',
                           style: TextStyle(
                             color: Colors.white,
                           ),
                         ),
-                        SizedBox(height: 8.0),
+                        const SizedBox(height: 8.0),
                         TextField(
                           controller: _deepgramApiKeyController,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             labelText: 'Deepgram API Key',
                             labelStyle: TextStyle(color: Colors.white),
                             border: OutlineInputBorder(),
                             enabledBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
-                              borderRadius:
-                                  const BorderRadius.all(Radius.circular(20.0)),
+                              borderRadius: BorderRadius.all(Radius.circular(20.0)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
                             ),
                           ),
-                          style: TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white),
                         ),
-                        SizedBox(height: 8.0),
+                        const SizedBox(height: 8.0),
                         TextButton(
                           onPressed: () {
-                            launch(
-                                'https://developers.deepgram.com/docs/create-additional-api-keys');
+                            launch('https://developers.deepgram.com/docs/create-additional-api-keys');
                           },
-                          child: Text(
+                          child: const Text(
                             'How to generate a Deepgram API key?',
                             style: TextStyle(
                               color: Colors.white,
@@ -182,37 +178,36 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             ),
                           ),
                         ),
-                        SizedBox(height: 16.0),
-                        Text(
+                        const SizedBox(height: 16.0),
+                        const Text(
                           'OpenAI API Key is used for chat.',
                           style: TextStyle(
                             color: Colors.white,
                           ),
                         ),
-                        SizedBox(height: 8.0),
+                        const SizedBox(height: 8.0),
                         TextField(
                           controller: _openaiApiKeyController,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             labelText: 'OpenAI API Key',
                             labelStyle: TextStyle(color: Colors.white),
                             border: OutlineInputBorder(),
                             enabledBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
-                              borderRadius:
-                                  const BorderRadius.all(Radius.circular(20.0)),
+                              borderRadius: BorderRadius.all(Radius.circular(20.0)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
                             ),
                           ),
-                          style: TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white),
                         ),
-                        SizedBox(height: 8.0),
+                        const SizedBox(height: 8.0),
                         TextButton(
                           onPressed: () {
                             launch('https://platform.openai.com/api-keys');
                           },
-                          child: Text(
+                          child: const Text(
                             'How to generate an OpenAI API key?',
                             style: TextStyle(
                               color: Colors.white,
@@ -220,15 +215,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             ),
                           ),
                         ),
-                        SizedBox(height: 16.0),
+                        const SizedBox(height: 16.0),
                         ElevatedButton(
                           onPressed: () {
-                            String deepgramApiKey =
-                                _deepgramApiKeyController.text;
+                            String deepgramApiKey = _deepgramApiKeyController.text;
                             String openaiApiKey = _openaiApiKeyController.text;
 
-                            if (deepgramApiKey.isNotEmpty &&
-                                 openaiApiKey.isNotEmpty) {
+                            if (deepgramApiKey.isNotEmpty && openaiApiKey.isNotEmpty) {
                               _saveApiKeys(deepgramApiKey, openaiApiKey);
                               Navigator.pop(context);
                             } else {
@@ -237,15 +230,14 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                                 context: context,
                                 builder: (BuildContext context) {
                                   return AlertDialog(
-                                    title: Text('Error'),
-                                    content:
-                                        Text('Please provide both API keys'),
+                                    title: const Text('Error'),
+                                    content: const Text('Please provide both API keys'),
                                     actions: [
                                       TextButton(
                                         onPressed: () {
                                           Navigator.pop(context);
                                         },
-                                        child: Text('OK'),
+                                        child: const Text('OK'),
                                       ),
                                     ],
                                   );
@@ -254,16 +246,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             }
                           },
                           style: ButtonStyle(
-                            backgroundColor:
-                                MaterialStateProperty.all<Color>(Colors.white),
-                            shape: MaterialStateProperty.all<
-                                RoundedRectangleBorder>(
+                            backgroundColor: MaterialStateProperty.all<Color>(Colors.white),
+                            shape: MaterialStateProperty.all<RoundedRectangleBorder>(
                               RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20.0),
                               ),
                             ),
-                            overlayColor:
-                                MaterialStateProperty.resolveWith<Color>(
+                            overlayColor: MaterialStateProperty.resolveWith<Color>(
                               (Set<MaterialState> states) {
                                 if (states.contains(MaterialState.pressed)) {
                                   return Colors.grey[200]!;
@@ -272,7 +261,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                               },
                             ),
                           ),
-                          child: Text(
+                          child: const Text(
                             'Save',
                             style: TextStyle(color: Colors.black),
                           ),
@@ -318,30 +307,33 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         appBar: AppBar(
           backgroundColor: FlutterFlowTheme.of(context).primary,
           automaticallyImplyLeading: false,
-          title: InkWell(
-            splashColor: Colors.transparent,
-            focusColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            onTap: () async {
-              context.pushNamed('chatPage');
+          title: FFButtonWidget(
+            onPressed: () async {
+              context.pushNamed('memoriesPage');
             },
-            child: Text(
-              'Chat',
-              style: FlutterFlowTheme.of(context).headlineMedium.override(
-                    fontFamily:
-                        FlutterFlowTheme.of(context).headlineMediumFamily,
-                    color: Colors.white,
-                    fontSize: 22.0,
-                    letterSpacing: 0.0,
-                    useGoogleFonts: GoogleFonts.asMap().containsKey(
-                        FlutterFlowTheme.of(context).headlineMediumFamily),
+            text: 'Memories ↗',
+            options: FFButtonOptions(
+              padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
+              iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+              color: FlutterFlowTheme.of(context).primary,
+              textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                    color: const Color(0xFFF7F4F4),
+                    fontSize: 18.0,
+                    fontWeight: FontWeight.bold,
+                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                   ),
+              elevation: 0.0,
+              borderSide: const BorderSide(
+                color: Colors.transparent,
+                width: 0.0,
+              ),
+              borderRadius: BorderRadius.circular(24.0),
             ),
           ),
           actions: [
             IconButton(
-              icon: Icon(
+              icon: const Icon(
                 Icons.settings,
                 color: Colors.white,
                 size: 30,
@@ -357,10 +349,10 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
             wrapWithModel(
               model: _model.blurModel,
               updateCallback: () => setState(() {}),
-              child: BlurBotWidget(),
+              child: const BlurBotWidget(),
             ),
             Align(
-              alignment: AlignmentDirectional(0.0, 0.0),
+              alignment: const AlignmentDirectional(0.0, 0.0),
               child: Column(
                 mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -375,24 +367,20 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                           width: 120.0,
                           height: 120.0,
                           fit: BoxFit.cover,
-                          alignment: Alignment(0.0, 1.0),
+                          alignment: const Alignment(0.0, 1.0),
                         ),
                       ),
                       Align(
-                        alignment: AlignmentDirectional(0.0, 0.0),
+                        alignment: const AlignmentDirectional(0.0, 0.0),
                         child: Text(
                           'Connected Device',
-                          style: FlutterFlowTheme.of(context)
-                              .headlineLarge
-                              .override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .headlineLargeFamily,
+                          style: FlutterFlowTheme.of(context).headlineLarge.override(
+                                fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
                                 fontSize: 24.0,
                                 letterSpacing: 0.0,
                                 fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .headlineLargeFamily),
+                                useGoogleFonts:
+                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
                               ),
                         ),
                       ),
@@ -400,71 +388,58 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                         mainAxisSize: MainAxisSize.max,
                         children: [
                           Align(
-                            alignment: AlignmentDirectional(0.0, 0.0),
+                            alignment: const AlignmentDirectional(0.0, 0.0),
                             child: Text(
                               valueOrDefault<String>(
-                                BTDeviceStruct.maybeFromMap(widget.btdevice)
-                                    ?.name,
+                                BTDeviceStruct.maybeFromMap(widget.btdevice)?.name,
                                 '-',
                               ),
-                              style: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    fontFamily: FlutterFlowTheme.of(context)
-                                        .titleSmallFamily,
+                              style: FlutterFlowTheme.of(context).titleSmall.override(
+                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                     letterSpacing: 0.0,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(
-                                            FlutterFlowTheme.of(context)
-                                                .titleSmallFamily),
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                   ),
                             ),
                           ),
                           Align(
-                            alignment: AlignmentDirectional(0.0, 0.0),
+                            alignment: const AlignmentDirectional(0.0, 0.0),
                             child: Text(
                               valueOrDefault<String>(
-                                BTDeviceStruct.maybeFromMap(widget.btdevice)
-                                    ?.id,
+                                BTDeviceStruct.maybeFromMap(widget.btdevice)?.id,
                                 '-',
                               ),
-                              style: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    fontFamily: FlutterFlowTheme.of(context)
-                                        .titleSmallFamily,
+                              style: FlutterFlowTheme.of(context).titleSmall.override(
+                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
                                     letterSpacing: 0.0,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(
-                                            FlutterFlowTheme.of(context)
-                                                .titleSmallFamily),
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                                   ),
                             ),
                           ),
-                        ].divide(SizedBox(height: 8.0)),
+                        ].divide(const SizedBox(height: 8.0)),
                       ),
-                    ].divide(SizedBox(height: 16.0)),
+                    ].divide(const SizedBox(height: 16.0)),
                   ),
                   Expanded(
                     child: Align(
-                      alignment: AlignmentDirectional(0.0, 0.0),
+                      alignment: const AlignmentDirectional(0.0, 0.0),
                       child: _areApiKeysSet
                           ? wrapWithModel(
                               model: _model.deviceDataModel,
                               updateCallback: () => setState(() {}),
                               updateOnChange: true,
                               child: DeviceDataWidget(
-                                btdevice: BTDeviceStruct.maybeFromMap(
-                                    widget.btdevice!)!,
+                                btdevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
                               ),
                             )
-                          : SizedBox.shrink(),
+                          : const SizedBox.shrink(),
                     ),
                   ),
                 ]
-                    .divide(SizedBox(height: 32.0))
-                    .addToStart(SizedBox(height: 48.0))
-                    .addToEnd(SizedBox(height: 48.0)),
+                    .divide(const SizedBox(height: 32.0))
+                    .addToStart(const SizedBox(height: 48.0))
+                    .addToEnd(const SizedBox(height: 48.0)),
               ),
             ),
           ],
