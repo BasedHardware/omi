@@ -4,7 +4,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur/blur_widget.dart';
 import '/pages/ble/device_data/device_data_widget.dart';
-import 'connect_device_widget.dart' show ConnectDeviceWidget;
+import 'page.dart' show ConnectDeviceWidget;
 
 class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
   ///  Local state fields for this page.

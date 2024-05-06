@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tilt/flutter_tilt.dart';
 
-import '/components/logo/logo_main/logo_main_widget.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import 'welcome_model.dart';
+import 'model.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
-import 'dart:ui';
 import 'package:permission_handler/permission_handler.dart';
 
 class WelcomeWidget extends StatefulWidget {
@@ -22,8 +18,7 @@ class WelcomeWidget extends StatefulWidget {
   State<WelcomeWidget> createState() => _WelcomeWidgetState();
 }
 
-class _WelcomeWidgetState extends State<WelcomeWidget>
-    with SingleTickerProviderStateMixin {
+class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProviderStateMixin {
   late WelcomeModel _model;
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -42,11 +37,10 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
     // Initialize the animation controller and animation
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(seconds: 1),
+      duration: const Duration(seconds: 1),
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: pi / 200, end: pi / 200)
-        .animate(_animationController);
+    _animation = Tween<double>(begin: pi / 200, end: pi / 200).animate(_animationController);
 
     // Initialize the bounce animation
     _bounceAnimation = Tween<double>(begin: 0, end: 10).animate(
@@ -65,8 +59,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
     _animationController.dispose();
 
     // Show the status bar again when the widget is disposed
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
 
     super.dispose();
   }
@@ -85,16 +78,16 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
             wrapWithModel(
               model: _model.blurBotModel,
               updateCallback: () => setState(() {}),
-              child: BlurBotWidget(),
+              child: const BlurBotWidget(),
             ),
             Column(
               mainAxisSize: MainAxisSize.max,
               children: [
                 Expanded(
                   child: Tilt(
-                    shadowConfig: ShadowConfig(disable: true),
-                    lightConfig: LightConfig(disable: true),
-                    tiltConfig: TiltConfig(
+                    shadowConfig: const ShadowConfig(disable: true),
+                    lightConfig: const LightConfig(disable: true),
+                    tiltConfig: const TiltConfig(
                       angle: 30,
                       moveDuration: Duration(milliseconds: 0),
                     ),
@@ -120,8 +113,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding:
-                        EdgeInsetsDirectional.fromSTEB(30.0, 80.0, 30.0, 40.0),
+                    padding: const EdgeInsetsDirectional.fromSTEB(30.0, 80.0, 30.0, 40.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -129,20 +121,18 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                         Text(
                           "Friend helps you remember everything",
                           textAlign: TextAlign.start,
-                          style:
-                              FlutterFlowTheme.of(context).bodyMedium.override(
-                                    fontFamily: 'SF Pro Display',
-                                    color: Colors.white,
-                                    fontSize: 29.0,
-                                    letterSpacing: 0.0,
-                                    fontWeight: FontWeight.w900,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey('SF Pro Display'),
-                                    lineHeight: 1.2,
-                                  ),
+                          style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                fontFamily: 'SF Pro Display',
+                                color: Colors.white,
+                                fontSize: 29.0,
+                                letterSpacing: 0.0,
+                                fontWeight: FontWeight.w900,
+                                useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+                                lineHeight: 1.2,
+                              ),
                         ),
-                        SizedBox(height: 10.0),
-                        Text(
+                        const SizedBox(height: 10.0),
+                        const Text(
                           "Your Personal growth journey with AI that listens to your every word",
                           style: TextStyle(
                             color: Color.fromARGB(255, 101, 101, 101),
@@ -151,11 +141,11 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                             height: 1.5,
                           ),
                         ),
-                        SizedBox(height: 20.0),
+                        const SizedBox(height: 20.0),
                         Center(
                           child: Material(
                             elevation: 4.0,
-                            shape: CircleBorder(),
+                            shape: const CircleBorder(),
                             child: InkWell(
                               splashColor: Colors.transparent,
                               focusColor: Colors.transparent,
@@ -164,25 +154,20 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                               mouseCursor: SystemMouseCursors.click,
                               onTap: () async {
                                 // Check if Bluetooth permission is granted
-                                PermissionStatus bluetoothStatus =
-                                    await Permission.bluetooth.status;
+                                PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
                                 if (bluetoothStatus.isGranted) {
                                   // Bluetooth permission is already granted
                                   // Request notification permission
-                                  PermissionStatus notificationStatus =
-                                      await Permission.notification.request();
+                                  PermissionStatus notificationStatus = await Permission.notification.request();
 
                                   // Navigate to the 'scanDevices' screen
                                   context.goNamed('findDevices');
                                 } else {
                                   // Bluetooth permission is not granted
-                                  if (await Permission.bluetooth
-                                      .request()
-                                      .isGranted) {
+                                  if (await Permission.bluetooth.request().isGranted) {
                                     // Bluetooth permission is granted now
                                     // Request notification permission
-                                    PermissionStatus notificationStatus =
-                                        await Permission.notification.request();
+                                    PermissionStatus notificationStatus = await Permission.notification.request();
 
                                     // Navigate to the 'scanDevices' screen
                                     context.goNamed('findDevices');
@@ -194,7 +179,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                                       builder: (BuildContext context) {
                                         return AlertDialog(
                                           backgroundColor: Colors.grey[900],
-                                          title: Text(
+                                          title: const Text(
                                             'Bluetooth Required',
                                             style: TextStyle(
                                               color: Colors.white,
@@ -202,7 +187,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          content: Text(
+                                          content: const Text(
                                             'This app needs Bluetooth to function properly. Please enable it in the settings.',
                                             style: TextStyle(
                                               color: Colors.white,
@@ -215,7 +200,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                                                 Navigator.of(context).pop();
                                                 openAppSettings();
                                               },
-                                              child: Text(
+                                              child: const Text(
                                                 'OK',
                                                 style: TextStyle(
                                                   color: Colors.blue,
@@ -236,17 +221,14 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                                   return RadialGradient(
                                     center: Alignment.center,
                                     radius: 0.45,
-                                    colors: [
-                                      Colors.white,
-                                      Colors.white.withOpacity(0.0)
-                                    ],
+                                    colors: [Colors.white, Colors.white.withOpacity(0.0)],
                                     stops: [0.9, 1.0],
                                   ).createShader(bounds);
                                 },
                                 child: Container(
                                   width: 100,
                                   height: 100,
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     shape: BoxShape.circle,
                                   ),
                                   child: Transform(
@@ -270,7 +252,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget>
                                           Center(
                                             child: Transform.rotate(
                                               angle: -pi / 4,
-                                              child: Icon(
+                                              child: const Icon(
                                                 Icons.arrow_forward,
                                                 size: 60,
                                                 color: Colors.white,

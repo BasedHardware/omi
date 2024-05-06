@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/enums/enums.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
-import 'package:friend_private/pages/home_page/home_page_model.dart';
-import 'package:friend_private/pages/home_page/summary_widget.dart';
+import 'package:friend_private/pages/memories/model.dart';
+import 'package:friend_private/pages/memories/widgets/summary_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class HomePageSummariesButtons extends StatefulWidget {
-  final HomePageModel model;
+  final MemoriesPageModel model;
   final String? dailySummary;
   final String? weeklySummary;
   final String? monthlySummary;
