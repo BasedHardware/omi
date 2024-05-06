@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
@@ -96,8 +97,12 @@ Future<String> executeGptPrompt(String? prompt) async {
 }
 
 Future<String> generateTitleAndSummaryForMemory(String? memory) async {
+  final prefs = await SharedPreferences.getInstance();
+  final languageCode = prefs.getString('recordingsLanguage') ?? 'en';
+  final language = availableLanguagesByCode[languageCode] ?? 'English';
+
   var prompt = '''
-    Generate a title and a summary for the following recording chunk of a conversation.
+    ${languageCode == 'en' ? 'Generate a title and a summary for the following recording chunk of a conversation.' : 'Generate a title and a summary in English for the following recording chunk of a conversation that was performed in $language.'} 
     For the title, use the most important topic or the most important action-item in the conversation.
     For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
     action-items in very concise short points in second person (use bullet points). 

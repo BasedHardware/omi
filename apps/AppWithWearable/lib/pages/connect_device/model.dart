@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur/blur_widget.dart';
-import '/pages/ble/device_data/page.dart';
+import '/pages/ble/device_data/widget.dart';
 import 'page.dart' show ConnectDeviceWidget;
 
 class ConnectDeviceModel extends FlutterFlowModel<ConnectDeviceWidget> {
