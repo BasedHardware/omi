@@ -30,7 +30,7 @@ Open Source AI Wearable device that records everything you say, gives you proact
 - [Introduction](https://basedhardware.github.io/Friend/)
 - [App setup](https://basedhardware.github.io/Friend/get_started/Setup/)
 - [Buying Guide](https://basedhardware.github.io/Friend/assembly/Buying_Guide/)
-- [Hardware Buying Guide](https://basedhardware.github.io/Friend/docs/hardware-buying-guide/)
+- [Hardware Buying Guide](https://github.com/h0lai/Friend/blob/main/docs/hardware-buying-guide.md)
 - [Build the device](https://basedhardware.github.io/Friend/assembly/Build_the_device/)
 - [Install firmware](https://basedhardware.github.io/Friend/assembly/Install_firmware/)
 
