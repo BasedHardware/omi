@@ -23,8 +23,6 @@ class ChatModel extends FlutterFlowModel<ChatWidget> {
   FocusNode? textFieldFocusNode;
   TextEditingController? textController;
   String? Function(BuildContext, String?)? textControllerValidator;
-  // Stores action output result for [Firestore Query - Query a collection] action in IconButton widget.
-  List<MemoriesRecord>? latestMemoriesChat2;
   // Stores action output result for [Backend Call - API (Vectorize)] action in IconButton widget.
   List<double>? vector;
   // Stores action output result for [Backend Call - API (QueryVectors)] action in IconButton widget.

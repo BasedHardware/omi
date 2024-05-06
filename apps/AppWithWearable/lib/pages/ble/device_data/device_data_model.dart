@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'device_data_widget.dart' show DeviceDataWidget;
 
@@ -29,7 +28,6 @@ class DeviceDataModel extends FlutterFlowModel<DeviceDataWidget> {
   // Stores action output result for [Custom Action - bleReceiveWAV] action in deviceData widget.
   String wav = '';
   // Stores action output result for [Backend Call - API (WHISPER D)] action in deviceData widget.
-  ApiCallResponse? whsiper;
 
   @override
   void initState(BuildContext context) {}
