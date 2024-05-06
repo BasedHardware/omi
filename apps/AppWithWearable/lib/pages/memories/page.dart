@@ -88,53 +88,38 @@ class _MemoriesPageState extends State<MemoriesPage> {
                       alignment: AlignmentDirectional(0.0, 0.0),
                       child: BlurBotWidget(),
                     ),
-                    SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(height: 16),
-                          HomePageSummariesButtons(
-                            model: _model,
-                            dailySummary: dailySummary,
-                            weeklySummary: weeklySummary,
-                            monthlySummary: monthlySummary,
-                          ),
-                          const SizedBox(height: 8),
-                          if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
-                          Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 4.0, 16.0, 0.0),
-                            child: Container(
-                              width: double.infinity,
-                              height: MediaQuery.sizeOf(context).height * 0.9,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12.0),
-                                shape: BoxShape.rectangle,
-                                border: Border.all(
-                                  color: const Color(0x00E0E3E7),
+                    ListView(
+                      children: [
+                        const SizedBox(height: 16),
+                        HomePageSummariesButtons(
+                          model: _model,
+                          dailySummary: dailySummary,
+                          weeklySummary: weeklySummary,
+                          monthlySummary: monthlySummary,
+                        ),
+                        const SizedBox(height: 8),
+                        if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(top: 32.0),
+                                    child: EmptyMemoriesWidget(),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  primary: false,
+                                  shrinkWrap: true,
+                                  scrollDirection: Axis.vertical,
+                                  itemCount: FFAppState().memories.length,
+                                  itemBuilder: (context, index) {
+                                    return MemoryListItem(memory: FFAppState().memories[index], model: _model);
+                                  },
                                 ),
-                              ),
-                              child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
-                                  ? Center(
-                                      child: SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 1.0,
-                                        height: MediaQuery.sizeOf(context).height * 0.4,
-                                        child: const EmptyMemoriesWidget(),
-                                      ),
-                                    )
-                                  : ListView.builder(
-                                      padding: EdgeInsets.zero,
-                                      primary: false,
-                                      shrinkWrap: true,
-                                      scrollDirection: Axis.vertical,
-                                      itemCount: FFAppState().memories.length,
-                                      itemBuilder: (context, index) {
-                                        return MemoryListItem(memory: FFAppState().memories[index], model: _model);
-                                      },
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     )
                   ],
                 )),
