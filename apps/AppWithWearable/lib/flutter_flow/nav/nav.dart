@@ -80,7 +80,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           name: 'connectDevice',
           path: '/connectDevice',
           builder: (context, params) => ConnectDeviceWidget(
-            btdevice: params.getParam(
+            btDevice: params.getParam(
               'btdevice',
               ParamType.JSON,
             ),
