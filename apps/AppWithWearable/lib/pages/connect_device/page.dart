@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +12,7 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import '/pages/ble/device_data/page.dart';
+import '/pages/ble/device_data/widget.dart';
 import 'model.dart';
 
 export 'model.dart';
@@ -29,6 +30,7 @@ class ConnectDeviceWidget extends StatefulWidget {
 }
 
 class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
+  GlobalKey<DeviceDataWidgetState> childWidgetKey = GlobalKey();
   late ConnectDeviceModel _model;
   bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
@@ -92,43 +94,6 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   }
 
   String _selectedLanguage = 'en';
-  final Map<String, String> _languages = {
-    'English': 'en',
-    'Bulgarian': 'bg',
-    'Catalan': 'ca',
-    'Czech': 'cs',
-    'Danish': 'da',
-    'Dutch': 'nl',
-    'Estonian': 'et',
-    'Finnish': 'fi',
-    'Flemish': 'nl-BE',
-    'French': 'fr',
-    'French (Canada)': 'fr-CA',
-    'German': 'de',
-    'German (Switzerland)': 'de-CH',
-    'Greek': 'el',
-    'Hindi': 'hi',
-    'Hungarian': 'hu',
-    'Indonesian': 'id',
-    'Italian': 'it',
-    'Japanese': 'ja',
-    'Korean': 'ko',
-    'Latvian': 'lv',
-    'Lithuanian': 'lt',
-    'Malay': 'ms',
-    'Norwegian': 'no',
-    'Polish': 'pl',
-    'Portuguese': 'pt',
-    'Romanian': 'ro',
-    'Russian': 'ru',
-    'Slovak': 'sk',
-    'Spanish': 'es',
-    'Swedish': 'sv',
-    'Thai': 'th',
-    'Turkish': 'tr',
-    'Ukrainian': 'uk',
-    'Vietnamese': 'vi',
-  };
 
   Future<void> _showSettingsBottomSheet() async {
     // Load API keys from shared preferences
@@ -301,13 +266,15 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                             ),
                             isExpanded: false,
                             itemHeight: 48,
-                            items: _languages.keys.map<DropdownMenuItem<String>>((String key) {
+                            items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
                               return DropdownMenuItem<String>(
-                                value: _languages[key],
+                                value: availableLanguages[key],
                                 child: Text(
-                                  '$key (${_languages[key]})',
+                                  '$key (${availableLanguages[key]})',
                                   style: TextStyle(
-                                      color: _selectedLanguage == _languages[key] ? Colors.blue[400] : Colors.white,
+                                      color: _selectedLanguage == availableLanguages[key]
+                                          ? Colors.blue[400]
+                                          : Colors.white,
                                       fontSize: 16),
                                 ),
                               );
@@ -386,8 +353,11 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('deepgramApiKey', deepgramApiKey);
     await prefs.setString('openaiApiKey', openaiApiKey);
-    await prefs.setString('recordingsLanguage', _selectedLanguage);
-
+    if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
+      // If the language has changed, restart the deepgram websocket
+      childWidgetKey.currentState?.resetState();
+      await prefs.setString('recordingsLanguage', _selectedLanguage);
+    }
     // Initialize the page and enable the DeviceDataWidget after saving the API keys
     _initializePage();
     setState(() {
@@ -494,6 +464,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
               _areApiKeysSet
                   ? DeviceDataWidget(
                       btDevice: BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
+                      key: childWidgetKey,
                     )
                   : const SizedBox.shrink(),
             ]),
