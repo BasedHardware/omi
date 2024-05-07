@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -23,7 +24,8 @@ const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) speechFinalCallback, void Function(String) interimCallback) async {
+Future<void> _initStream(
+    void Function(String) speechFinalCallback, void Function(String, Map<int, String>) interimCallback) async {
   final prefs = await SharedPreferences.getInstance();
   final apiKey = prefs.getString('deepgramApiKey') ?? '';
 
@@ -40,14 +42,20 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
 
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
-        // data['words'].forEach((word) {
-        //   debugPrint('Word: ${word['word']}');
-        // });
+        Map<int, String> bySpeaker = {};
+        data['words'].forEach((word) {
+          int speaker = word['speaker'];
+          bySpeaker[speaker] ??= '';
+          bySpeaker[speaker] = '${(bySpeaker[speaker] ?? '') + word['punctuated_word']} ';
+        });
+        // This is step 1 for diarization, but, sometimes "Speaker 1: Hello how"
+        //   but it says it's the previous speaker (e.g. speaker 0), but in the next stream it fixes the transcript, and says it's speaker 1.
+        debugPrint(bySpeaker.toString());
         if (speechFinal) {
-          interimCallback(transcript);
+          interimCallback(transcript, bySpeaker);
           speechFinalCallback('');
         } else {
-          interimCallback(transcript);
+          interimCallback(transcript, bySpeaker);
         }
       }
     }, onError: (err) {
@@ -69,8 +77,8 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
   }
 }
 
-Future<String> bleReceiveWAV(
-    BTDeviceStruct btDevice, void Function(String) speechFinalCallback, void Function(String) interimCallback) async {
+Future<String> bleReceiveWAV(BTDeviceStruct btDevice, void Function(String) speechFinalCallback,
+    void Function(String, Map<int, String>) interimCallback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 

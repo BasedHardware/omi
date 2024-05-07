@@ -19,10 +19,10 @@ export 'model.dart';
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
     super.key,
-    required this.btdevice,
+    required this.btDevice,
   });
 
-  final dynamic btdevice;
+  final dynamic btDevice;
 
   @override
   State<ConnectDeviceWidget> createState() => _ConnectDeviceWidgetState();
@@ -64,13 +64,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       setState(() {
-        _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btdevice)?.rssi;
+        _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btDevice)?.rssi;
       });
       _model.rssiUpdateTimer = InstantTimer.periodic(
         duration: const Duration(milliseconds: 2000),
         callback: (timer) async {
           _model.updatedRssi = await actions.ble0getRssi(
-            BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
+            BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
           );
           setState(() {
             _model.currentRssi = _model.updatedRssi;
@@ -351,95 +351,63 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
               updateCallback: () => setState(() {}),
               child: const BlurBotWidget(),
             ),
-            Align(
-              alignment: const AlignmentDirectional(0.0, 0.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24.0),
-                        child: Image.network(
-                          'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0NTYyMDF8MHwxfHNlYXJjaHwyfHxuZWNrbGFjZXxlbnwwfHx8fDE3MTEyMDQxNTF8MA&ixlib=rb-4.0.3&q=80&w=1080',
-                          width: 120.0,
-                          height: 120.0,
-                          fit: BoxFit.cover,
-                          alignment: const Alignment(0.0, 1.0),
-                        ),
+            ListView(children: [
+              const SizedBox(height: 64),
+              Center(
+                  child: ClipRRect(
+                borderRadius: BorderRadius.circular(24.0),
+                child: Image.network(
+                  'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0NTYyMDF8MHwxfHNlYXJjaHwyfHxuZWNrbGFjZXxlbnwwfHx8fDE3MTEyMDQxNTF8MA&ixlib=rb-4.0.3&q=80&w=1080',
+                  width: 120.0,
+                  height: 120.0,
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0.0, 1.0),
+                ),
+              )),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  'Connected Device',
+                  style: FlutterFlowTheme.of(context).headlineLarge.override(
+                        fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
+                        fontSize: 24.0,
+                        letterSpacing: 0.0,
+                        fontWeight: FontWeight.bold,
+                        useGoogleFonts:
+                            GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
                       ),
-                      Align(
-                        alignment: const AlignmentDirectional(0.0, 0.0),
-                        child: Text(
-                          'Connected Device',
-                          style: FlutterFlowTheme.of(context).headlineLarge.override(
-                                fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
-                                fontSize: 24.0,
-                                letterSpacing: 0.0,
-                                fontWeight: FontWeight.bold,
-                                useGoogleFonts:
-                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
-                              ),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.max,
-                        children: [
-                          Align(
-                            alignment: const AlignmentDirectional(0.0, 0.0),
-                            child: Text(
-                              valueOrDefault<String>(
-                                BTDeviceStruct.maybeFromMap(widget.btdevice)?.name,
-                                '-',
-                              ),
-                              style: FlutterFlowTheme.of(context).titleSmall.override(
-                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                                    letterSpacing: 0.0,
-                                    useGoogleFonts:
-                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                                  ),
-                            ),
-                          ),
-                          Align(
-                            alignment: const AlignmentDirectional(0.0, 0.0),
-                            child: Text(
-                              valueOrDefault<String>(
-                                BTDeviceStruct.maybeFromMap(widget.btdevice)?.id,
-                                '-',
-                              ),
-                              style: FlutterFlowTheme.of(context).titleSmall.override(
-                                    fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                                    letterSpacing: 0.0,
-                                    useGoogleFonts:
-                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                                  ),
-                            ),
-                          ),
-                        ].divide(const SizedBox(height: 8.0)),
-                      ),
-                    ].divide(const SizedBox(height: 16.0)),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: const AlignmentDirectional(0.0, 0.0),
-                      child: _areApiKeysSet
-                          ? DeviceDataWidget(
-                              btDevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ),
-                ]
-                    .divide(const SizedBox(height: 32.0))
-                    .addToStart(const SizedBox(height: 48.0))
-                    .addToEnd(const SizedBox(height: 48.0)),
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Center(
+                  child: Text(
+                BTDeviceStruct.maybeFromMap(widget.btDevice)?.name ?? '-',
+                style: _getTextStyle(),
+              )),
+              const SizedBox(height: 8),
+              Center(
+                  child: Text(
+                BTDeviceStruct.maybeFromMap(widget.btDevice)?.id ?? '-',
+                style: _getTextStyle(),
+              )),
+              const SizedBox(height:32),
+              _areApiKeysSet
+                  ? DeviceDataWidget(
+                      btDevice: BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
+                    )
+                  : const SizedBox.shrink(),
+            ]),
           ],
         ),
       ),
     );
+  }
+
+  _getTextStyle() {
+    return FlutterFlowTheme.of(context).titleSmall.override(
+          fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+          letterSpacing: 0.0,
+          useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+        );
   }
 }

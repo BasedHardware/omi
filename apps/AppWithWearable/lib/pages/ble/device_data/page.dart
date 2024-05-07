@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/actions/actions.dart';
@@ -25,17 +26,47 @@ class DeviceDataWidget extends StatefulWidget {
 
 class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   Timer? _timer;
-  List<String> whispers = [];
-  List<String> whispersDiarized = [];
+
+  // List<String> whispers = [''];
+  List<Map<int, String>> whispersDiarized = [{}];
+
+  String _buildDiarizedTranscriptMessage() {
+    int totalSpeakers = whispersDiarized
+        .map((e) => e.keys.isEmpty ? 0 : ((e.keys).max + 1))
+        .reduce((value, element) => value > element ? value : element);
+
+    debugPrint('Speakers count: $totalSpeakers');
+
+    String transcript = '';
+    for (int partIdx = 0; partIdx < whispersDiarized.length; partIdx++) {
+      var part = whispersDiarized[partIdx];
+      if (part.isEmpty) continue;
+      for (int speaker = 0; speaker < totalSpeakers; speaker++) {
+        if (part.containsKey(speaker)) {
+          // This part and previous have only 1 speaker, and is the same
+          if (partIdx > 0 &&
+              whispersDiarized[partIdx - 1].containsKey(speaker) &&
+              whispersDiarized[partIdx - 1].length == 1 &&
+              part.length == 1) {
+            transcript += '${part[speaker]!} ';
+          } else {
+            transcript += 'Speaker $speaker: ${part[speaker]!} ';
+          }
+        }
+      }
+      transcript += '\n';
+    }
+    return transcript;
+  }
 
   _initiateTimer() {
     _timer = Timer(const Duration(seconds: 30), () {
       debugPrint('Creating memory from whispers');
-      String whispers = this.whispers.join(' ');
-      debugPrint('whispers: ${this.whispers.join(' ')}');
-      processTranscriptContent(whispers);
+      String transcript = _buildDiarizedTranscriptMessage();
+      debugPrint('Transcript: \n${transcript.trim()}');
+      processTranscriptContent(transcript);
       setState(() {
-        this.whispers = [];
+        whispersDiarized = [{}];
       });
     });
   }
@@ -43,29 +74,22 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   @override
   void initState() {
     super.initState();
-
-    // On component load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await actions.bleReceiveWAV(widget.btDevice!, (_) {
-        debugPrint("Deepgram Finalized Callback received"); // it's always empty string
+        debugPrint("Deepgram Finalized Callback received");
         setState(() {
-          // Add space for a new entry
-          whispers.add('');
+          whispersDiarized.add({});
         });
         _initiateTimer();
-      }, (String transcript) {
+      }, (String transcript, Map<int, String> transcriptBySpeaker) {
         _timer?.cancel();
-
-        // We dont have any whispers yet so we need to create the first one to update
-        if (whispers.isEmpty) {
-          setState(() {
-            whispers.add(transcript);
-          });
-        } else {
-          setState(() {
-            whispers[whispers.length - 1] = transcript;
-          });
-        }
+        var copy = whispersDiarized[whispersDiarized.length - 1];
+        transcriptBySpeaker.forEach((speaker, transcript) {
+          copy[speaker] = transcript;
+        });
+        setState(() {
+          whispersDiarized[whispersDiarized.length - 1] = copy;
+        });
       });
     });
 
@@ -75,48 +99,35 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
-
-    return Align(
-      alignment: const AlignmentDirectional(0.0, 0.0),
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Builder(
-                builder: (context) {
-                  return ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    scrollDirection: Axis.vertical,
-                    itemCount: whispers.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16.0),
-                    itemBuilder: (context, whispersListIndex) {
-                      final whispersListItem = whispers[whispersListIndex];
-                      return Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-                        child: Text(
-                          whispersListItem,
-                          style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                letterSpacing: 0.0,
-                                useGoogleFonts:
-                                    GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                              ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ].divide(const SizedBox(height: 16.0)),
+    var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
+    // debugPrint('filteredNotEmptyWhispers ${filteredNotEmptyWhispers.length}');
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      shrinkWrap: true,
+      scrollDirection: Axis.vertical,
+      itemCount: filteredNotEmptyWhispers.length,
+      physics: const NeverScrollableScrollPhysics(),
+      separatorBuilder: (_, __) => const SizedBox(height: 16.0),
+      itemBuilder: (context, idx) {
+        final data = filteredNotEmptyWhispers[idx];
+        String transcriptItem = '';
+        for (int speaker = 0; speaker < data.length; speaker++) {
+          if (data.containsKey(speaker)) {
+            transcriptItem += 'Speaker $speaker: ${data[speaker]!} ';
+          }
+        }
+        return Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+          child: Text(
+            transcriptItem,
+            style: FlutterFlowTheme.of(context).bodyMedium.override(
+                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                  letterSpacing: 0.0,
+                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
