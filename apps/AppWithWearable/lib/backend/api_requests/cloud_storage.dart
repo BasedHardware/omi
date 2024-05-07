@@ -17,7 +17,6 @@ void authenticateGCP() async {
   }
   final credentialsBytes = base64Decode(credentialsBase64);
   String decodedString = utf8.decode(credentialsBytes);
-  debugPrint('decodedString: $decodedString');
   final credentials = ServiceAccountCredentials.fromJson(jsonDecode(decodedString));
   var scopes = ['https://www.googleapis.com/auth/devstorage.full_control'];
   authClient = await clientViaServiceAccount(credentials, scopes);
