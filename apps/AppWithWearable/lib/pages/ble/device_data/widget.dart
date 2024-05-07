@@ -75,11 +75,11 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
       File file = await audioStorage!.createWavFile();
-      processTranscriptContent(transcript, file.path);
+      String? fileName = await uploadFile(file);
+      processTranscriptContent(transcript, fileName);
       setState(() {
         whispersDiarized = [{}];
       });
-      uploadFile(file);
       audioStorage?.clearAudioBytes();
     });
   }

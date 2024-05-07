@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
@@ -26,6 +30,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
   String? dailySummary;
   String? weeklySummary;
   String? monthlySummary;
+  late AudioPlayer _audioPlayer;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -44,6 +49,49 @@ class _MemoriesPageState extends State<MemoriesPage> {
     monthlySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
   }
 
+  void _playAudio(MemoryRecord memory) async {
+    if (memory.audioFileName == null) return;
+    String fileName = memory.audioFileName!;
+    File? gcpFile = await downloadFile(fileName, fileName);
+    _audioPlayer.play(DeviceFileSource(gcpFile?.path ?? ''));
+    debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
+    var memories = FFAppState().memories;
+    for (var m in memories) {
+      if (m.id == memory.id) {
+        m.playerState = PlayerState.playing;
+      } else {
+        m.playerState = PlayerState.stopped;
+      }
+    }
+    FFAppState().update(() {
+      FFAppState().memories = memories;
+    });
+  }
+
+  void _pauseAudio(MemoryRecord memory) async {
+    if (memory.audioFileName == null) return;
+    await _audioPlayer.pause();
+    setState(() {
+      memory.playerState = PlayerState.paused;
+    });
+  }
+
+  void _resumeAudio(MemoryRecord memory) async {
+    if (memory.audioFileName == null) return;
+    await _audioPlayer.resume();
+    setState(() {
+      memory.playerState = PlayerState.playing;
+    });
+  }
+
+  void _stopAudio(MemoryRecord memory) async {
+    if (memory.audioFileName == null) return;
+    await _audioPlayer.stop();
+    setState(() {
+      memory.playerState = PlayerState.stopped;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -51,7 +99,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
     _dailySummary();
     _weeklySummary();
     _monthlySummary();
-    WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
+    _audioPlayer = AudioPlayer();
   }
 
   @override
@@ -115,7 +163,14 @@ class _MemoriesPageState extends State<MemoriesPage> {
                                   scrollDirection: Axis.vertical,
                                   itemCount: FFAppState().memories.length,
                                   itemBuilder: (context, index) {
-                                    return MemoryListItem(memory: FFAppState().memories[index], model: _model);
+                                    return MemoryListItem(
+                                      memory: FFAppState().memories[index],
+                                      model: _model,
+                                      playAudio: _playAudio,
+                                      pauseAudio: _pauseAudio,
+                                      resumeAudio: _resumeAudio,
+                                      stopAudio: _stopAudio,
+                                    );
                                   },
                                 ),
                         ),
