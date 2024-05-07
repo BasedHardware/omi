@@ -1,10 +1,10 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 
-import 'home_page_widget.dart' show HomePageWidget;
+import 'page.dart' show MemoriesPage;
 import 'package:flutter/material.dart';
 
-class HomePageModel extends FlutterFlowModel<HomePageWidget> {
+class MemoriesPageModel extends FlutterFlowModel<MemoriesPage> {
   ///  Local state fields for this page.
 
   bool isShowFullList = true;

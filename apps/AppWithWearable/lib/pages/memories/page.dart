@@ -2,26 +2,27 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
-import 'package:friend_private/pages/home_page/empty_memories.dart';
-import 'package:friend_private/pages/home_page/header_buttons.dart';
-import 'package:friend_private/pages/home_page/home_page_model.dart';
-import 'package:friend_private/pages/home_page/memory_list_item.dart';
-import 'package:friend_private/pages/home_page/memory_processing.dart';
-import 'package:friend_private/pages/home_page/summaries_buttons.dart';
+import 'package:friend_private/pages/memories/widgets/summaries_buttons.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class HomePageWidget extends StatefulWidget {
-  const HomePageWidget({super.key});
+import 'widgets/empty_memories.dart';
+import 'widgets/header_buttons.dart';
+import 'model.dart';
+import 'widgets/memory_list_item.dart';
+import 'widgets/memory_processing.dart';
+
+class MemoriesPage extends StatefulWidget {
+  const MemoriesPage({super.key});
 
   @override
-  State<HomePageWidget> createState() => _HomePageWidgetState();
+  State<MemoriesPage> createState() => _MemoriesPageState();
 }
 
-class _HomePageWidgetState extends State<HomePageWidget> {
-  late HomePageModel _model;
+class _MemoriesPageState extends State<MemoriesPage> {
+  late MemoriesPageModel _model;
   String? dailySummary;
   String? weeklySummary;
   String? monthlySummary;
@@ -46,7 +47,7 @@ class _HomePageWidgetState extends State<HomePageWidget> {
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => HomePageModel());
+    _model = createModel(context, () => MemoriesPageModel());
     _dailySummary();
     _weeklySummary();
     _monthlySummary();

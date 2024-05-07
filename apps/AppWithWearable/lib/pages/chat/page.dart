@@ -14,8 +14,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'chat_model.dart';
-export 'chat_model.dart';
+import 'model.dart';
+export 'model.dart';
 
 class ChatPageWidget extends StatefulWidget {
   const ChatPageWidget({super.key});
