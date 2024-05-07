@@ -44,6 +44,7 @@ Future<IOWebSocketChannel> _initStream(
 
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
+        debugPrint('~~ ${parsedJson.toString()}');
         Map<int, String> bySpeaker = {};
         data['words'].forEach((word) {
           int speaker = word['speaker'];
@@ -84,7 +85,6 @@ Future<IOWebSocketChannel> _initStream(
 Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage>> bleReceiveWAV(BTDeviceStruct btDevice,
     void Function(String) speechFinalCallback, void Function(String, Map<int, String>) interimCallback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
-  final completer = Completer<String>();
   AudioStorage audioStorage = AudioStorage();
 
   try {
@@ -121,74 +121,12 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage>> bleReceiv
     }
 
     debugPrint('Desired characteristic not found');
-    if (!completer.isCompleted) {
-      completer.complete(null);
-    }
   } catch (e) {
     debugPrint('Error receiving data: $e');
-    if (!completer.isCompleted) {
-      completer.completeError(e);
-    }
   } finally {}
 
   // return completer.future;
   return Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage>(null, null, audioStorage);
-}
-
-FFUploadedFile createWavFile(List<int> audioData) {
-  // audioData = filterAudioData(audioData);
-  final byteData = ByteData(2 * audioData.length);
-  for (int i = 0; i < audioData.length; i++) {
-    byteData.setUint16(i * 2, audioData[i], Endian.little);
-  }
-
-  final wavHeader = buildWavHeader(audioData.length * 2);
-  final wavBytes = Uint8List.fromList(wavHeader + byteData.buffer.asUint8List());
-  final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-  final name = 'recording-$timestamp.wav';
-
-  return FFUploadedFile(
-    name: name,
-    bytes: Uint8List.fromList(wavBytes),
-  );
-}
-
-Uint8List buildWavHeader(int dataLength) {
-  final byteData = ByteData(44);
-  final size = dataLength + 36;
-
-  // RIFF chunk
-  byteData.setUint8(0, 0x52); // 'R'
-  byteData.setUint8(1, 0x49); // 'I'
-  byteData.setUint8(2, 0x46); // 'F'
-  byteData.setUint8(3, 0x46); // 'F'
-  byteData.setUint32(4, size, Endian.little);
-  byteData.setUint8(8, 0x57); // 'W'
-  byteData.setUint8(9, 0x41); // 'A'
-  byteData.setUint8(10, 0x56); // 'V'
-  byteData.setUint8(11, 0x45); // 'E'
-
-  // fmt chunk
-  byteData.setUint8(12, 0x66); // 'f'
-  byteData.setUint8(13, 0x6D); // 'm'
-  byteData.setUint8(14, 0x74); // 't'
-  byteData.setUint8(15, 0x20); // ' '
-  byteData.setUint32(16, 16, Endian.little);
-  byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
-  byteData.setUint16(22, channelCount, Endian.little);
-  byteData.setUint32(24, sampleRate, Endian.little);
-  byteData.setUint32(28, sampleRate * channelCount * sampleWidth, Endian.little);
-  byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
-  byteData.setUint16(34, sampleWidth * 8, Endian.little);
-
-  // data chunk
-  byteData.setUint8(36, 0x64); // 'd'
-  byteData.setUint8(37, 0x61); // 'a'
-  byteData.setUint8(38, 0x74); // 't'
-  byteData.setUint8(39, 0x61); // 'a'
-  byteData.setUint32(40, dataLength, Endian.little);
-
-  return byteData.buffer.asUint8List();
 }
 
 class AudioStorage {
@@ -237,7 +175,6 @@ class AudioStorage {
     return byteData.buffer.asUint8List();
   }
 
-  // Utility to build the WAV header
   Uint8List buildWavHeader(int dataLength) {
     final byteData = ByteData(44);
     final size = dataLength + 36;
@@ -275,4 +212,41 @@ class AudioStorage {
 
     return byteData.buffer.asUint8List();
   }
+
+// Utility to build the WAV header
+// Uint8List buildWavHeader(int dataLength) {
+//   final byteData = ByteData(44);
+//   final size = dataLength + 36;
+//   // Set the correct RIFF header
+//   const riffHeader = 'RIFF';
+//   const waveFormat = 'WAVE';
+//   const fmtChunkID = 'fmt ';
+//   const dataChunkID = 'data';
+//
+//   void writeString(int offset, String value) {
+//     for (int i = 0; i < value.length; i++) {
+//       debugPrint('Writing string: ${offset+i}, ${value.codeUnitAt(i)}');
+//       byteData.setUint8(offset + i, value.codeUnitAt(i));
+//     }
+//   }
+//   // RIFF chunk
+//   writeString(0, riffHeader);
+//   byteData.setUint32(4, size, Endian.little);
+//   writeString(8, waveFormat);
+//   writeString(12, fmtChunkID);
+//
+//   // fmt chunk
+//   byteData.setUint32(16, 16, Endian.little);
+//   byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
+//   byteData.setUint16(22, channelCount, Endian.little);
+//   byteData.setUint32(24, sampleRate, Endian.little);
+//   byteData.setUint32(28, sampleRate * channelCount * sampleWidth, Endian.little);
+//   byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
+//   byteData.setUint16(34, sampleWidth * 8, Endian.little);
+//
+//   writeString(36, dataChunkID);
+//   byteData.setUint32(40, dataLength, Endian.little);
+//
+//   return byteData.buffer.asUint8List();
+// }
 }

@@ -53,7 +53,18 @@ class _MemoriesPageState extends State<MemoriesPage> {
     if (memory.audioFileName == null) return;
     String fileName = memory.audioFileName!;
     File? gcpFile = await downloadFile(fileName, fileName);
-    _audioPlayer.play(DeviceFileSource(gcpFile?.path ?? ''));
+    if (gcpFile == null) {
+      // show dialog
+      showDialog(
+          context: context,
+          builder: (_) => const AlertDialog(
+                title: Text('Error'),
+                content: Text(
+                    'Failed to retrieve the audio file, please check your credentials and GCP bucket settings are set.'),
+              ));
+      return;
+    }
+    _audioPlayer.play(DeviceFileSource(gcpFile.path ?? ''));
     debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
     var memories = FFAppState().memories;
     for (var m in memories) {
@@ -105,6 +116,8 @@ class _MemoriesPageState extends State<MemoriesPage> {
   @override
   void dispose() {
     _model.dispose();
+    _audioPlayer.stop();
+    _audioPlayer.dispose();
     super.dispose();
   }
 

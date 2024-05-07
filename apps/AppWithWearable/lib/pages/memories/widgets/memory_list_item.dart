@@ -212,7 +212,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       )),
                     ),
                   ),
-                  widget.memory.audioFileName != null
+                  (widget.memory.audioFileName?.isNotEmpty ?? false)
                       ? Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
