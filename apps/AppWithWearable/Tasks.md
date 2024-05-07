@@ -40,7 +40,7 @@
 
 ---
 
-- [ ] Multilanguage option, implement settings selector, and use that for the deepgram websocket
+- [x] Multilanguage option, implement settings selector, and use that for the deepgram websocket
   creation
 - [ ] Option for storing your transcripts somewhere in the cloud, user inputs their own GCP storage
   bucket + auth key, and the files are uploaded there + a reference is stored in the MemoryRecord
