@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -22,6 +25,54 @@ class MemoryListItem extends StatefulWidget {
 }
 
 class _MemoryListItemState extends State<MemoryListItem> {
+  late AudioPlayer _audioPlayer;
+  PlayerState _playerState = PlayerState.stopped;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  void _playAudio() async {
+    if (widget.memory.audioFilePath == null) return;
+    _audioPlayer.play(DeviceFileSource(widget.memory.audioFilePath!));
+    debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
+    setState(() {
+      _playerState = PlayerState.playing;
+    });
+  }
+
+  void _pauseAudio() async {
+    if (widget.memory.audioFilePath == null) return;
+    await _audioPlayer.pause();
+    setState(() {
+      _playerState = PlayerState.paused;
+    });
+  }
+
+  void _resumeAudio() async {
+    if (widget.memory.audioFilePath == null) return;
+    await _audioPlayer.resume();
+    setState(() {
+      _playerState = PlayerState.playing;
+    });
+  }
+
+  void _stopAudio() async {
+    if (widget.memory.audioFilePath == null) return;
+    await _audioPlayer.stop();
+    setState(() {
+      _playerState = PlayerState.stopped;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -197,6 +248,25 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       )),
                     ),
                   ),
+                  widget.memory.audioFilePath != null
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.play_arrow),
+                              onPressed: _playerState == PlayerState.playing ? null : _playAudio,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.pause),
+                              onPressed: _playerState == PlayerState.playing ? _pauseAudio : null,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.stop),
+                              onPressed: _playerState != PlayerState.stopped ? _stopAudio : null,
+                            ),
+                          ],
+                        )
+                      : Container(),
                 ],
               ),
             ),

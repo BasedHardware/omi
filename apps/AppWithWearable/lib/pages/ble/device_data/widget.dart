@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/actions/actions.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/custom_code/actions/ble_receive_w_a_v.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
@@ -13,6 +16,7 @@ import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'package:path_provider/path_provider.dart';
 
 class DeviceDataWidget extends StatefulWidget {
   const DeviceDataWidget({
@@ -33,6 +37,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   List<Map<int, String>> whispersDiarized = [{}];
   IOWebSocketChannel? channel;
   StreamSubscription? streamSubscription;
+  AudioStorage? audioStorage;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -64,14 +69,27 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 30), () {
+    _timer = Timer(const Duration(seconds: 5), () async {
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
-      processTranscriptContent(transcript);
+      File file = await audioStorage!.createWavFile();
+      processTranscriptContent(transcript, file.path);
       setState(() {
         whispersDiarized = [{}];
       });
+      // uploadFile(file);
+
+      // FFUploadedFile f = createWavFile(audioStorage!.audioBytes);
+      // final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      // final filename = 'recording-$timestamp.wav';
+      // final directory = await getApplicationDocumentsDirectory();
+      // final file2 = File('${directory.path}/$filename');
+      // await file2.writeAsBytes(f.bytes!);
+      // uploadFile(file2);
+
+      // Get directory to save the file
+      audioStorage?.clearAudioBytes();
     });
   }
 
@@ -83,7 +101,8 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple2<IOWebSocketChannel?, StreamSubscription?> data = await actions.bleReceiveWAV(widget.btDevice!, (_) {
+      Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage> data =
+          await actions.bleReceiveWAV(widget.btDevice!, (_) {
         debugPrint("Deepgram Finalized Callback received");
         setState(() {
           whispersDiarized.add({});
@@ -101,6 +120,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
       });
       channel = data.item1;
       streamSubscription = data.item2;
+      audioStorage = data.item3;
     });
   }
 

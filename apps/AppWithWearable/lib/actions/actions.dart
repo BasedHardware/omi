@@ -5,12 +5,12 @@ import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 // Perform actions periodically
-Future<void> processTranscriptContent(String content) async {
-  if (content.isNotEmpty) await memoryCreationBlock(content);
+Future<void> processTranscriptContent(String content, String audioFilePath) async {
+  if (content.isNotEmpty) await memoryCreationBlock(content, audioFilePath);
 }
 
 // Process the creation of memory records
-Future<void> memoryCreationBlock(String rawMemory) async {
+Future<void> memoryCreationBlock(String rawMemory, String audioFilePath) async {
   changeAppStateMemoryCreating();
   var structuredMemory = await generateTitleAndSummaryForMemory(rawMemory);
   debugPrint('Structured Memory: $structuredMemory');
@@ -18,7 +18,7 @@ Future<void> memoryCreationBlock(String rawMemory) async {
     await saveFailureMemory(rawMemory, structuredMemory);
     changeAppStateMemoryCreating();
   } else {
-    await finalizeMemoryRecord(rawMemory, structuredMemory);
+    await finalizeMemoryRecord(rawMemory, structuredMemory, audioFilePath);
   }
 }
 
@@ -42,20 +42,21 @@ void changeAppStateMemoryCreating() {
 }
 
 // Finalize memory record after processing feedback
-Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory) async {
-  await createMemoryRecord(rawMemory, structuredMemory);
+Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory, String audioFilePath) async {
+  await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
   changeAppStateMemoryCreating();
 }
 
 // Create memory record
-Future<MemoryRecord> createMemoryRecord(String rawMemory, String structuredMemory) async {
+Future<MemoryRecord> createMemoryRecord(String rawMemory, String structuredMemory, String audioFilePath) async {
   var memory = MemoryRecord(
       id: const Uuid().v4(),
       date: DateTime.now(),
       rawMemory: rawMemory,
       structuredMemory: structuredMemory,
       isEmpty: rawMemory == '',
-      isUseless: false);
+      isUseless: false,
+      audioFilePath: audioFilePath);
   MemoryStorage.addMemory(memory);
   debugPrint('createMemoryRecord added memory: ${memory.id}');
   return memory;
