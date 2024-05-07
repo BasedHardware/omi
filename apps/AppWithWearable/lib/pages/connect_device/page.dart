@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../backend/api_requests/api_calls.dart';
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -44,7 +45,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => ConnectDeviceModel());
-
+    authenticateGCP();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Check if the API keys are set
       final prefs = await SharedPreferences.getInstance();

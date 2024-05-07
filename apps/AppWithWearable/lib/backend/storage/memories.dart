@@ -8,6 +8,7 @@ class MemoryRecord {
   String structuredMemory;
   bool isEmpty;
   bool isUseless;
+  String? audioFilePath;
 
   MemoryRecord({
     required this.id,
@@ -16,6 +17,7 @@ class MemoryRecord {
     required this.structuredMemory,
     required this.isEmpty,
     required this.isUseless,
+    this.audioFilePath,
   });
 
   Map<String, dynamic> toJson() {
@@ -26,6 +28,7 @@ class MemoryRecord {
       'structuredMemory': structuredMemory,
       'isEmpty': isEmpty,
       'isUseless': isUseless,
+      'audioFilePath': audioFilePath ?? '',
     };
   }
 
@@ -37,6 +40,7 @@ class MemoryRecord {
       structuredMemory: json['structuredMemory'],
       isEmpty: json['isEmpty'],
       isUseless: json['isUseless'],
+      audioFilePath: json['audioFilePath'],
     );
   }
 
