@@ -29,12 +29,6 @@ class PermissionListItem extends StatefulWidget {
 }
 
 class _PermissionListItemState extends State<PermissionListItem> {
-  // @override
-  // void initState() {
-  //   super.initState();
-  //
-  //   WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
-  // }
 
   @override
   Widget build(BuildContext context) {
