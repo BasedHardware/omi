@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +12,7 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import '/pages/ble/device_data/page.dart';
+import '/pages/ble/device_data/widget.dart';
 import 'model.dart';
 
 export 'model.dart';
@@ -29,7 +30,10 @@ class ConnectDeviceWidget extends StatefulWidget {
 }
 
 class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
+  GlobalKey<DeviceDataWidgetState> childWidgetKey = GlobalKey();
   late ConnectDeviceModel _model;
+  bool deepgramApiIsVisible = false;
+  bool openaiApiIsVisible = false;
   final _deepgramApiKeyController = TextEditingController();
   final _openaiApiKeyController = TextEditingController();
   bool _areApiKeysSet = false;
@@ -89,23 +93,18 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     super.dispose();
   }
 
-  String _obscureApiKey(String apiKey) {
-    if (apiKey.length <= 3) {
-      return apiKey;
-    } else {
-      final obscuredKey = '*' * (apiKey.length - 3);
-      return apiKey.substring(0, 3) + obscuredKey;
-    }
-  }
+  String _selectedLanguage = 'en';
 
   Future<void> _showSettingsBottomSheet() async {
     // Load API keys from shared preferences
     final prefs = await SharedPreferences.getInstance();
     final deepgramApiKey = prefs.getString('deepgramApiKey') ?? '';
     final openaiApiKey = prefs.getString('openaiApiKey') ?? '';
+    final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
 
-    _deepgramApiKeyController.text = _obscureApiKey(deepgramApiKey);
-    _openaiApiKeyController.text = _obscureApiKey(openaiApiKey);
+    _deepgramApiKeyController.text = deepgramApiKey;
+    _openaiApiKeyController.text = openaiApiKey;
+    _selectedLanguage = recordingsLanguage;
 
     await showModalBottomSheet(
       context: context,
@@ -118,8 +117,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         ),
       ),
       builder: (BuildContext context) {
-        return WillPopScope(
-          onWillPop: () async => false,
+        return PopScope(
+          canPop: false,
           child: StatefulBuilder(
             builder: (BuildContext context, StateSetter setModalState) {
               return Padding(
@@ -127,7 +126,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                   bottom: MediaQuery.of(context).viewInsets.bottom,
                 ),
                 child: Container(
-                  height: MediaQuery.of(context).size.height * 0.6,
+                  height: MediaQuery.of(context).size.height * 0.7,
                   padding: const EdgeInsets.all(16.0),
                   child: SingleChildScrollView(
                     child: Column(
@@ -151,16 +150,28 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                         const SizedBox(height: 8.0),
                         TextField(
                           controller: _deepgramApiKeyController,
-                          decoration: const InputDecoration(
+                          obscureText: deepgramApiIsVisible ? false : true,
+                          decoration: InputDecoration(
                             labelText: 'Deepgram API Key',
-                            labelStyle: TextStyle(color: Colors.white),
-                            border: OutlineInputBorder(),
-                            enabledBorder: OutlineInputBorder(
+                            labelStyle: const TextStyle(color: Colors.white),
+                            border: const OutlineInputBorder(),
+                            enabledBorder: const OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
                               borderRadius: BorderRadius.all(Radius.circular(20.0)),
                             ),
-                            focusedBorder: OutlineInputBorder(
+                            focusedBorder: const OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.white),
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                              onPressed: () {
+                                setModalState(() {
+                                  deepgramApiIsVisible = !deepgramApiIsVisible;
+                                });
+                              },
                             ),
                           ),
                           style: const TextStyle(color: Colors.white),
@@ -188,18 +199,31 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                         const SizedBox(height: 8.0),
                         TextField(
                           controller: _openaiApiKeyController,
-                          decoration: const InputDecoration(
-                            labelText: 'OpenAI API Key',
-                            labelStyle: TextStyle(color: Colors.white),
-                            border: OutlineInputBorder(),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.white),
-                              borderRadius: BorderRadius.all(Radius.circular(20.0)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.white),
-                            ),
-                          ),
+                          obscureText: openaiApiIsVisible ? false : true,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: InputDecoration(
+                              labelText: 'OpenAI API Key',
+                              labelStyle: const TextStyle(color: Colors.white),
+                              border: const OutlineInputBorder(),
+                              enabledBorder: const OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white),
+                                borderRadius: BorderRadius.all(Radius.circular(20.0)),
+                              ),
+                              focusedBorder: const OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                onPressed: () {
+                                  setModalState(() {
+                                    openaiApiIsVisible = !openaiApiIsVisible;
+                                  });
+                                },
+                              )),
                           style: const TextStyle(color: Colors.white),
                         ),
                         const SizedBox(height: 8.0),
@@ -216,6 +240,48 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                           ),
                         ),
                         const SizedBox(height: 16.0),
+                        const Center(child: Text('Recordings Language:', style: TextStyle(color: Colors.white))),
+                        const SizedBox(height: 12),
+                        Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          child: DropdownButton<String>(
+                            menuMaxHeight: 350,
+                            value: _selectedLanguage,
+                            onChanged: (String? newValue) {
+                              setModalState(() {
+                                _selectedLanguage = newValue!;
+                                debugPrint('Selecting: $newValue');
+                              });
+                            },
+                            dropdownColor: Colors.black,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            underline: Container(
+                              height: 0,
+                              color: Colors.white,
+                            ),
+                            isExpanded: false,
+                            itemHeight: 48,
+                            items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+                              return DropdownMenuItem<String>(
+                                value: availableLanguages[key],
+                                child: Text(
+                                  '$key (${availableLanguages[key]})',
+                                  style: TextStyle(
+                                      color: _selectedLanguage == availableLanguages[key]
+                                          ? Colors.blue[400]
+                                          : Colors.white,
+                                      fontSize: 16),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                         ElevatedButton(
                           onPressed: () {
                             String deepgramApiKey = _deepgramApiKeyController.text;
@@ -278,8 +344,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     );
 // Set the obscured API keys in the text fields
     setState(() {
-      _deepgramApiKeyController.text = _obscureApiKey(deepgramApiKey);
-      _openaiApiKeyController.text = _obscureApiKey(openaiApiKey);
+      _deepgramApiKeyController.text = deepgramApiKey;
+      _openaiApiKeyController.text = openaiApiKey;
     });
   }
 
@@ -287,8 +353,12 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('deepgramApiKey', deepgramApiKey);
     await prefs.setString('openaiApiKey', openaiApiKey);
-
-// Initialize the page and enable the DeviceDataWidget after saving the API keys
+    if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
+      // If the language has changed, restart the deepgram websocket
+      childWidgetKey.currentState?.resetState();
+      await prefs.setString('recordingsLanguage', _selectedLanguage);
+    }
+    // Initialize the page and enable the DeviceDataWidget after saving the API keys
     _initializePage();
     setState(() {
       _areApiKeysSet = true;
@@ -390,10 +460,11 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                 BTDeviceStruct.maybeFromMap(widget.btDevice)?.id ?? '-',
                 style: _getTextStyle(),
               )),
-              const SizedBox(height:32),
+              const SizedBox(height: 32),
               _areApiKeysSet
                   ? DeviceDataWidget(
                       btDevice: BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
+                      key: childWidgetKey,
                     )
                   : const SizedBox.shrink(),
             ]),

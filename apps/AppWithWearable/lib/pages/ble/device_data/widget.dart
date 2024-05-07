@@ -6,6 +6,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/actions/actions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:tuple/tuple.dart';
+import 'package:web_socket_channel/io.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
@@ -21,14 +23,16 @@ class DeviceDataWidget extends StatefulWidget {
   final BTDeviceStruct? btDevice;
 
   @override
-  State<DeviceDataWidget> createState() => _DeviceDataWidgetState();
+  State<DeviceDataWidget> createState() => DeviceDataWidgetState();
 }
 
-class _DeviceDataWidgetState extends State<DeviceDataWidget> {
+class DeviceDataWidgetState extends State<DeviceDataWidget> {
   Timer? _timer;
 
   // List<String> whispers = [''];
   List<Map<int, String>> whispersDiarized = [{}];
+  IOWebSocketChannel? channel;
+  StreamSubscription? streamSubscription;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -74,8 +78,12 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
   @override
   void initState() {
     super.initState();
+    initBleConnection();
+  }
+
+  void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      await actions.bleReceiveWAV(widget.btDevice!, (_) {
+      Tuple2<IOWebSocketChannel?, StreamSubscription?> data = await actions.bleReceiveWAV(widget.btDevice!, (_) {
         debugPrint("Deepgram Finalized Callback received");
         setState(() {
           whispersDiarized.add({});
@@ -91,9 +99,19 @@ class _DeviceDataWidgetState extends State<DeviceDataWidget> {
           whispersDiarized[whispersDiarized.length - 1] = copy;
         });
       });
+      channel = data.item1;
+      streamSubscription = data.item2;
     });
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
+  void resetState() {
+    streamSubscription?.cancel();
+    channel?.sink.close();
+    setState(() {
+      whispersDiarized = [{}];
+      _timer?.cancel();
+      initBleConnection();
+    });
   }
 
   @override

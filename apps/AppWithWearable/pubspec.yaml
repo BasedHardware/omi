@@ -53,6 +53,7 @@ dependencies:
   flutter_tilt: any
   path: ^1.9.0
   uuid: ^4.4.0
+  tuple: ^2.0.2
 
 dependency_overrides:
   http: 1.2.0

@@ -5,15 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tuple/tuple.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:web_socket_channel/io.dart';
-
-const serverUrl =
-    'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
-
-late IOWebSocketChannel channel;
 
 const int sampleRate = 8000;
 const int channelCount = 1;
@@ -24,13 +20,18 @@ const String audioServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(
+Future<IOWebSocketChannel> _initStream(
     void Function(String) speechFinalCallback, void Function(String, Map<int, String>) interimCallback) async {
   final prefs = await SharedPreferences.getInstance();
   final apiKey = prefs.getString('deepgramApiKey') ?? '';
+  final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+
+  var serverUrl =
+      'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
 
   debugPrint('Websocket Opening');
-  channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
+  IOWebSocketChannel channel =
+      IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
 
   channel.ready.then((_) {
     channel.stream.listen((event) {
@@ -71,19 +72,21 @@ Future<void> _initStream(
 
   try {
     await channel.ready;
+    debugPrint('Channel is ready, websocket opened');
   } catch (e) {
     // handle exception here
     debugPrint("Websocket was unable to establishconnection");
   }
+  return channel;
 }
 
-Future<String> bleReceiveWAV(BTDeviceStruct btDevice, void Function(String) speechFinalCallback,
-    void Function(String, Map<int, String>) interimCallback) async {
+Future<Tuple2<IOWebSocketChannel?, StreamSubscription?>> bleReceiveWAV(BTDeviceStruct btDevice,
+    void Function(String) speechFinalCallback, void Function(String, Map<int, String>) interimCallback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   final completer = Completer<String>();
 
   try {
-    _initStream(speechFinalCallback, interimCallback);
+    IOWebSocketChannel channel = await _initStream(speechFinalCallback, interimCallback);
     await device.connect();
     debugPrint('Connected to device: ${device.id}');
     List<BluetoothService> services = await device.discoverServices();
@@ -100,13 +103,14 @@ Future<String> bleReceiveWAV(BTDeviceStruct btDevice, void Function(String) spee
               await characteristic.setNotifyValue(true);
               debugPrint('Subscribed to characteristic: ${characteristic.uuid.str128}');
 
-              characteristic.value.listen((value) {
+              StreamSubscription stream = characteristic.value.listen((value) {
                 if (value.isEmpty) return;
                 value.removeRange(0, 3);
                 channel.sink.add(value);
               });
 
-              return completer.future;
+              // return completer.future;
+              return Tuple2<IOWebSocketChannel?, StreamSubscription?>(channel, stream);
             }
           }
         }
@@ -124,7 +128,8 @@ Future<String> bleReceiveWAV(BTDeviceStruct btDevice, void Function(String) spee
     }
   } finally {}
 
-  return completer.future;
+  // return completer.future;
+  return const Tuple2<IOWebSocketChannel?, StreamSubscription?>(null, null);
 }
 
 FFUploadedFile createWavFile(List<int> audioData) {
