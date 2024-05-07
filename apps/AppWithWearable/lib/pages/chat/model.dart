@@ -1,5 +1,5 @@
 import '/flutter_flow/flutter_flow_util.dart';
-import 'chat_widget.dart' show ChatPageWidget;
+import 'page.dart' show ChatPageWidget;
 import 'package:flutter/material.dart';
 
 class ChatModel extends FlutterFlowModel<ChatPageWidget> {

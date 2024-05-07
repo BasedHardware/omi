@@ -1,11 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/ble/connected/connected_widget.dart';
+import 'package:friend_private/pages/ble/connecting/connecting_widget.dart';
+import 'package:friend_private/pages/ble/find_devices/find_devices_widget.dart';
+import 'package:friend_private/pages/ble/scan_devices/scan_devices_widget.dart';
+import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/connect_device/page.dart';
+import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/permissions/page.dart';
+import 'package:friend_private/pages/welcome/page.dart';
 import 'package:provider/provider.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/index.dart';
 
 export 'package:go_router/go_router.dart';
 export 'serialization_util.dart';
@@ -41,7 +49,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                 ),
               ),
             )
-          : entryPage ?? WelcomeWidget(),
+          : entryPage ?? const WelcomeWidget(),
       routes: [
         FFRoute(
           name: '_initialize',
@@ -56,17 +64,17 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? WelcomeWidget(), // TODO: restore back to WelcomeWidget when done with the PR
+              : entryPage ?? const WelcomeWidget(), // TODO: restore back to WelcomeWidget when done with the PR
         ),
         FFRoute(
           name: 'welcome',
           path: '/welcome',
-          builder: (context, params) => WelcomeWidget(),
+          builder: (context, params) => const WelcomeWidget(),
         ),
         FFRoute(
           name: 'PermissionPage',
           path: '/permissionPage',
-          builder: (context, params) => PermissionPageWidget(),
+          builder: (context, params) => const PermissionPageWidget(),
         ),
         FFRoute(
           name: 'connectDevice',
@@ -91,22 +99,22 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'findDevices',
           path: '/findDevices',
-          builder: (context, params) => FindDevicesWidget(),
+          builder: (context, params) => const FindDevicesWidget(),
         ),
         FFRoute(
           name: 'memoriesPage',
           path: '/memoriesPage',
-          builder: (context, params) => HomePageWidget(),
+          builder: (context, params) => const MemoriesPage(),
         ),
         FFRoute(
           name: 'chatPage',
           path: '/chatPage',
-          builder: (context, params) => ChatPageWidget(),
+          builder: (context, params) => const ChatPageWidget(),
         ),
         FFRoute(
           name: 'scanDevices',
           path: '/scanDevices',
-          builder: (context, params) => ScanDevicesWidget(),
+          builder: (context, params) => const ScanDevicesWidget(),
         ),
         FFRoute(
           name: 'connected',
@@ -278,7 +286,7 @@ class TransitionInfo {
   final Duration duration;
   final Alignment? alignment;
 
-  static TransitionInfo appDefault() => TransitionInfo(hasTransition: false);
+  static TransitionInfo appDefault() => const TransitionInfo(hasTransition: false);
 }
 
 class RootPageContext {

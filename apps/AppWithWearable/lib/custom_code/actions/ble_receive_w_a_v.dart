@@ -29,34 +29,20 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
 
   debugPrint('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
-  // var isFinals = [];
+
   channel.ready.then((_) {
     channel.stream.listen((event) {
       debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
-      final transcript = parsedJson['channel']['alternatives'][0]['transcript'];
-      // final isFinal = parsedJson['is_final'];
+      final data = parsedJson['channel']['alternatives'][0];
+      final transcript = data['transcript'];
       final speechFinal = parsedJson['is_final'];
 
-      // if (transcript.length > 0) {
-      //   debugPrint('~~Transcript: $transcript isFinal: $isFinal speechFinal: $speechFinal');
-      //   if (speechFinal) {
-      //     debugPrint('isFinals.join(' '): ${isFinals.join(' ')}');
-      //     interimCallback(isFinals.join(' ') + (isFinals.isNotEmpty ? ' ' : '') + transcript);
-      //     finalizedCallback('');
-      //     isFinals = [];
-      //   } else {
-      //     if (isFinal) {
-      //       debugPrint('~~ isFinal but it was not speechFinal ~~');
-      //       isFinals.add(transcript);
-      //       interimCallback(transcript);
-      //     } else {
-      //       interimCallback(transcript);
-      //     }
-      //   }
-      // }
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
+        // data['words'].forEach((word) {
+        //   debugPrint('Word: ${word['word']}');
+        // });
         if (speechFinal) {
           interimCallback(transcript);
           speechFinalCallback('');
@@ -64,9 +50,6 @@ Future<void> _initStream(void Function(String) speechFinalCallback, void Functio
           interimCallback(transcript);
         }
       }
-
-      // Re-instantiate the Completer for next use
-      // completer = Completer<String>();
     }, onError: (err) {
       debugPrint('Websocket Error: $err');
       // handle stream error
@@ -108,8 +91,6 @@ Future<String> bleReceiveWAV(
             if (isNotify) {
               await characteristic.setNotifyValue(true);
               debugPrint('Subscribed to characteristic: ${characteristic.uuid.str128}');
-              // List<int> wavData = [];
-              // int samplesToRead = 150000;
 
               characteristic.value.listen((value) {
                 if (value.isEmpty) return;

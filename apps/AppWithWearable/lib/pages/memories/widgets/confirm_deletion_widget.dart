@@ -4,8 +4,6 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'confirm_deletion_model.dart';
-export 'confirm_deletion_model.dart';
 
 class ConfirmDeletionWidget extends StatefulWidget {
   const ConfirmDeletionWidget({
@@ -20,27 +18,10 @@ class ConfirmDeletionWidget extends StatefulWidget {
 }
 
 class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
-  late ConfirmDeletionModel _model;
-
-  @override
-  void setState(VoidCallback callback) {
-    super.setState(callback);
-    _model.onUpdate();
-  }
-
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => ConfirmDeletionModel());
-
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _model.maybeDispose();
-
-    super.dispose();
   }
 
   @override

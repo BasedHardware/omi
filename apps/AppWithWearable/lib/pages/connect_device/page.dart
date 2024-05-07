@@ -11,10 +11,10 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import '/pages/ble/device_data/device_data_widget.dart';
-import 'connect_device_model.dart';
+import '/pages/ble/device_data/page.dart';
+import 'model.dart';
 
-export 'connect_device_model.dart';
+export 'model.dart';
 
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
@@ -425,13 +425,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                     child: Align(
                       alignment: const AlignmentDirectional(0.0, 0.0),
                       child: _areApiKeysSet
-                          ? wrapWithModel(
-                              model: _model.deviceDataModel,
-                              updateCallback: () => setState(() {}),
-                              updateOnChange: true,
-                              child: DeviceDataWidget(
-                                btdevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
-                              ),
+                          ? DeviceDataWidget(
+                              btDevice: BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
                             )
                           : const SizedBox.shrink(),
                     ),
