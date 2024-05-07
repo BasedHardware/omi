@@ -324,6 +324,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   _getSaveButton() {
     return ElevatedButton(
       onPressed: () {
+        // TODO: fix this, first timers, will be able to pop, without having them saved
         if (_deepgramApiKeyController.text.isEmpty || _openaiApiKeyController.text.isEmpty) {
           showDialog(
             context: context,
