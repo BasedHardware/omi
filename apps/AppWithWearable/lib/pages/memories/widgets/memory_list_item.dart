@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
@@ -17,62 +18,25 @@ import 'edit_memory_widget.dart';
 class MemoryListItem extends StatefulWidget {
   final MemoryRecord memory;
   final MemoriesPageModel model;
+  final Function(MemoryRecord) playAudio;
+  final Function(MemoryRecord) pauseAudio;
+  final Function(MemoryRecord) resumeAudio;
+  final Function(MemoryRecord) stopAudio;
 
-  const MemoryListItem({super.key, required this.memory, required this.model});
+  const MemoryListItem(
+      {super.key,
+      required this.memory,
+      required this.model,
+      required this.playAudio,
+      required this.pauseAudio,
+      required this.resumeAudio,
+      required this.stopAudio});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
 }
 
 class _MemoryListItemState extends State<MemoryListItem> {
-  late AudioPlayer _audioPlayer;
-  PlayerState _playerState = PlayerState.stopped;
-
-  @override
-  void initState() {
-    super.initState();
-    _audioPlayer = AudioPlayer();
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  void _playAudio() async {
-    if (widget.memory.audioFilePath == null) return;
-    _audioPlayer.play(DeviceFileSource(widget.memory.audioFilePath!));
-    debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
-    setState(() {
-      _playerState = PlayerState.playing;
-    });
-  }
-
-  void _pauseAudio() async {
-    if (widget.memory.audioFilePath == null) return;
-    await _audioPlayer.pause();
-    setState(() {
-      _playerState = PlayerState.paused;
-    });
-  }
-
-  void _resumeAudio() async {
-    if (widget.memory.audioFilePath == null) return;
-    await _audioPlayer.resume();
-    setState(() {
-      _playerState = PlayerState.playing;
-    });
-  }
-
-  void _stopAudio() async {
-    if (widget.memory.audioFilePath == null) return;
-    await _audioPlayer.stop();
-    setState(() {
-      _playerState = PlayerState.stopped;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -248,22 +212,28 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       )),
                     ),
                   ),
-                  widget.memory.audioFilePath != null
+                  widget.memory.audioFileName != null
                       ? Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            const Text('Recording:'),
                             IconButton(
-                              icon: const Icon(Icons.play_arrow),
-                              onPressed: _playerState == PlayerState.playing ? null : _playAudio,
+                              icon: Icon(
+                                  widget.memory.playerState == PlayerState.playing ? Icons.pause : Icons.play_arrow),
+                              onPressed: widget.memory.playerState == PlayerState.playing
+                                  ? () => widget.pauseAudio(widget.memory)
+                                  : widget.memory.playerState == PlayerState.paused
+                                      ? () =>widget.resumeAudio(widget.memory)
+                                      : () =>widget.playAudio(widget.memory),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.pause),
-                              onPressed: _playerState == PlayerState.playing ? _pauseAudio : null,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.stop),
-                              onPressed: _playerState != PlayerState.stopped ? _stopAudio : null,
-                            ),
+                            widget.memory.playerState != PlayerState.stopped
+                                ? IconButton(
+                                    icon: const Icon(Icons.stop),
+                                    onPressed: widget.memory.playerState != PlayerState.stopped
+                                        ? ()=> widget.stopAudio(widget.memory)
+                                        : null,
+                                  )
+                                : Container(),
                           ],
                         )
                       : Container(),

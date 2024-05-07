@@ -221,8 +221,6 @@ class AudioStorage {
     final wavBytes = Uint8List.fromList(wavHeader + convertToLittleEndianBytes(_audioBytes));
     final filename = 'recording-$timestamp.wav';
 
-    // Get directory to save the file
-    // TODO: rather store in a temporal directory
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$filename');
     await file.writeAsBytes(wavBytes);
