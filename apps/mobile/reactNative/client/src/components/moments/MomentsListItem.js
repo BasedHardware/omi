@@ -1,26 +1,31 @@
 import {useContext, useRef} from 'react';
 import {ListItem} from 'react-native-elements';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import {TouchableOpacity, StyleSheet} from 'react-native';
+import {TouchableOpacity, StyleSheet, Text} from 'react-native';
 import {MomentsContext} from '../../contexts/MomentsContext';
 import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
 import {faTrash} from '@fortawesome/free-solid-svg-icons';
 
-const MomentListItem = ({item, onItemPress}) => {
-  const {deleteMoment} = useContext(MomentsContext);
+const MomentListItem = ({momentId, onItemPress}) => {
+  const {deleteMoment, moments} = useContext(MomentsContext);
   const swipeableRef = useRef(null);
   const touchableRef = useRef(null);
 
-  const handleDelete = item => {
+  const moment = moments.find(moment => moment.momentId === momentId);
+  if (!moment) {
+    return <Text>Loading moment...</Text>;
+  }
+  
+  const handleDelete = moment => {
     if (swipeableRef.current) {
       swipeableRef.current.close();
     }
-    deleteMoment(item);
+    deleteMoment(moment);
   };
 
   const renderRightActions = () => (
     <TouchableOpacity
-      onPress={() => handleDelete(item)}
+      onPress={() => handleDelete(moment)}
       style={styles.deleteButton}>
       <FontAwesomeIcon icon={faTrash} size={30} color="white" />
     </TouchableOpacity>
@@ -46,18 +51,18 @@ const MomentListItem = ({item, onItemPress}) => {
       simultaneousHandlers={touchableRef}>
       <TouchableOpacity
         ref={touchableRef}
-        onPress={() => onItemPress(item)}
+        onPress={() => onItemPress(momentId)}
         activeOpacity={0.6}
         style={styles.touchable}>
         <ListItem
-          key={item.momentId}
+          key={moment.momentId}
           bottomDivider
           containerStyle={styles.listItem}>
           <ListItem.Content>
             <ListItem.Title>
-              {item.title.substring(0, 30) + '...'}
+              {moment.title.substring(0, 30) + '...'}
             </ListItem.Title>
-            <ListItem.Subtitle>{formatDate(item.date)}</ListItem.Subtitle>
+            <ListItem.Subtitle>{formatDate(moment.date)}</ListItem.Subtitle>
           </ListItem.Content>
           <ListItem.Chevron />
         </ListItem>

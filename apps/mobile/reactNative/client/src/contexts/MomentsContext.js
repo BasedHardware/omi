@@ -101,11 +101,11 @@ export const MomentsProvider = ({children}) => {
   const deleteMoment = async moment => {
     try {
       const response = await axios.delete(`${BACKEND_URL}:30001/moments`, {
-        data: {id: moment.id},
+        data: {id: moment.momentId},
       });
       if (response.status === 200) {
         let moments = (await fetchMomentsFromLocalStorage()) || [];
-        moments = moments.filter(item => item.id !== moment.id);
+        moments = moments.filter(item => item.id !== moment.moemntId);
         await updateLocalStorage(moments);
         setMoments(moments);
       }

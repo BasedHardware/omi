@@ -1,21 +1,35 @@
-import React from 'react';
+import {useContext, useState, useEffect} from 'react';
 import {ScrollView, View, Text, StyleSheet} from 'react-native';
 import {Card} from 'react-native-elements';
+import {MomentsContext} from '../contexts/MomentsContext';
 
 const MomentDetailScreen = ({route}) => {
-  const {transcript, summary, title, actionItems} = route.params;
+  const {momentId} = route.params;
+  const {moments} = useContext(MomentsContext);
+  const [moment, setMoment] = useState(null);
+
+  useEffect(() => {
+    const foundMoment = moments.find(m => m.id === momentId);
+    setMoment(foundMoment);
+  }, [moments, momentId]);
+
+  if (!moment) {
+    return <Text>Loading...</Text>;
+  }
 
   return (
-    <ScrollView style={{backgroundColor: '#000'}} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={{backgroundColor: '#000'}}
+      contentContainerStyle={styles.container}>
       <Card containerStyle={styles.card}>
-        <Card.Title style={styles.title}>{title}</Card.Title>
+        <Card.Title style={styles.title}>{moment.title}</Card.Title>
         <Card.Divider />
         <Text style={styles.title}>Summary</Text>
-        <Text style={styles.summaryText}>{summary}</Text>
+        <Text style={styles.summaryText}>{moment.summary}</Text>
         <Card.Divider />
         <Text style={styles.title}>Action Items</Text>
         <Text style={styles.actionItems}>
-          {actionItems.map((item, index) => (
+          {moment.actionItems.map((item, index) => (
             <Text key={index} style={styles.actionItemsText}>
               • {item}
               {'\n'}
@@ -26,7 +40,7 @@ const MomentDetailScreen = ({route}) => {
         <View style={styles.transcriptContainer}>
           <Text style={styles.title}>Transcript</Text>
           <ScrollView>
-            <Text style={styles.transcriptText}>{transcript}</Text>
+            <Text style={styles.transcriptText}>{moment.transcript}</Text>
           </ScrollView>
         </View>
       </Card>
@@ -57,19 +71,19 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     fontSize: 18,
-    color: '#333', 
+    color: '#333',
     marginBottom: 10,
   },
   actionItemsText: {
     fontSize: 18,
-    color: '#333', 
+    color: '#333',
     marginBottom: 10,
   },
   transcriptContainer: {
     minHeight: 100,
     maxHeight: 400,
     overflow: 'hidden',
-    backgroundColor: '#fff', 
+    backgroundColor: '#fff',
   },
   transcriptText: {
     fontSize: 16,

@@ -10,6 +10,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 
 const MomentsTab = () => {
   const {moments} = useContext(MomentsContext);
+  
   const {isRecording, displayTranscript, stopRecording, startRecording} =
     useAudioStream();
 
@@ -24,13 +25,8 @@ const MomentsTab = () => {
     stopRecording();
   };
 
-  const handlePress = item => {
-    navigation.navigate('Moment Details', {
-      title: item.title,
-      summary: item.summary,
-      transcript: item.transcript,
-      actionItems: item.actionItems,
-    });
+  const handlePress = momentId => {
+    navigation.navigate('Moment Details', {momentId});
   };
 
   return (
@@ -47,9 +43,12 @@ const MomentsTab = () => {
         <FlatList
           data={moments}
           keyExtractor={(item, index) => index.toString()}
-          renderItem={({item}) => (
-            <MomentListItem item={item} onItemPress={handlePress} />
-          )}
+          renderItem={({item}) => {
+            console.log('Passing momentId:', item.momentId);
+            return (
+              <MomentListItem momentId={item.momentId} onItemPress={handlePress} />
+            );
+          }}
           style={{flex: 1}}
         />
       </SafeAreaView>

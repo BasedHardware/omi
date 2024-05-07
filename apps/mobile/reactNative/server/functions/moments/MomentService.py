@@ -39,7 +39,7 @@ class MomentService:
             moments_collection = self.db['moments']
             moments = list(moments_collection.find({}))
             for moment in moments:
-                moment['id'] = str(moment.pop('_id'))
+                moment['momentId'] = str(moment.pop('_id'))
             return moments
         else:
             print("MongoDB connection is not initialized.")

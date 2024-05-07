@@ -45,6 +45,7 @@
     "@babel/core": "^7.24.4",
     "@babel/eslint-parser": "^7.24.1",
     "@babel/preset-env": "^7.20.0",
+    "@babel/preset-react": "^7.24.1",
     "@babel/runtime": "^7.20.0",
     "@react-native/babel-preset": "0.73.21",
     "@react-native/eslint-config": "0.73.2",
