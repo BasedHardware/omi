@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/actions/actions.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/custom_code/actions/ble_receive_w_a_v.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -78,17 +79,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
       setState(() {
         whispersDiarized = [{}];
       });
-      // uploadFile(file);
-
-      // FFUploadedFile f = createWavFile(audioStorage!.audioBytes);
-      // final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      // final filename = 'recording-$timestamp.wav';
-      // final directory = await getApplicationDocumentsDirectory();
-      // final file2 = File('${directory.path}/$filename');
-      // await file2.writeAsBytes(f.bytes!);
-      // uploadFile(file2);
-
-      // Get directory to save the file
+      uploadFile(file);
       audioStorage?.clearAudioBytes();
     });
   }
