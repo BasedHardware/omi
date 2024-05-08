@@ -38,13 +38,13 @@ Future<String?> uploadFile(File file) async {
       Uri.parse(url),
       headers: {
         'Authorization': 'Bearer ${authClient?.credentials.accessToken.data}',
-        'Content-Type': 'audio/wav', // Example: 'image/jpeg'
+        'Content-Type': 'audio/wav',
       },
       body: file.readAsBytesSync(),
     );
 
     if (response.statusCode == 200) {
-      var json = jsonDecode(response.body);
+      // var json = jsonDecode(response.body);
       debugPrint('Upload successful');
       return fileName;
     } else {
