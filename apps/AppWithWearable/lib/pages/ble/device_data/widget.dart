@@ -70,7 +70,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 30), () async {
+    _timer = Timer(const Duration(seconds: 5), () async {
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
