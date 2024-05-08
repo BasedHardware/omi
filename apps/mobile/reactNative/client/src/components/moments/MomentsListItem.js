@@ -16,16 +16,16 @@ const MomentListItem = ({momentId, onItemPress}) => {
     return <Text>Loading moment...</Text>;
   }
   
-  const handleDelete = moment => {
+  const handleDelete = momentId => {
     if (swipeableRef.current) {
       swipeableRef.current.close();
     }
-    deleteMoment(moment);
+    deleteMoment(momentId);
   };
 
   const renderRightActions = () => (
     <TouchableOpacity
-      onPress={() => handleDelete(moment)}
+      onPress={() => handleDelete(momentId)}
       style={styles.deleteButton}>
       <FontAwesomeIcon icon={faTrash} size={30} color="white" />
     </TouchableOpacity>

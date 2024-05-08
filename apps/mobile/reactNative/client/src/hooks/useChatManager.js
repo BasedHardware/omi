@@ -4,26 +4,24 @@ import {SnackbarContext} from '../contexts/SnackbarContext';
 import {AuthContext} from '../contexts/AuthContext';
 import {useSecureStorage} from './useSecureStorage';
 import {processToken} from '../components/chat/utils/processToken';
+import {BACKEND_URL, BACKEND_URL_PROD} from '@env';
 
 export const useChatManager = () => {
   const {showSnackbar} = useContext(SnackbarContext);
   const {userId} = useContext(AuthContext);
-  const {
-    storeItem,
-    retrieveItem,
-    clearLocalChat,
-    deleteLocalChat,
-  } = useSecureStorage();
+  const {storeItem, retrieveItem, clearLocalChat, deleteLocalChat} =
+    useSecureStorage();
   const [chatArray, setChatArray] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState({});
   const [insideCodeBlock, setInsideCodeBlock] = useState(false);
   const ignoreNextTokenRef = useRef(false);
   const languageRef = useRef(null);
+
   const chatUrl =
     process.env.NODE_ENV === 'development'
-      ? 'http://192.168.86.242:30000'
-      : process.env.REACT_APP_BACKEND_URL_PROD;
+      ? `${BACKEND_URL}:30000`
+      : BACKEND_URL_PROD;
 
   useEffect(() => {
     setIsLoading(true);
@@ -180,7 +178,6 @@ export const useChatManager = () => {
   };
 
   const updateMessagesStateAndStorage = async (chatId, completeMessage) => {
-    // Update messages state
     setMessages(prevMessages => {
       const updatedMessages = [
         ...(prevMessages[chatId] || []).slice(0, -1),
@@ -336,5 +333,6 @@ export const useChatManager = () => {
     deleteChat,
     createChat,
     getChats,
+    isLoading,
   };
 };

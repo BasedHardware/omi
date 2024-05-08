@@ -18,7 +18,7 @@ export const useSecureStorage = () => {
   const retrieveItem = async item => {
     try {
       const jsonItem = await EncryptedStorage.getItem(item);
-      return jsonItem ? JSON.parse(jsonItem) : {};
+      return jsonItem ? JSON.parse(jsonItem) : null;
     } catch (error) {
       console.error('Failed to retrieve users:', error);
       showSnackbar('Failed to retrieve user data', 'error');
