@@ -4,12 +4,8 @@ import {Input, Button, Icon} from 'react-native-elements';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {AuthContext} from '../contexts/AuthContext';
 import LoadingComponent from '../components/LoadingComponent';
-import EncryptedStorage from 'react-native-encrypted-storage';
 
-// const deleteUserData = async () => {
-//   await EncryptedStorage.getItem('users');
-//   await EncryptedStorage.removeItem('users');
-// };
+
 
 const Stack = createNativeStackNavigator();
 
