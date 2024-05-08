@@ -44,7 +44,6 @@ Future<IOWebSocketChannel> _initStream(
 
       if (transcript.length > 0) {
         debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
-        debugPrint('~~ ${parsedJson.toString()}');
         Map<int, String> bySpeaker = {};
         data['words'].forEach((word) {
           int speaker = word['speaker'];
@@ -108,7 +107,12 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage>> bleReceiv
               StreamSubscription stream = characteristic.value.listen((List<int> value) {
                 if (value.isEmpty) return;
                 value.removeRange(0, 3);
-                audioStorage.addAudioBytes(value);
+                for (int i = 0; i < value.length; i += 2) {
+                  int byte1 = value[i];
+                  int byte2 = value[i + 1];
+                  int int16Value = (byte2 << 8) | byte1;
+                  audioStorage.addAudioBytes([int16Value]);
+                }
                 channel.sink.add(value);
               });
 
@@ -151,9 +155,25 @@ class AudioStorage {
     _audioBytes.removeWhere((byte) => byte == 0);
   }
 
+  // Method to clean out the silent parts based on a given threshold
+  // void removeSilentSegments({int silenceThreshold = 10}) {
+  //   // Identify segments with sound (above the silenceThreshold)
+  //   List<int> cleanedBytes = [];
+  //   for (int byte in _audioBytes) {
+  //     if (byte.abs() > silenceThreshold) {
+  //       cleanedBytes.add(byte);
+  //     }
+  //   }
+  //   _audioBytes
+  //     ..clear()
+  //     ..addAll(cleanedBytes);
+  //   debugPrint('Cleaned silent segments');
+  // }
+
   // Method to create a WAV file from the stored audio bytes
   Future<File> createWavFile() async {
-    cleanAudioBytes();
+    // TODO: remove empty sounds without words
+    // removeSilentSegments();
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final wavHeader = buildWavHeader(_audioBytes.length * 2);
     final wavBytes = Uint8List.fromList(wavHeader + convertToLittleEndianBytes(_audioBytes));
@@ -212,41 +232,4 @@ class AudioStorage {
 
     return byteData.buffer.asUint8List();
   }
-
-// Utility to build the WAV header
-// Uint8List buildWavHeader(int dataLength) {
-//   final byteData = ByteData(44);
-//   final size = dataLength + 36;
-//   // Set the correct RIFF header
-//   const riffHeader = 'RIFF';
-//   const waveFormat = 'WAVE';
-//   const fmtChunkID = 'fmt ';
-//   const dataChunkID = 'data';
-//
-//   void writeString(int offset, String value) {
-//     for (int i = 0; i < value.length; i++) {
-//       debugPrint('Writing string: ${offset+i}, ${value.codeUnitAt(i)}');
-//       byteData.setUint8(offset + i, value.codeUnitAt(i));
-//     }
-//   }
-//   // RIFF chunk
-//   writeString(0, riffHeader);
-//   byteData.setUint32(4, size, Endian.little);
-//   writeString(8, waveFormat);
-//   writeString(12, fmtChunkID);
-//
-//   // fmt chunk
-//   byteData.setUint32(16, 16, Endian.little);
-//   byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
-//   byteData.setUint16(22, channelCount, Endian.little);
-//   byteData.setUint32(24, sampleRate, Endian.little);
-//   byteData.setUint32(28, sampleRate * channelCount * sampleWidth, Endian.little);
-//   byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
-//   byteData.setUint16(34, sampleWidth * 8, Endian.little);
-//
-//   writeString(36, dataChunkID);
-//   byteData.setUint32(40, dataLength, Endian.little);
-//
-//   return byteData.buffer.asUint8List();
-// }
 }

@@ -42,9 +42,10 @@
 
 - [x] Multilanguage option, implement settings selector, and use that for the deepgram websocket
   creation
-- [ ] Option for storing your transcripts somewhere in the cloud, user inputs their own GCP storage
+- [x] Option for storing your transcripts somewhere in the cloud, user inputs their own GCP storage
   bucket + auth key, and the files are uploaded there + a reference is stored in the MemoryRecord
   object.
+  - [ ] `createWavFile` remove empty sounds without words, and saves that fixed file.
 
 - [ ] ~~ (Idea) Detect a keyword or special order e.g. "Hey Friend" (but not so generic) and
   triggers a prompt execution + response. This would require a few hardware updates (could also be a
