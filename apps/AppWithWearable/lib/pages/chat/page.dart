@@ -1,4 +1,7 @@
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
+import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
 
@@ -585,11 +588,11 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
                                                   ),
                                                   showLoadingIndicator: true,
                                                   onPressed: () async {
-                                                    // String ragContext =
-                                                    //     await _retrieveRAGContext(_model.textController.text);
+                                                    String ragContext =
+                                                        await _retrieveRAGContext(_model.textController.text);
                                                     await uiUpdatesChatQA();
                                                     await streamApiResponse(
-                                                      '',
+                                                      ragContext,
                                                       _callbackFunctionChatStreaming(),
                                                     );
 
@@ -630,23 +633,25 @@ class _ChatPageWidgetState extends State<ChatPageWidget> {
     );
   }
 
-  // Future<String> _retrieveRAGContext(String message) async {
-  //   String? betterContextQuestion =
-  //       await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
-  //   debugPrint('_retrieveRAGContext: $betterContextQuestion');
-  //   if (betterContextQuestion == null) {
-  //     return '';
-  //   }
-  //   List<double> vectorizedMessage = await getEmbeddingsFromInput(
-  //     message,
-  //   );
-  //   List foundVectors = await queryPineconeVectors(vectorizedMessage);
-  //   String context = '';
-  //   for (var element in foundVectors) {
-  //     context += element['structuredMemory'] + '\n';
-  //   }
-  //   return context;
-  // }
+  Future<String> _retrieveRAGContext(String message) async {
+    String? betterContextQuestion =
+        await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
+    debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
+    if (betterContextQuestion == null) {
+      return '';
+    }
+    List<double> vectorizedMessage = await getEmbeddingsFromInput(
+      message,
+    );
+    List<String> memoriesId = querySimilarVectors(vectorizedMessage);
+    debugPrint('querySimilarVectors memories retrieved: $memoriesId');
+    if (memoriesId.isEmpty) {
+      return '';
+    }
+    List<MemoryRecord> memories = await MemoryStorage.getAllMemoriesByIds(memoriesId);
+    return MemoryRecord.memoriesToString(memories);
+
+  }
 
   uiUpdatesChatQA() async {
     setState(() {
