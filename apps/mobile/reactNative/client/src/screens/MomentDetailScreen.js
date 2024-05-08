@@ -9,7 +9,8 @@ const MomentDetailScreen = ({route}) => {
   const [moment, setMoment] = useState(null);
 
   useEffect(() => {
-    const foundMoment = moments.find(m => m.id === momentId);
+    const foundMoment = moments.find(m => m.momentId === momentId);
+    console.log('Found moment:', foundMoment);
     setMoment(foundMoment);
   }, [moments, momentId]);
 
