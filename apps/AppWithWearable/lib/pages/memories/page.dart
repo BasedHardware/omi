@@ -49,6 +49,20 @@ class _MemoriesPageState extends State<MemoriesPage> {
     monthlySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
   }
 
+  void _resetMemoriesState(String? memoryId) {
+    var memories = FFAppState().memories;
+    for (var m in memories) {
+      if (memoryId != null && m.id == memoryId) {
+        m.playerState = PlayerState.playing;
+      } else {
+        m.playerState = PlayerState.stopped;
+      }
+    }
+    FFAppState().update(() {
+      FFAppState().memories = memories;
+    });
+  }
+
   void _playAudio(MemoryRecord memory) async {
     if (memory.audioFileName == null) return;
     String fileName = memory.audioFileName!;
@@ -66,17 +80,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
     }
     _audioPlayer.play(DeviceFileSource(gcpFile.path ?? ''));
     debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
-    var memories = FFAppState().memories;
-    for (var m in memories) {
-      if (m.id == memory.id) {
-        m.playerState = PlayerState.playing;
-      } else {
-        m.playerState = PlayerState.stopped;
-      }
-    }
-    FFAppState().update(() {
-      FFAppState().memories = memories;
-    });
+    _resetMemoriesState(memory.id);
   }
 
   void _pauseAudio(MemoryRecord memory) async {
@@ -111,6 +115,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
     _weeklySummary();
     _monthlySummary();
     _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerComplete.listen((event) {
+      _resetMemoriesState(null);
+    });
   }
 
   @override
