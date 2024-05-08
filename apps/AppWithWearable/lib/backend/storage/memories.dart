@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,6 +9,8 @@ class MemoryRecord {
   String structuredMemory;
   bool isEmpty;
   bool isUseless;
+  String? audioFileName;
+  PlayerState playerState = PlayerState.stopped;
 
   MemoryRecord({
     required this.id,
@@ -16,6 +19,7 @@ class MemoryRecord {
     required this.structuredMemory,
     required this.isEmpty,
     required this.isUseless,
+    this.audioFileName,
   });
 
   Map<String, dynamic> toJson() {
@@ -26,6 +30,7 @@ class MemoryRecord {
       'structuredMemory': structuredMemory,
       'isEmpty': isEmpty,
       'isUseless': isUseless,
+      'audioFileName': audioFileName ?? '',
     };
   }
 
@@ -37,6 +42,7 @@ class MemoryRecord {
       structuredMemory: json['structuredMemory'],
       isEmpty: json['isEmpty'],
       isUseless: json['isUseless'],
+      audioFileName: json['audioFileName'],
     );
   }
 

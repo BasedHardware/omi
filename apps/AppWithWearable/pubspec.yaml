@@ -54,6 +54,8 @@ dependencies:
   path: ^1.9.0
   uuid: ^4.4.0
   tuple: ^2.0.2
+  googleapis_auth: ^1.6.0
+  audioplayers: ^5.2.1
 
 dependency_overrides:
   http: 1.2.0
