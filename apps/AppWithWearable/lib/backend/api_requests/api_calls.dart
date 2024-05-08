@@ -164,3 +164,75 @@ String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHis
   });
   return body;
 }
+
+// ------
+
+Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatHistory) async {
+  var tools = [
+    {
+      "type": "function",
+      "function": {
+        "name": "retrieve_rag_context",
+        "description": "Retrieve pieces of user memories as context.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": '''
+              Based on the current conversation, determine if the message is a question and if there's 
+              context that needs to be retrieved from the user recorded audio memories in order to answer that question.
+              If that's the case, return the question better parsed so that retrieved pieces of context are better.
+              ''',
+            },
+          },
+        },
+      },
+    }
+  ];
+  String message = '''
+        Conversation:
+        ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
+        USER:$lastMessage
+        '''
+      .replaceAll('        ', '');
+  debugPrint('determineRequiresContext message: $message');
+  var response = await gptApiCall(
+      model: 'gpt-4-turbo',
+      messages: [
+        {"role": "user", "content": message}
+      ],
+      tools: tools);
+  if (response.toString().contains('retrieve_rag_context')) {
+    var args = jsonDecode(response[0]['function']['arguments']);
+    return args['question'];
+  }
+  return null;
+}
+
+String qaStreamedBody(String context, List<dynamic> chatHistory) {
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    If the message doesn't require context, it will be empty, so answer the question casually.
+    
+    Conversation History:
+    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
+
+    Context:
+    ``` 
+    $context
+    ```
+    Answer:
+    '''
+      .replaceAll('    ', '');
+  debugPrint(prompt);
+  var body = jsonEncode({
+    "model": "gpt-4-turbo",
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
+    "stream": true,
+  });
+  return body;
+}

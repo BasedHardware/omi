@@ -12,28 +12,25 @@
   structuring but as context, not as part of the structure, so that if there's some reference to a  
   person, and then you use a pronoun, the LLM understands what you are referring to.
 - [ ] Migrate MemoryRecord from SharedPreferences to sqlite
-- [ ] Implement [similarity search](https://www.pinecone.io/learn/vector-similarity/) locally
-    - [ ] Use from the AppStandalone `_ragContext` function as a baseline for creating the query  
+- [X] Implement [similarity search](https://www.pinecone.io/learn/vector-similarity/) locally
+    - [X] Use from the AppStandalone `_ragContext` function as a baseline for creating the query  
       embedding.
-    - [ ] When a memory is created, compute the vector embedding and store it locally.
-    - [ ] When the user sends a question in the chat, extract from the AppStandalone  
+    - [X] When a memory is created, compute the vector embedding and store it locally.
+    - [X] When the user sends a question in the chat, extract from the AppStandalone  
       the `function_calling` that determines if the message requires context, if that's the case,  
       retrieve the top 10 most similar vectors ~~ For an initial version we can read all memories  
       from sqlite or SharedPreferences, and compute the formula between the query and each vector.
-    - [ ] Use that as context, and ask to the LLM. Retrieve the prompt from the AppStandalone.
-    - [X] -----  
-- [ ] Another option is to use one of the vector db libraries available for  
-  dart https://github.com/FastCodeAI/DVDB or https://pub.dev/packages/chromadb
+    - [X] Use that as context, and ask to the LLM. Retrieve the prompt from the AppStandalone.
+    - [ ] Improve function call way of parsing the text sent to the RAG, GPT should format the input
+      better for RAG to retrieve better context.
 - [ ] Settings Deepgram + openAI key are forced to be set
 - [ ] In case an API key fails, either Deepgram WebSocket connection fails, or GPT requests, let
-  the  
-  user know the error message, either has no more credits, api key is invalid, etc.
+  the user know the error message, either has no more credits, api key is invalid, etc.
 - [ ] Improve connected device page UI, including transcription text, and when memory creates
   after  
   30 seconds, let the user know
 - [ ] Structure the memory asking JSON output `{"title", "summary"}`, in that way we can have
-  better  
-  parsed data.
+  better parsed data.
 - [x] Test/Implement [speaker diarization](https://developers.deepgram.com/docs/diarization) to  
   recognize multiple speakers in transcription, use that for better context when creating the  
   structured memory.
@@ -44,6 +41,7 @@
   conversation, also, remove Speaker $i in transcript.
 - [ ] Allow users who don't have a GCP bucket to store their recordings locally.
 - [ ] Improve recordings player.
+
 ---  
 
 - [x] Multilanguage option, implement settings selector, and use that for the deepgram websocket  
