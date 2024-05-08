@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:uuid/uuid.dart';
 import '/backend/api_requests/api_calls.dart';
@@ -43,8 +44,11 @@ void changeAppStateMemoryCreating() {
 
 // Finalize memory record after processing feedback
 Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory, String? audioFilePath) async {
-  await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
+  MemoryRecord createdMemory = await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
   changeAppStateMemoryCreating();
+  List<double> vector = await getEmbeddingsFromInput(structuredMemory);
+  storeMemoryVector(createdMemory, vector);
+  // storeMemoryVector
 }
 
 // Create memory record

@@ -76,6 +76,17 @@ class MemoryStorage {
     return memories.where((memory) => !memory.isUseless).toList();
   }
 
+  static Future<List<MemoryRecord>> getAllMemoriesByIds(List<String> memoriesId) async {
+    List<MemoryRecord> memories = await getAllMemories();
+    List<MemoryRecord> filtered = [];
+    for (MemoryRecord memory in memories) {
+      if (memoriesId.contains(memory.id)) {
+        filtered.add(memory);
+      }
+    }
+    return filtered;
+  }
+
   static Future<void> updateMemory(String memoryId, String updatedMemory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
