@@ -12,7 +12,7 @@ If you purchased an unassembled Friend device or built it yourself using our har
 Important: If you purchased an assembled device please skip this step
 
 
-We have uploaded a build of the firmware in `firmware/Release`, that will always contain the most up to date build of the firmware. To use this firmware please download it and follow step 6 below. If you would like to build the firmware yourself please follow all the steps below.
+SKIP and INSTALL PRE-BUILT FIRMWARE: We have uploaded a [build of the firmware](https://github.com/BasedHardware/Friend/releases/download/v1.0.0-firmware/zephyr.uf2) in `firmware/Release`, that will always contain the most up to date build of the firmware. To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
 
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8)
 
