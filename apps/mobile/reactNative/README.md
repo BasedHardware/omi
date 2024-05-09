@@ -44,8 +44,6 @@ For Android (untested):
 ```npm run android```
 
 
-## Known Issues
-- **Audio Streaming**: When streaming from the Friend device, Deepgram returns silence. Relevant code is located in `useAudioStream.js`.
 
 ## Streaming Flow
 1. **Start**: Press 'Record' to start streaming.

@@ -44,10 +44,8 @@ def handle_add_moment(request):
     data = request.json
     new_moment = data['newMoment']
     new_moment = {**new_moment, **boss_agent.extract_content(new_moment)}
-
     # Add the moment to the database
     new_moment = moment_service.add_moment(new_moment)
-    
     # Create the first snapshot for the moment
     action_items_str = "Action Items:\n" + "\n".join(new_moment['actionItems'])
     combined_content = f"Transcript: {new_moment['transcript']}\n{action_items_str}\nSummary: {new_moment['summary']}"

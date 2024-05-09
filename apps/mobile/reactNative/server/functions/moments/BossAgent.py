@@ -16,11 +16,11 @@ class ActionItemsSignature(Signature):
     From the content, extract the suggested action items.
     """
     content = InputField()
-    actions: ActionItemsOutput = OutputField()
+    actions: ActionItemsOutput = OutputField(desc='Suggested actions should come directly from the content. If no actions are required, the output should be an empty list.')
 
 class NewActionItemsSignature(Signature):
     """
-    From the two lists of action items, combine them into a single list. No duplicates
+    Create a new list of action items by combining two lists.
     """
 
     list_1 = InputField()
@@ -29,11 +29,10 @@ class NewActionItemsSignature(Signature):
 
 class DocumentContent(Signature):
     """From the content, extract the title and summary of the document.
-    The title should be kept concise.
     """
 
     document = InputField()
-    title = OutputField()
+    title = OutputField(desc='Short descriptive title of the document')
     summary = OutputField()
     
 class BossAgent:
@@ -76,6 +75,7 @@ class BossAgent:
             actions_pred = extract_actions(content=content)
             generate_summary_prompt = dspy.ChainOfThought(DocumentContent)
             content_pred = generate_summary_prompt(document=content)
+            print(content_pred.title)
 
             extracted_content = {
                 'title': content_pred.title,

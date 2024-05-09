@@ -23,9 +23,9 @@ const useAudioStream = () => {
 
   // This is the function responsible for handling the data received from the Bluetooth device
   const handleUpdateValueForCharacteristic = data => {
-    // data.value is an array that looks to be in PCM8 format
     const array = new Uint8Array(data.value);
-    ws.current.send(array.buffer);
+    const modifiedArray = array.slice(3);
+    ws.current.send(modifiedArray.buffer);
   };
 
   const countTokens = text => {
@@ -37,7 +37,7 @@ const useAudioStream = () => {
     if (currentMomentRef.current) {
       try {
         const momentId = currentMomentRef.current.momentId;
-        console.log(currentMomentRef.current)
+        console.log(currentMomentRef.current);
         await updateMoment({momentId, transcript});
       } catch (error) {
         console.error('Error updating moment', error);
