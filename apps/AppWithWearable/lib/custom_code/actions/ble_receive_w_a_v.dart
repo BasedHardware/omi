@@ -3,13 +3,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/pages/connect_device/connect_device_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'dart:convert';
 import 'package:web_socket_channel/io.dart';
-import 'package:flutter/material.dart';
 
 const serverUrl =
     'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=en&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
@@ -27,11 +26,10 @@ const String audioCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
 const String audioCharacteristicFormatUuid =
     "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-Future<void> _initStream(void Function(String) finalized_callback,
+Future<void> _initStreamDeepgram(
+    String apiKey,
+    void Function(String) finalized_callback,
     void Function(String) interim_callback) async {
-  final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('deepgramApiKey') ?? '';
-
   print('Websocket Opening');
   channel = IOWebSocketChannel.connect(Uri.parse(serverUrl),
       headers: {'Authorization': 'Token $apiKey'});
@@ -83,7 +81,34 @@ Future<void> _initStream(void Function(String) finalized_callback,
   }
 }
 
-Future<String> bleReceiveWAV(BTDeviceStruct btDevice,
+Future<void> _initStreamWhisper(
+    String apiKey,
+    void Function(String) finalized_callback,
+    void Function(String) interim_callback) async {
+  while (true) {
+    await Future.delayed(Duration(seconds: 1));
+    print('Whispering');
+    interim_callback('Whispering');
+  }
+}
+
+Future<void> _initStream(void Function(String) finalized_callback,
+    void Function(String) interim_callback) async {
+  final prefs = await SharedPreferences.getInstance();
+  final ttsProvider =
+      prefs.getString('ttsProvider') ?? TtsProvider.deepgram.name;
+  if (ttsProvider == TtsProvider.deepgram.name) {
+    final apiKey = prefs.getString('deepgramApiKey') ?? '';
+    _initStreamDeepgram(apiKey, finalized_callback, interim_callback);
+  } else if (ttsProvider == TtsProvider.whisper.name) {
+    _initStreamWhisper(finalized_callback, interim_callback);
+  } else {
+    print('Invalid TTS Provider Selected');
+  }
+}
+
+Future<String> bleReceiveWAV(
+    BTDeviceStruct btDevice,
     void Function(String) finalized_callback,
     void Function(String) interim_callback) async {
   final device = BluetoothDevice.fromId(btDevice.id);
@@ -179,21 +204,21 @@ Uint8List buildWavHeader(int dataLength) {
   byteData.setUint8(13, 0x6D); // 'm'
   byteData.setUint8(14, 0x74); // 't'
   byteData.setUint8(15, 0x20); // ' '
-byteData.setUint32(16, 16, Endian.little);
-byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
-byteData.setUint16(22, channelCount, Endian.little);
-byteData.setUint32(24, sampleRate, Endian.little);
-byteData.setUint32(
-28, sampleRate * channelCount * sampleWidth, Endian.little);
-byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
-byteData.setUint16(34, sampleWidth * 8, Endian.little);
+  byteData.setUint32(16, 16, Endian.little);
+  byteData.setUint16(20, 1, Endian.little); // Audio format (1 = PCM)
+  byteData.setUint16(22, channelCount, Endian.little);
+  byteData.setUint32(24, sampleRate, Endian.little);
+  byteData.setUint32(
+      28, sampleRate * channelCount * sampleWidth, Endian.little);
+  byteData.setUint16(32, channelCount * sampleWidth, Endian.little);
+  byteData.setUint16(34, sampleWidth * 8, Endian.little);
 
 // data chunk
-byteData.setUint8(36, 0x64); // 'd'
-byteData.setUint8(37, 0x61); // 'a'
-byteData.setUint8(38, 0x74); // 't'
-byteData.setUint8(39, 0x61); // 'a'
-byteData.setUint32(40, dataLength, Endian.little);
+  byteData.setUint8(36, 0x64); // 'd'
+  byteData.setUint8(37, 0x61); // 'a'
+  byteData.setUint8(38, 0x74); // 't'
+  byteData.setUint8(39, 0x61); // 'a'
+  byteData.setUint32(40, dataLength, Endian.little);
 
-return byteData.buffer.asUint8List();
+  return byteData.buffer.asUint8List();
 }
