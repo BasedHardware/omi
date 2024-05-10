@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-export 'blur_bot_model.dart';
 
 
 class BlurBotWidget extends StatefulWidget {

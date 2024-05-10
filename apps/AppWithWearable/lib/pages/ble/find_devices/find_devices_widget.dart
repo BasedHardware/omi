@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
-import '/flutter_flow/flutter_flow_animations.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/permissions_util.dart';
-import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'find_devices_model.dart';
 
 export 'find_devices_model.dart';
@@ -39,7 +36,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
 
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(seconds: 5),
+      duration: const Duration(seconds: 5),
     );
 
     _animation = Tween<double>(begin: 0, end: 1).animate(
@@ -83,12 +80,12 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Error'),
-          content: Text('Bluetooth off'),
+          title: const Text('Error'),
+          content: const Text('Bluetooth off'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         ),
@@ -123,7 +120,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
         // No matching device found, continue scanning
       }
 
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
     }
   }
 
@@ -162,7 +159,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
     final gifSize = getGifSize(screenHeight);
 
     return Scaffold(
-      backgroundColor: Color.fromARGB(255, 0, 0, 0),
+      backgroundColor: const Color.fromARGB(255, 0, 0, 0),
       body: Stack(
         children: [
           SafeArea(
@@ -170,7 +167,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Padding(
-                  padding: EdgeInsets.only(top: 16.0),
+                  padding: const EdgeInsets.only(top: 16.0),
                   child: Text(
                     'Pairing',
                     style: FlutterFlowTheme.of(context).bodyMedium.override(
@@ -185,12 +182,12 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                     textAlign: TextAlign.center,
                   ),
                 ),
-                SizedBox(height: 16.0),
+                const SizedBox(height: 16.0),
                 AnimatedOpacity(
-                  duration: Duration(milliseconds: 500),
+                  duration: const Duration(milliseconds: 500),
                   opacity: _isConnected ? 1.0 : 0.0,
                   child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
+                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.transparent,
@@ -200,20 +197,20 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                           width: 2,
                         ),
                       ),
-                      padding: EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.all(8.0),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
                             width: 10,
                             height: 10,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Color.fromARGB(255, 0, 255, 8),
                               shape: BoxShape.circle,
                             ),
                           ),
-                          SizedBox(width: 8.0),
-                          Text(
+                          const SizedBox(width: 8.0),
+                          const Text(
                             'Friend Connected',
                             style: TextStyle(
                               color: Colors.white,
@@ -226,7 +223,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                     ),
                   ),
                 ),
-                SizedBox(height: 16.0),
+                const SizedBox(height: 16.0),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -240,7 +237,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                             return Transform.scale(
                               scale: _animation.value,
                               child: Container(
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Color.fromARGB(0, 89, 255, 0),
                                 ),
@@ -255,9 +252,9 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                           },
                         ),
                       ),
-                      SizedBox(height: 16.0),
+                      const SizedBox(height: 16.0),
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 30.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 30.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -274,10 +271,10 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                                   ),
                               textAlign: TextAlign.center,
                             ),
-                            SizedBox(height: 8.0),
+                            const SizedBox(height: 8.0),
                             Text(
                               _stringStatus2,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Color.fromARGB(255, 255, 255, 255),
                                 fontSize: 16.0,
                                 fontWeight: FontWeight.w500,
@@ -285,18 +282,18 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             AnimatedOpacity(
-                              duration: Duration(milliseconds: 500),
+                              duration: const Duration(milliseconds: 500),
                               opacity: _isConnected ? 1.0 : 0.0,
                               child: Padding(
-                                padding: EdgeInsets.all(16.0),
+                                padding: const EdgeInsets.all(16.0),
                                 child: FFButtonWidget(
                                   onPressed: _navigateToConnecting,
                                   text: 'Continue',
                                   options: FFButtonOptions(
                                     height: 50,
-                                    padding: EdgeInsets.symmetric(horizontal: 30),
+                                    padding: const EdgeInsets.symmetric(horizontal: 30),
                                     color: FlutterFlowTheme.of(context).secondary,
                                     textStyle: FlutterFlowTheme.of(context).titleSmall.copyWith(
                                           color: FlutterFlowTheme.of(context).primary,
