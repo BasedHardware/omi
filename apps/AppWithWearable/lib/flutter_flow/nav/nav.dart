@@ -6,7 +6,7 @@ import 'package:friend_private/pages/ble/connecting/connecting_widget.dart';
 import 'package:friend_private/pages/ble/find_devices/find_devices_widget.dart';
 import 'package:friend_private/pages/ble/scan_devices/scan_devices_widget.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/connect_device/page.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/permissions/page.dart';
 import 'package:friend_private/pages/welcome/page.dart';

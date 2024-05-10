@@ -3,18 +3,17 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../backend/api_requests/api_calls.dart';
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
-import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import '/pages/ble/device_data/widget.dart';
+import 'widget.dart';
 import 'model.dart';
 
 export 'model.dart';
@@ -131,13 +130,13 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                 ),
                 child: Container(
                   height: MediaQuery.of(context).size.height * 0.8,
-                  padding: const EdgeInsets.symmetric(horizontal:16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Column(
                     children: [
                       Expanded(
                           child: ListView(
                         children: [
-                          const SizedBox(height:16),
+                          const SizedBox(height: 16),
                           const Center(
                               child: Text(
                             'Settings',
@@ -246,8 +245,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
                           )),
                           const SizedBox(height: 24.0),
                           Container(
-                            height:0.2,
-                            color:Colors.grey[400],
+                            height: 0.2,
+                            color: Colors.grey[400],
                             width: double.infinity,
                           ),
                           const SizedBox(height: 16.0),
@@ -446,11 +445,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
         ),
         body: Stack(
           children: [
-            wrapWithModel(
-              model: _model.blurModel,
-              updateCallback: () => setState(() {}),
-              child: const BlurBotWidget(),
-            ),
+            const BlurBotWidget(),
             ListView(children: [
               const SizedBox(height: 64),
               Center(

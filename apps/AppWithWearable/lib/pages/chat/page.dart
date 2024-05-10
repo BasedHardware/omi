@@ -3,7 +3,7 @@ import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/flutter_flow/custom_functions.dart';
-import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tilt/flutter_tilt.dart';
 
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/pages/ble/blur_bot/blur_bot_widget.dart';
-import 'model.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'package:permission_handler/permission_handler.dart';
@@ -19,7 +18,7 @@ class WelcomeWidget extends StatefulWidget {
 }
 
 class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProviderStateMixin {
-  late WelcomeModel _model;
+  final unfocusNode = FocusNode();
   late AnimationController _animationController;
   late Animation<double> _animation;
   late Animation<double> _bounceAnimation;
@@ -29,7 +28,6 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => WelcomeModel());
 
     // Hide the status bar
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -55,8 +53,8 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
 
   @override
   void dispose() {
-    _model.dispose();
     _animationController.dispose();
+    unfocusNode.dispose();
 
     // Show the status bar again when the widget is disposed
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
@@ -67,19 +65,15 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => _model.unfocusNode.canRequestFocus
-          ? FocusScope.of(context).requestFocus(_model.unfocusNode)
+      onTap: () => unfocusNode.canRequestFocus
+          ? FocusScope.of(context).requestFocus(unfocusNode)
           : FocusScope.of(context).unfocus(),
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: FlutterFlowTheme.of(context).primary,
         body: Stack(
           children: [
-            wrapWithModel(
-              model: _model.blurBotModel,
-              updateCallback: () => setState(() {}),
-              child: const BlurBotWidget(),
-            ),
+            const BlurBotWidget(),
             Column(
               mainAxisSize: MainAxisSize.max,
               children: [

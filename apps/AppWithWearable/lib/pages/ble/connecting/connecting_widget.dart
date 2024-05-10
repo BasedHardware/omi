@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'connecting_model.dart';
 
 export 'connecting_model.dart';
@@ -78,49 +78,41 @@ class _ConnectingWidgetState extends State<ConnectingWidget> {
         backgroundColor: FlutterFlowTheme.of(context).primary,
         body: Stack(
           children: [
-            wrapWithModel(
-              model: _model.blurModel,
-              updateCallback: () => setState(() {}),
-              child: BlurBotWidget(),
-            ),
+            const BlurBotWidget(),
             Align(
-              alignment: AlignmentDirectional(0.0, 0.0),
+              alignment: const AlignmentDirectional(0.0, 0.0),
               child: Column(
                 mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Align(
-                    alignment: AlignmentDirectional(0.0, 0.0),
+                    alignment: const AlignmentDirectional(0.0, 0.0),
                     child: Text(
                       formatNumber(
                         _model.connectedFraction,
                         formatType: FormatType.percent,
                       ),
-                      style:
-                          FlutterFlowTheme.of(context).headlineLarge.override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .headlineLargeFamily,
-                                letterSpacing: 0.0,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .headlineLargeFamily),
-                              ),
-                    ),
-                  ),
-                  Align(
-                    alignment: AlignmentDirectional(0.0, 0.0),
-                    child: Text(
-                      'Connecting',
-                      style: FlutterFlowTheme.of(context).titleSmall.override(
-                            fontFamily:
-                                FlutterFlowTheme.of(context).titleSmallFamily,
+                      style: FlutterFlowTheme.of(context).headlineLarge.override(
+                            fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
                             letterSpacing: 0.0,
-                            useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                FlutterFlowTheme.of(context).titleSmallFamily),
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
                           ),
                     ),
                   ),
-                ].divide(SizedBox(height: 16.0)),
+                  Align(
+                    alignment: const AlignmentDirectional(0.0, 0.0),
+                    child: Text(
+                      'Connecting',
+                      style: FlutterFlowTheme.of(context).titleSmall.override(
+                            fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                            letterSpacing: 0.0,
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
+                          ),
+                    ),
+                  ),
+                ].divide(const SizedBox(height: 16.0)),
               ),
             ),
           ],
