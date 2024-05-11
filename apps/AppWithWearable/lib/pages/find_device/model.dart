@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'find_devices_widget.dart' show FindDevicesWidget;
+import 'page.dart' show FindDevicesWidget;
 
 class FindDevicesModel extends FlutterFlowModel<FindDevicesWidget> {
   ///  Local state fields for this page.

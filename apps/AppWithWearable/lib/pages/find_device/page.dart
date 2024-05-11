@@ -8,9 +8,9 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/permissions_util.dart';
-import 'find_devices_model.dart';
+import 'model.dart';
 
-export 'find_devices_model.dart';
+export 'model.dart';
 
 class FindDevicesWidget extends StatefulWidget {
   const FindDevicesWidget({super.key});
