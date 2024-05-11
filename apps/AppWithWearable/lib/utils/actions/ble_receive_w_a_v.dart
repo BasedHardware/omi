@@ -38,6 +38,7 @@ Future<IOWebSocketChannel> _initStream(
     channel.stream.listen((event) {
       // debugPrint('Event from Stream: $event');
       final parsedJson = jsonDecode(event);
+      // FIXME Receiver: null ~ Tried calling: []("alternatives")
       final data = parsedJson['channel']['alternatives'][0];
       final transcript = data['transcript'];
       final speechFinal = parsedJson['is_final'];

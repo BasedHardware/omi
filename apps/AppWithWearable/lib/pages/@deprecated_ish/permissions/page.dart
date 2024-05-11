@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:friend_private/pages/permissions/widgets/list_item.dart';
+import 'package:friend_private/pages/@deprecated_ish/permissions/widgets/list_item.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart' as smooth_page_indicator;
-import '../../backend/schema/enums/enums.dart';
+import '../../../backend/schema/enums/enums.dart';
 import '/flutter_flow/flutter_flow_animations.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';

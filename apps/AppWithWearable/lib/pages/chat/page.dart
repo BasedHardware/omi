@@ -3,7 +3,7 @@ import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/flutter_flow/custom_functions.dart';
-import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -20,14 +20,14 @@ import 'package:provider/provider.dart';
 import 'model.dart';
 export 'model.dart';
 
-class ChatPageWidget extends StatefulWidget {
-  const ChatPageWidget({super.key});
+class ChatPage extends StatefulWidget {
+  const ChatPage({super.key});
 
   @override
-  State<ChatPageWidget> createState() => _ChatPageWidgetState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageWidgetState extends State<ChatPageWidget> {
+class _ChatPageState extends State<ChatPage> {
   late ChatModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();

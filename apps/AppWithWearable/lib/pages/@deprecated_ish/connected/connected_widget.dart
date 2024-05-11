@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
+import '/utils/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'connected_model.dart';
 
 export 'connected_model.dart';
@@ -79,13 +79,9 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
         backgroundColor: FlutterFlowTheme.of(context).primary,
         body: Stack(
           children: [
-            wrapWithModel(
-              model: _model.blurModel,
-              updateCallback: () => setState(() {}),
-              child: BlurBotWidget(),
-            ),
+            const BlurBotWidget(),
             Align(
-              alignment: AlignmentDirectional(0.0, 0.0),
+              alignment: const AlignmentDirectional(0.0, 0.0),
               child: Column(
                 mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -96,40 +92,35 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                     size: 40.0,
                   ),
                   Align(
-                    alignment: AlignmentDirectional(0.0, 0.0),
+                    alignment: const AlignmentDirectional(0.0, 0.0),
                     child: Text(
                       'Device Connected',
-                      style:
-                          FlutterFlowTheme.of(context).headlineLarge.override(
-                                fontFamily: FlutterFlowTheme.of(context)
-                                    .headlineLargeFamily,
-                                fontSize: 24.0,
-                                letterSpacing: 0.0,
-                                fontWeight: FontWeight.bold,
-                                useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                    FlutterFlowTheme.of(context)
-                                        .headlineLargeFamily),
-                              ),
+                      style: FlutterFlowTheme.of(context).headlineLarge.override(
+                            fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
+                            fontSize: 24.0,
+                            letterSpacing: 0.0,
+                            fontWeight: FontWeight.bold,
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
+                          ),
                     ),
                   ),
                   Align(
-                    alignment: AlignmentDirectional(0.0, 0.0),
+                    alignment: const AlignmentDirectional(0.0, 0.0),
                     child: Text(
                       'Simply turn your device and it will start\ndocumenting your memories automatically.',
                       textAlign: TextAlign.center,
                       style: FlutterFlowTheme.of(context).titleSmall.override(
-                            fontFamily:
-                                FlutterFlowTheme.of(context).titleSmallFamily,
-                            color: Color(0x9AFFFFFF),
+                            fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
+                            color: const Color(0x9AFFFFFF),
                             letterSpacing: 0.0,
-                            useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                FlutterFlowTheme.of(context).titleSmallFamily),
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
                           ),
                     ),
                   ),
                   Padding(
-                    padding:
-                        EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 12.0),
+                    padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 12.0),
                     child: FFButtonWidget(
                       onPressed: () async {
                         context.pushNamed('PermissionPage');
@@ -137,21 +128,17 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                       text: 'Continue',
                       options: FFButtonOptions(
                         height: 60.0,
-                        padding: EdgeInsetsDirectional.fromSTEB(
-                            40.0, 0.0, 40.0, 0.0),
-                        iconPadding:
-                            EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                        padding: const EdgeInsetsDirectional.fromSTEB(40.0, 0.0, 40.0, 0.0),
+                        iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                         color: FlutterFlowTheme.of(context).secondary,
-                        textStyle:
-                            FlutterFlowTheme.of(context).titleSmall.override(
-                                  fontFamily: 'SF Pro Display',
-                                  color: FlutterFlowTheme.of(context).primary,
-                                  fontSize: 16.0,
-                                  letterSpacing: 0.0,
-                                  fontWeight: FontWeight.bold,
-                                  useGoogleFonts: GoogleFonts.asMap()
-                                      .containsKey('SF Pro Display'),
-                                ),
+                        textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                              fontFamily: 'SF Pro Display',
+                              color: FlutterFlowTheme.of(context).primary,
+                              fontSize: 16.0,
+                              letterSpacing: 0.0,
+                              fontWeight: FontWeight.bold,
+                              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+                            ),
                         elevation: 3.0,
                         borderSide: BorderSide(
                           color: FlutterFlowTheme.of(context).secondary,
@@ -161,7 +148,7 @@ class _ConnectedWidgetState extends State<ConnectedWidget> {
                       ),
                     ),
                   ),
-                ].divide(SizedBox(height: 16.0)),
+                ].divide(const SizedBox(height: 16.0)),
               ),
             ),
           ],
