@@ -5,17 +5,18 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
-import 'package:friend_private/utils/actions/listen_connection_events.dart';
-import 'package:friend_private/utils/scan.dart';
+import 'package:friend_private/utils/ble/connected.dart';
+import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'widget.dart';
+import 'widgets/transcript.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -30,7 +31,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  GlobalKey<DeviceDataWidgetState> childWidgetKey = GlobalKey();
+  GlobalKey<TranscriptWidgetState> childWidgetKey = GlobalKey();
   BTDeviceStruct? _device;
   bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
@@ -82,7 +83,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   _initiateConnectionListener() async {
-    connectionStateListener = listenConnectionEvents(_device!.id, () {
+    connectionStateListener = getConnectionStateListener(_device!.id, () {
       childWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;
@@ -206,7 +207,7 @@ class _HomePageState extends State<HomePage> {
             ListView(children: [
               ..._getConnectedDeviceWidgets(),
               _areApiKeysSet && _device != null
-                  ? DeviceDataWidget(
+                  ? TranscriptWidget(
                       btDevice: _device!,
                       key: childWidgetKey,
                     )
@@ -308,6 +309,12 @@ class _HomePageState extends State<HomePage> {
             ),
             textAlign: TextAlign.center,
           ),
+          // TextButton( // Test button trigger sentry exception
+          //     onPressed: () {
+          //       var data = {};
+          //       print(data['123']!);
+          //     },
+          //     child: Text('Hiiiii'))
           // SizedBox(width: 16.0), // TODO: battery score should go in here
           // Container(
           //   decoration: BoxDecoration(

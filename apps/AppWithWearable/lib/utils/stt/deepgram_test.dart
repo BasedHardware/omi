@@ -1,7 +1,3 @@
-// Automatic FlutterFlow imports
-// Begin custom action code
-// DO NOT REMOVE OR MODIFY THE CODE ABOVE!
-
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -25,7 +21,7 @@ Future<List<int>?> bleReceiveWavTest(BTDeviceStruct btDevice) async {
           });
 
           // Wait for a short duration to receive data
-          await Future.delayed(Duration(seconds: 5));
+          await Future.delayed(const Duration(seconds: 5));
 
           await characteristic.setNotifyValue(false);
           await device.disconnect();

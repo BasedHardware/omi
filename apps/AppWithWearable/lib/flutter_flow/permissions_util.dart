@@ -8,13 +8,12 @@ const kPermissionStateToBool = {
   PermissionStatus.permanentlyDenied: false,
 };
 
-final notificationsPermission = Permission.notification;
-final bluetoothPermission = Permission.bluetooth;
+const notificationsPermission = Permission.notification;
+const bluetoothPermission = Permission.bluetooth;
 
 Future<bool> getPermissionStatus(Permission setting) async {
   final status = await setting.status;
   return kPermissionStateToBool[status]!;
 }
 
-Future<void> requestPermission(Permission setting) async =>
-    await setting.request();
+Future<void> requestPermission(Permission setting) async => await setting.request();
