@@ -309,12 +309,12 @@ class _HomePageState extends State<HomePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          TextButton(
-              onPressed: () {
-                var data = {};
-                print(data['123']!);
-              },
-              child: Text('Hiiiii'))
+          // TextButton( // Test button trigger sentry exception
+          //     onPressed: () {
+          //       var data = {};
+          //       print(data['123']!);
+          //     },
+          //     child: Text('Hiiiii'))
           // SizedBox(width: 16.0), // TODO: battery score should go in here
           // Container(
           //   decoration: BoxDecoration(
