@@ -87,6 +87,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _device = null;
       });
+      // TODO: throw notification telling to reconnect
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
           setState(() {
