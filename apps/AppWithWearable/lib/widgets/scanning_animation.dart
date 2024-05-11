@@ -29,6 +29,12 @@ class _ScanningAnimationState extends State<ScanningAnimation> with SingleTicker
   }
 
   @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery
         .of(context)
