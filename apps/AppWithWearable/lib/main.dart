@@ -21,7 +21,7 @@ void main() async {
   runApp(ChangeNotifierProvider(
     create: (context) => appState,
     child: MyApp(
-      entryPage: userOnboarded ? const ConnectDeviceWidget(btDevice: null) : null,
+      entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
     ),
   ));
 }
