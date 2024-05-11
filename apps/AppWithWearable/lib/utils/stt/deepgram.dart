@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
@@ -56,22 +58,26 @@ Future<IOWebSocketChannel> _initStream(
         }
       }
     }, onError: (err) {
+      addDeepgramEventContext('Websocket Error');
       debugPrint('Websocket Error: $err');
-      // handle stream error
+      Sentry.captureException(err, stackTrace: err.stackTrace);
     }, onDone: (() {
-      // stream on done callback...
+      addDeepgramEventContext('Websocket Closed');
       debugPrint('Websocket Closed');
     }), cancelOnError: true);
   }).onError((error, stackTrace) {
-    debugPrint("WebsocketChannel was unable to establishconnection");
+    addDeepgramEventContext('Websocket Unable To Connect');
+    debugPrint("WebsocketChannel was unable to establish connection");
   });
 
   try {
     await channel.ready;
-    debugPrint('Channel is ready, websocket opened');
-  } catch (e) {
-    // handle exception here
-    debugPrint("Websocket was unable to establishconnection");
+    addDeepgramEventContext('Websocket Opened');
+    debugPrint('Websocket Opened');
+  } catch (err) {
+    addDeepgramEventContext('Websocket Unable To Connect 2');
+    debugPrint("Websocket was unable to establish connection");
+    Sentry.captureException(err);
   }
   return channel;
 }

@@ -311,7 +311,6 @@ class _HomePageState extends State<HomePage> {
           ),
           TextButton(
               onPressed: () {
-                Sentry.captureMessage('Hi there f');
                 var data = {};
                 print(data['123']!);
               },
