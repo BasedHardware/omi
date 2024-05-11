@@ -5,8 +5,8 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/pages/ble/blur_bot/blur_bot_widget.dart';
 import 'package:friend_private/pages/memories/widgets/summaries_buttons.dart';
+import 'package:friend_private/widgets/blur_bot_widget.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';

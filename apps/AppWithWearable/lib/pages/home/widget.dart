@@ -4,20 +4,18 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/actions/actions.dart';
+import 'package:friend_private/utils/actions/ble_receive_w_a_v.dart';
+import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/custom_code/actions/ble_receive_w_a_v.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'package:path_provider/path_provider.dart';
 
 class DeviceDataWidget extends StatefulWidget {
   const DeviceDataWidget({
@@ -92,8 +90,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage> data =
-          await actions.bleReceiveWAV(widget.btDevice!, (_) {
+      Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage> data = await bleReceiveWAV(widget.btDevice!, (_) {
         debugPrint("Deepgram Finalized Callback received");
         setState(() {
           whispersDiarized.add({});
@@ -115,13 +112,15 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
     });
   }
 
-  void resetState() {
+  void resetState({bool resetBLEConnection = true}) {
     streamSubscription?.cancel();
     channel?.sink.close();
     setState(() {
       whispersDiarized = [{}];
       _timer?.cancel();
-      initBleConnection();
+      if (resetBLEConnection) {
+        initBleConnection();
+      }
     });
   }
 
@@ -129,7 +128,6 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
-    // debugPrint('filteredNotEmptyWhispers ${filteredNotEmptyWhispers.length}');
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
