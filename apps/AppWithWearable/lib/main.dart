@@ -16,6 +16,7 @@ void main() async {
   await appState.initializePersistedState();
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool userOnboarded = prefs.getBool('onboardingCompleted') ?? false;
+  // bool userOnboarded = false;
 
   runApp(ChangeNotifierProvider(
     create: (context) => appState,

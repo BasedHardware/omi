@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/utils/scan.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
+import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -75,7 +76,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
     }
   }
 
-  void _navigateToConnecting() async{
+  void _navigateToConnecting() async {
     if (_friendDevice == null) return;
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.setBool('onboardingCompleted', true);
@@ -170,31 +171,10 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(
-                              _stringStatus1,
-                              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                    fontFamily: 'SF Pro Display',
-                                    color: Colors.white,
-                                    fontSize: 32.0,
-                                    letterSpacing: 0.0,
-                                    fontWeight: FontWeight.w700,
-                                    useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-                                    lineHeight: 1.2,
-                                  ),
-                              textAlign: TextAlign.center,
+                            ScanningUI(
+                              string1: _stringStatus1,
+                              string2: _stringStatus2,
                             ),
-                            const SizedBox(height: 8.0),
-                            Text(
-                              _stringStatus2,
-                              style: const TextStyle(
-                                color: Color.fromARGB(255, 255, 255, 255),
-                                fontSize: 16.0,
-                                fontWeight: FontWeight.w500,
-                                height: 1.5,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16.0),
                             AnimatedOpacity(
                               duration: const Duration(milliseconds: 500),
                               opacity: _isConnected ? 1.0 : 0.0,
