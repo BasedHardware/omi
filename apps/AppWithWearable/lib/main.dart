@@ -31,6 +31,7 @@ void main() async {
           debugPrint('Sentry event: ${event.environment}');
           return event;
         };
+        options.attachScreenshot = true;
       },
       appRunner: () => runApp(ChangeNotifierProvider(
         create: (context) => appState,
@@ -39,6 +40,7 @@ void main() async {
         ),
       )),
     );
+    // Sentry.configureScope((scope) => scope.level = SentryLevel.info);
   } else {
     runApp(ChangeNotifierProvider(
       create: (context) => appState,
