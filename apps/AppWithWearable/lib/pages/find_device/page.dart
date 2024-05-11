@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/utils/scan.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/utils/actions/index.dart' as actions;
@@ -10,9 +11,6 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/permissions_util.dart';
-import 'model.dart';
-
-export 'model.dart';
 
 class FindDevicesWidget extends StatefulWidget {
   const FindDevicesWidget({super.key});
@@ -22,7 +20,6 @@ class FindDevicesWidget extends StatefulWidget {
 }
 
 class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTickerProviderStateMixin {
-  late FindDevicesModel _model;
   BTDeviceStruct? _friendDevice;
   String _stringStatus1 = 'Looking for Friend wearable';
   String _stringStatus2 = 'Locating your Friend device. Keep it near your phone for pairing';
@@ -31,9 +28,8 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _model = FindDevicesModel();
-    _fetchDevices();
 
+    _fetchDevices(); // meaningless?
     // Automatically scan for devices when the screen loads
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scanDevices();
@@ -42,20 +38,14 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
 
   Future<void> _fetchDevices() async {
     if (await getPermissionStatus(bluetoothPermission)) {
-      setState(() {
-        _model.isFetchingDevices = true;
-        _model.isFetchingConnectedDevices = true;
-      });
-      _model.fetchedConnectedDevices = await actions.ble0getConnectedDevices();
-      setState(() {
-        _model.isFetchingConnectedDevices = false;
-        _model.connectedDevices = _model.fetchedConnectedDevices!.toList().cast<BTDeviceStruct>();
-      });
-      _model.devices = await actions.ble0findDevices();
-      setState(() {
-        _model.connectedDevices = _model.devices!.toList().cast<BTDeviceStruct>();
-        _model.isFetchingDevices = false;
-      });
+      // List<BTDeviceStruct> fetchedConnectedDevices = await actions.ble0getConnectedDevices();
+      // setState(() {
+      //   _model.connectedDevices = fetchedConnectedDevices.toList().cast<BTDeviceStruct>();
+      // });
+      // _model.devices = await actions.ble0findDevices();
+      // setState(() {
+      //   _model.connectedDevices = _model.devices!.toList().cast<BTDeviceStruct>();
+      // });
     } else {
       showDialog(
         context: context,
@@ -85,8 +75,11 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
     }
   }
 
-  void _navigateToConnecting() {
+  void _navigateToConnecting() async{
     if (_friendDevice == null) return;
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.setBool('onboardingCompleted', true);
+
     context.pushNamed(
       'connectDevice',
       queryParameters: {
@@ -100,25 +93,6 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    double getGifSize(double screenHeight) {
-      if (screenHeight <= 667) {
-        return 200.0; // iPhone SE, iPhone 8 and earlier
-      } else if (screenHeight <= 736) {
-        return 250.0; // iPhone 8 Plus
-      } else if (screenHeight <= 844) {
-        return 300.0; // iPhone 12, iPhone 13
-      } else if (screenHeight <= 896) {
-        return 350.0; // iPhone XR, iPhone 11
-      } else if (screenHeight <= 926) {
-        return 400.0; // iPhone 12 Pro Max, iPhone 13 Pro Max
-      } else {
-        return 450.0; // iPhone 14 Pro Max and larger devices
-      }
-    }
-
-    final gifSize = getGifSize(screenHeight);
-
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 0, 0, 0),
       body: Stack(

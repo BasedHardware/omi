@@ -3,7 +3,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
+import 'package:friend_private/utils/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
+import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,9 +16,6 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
 import 'widget.dart';
-import 'model.dart';
-
-export 'model.dart';
 
 class ConnectDeviceWidget extends StatefulWidget {
   const ConnectDeviceWidget({
@@ -32,7 +31,7 @@ class ConnectDeviceWidget extends StatefulWidget {
 
 class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   GlobalKey<DeviceDataWidgetState> childWidgetKey = GlobalKey();
-  late ConnectDeviceModel _model;
+  BTDeviceStruct? _device;
   bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
   final _deepgramApiKeyController = TextEditingController();
@@ -43,10 +42,27 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // InstantTimer? rssiUpdateTimer;
+  final unFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => ConnectDeviceModel());
+    if (widget.btDevice != null) {
+      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+    } else {
+      scanAndConnectDevice().then((friendDevice) {
+        if (friendDevice != null) {
+          setState(() {
+            // _isConnected = true;
+            _device = friendDevice;
+            // _stringStatus1 = 'Friend Wearable';
+            // _stringStatus2 = 'Successfully connected and ready to accelerate your journey with AI';
+          });
+        }
+      });
+    }
+
     authenticateGCP();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Check if the API keys are set
@@ -54,9 +70,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
       final deepgramApiKey = prefs.getString('deepgramApiKey');
       final openaiApiKey = prefs.getString('openaiApiKey');
 
-      if (deepgramApiKey != null && deepgramApiKey.isNotEmpty && openaiApiKey != null && openaiApiKey.isNotEmpty) {
+      if ((deepgramApiKey?.isNotEmpty ?? false) && (openaiApiKey?.isNotEmpty ?? false)) {
         // If both API keys are set, initialize the page and enable the DeviceDataWidget
-        _initializePage();
         setState(() {
           _areApiKeysSet = true;
         });
@@ -67,35 +82,14 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
     });
   }
 
-  void _initializePage() {
-    // On page load action.
-    // TODO: if onboarded pages already visited, scan from here, and make sure it's connected
-    SchedulerBinding.instance.addPostFrameCallback((_) async {
-      setState(() {
-        _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btDevice)?.rssi;
-      });
-      _model.rssiUpdateTimer = InstantTimer.periodic(
-        duration: const Duration(milliseconds: 2000),
-        callback: (timer) async {
-          _model.updatedRssi = await actions.ble0getRssi(
-            BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
-          );
-          setState(() {
-            _model.currentRssi = _model.updatedRssi;
-          });
-        },
-        startImmediately: true,
-      );
-    });
-  }
-
   @override
   void dispose() {
-    _model.dispose();
     _deepgramApiKeyController.dispose();
     _openaiApiKeyController.dispose();
     _gcpCredentialsController.dispose();
     _gcpBucketNameController.dispose();
+    // rssiUpdateTimer?.cancel();
+    unFocusNode.dispose();
     super.dispose();
   }
 
@@ -122,7 +116,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
       ),
       builder: (BuildContext context) {
         return PopScope(
-          canPop: _deepgramApiKeyController.text.isNotEmpty && _openaiApiKeyController.text.isNotEmpty,
+          canPop: _areApiKeysSet,
           child: StatefulBuilder(
             builder: (BuildContext context, StateSetter setModalState) {
               return Padding(
@@ -324,7 +318,6 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   _getSaveButton() {
     return ElevatedButton(
       onPressed: () {
-        // TODO: fix this, first timers, will be able to pop, without having them saved
         if (_deepgramApiKeyController.text.isEmpty || _openaiApiKeyController.text.isEmpty) {
           showDialog(
             context: context,
@@ -389,7 +382,6 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
       authenticateGCP();
     }
     // Initialize the page and enable the DeviceDataWidget after saving the API keys
-    _initializePage();
     setState(() {
       _areApiKeysSet = true;
     });
@@ -398,8 +390,8 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => _model.unfocusNode.canRequestFocus
-          ? FocusScope.of(context).requestFocus(_model.unfocusNode)
+      onTap: () => unFocusNode.canRequestFocus
+          ? FocusScope.of(context).requestFocus(unFocusNode)
           : FocusScope.of(context).unfocus(),
       child: Scaffold(
         key: scaffoldKey,
@@ -448,48 +440,10 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
           children: [
             const BlurBotWidget(),
             ListView(children: [
-              const SizedBox(height: 64),
-              Center(
-                  child: ClipRRect(
-                borderRadius: BorderRadius.circular(24.0),
-                child: Image.network(
-                  'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0NTYyMDF8MHwxfHNlYXJjaHwyfHxuZWNrbGFjZXxlbnwwfHx8fDE3MTEyMDQxNTF8MA&ixlib=rb-4.0.3&q=80&w=1080',
-                  width: 120.0,
-                  height: 120.0,
-                  fit: BoxFit.cover,
-                  alignment: const Alignment(0.0, 1.0),
-                ),
-              )),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  'Connected Device',
-                  style: FlutterFlowTheme.of(context).headlineLarge.override(
-                        fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
-                        fontSize: 24.0,
-                        letterSpacing: 0.0,
-                        fontWeight: FontWeight.bold,
-                        useGoogleFonts:
-                            GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
-                      ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                  child: Text(
-                BTDeviceStruct.maybeFromMap(widget.btDevice)?.name ?? '-',
-                style: _getTextStyle(),
-              )),
-              const SizedBox(height: 8),
-              Center(
-                  child: Text(
-                BTDeviceStruct.maybeFromMap(widget.btDevice)?.id ?? '-',
-                style: _getTextStyle(),
-              )),
-              const SizedBox(height: 32),
-              _areApiKeysSet
+              ..._getConnectedDeviceWidgets(),
+              _areApiKeysSet && _device != null
                   ? DeviceDataWidget(
-                      btDevice: BTDeviceStruct.maybeFromMap(widget.btDevice!)!,
+                      btDevice: _device!,
                       key: childWidgetKey,
                     )
                   : const SizedBox.shrink(),
@@ -506,5 +460,43 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
           letterSpacing: 0.0,
           useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
         );
+  }
+
+  _getConnectedDeviceWidgets() {
+    if (_device == null) {
+      return [const ScanningAnimation()];
+    }
+    return [
+      const SizedBox(height: 64),
+      Center(
+          child: ClipRRect(
+        borderRadius: BorderRadius.circular(24.0),
+        child: Image.network(
+          'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0NTYyMDF8MHwxfHNlYXJjaHwyfHxuZWNrbGFjZXxlbnwwfHx8fDE3MTEyMDQxNTF8MA&ixlib=rb-4.0.3&q=80&w=1080',
+          width: 120.0,
+          height: 120.0,
+          fit: BoxFit.cover,
+          alignment: const Alignment(0.0, 1.0),
+        ),
+      )),
+      const SizedBox(height: 16),
+      Center(
+        child: Text(
+          'Connected Device',
+          style: FlutterFlowTheme.of(context).headlineLarge.override(
+                fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
+                fontSize: 24.0,
+                letterSpacing: 0.0,
+                fontWeight: FontWeight.bold,
+                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
+              ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Center(child: Text(_device?.name ?? '-', style: _getTextStyle())),
+      const SizedBox(height: 8),
+      Center(child: Text(_device?.id ?? '-', style: _getTextStyle())),
+      const SizedBox(height: 32),
+    ];
   }
 }
