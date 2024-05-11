@@ -20,14 +20,14 @@ import 'package:provider/provider.dart';
 import 'model.dart';
 export 'model.dart';
 
-class ChatPageWidget extends StatefulWidget {
-  const ChatPageWidget({super.key});
+class ChatPage extends StatefulWidget {
+  const ChatPage({super.key});
 
   @override
-  State<ChatPageWidget> createState() => _ChatPageWidgetState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageWidgetState extends State<ChatPageWidget> {
+class _ChatPageState extends State<ChatPage> {
   late ChatModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();

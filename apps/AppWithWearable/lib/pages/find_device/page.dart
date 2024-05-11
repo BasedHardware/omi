@@ -13,14 +13,14 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/permissions_util.dart';
 
-class FindDevicesWidget extends StatefulWidget {
-  const FindDevicesWidget({super.key});
+class FindDevicesPage extends StatefulWidget {
+  const FindDevicesPage({super.key});
 
   @override
-  _FindDevicesWidgetState createState() => _FindDevicesWidgetState();
+  _FindDevicesPageState createState() => _FindDevicesPageState();
 }
 
-class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTickerProviderStateMixin {
+class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProviderStateMixin {
   BTDeviceStruct? _friendDevice;
   String _stringStatus1 = 'Looking for Friend wearable';
   String _stringStatus2 = 'Locating your Friend device. Keep it near your phone for pairing';

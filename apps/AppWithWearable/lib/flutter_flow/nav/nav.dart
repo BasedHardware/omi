@@ -70,7 +70,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'connectDevice',
           path: '/connectDevice',
-          builder: (context, params) => ConnectDeviceWidget(
+          builder: (context, params) => HomePage(
             btDevice: params.getParam(
               'btdevice',
               ParamType.JSON,
@@ -80,7 +80,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'findDevices',
           path: '/findDevices',
-          builder: (context, params) => const FindDevicesWidget(),
+          builder: (context, params) => const FindDevicesPage(),
         ),
         FFRoute(
           name: 'memoriesPage',
@@ -90,7 +90,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'chatPage',
           path: '/chatPage',
-          builder: (context, params) => const ChatPageWidget(),
+          builder: (context, params) => const ChatPage(),
         ),
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );
