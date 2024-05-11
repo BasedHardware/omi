@@ -16,7 +16,6 @@ import 'package:web_socket_channel/io.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'package:path_provider/path_provider.dart';
 
 class DeviceDataWidget extends StatefulWidget {
   const DeviceDataWidget({
@@ -127,7 +126,6 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
-    // debugPrint('filteredNotEmptyWhispers ${filteredNotEmptyWhispers.length}');
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,

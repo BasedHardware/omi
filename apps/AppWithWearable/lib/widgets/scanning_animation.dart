@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class ScanningAnimation extends StatefulWidget {
-  const ScanningAnimation({super.key});
+  final double sizeMultiplier;
+
+  const ScanningAnimation({super.key, this.sizeMultiplier = 1});
 
   @override
   State<ScanningAnimation> createState() => _ScanningAnimationState();
@@ -36,10 +38,7 @@ class _ScanningAnimationState extends State<ScanningAnimation> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery
-        .of(context)
-        .size
-        .height;
+    final screenHeight = MediaQuery.of(context).size.height;
     double getGifSize(double screenHeight) {
       if (screenHeight <= 667) {
         return 200.0; // iPhone SE, iPhone 8 and earlier
@@ -56,7 +55,7 @@ class _ScanningAnimationState extends State<ScanningAnimation> with SingleTicker
       }
     }
 
-    final gifSize = getGifSize(screenHeight);
+    final gifSize = getGifSize(screenHeight) * widget.sizeMultiplier;
 
     return SizedBox(
       width: gifSize,
