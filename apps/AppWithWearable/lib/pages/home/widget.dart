@@ -112,13 +112,15 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
     });
   }
 
-  void resetState() {
+  void resetState({bool resetBLEConnection = true}) {
     streamSubscription?.cancel();
     channel?.sink.close();
     setState(() {
       whispersDiarized = [{}];
       _timer?.cancel();
-      initBleConnection();
+      if (resetBLEConnection) {
+        initBleConnection();
+      }
     });
   }
 

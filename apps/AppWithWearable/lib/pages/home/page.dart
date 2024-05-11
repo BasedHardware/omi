@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
+import 'package:friend_private/utils/actions/listen_connection_events.dart';
 import 'package:friend_private/utils/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
@@ -40,17 +44,21 @@ class _HomePageState extends State<HomePage> {
   String _selectedLanguage = 'en';
   final unFocusNode = FocusNode();
 
+  StreamSubscription<BluetoothConnectionState>? connectionStateListener;
+
   @override
   void initState() {
     super.initState();
     if (widget.btDevice != null) {
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      _initiateConnectionListener();
     } else {
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
           setState(() {
             _device = friendDevice;
           });
+          _initiateConnectionListener();
         }
       });
     }
@@ -73,6 +81,24 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  _initiateConnectionListener() async {
+    connectionStateListener = listenConnectionEvents(_device!.id, () {
+      childWidgetKey.currentState?.resetState(resetBLEConnection: false);
+      setState(() {
+        _device = null;
+      });
+      scanAndConnectDevice().then((friendDevice) {
+        if (friendDevice != null) {
+          setState(() {
+            _device = friendDevice;
+          });
+        }
+      });
+    }, () {
+      childWidgetKey.currentState?.resetState(resetBLEConnection: true);
+    });
+  }
+
   @override
   void dispose() {
     _deepgramApiKeyController.dispose();
@@ -80,6 +106,7 @@ class _HomePageState extends State<HomePage> {
     _gcpCredentialsController.dispose();
     _gcpBucketNameController.dispose();
     unFocusNode.dispose();
+    connectionStateListener?.cancel();
     super.dispose();
   }
 

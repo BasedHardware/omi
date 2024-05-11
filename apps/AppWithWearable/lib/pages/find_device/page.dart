@@ -38,6 +38,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   }
 
   Future<void> _fetchDevices() async {
+    // TODO: handle permission asking better
     if (await getPermissionStatus(bluetoothPermission)) {
       // List<BTDeviceStruct> fetchedConnectedDevices = await actions.ble0getConnectedDevices();
       // setState(() {
