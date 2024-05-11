@@ -31,7 +31,9 @@ void main() async {
           debugPrint('Sentry event: ${event.environment}');
           return event;
         };
-        options.attachScreenshot = true;
+        options.attachScreenshot = false;
+        options.debug = false;
+        // options.environment = Env.environment ?? 'development';
       },
       appRunner: () => runApp(ChangeNotifierProvider(
         create: (context) => appState,
