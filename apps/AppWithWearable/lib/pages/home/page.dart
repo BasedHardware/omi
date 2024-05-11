@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import 'widget.dart';
+import 'widgets/transcript.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -30,7 +30,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  GlobalKey<DeviceDataWidgetState> childWidgetKey = GlobalKey();
+  GlobalKey<TranscriptWidgetState> childWidgetKey = GlobalKey();
   BTDeviceStruct? _device;
   bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
@@ -206,7 +206,7 @@ class _HomePageState extends State<HomePage> {
             ListView(children: [
               ..._getConnectedDeviceWidgets(),
               _areApiKeysSet && _device != null
-                  ? DeviceDataWidget(
+                  ? TranscriptWidget(
                       btDevice: _device!,
                       key: childWidgetKey,
                     )
