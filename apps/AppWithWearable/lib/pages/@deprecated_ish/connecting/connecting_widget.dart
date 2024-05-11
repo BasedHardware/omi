@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/utils/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'connecting_model.dart';
@@ -35,7 +35,7 @@ class _ConnectingWidgetState extends State<ConnectingWidget> {
 
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      _model.hasWrite = await actions.ble0connectDevice(
+      _model.hasWrite = await bleConnectDevice(
         BTDeviceStruct.maybeFromMap(widget.btdevice!)!,
       );
       await Future.delayed(const Duration(milliseconds: 1000));
