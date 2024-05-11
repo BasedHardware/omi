@@ -17,8 +17,8 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
-class DeviceDataWidget extends StatefulWidget {
-  const DeviceDataWidget({
+class TranscriptWidget extends StatefulWidget {
+  const TranscriptWidget({
     super.key,
     required this.btDevice,
   });
@@ -26,10 +26,10 @@ class DeviceDataWidget extends StatefulWidget {
   final BTDeviceStruct? btDevice;
 
   @override
-  State<DeviceDataWidget> createState() => DeviceDataWidgetState();
+  State<TranscriptWidget> createState() => TranscriptWidgetState();
 }
 
-class DeviceDataWidgetState extends State<DeviceDataWidget> {
+class TranscriptWidgetState extends State<TranscriptWidget> {
   Timer? _timer;
 
   // List<String> whispers = [''];
