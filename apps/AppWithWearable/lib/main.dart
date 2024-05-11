@@ -3,8 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'env/env.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'flutter_flow/internationalization.dart';
 
@@ -14,16 +16,39 @@ void main() async {
 
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
+
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool userOnboarded = prefs.getBool('onboardingCompleted') ?? false;
-  // bool userOnboarded = false;
+  if (Env.sentryDSNKey?.isNotEmpty ?? false) {
+    debugPrint('Sentry key: ${Env.sentryDSNKey}');
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = Env.sentryDSNKey;
+        options.tracesSampleRate = 1.0;
+        options.profilesSampleRate = 1.0;
+        options.beforeSend = (SentryEvent event, Hint hint) async {
+          // Modify the event here:
+          debugPrint('Sentry event: ${event.environment}');
+          return event;
+        };
+      },
+      appRunner: () => runApp(ChangeNotifierProvider(
+        create: (context) => appState,
+        child: MyApp(
+          entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
+        ),
+      )),
+    );
+  } else {
+    runApp(ChangeNotifierProvider(
+      create: (context) => appState,
+      child: MyApp(
+        entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
+      ),
+    ));
+  }
 
-  runApp(ChangeNotifierProvider(
-    create: (context) => appState,
-    child: MyApp(
-      entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
-    ),
-  ));
+  // bool userOnboarded = false;
 }
 
 class MyApp extends StatefulWidget {

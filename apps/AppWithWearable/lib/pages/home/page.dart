@@ -11,6 +11,7 @@ import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -308,6 +309,13 @@ class _HomePageState extends State<HomePage> {
             ),
             textAlign: TextAlign.center,
           ),
+          TextButton(
+              onPressed: () {
+                Sentry.captureMessage('Hi there f');
+                var data = {};
+                print(data['123']!);
+              },
+              child: Text('Hiiiii'))
           // SizedBox(width: 16.0), // TODO: battery score should go in here
           // Container(
           //   decoration: BoxDecoration(

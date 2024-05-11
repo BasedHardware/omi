@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -7,7 +8,7 @@ Future<List<BTDeviceStruct>> bleFindDevices() async {
   FlutterBluePlus.scanResults.listen((results) {
     List<ScanResult> scannedDevices = [];
     for (ScanResult r in results) {
-      if (r.device.name.isNotEmpty) {
+      if (r.device.platformName.isNotEmpty) {
         scannedDevices.add(r);
       }
     }
@@ -15,8 +16,8 @@ Future<List<BTDeviceStruct>> bleFindDevices() async {
     devices.clear();
     for (var deviceResult in scannedDevices) {
       devices.add(BTDeviceStruct(
-        name: deviceResult.device.name,
-        id: deviceResult.device.id.toString(),
+        name: deviceResult.device.platformName,
+        id: deviceResult.device.remoteId.str,
         rssi: deviceResult.rssi,
       ));
     }
