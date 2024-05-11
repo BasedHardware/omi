@@ -233,14 +233,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  _getTextStyle() {
-    return FlutterFlowTheme.of(context).titleSmall.override(
-          fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-          letterSpacing: 0.0,
-          useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-        );
-  }
-
   _getConnectedDeviceWidgets() {
     if (_device == null) {
       return [
@@ -254,35 +246,77 @@ class _HomePageState extends State<HomePage> {
     }
     return [
       const SizedBox(height: 64),
-      Center(
-          child: ClipRRect(
-        borderRadius: BorderRadius.circular(24.0),
-        child: Image.network(
-          'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0NTYyMDF8MHwxfHNlYXJjaHwyfHxuZWNrbGFjZXxlbnwwfHx8fDE3MTEyMDQxNTF8MA&ixlib=rb-4.0.3&q=80&w=1080',
-          width: 120.0,
-          height: 120.0,
-          fit: BoxFit.cover,
-          alignment: const Alignment(0.0, 1.0),
-        ),
+      const Center(
+          child: ScanningAnimation(
+        sizeMultiplier: 0.4,
       )),
       const SizedBox(height: 16),
       Center(
-        child: Text(
-          'Connected Device',
-          style: FlutterFlowTheme.of(context).headlineLarge.override(
-                fontFamily: FlutterFlowTheme.of(context).headlineLargeFamily,
-                fontSize: 24.0,
-                letterSpacing: 0.0,
-                fontWeight: FontWeight.bold,
-                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).headlineLargeFamily),
-              ),
-        ),
+          child: Text(
+        'Connected Device',
+        style: FlutterFlowTheme.of(context).bodyMedium.override(
+              fontFamily: 'SF Pro Display',
+              color: Colors.white,
+              fontSize: 29.0,
+              letterSpacing: 0.0,
+              fontWeight: FontWeight.w700,
+              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+              lineHeight: 1.2,
+            ),
+        textAlign: TextAlign.center,
+      )),
+      const SizedBox(height: 8),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '${_device?.name ?? 'Friend'} ~ ${_device?.id.split('-').last.substring(0, 6)}',
+            style: const TextStyle(
+              color: Color.fromARGB(255, 255, 255, 255),
+              fontSize: 16.0,
+              fontWeight: FontWeight.w500,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          // SizedBox(width: 16.0), // TODO: battery score should go in here
+          // Container(
+          //   decoration: BoxDecoration(
+          //     color: Colors.transparent,
+          //     borderRadius: BorderRadius.circular(30),
+          //     border: Border.all(
+          //       color: Colors.white,
+          //       width: 1,
+          //     ),
+          //   ),
+          //   padding: const EdgeInsets.all(8.0),
+          //   child: Row(
+          //     mainAxisSize: MainAxisSize.min,
+          //     children: [
+          //       const Text(
+          //         '100%',
+          //         style: TextStyle(
+          //           color: Colors.white,
+          //           fontSize: 12,
+          //           fontWeight: FontWeight.bold,
+          //         ),
+          //       ),
+          //       const SizedBox(width: 8.0),
+          //       Container(
+          //         width: 10,
+          //         height: 10,
+          //         decoration: const BoxDecoration(
+          //           color: Color.fromARGB(255, 0, 255, 8),
+          //           shape: BoxShape.circle,
+          //         ),
+          //       ),
+          //     ],
+          //   ),
+          // )
+        ],
       ),
-      const SizedBox(height: 8),
-      Center(child: Text(_device?.name ?? '-', style: _getTextStyle())),
-      const SizedBox(height: 8),
-      Center(child: Text(_device?.id ?? '-', style: _getTextStyle())),
-      const SizedBox(height: 32),
+      const SizedBox(height: 64),
     ];
   }
 }
