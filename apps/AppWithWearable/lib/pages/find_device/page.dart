@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/utils/scan.dart';
+import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
+import '/utils/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -21,8 +23,6 @@ class FindDevicesWidget extends StatefulWidget {
 
 class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTickerProviderStateMixin {
   late FindDevicesModel _model;
-  late AnimationController _animationController;
-  late Animation<double> _animation;
   BTDeviceStruct? _friendDevice;
   String _stringStatus1 = 'Looking for Friend wearable';
   String _stringStatus2 = 'Locating your Friend device. Keep it near your phone for pairing';
@@ -34,30 +34,10 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
     _model = FindDevicesModel();
     _fetchDevices();
 
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 5),
-    );
-
-    _animation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.fastLinearToSlowEaseIn,
-      ),
-    );
-
-    _animationController.forward();
-
     // Automatically scan for devices when the screen loads
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scanDevices();
     });
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchDevices() async {
@@ -94,33 +74,14 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
   }
 
   Future<void> _scanDevices() async {
-    while (true) {
-      _model.devicesScanCopy = await actions.ble0findDevices();
+    BTDeviceStruct? friendDevice = await scanAndConnectDevice();
+    if (friendDevice != null) {
       setState(() {
-        _model.foundDevices = _model.devicesScanCopy!.toList().cast<BTDeviceStruct>();
+        _isConnected = true;
+        _friendDevice = friendDevice;
+        _stringStatus1 = 'Friend Wearable';
+        _stringStatus2 = 'Successfully connected and ready to accelerate your journey with AI';
       });
-
-      try {
-        final friendDevice = _model.foundDevices.firstWhere(
-          (device) => device.name == 'Friend' || device.name == 'Super',
-        );
-
-        // Connect to the device in the background
-        bool hasWrite = await actions.ble0connectDevice(friendDevice);
-
-        // Set _isConnected to true when connected
-        setState(() {
-          _isConnected = true;
-          _friendDevice = friendDevice;
-          _stringStatus1 = 'Friend Wearable';
-          _stringStatus2 = 'Successfully connected and ready to accelerate your journey with AI';
-        });
-        break;
-      } catch (e) {
-        // No matching device found, continue scanning
-      }
-
-      await Future.delayed(const Duration(seconds: 2));
     }
   }
 
@@ -228,30 +189,7 @@ class _FindDevicesWidgetState extends State<FindDevicesWidget> with SingleTicker
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(
-                        width: gifSize,
-                        height: gifSize,
-                        child: AnimatedBuilder(
-                          animation: _animation,
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: _animation.value,
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Color.fromARGB(0, 89, 255, 0),
-                                ),
-                                child: ClipOval(
-                                  child: Image.asset(
-                                    'assets/images/sphere.gif',
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                      const ScanningAnimation(),
                       const SizedBox(height: 16.0),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 30.0),

@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/custom_code/actions/index.dart' as actions;
+import '/utils/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/instant_timer.dart';
@@ -69,6 +69,7 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
 
   void _initializePage() {
     // On page load action.
+    // TODO: if onboarded pages already visited, scan from here, and make sure it's connected
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       setState(() {
         _model.currentRssi = BTDeviceStruct.maybeFromMap(widget.btDevice)?.rssi;
