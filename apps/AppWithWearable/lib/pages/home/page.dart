@@ -5,8 +5,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
-import 'package:friend_private/utils/actions/listen_connection_events.dart';
-import 'package:friend_private/utils/scan.dart';
+import 'package:friend_private/utils/ble/connected.dart';
+import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -82,7 +82,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   _initiateConnectionListener() async {
-    connectionStateListener = listenConnectionEvents(_device!.id, () {
+    connectionStateListener = getConnectionStateListener(_device!.id, () {
       childWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;

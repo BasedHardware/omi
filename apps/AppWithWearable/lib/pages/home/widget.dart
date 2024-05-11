@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/utils/actions/ble_receive_w_a_v.dart';
 import 'package:friend_private/utils/memories.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/utils/stt/deepgram.dart';
+import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
@@ -36,7 +36,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
   List<Map<int, String>> whispersDiarized = [{}];
   IOWebSocketChannel? channel;
   StreamSubscription? streamSubscription;
-  AudioStorage? audioStorage;
+  WavBytesUtil? audioStorage;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -90,7 +90,7 @@ class DeviceDataWidgetState extends State<DeviceDataWidget> {
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple3<IOWebSocketChannel?, StreamSubscription?, AudioStorage> data = await bleReceiveWAV(widget.btDevice!, (_) {
+      Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await bleReceiveWAV(widget.btDevice!, (_) {
         debugPrint("Deepgram Finalized Callback received");
         setState(() {
           whispersDiarized.add({});
