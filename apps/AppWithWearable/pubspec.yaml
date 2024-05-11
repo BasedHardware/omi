@@ -57,6 +57,8 @@ dependencies:
   googleapis_auth: ^1.6.0
   audioplayers: ^5.2.1
   ml_linalg: ^13.12.2
+  sentry_flutter: ^8.1.0
+  envied: ^0.5.4+1
 
 dependency_overrides:
   http: 1.2.0
@@ -71,6 +73,8 @@ dev_dependencies:
   lints: 3.0.0
   flutter_test:
     sdk: flutter
+  envied_generator: ^0.5.4+1
+  build_runner: ^2.4.9
 
 
 flutter_launcher_icons:
