@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/utils/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
+import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '/backend/schema/structs/index.dart';
-import '/utils/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/instant_timer.dart';
 import 'widget.dart';
 
 class ConnectDeviceWidget extends StatefulWidget {
@@ -464,7 +462,14 @@ class _ConnectDeviceWidgetState extends State<ConnectDeviceWidget> {
 
   _getConnectedDeviceWidgets() {
     if (_device == null) {
-      return [const ScanningAnimation()];
+      return [
+        const SizedBox(height: 64),
+        const ScanningAnimation(),
+        const ScanningUI(
+          string1: 'Looking for Friend wearable',
+          string2: 'Locating your Friend device. Keep it near your phone for pairing',
+        ),
+      ];
     }
     return [
       const SizedBox(height: 64),
