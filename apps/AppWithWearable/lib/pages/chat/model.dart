@@ -1,8 +1,8 @@
 import '/flutter_flow/flutter_flow_util.dart';
-import 'page.dart' show ChatPageWidget;
+import 'page.dart' show ChatPage;
 import 'package:flutter/material.dart';
 
-class ChatModel extends FlutterFlowModel<ChatPageWidget> {
+class ChatModel extends FlutterFlowModel<ChatPage> {
   ///  Local state fields for this page.
 
   bool showCommandAlertBool = false;

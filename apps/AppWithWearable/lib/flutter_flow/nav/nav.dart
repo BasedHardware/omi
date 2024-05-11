@@ -1,14 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/ble/connected/connected_widget.dart';
-import 'package:friend_private/pages/ble/connecting/connecting_widget.dart';
-import 'package:friend_private/pages/ble/find_devices/find_devices_widget.dart';
-import 'package:friend_private/pages/ble/scan_devices/scan_devices_widget.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/connect_device/page.dart';
+import 'package:friend_private/pages/find_device/page.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memories/page.dart';
-import 'package:friend_private/pages/permissions/page.dart';
 import 'package:friend_private/pages/welcome/page.dart';
 import 'package:provider/provider.dart';
 
@@ -64,7 +60,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
                     ),
                   ),
                 )
-              : entryPage ?? const WelcomeWidget(), // TODO: restore back to WelcomeWidget when done with the PR
+              : entryPage ?? const WelcomeWidget(),
         ),
         FFRoute(
           name: 'welcome',
@@ -72,25 +68,10 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           builder: (context, params) => const WelcomeWidget(),
         ),
         FFRoute(
-          name: 'PermissionPage',
-          path: '/permissionPage',
-          builder: (context, params) => const PermissionPageWidget(),
-        ),
-        FFRoute(
           name: 'connectDevice',
           path: '/connectDevice',
-          builder: (context, params) => ConnectDeviceWidget(
+          builder: (context, params) => HomePage(
             btDevice: params.getParam(
-              'btdevice',
-              ParamType.JSON,
-            ),
-          ),
-        ),
-        FFRoute(
-          name: 'connecting',
-          path: '/connecting',
-          builder: (context, params) => ConnectingWidget(
-            btdevice: params.getParam(
               'btdevice',
               ParamType.JSON,
             ),
@@ -99,7 +80,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'findDevices',
           path: '/findDevices',
-          builder: (context, params) => const FindDevicesWidget(),
+          builder: (context, params) => const FindDevicesPage(),
         ),
         FFRoute(
           name: 'memoriesPage',
@@ -109,23 +90,8 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'chatPage',
           path: '/chatPage',
-          builder: (context, params) => const ChatPageWidget(),
+          builder: (context, params) => const ChatPage(),
         ),
-        FFRoute(
-          name: 'scanDevices',
-          path: '/scanDevices',
-          builder: (context, params) => const ScanDevicesWidget(),
-        ),
-        FFRoute(
-          name: 'connected',
-          path: '/connected',
-          builder: (context, params) => ConnectedWidget(
-            btdevice: params.getParam(
-              'btdevice',
-              ParamType.JSON,
-            ),
-          ),
-        )
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );
 

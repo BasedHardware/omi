@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
-import '/pages/ble/blur/blur_widget.dart';
-import 'scan_devices_widget.dart' show ScanDevicesWidget;
+import '../../../widgets/blur_widget.dart';
+import 'connected_widget.dart' show ConnectedWidget;
 
-class ScanDevicesModel extends FlutterFlowModel<ScanDevicesWidget> {
+class ConnectedModel extends FlutterFlowModel<ConnectedWidget> {
   ///  Local state fields for this page.
 
   int? currentRssi;
@@ -14,17 +14,15 @@ class ScanDevicesModel extends FlutterFlowModel<ScanDevicesWidget> {
   ///  State fields for stateful widgets in this page.
 
   final unfocusNode = FocusNode();
-  // Model for blur component.
-  late BlurModel blurModel;
+
+  // Stores action output result for [Custom Action - ble0connectDevice] action in connected widget.
+  bool? hasWrite;
 
   @override
-  void initState(BuildContext context) {
-    blurModel = createModel(context, () => BlurModel());
-  }
+  void initState(BuildContext context) {}
 
   @override
   void dispose() {
     unfocusNode.dispose();
-    blurModel.dispose();
   }
 }
