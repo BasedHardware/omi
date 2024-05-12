@@ -17,6 +17,8 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
+enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
+
 class TranscriptWidget extends StatefulWidget {
   const TranscriptWidget({
     super.key,
@@ -30,13 +32,13 @@ class TranscriptWidget extends StatefulWidget {
 }
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
-  Timer? _timer;
-
-  // List<String> whispers = [''];
   List<Map<int, String>> whispersDiarized = [{}];
   IOWebSocketChannel? channel;
+  WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
+  bool websocketReconnecting = false;
   StreamSubscription? streamSubscription;
   WavBytesUtil? audioStorage;
+  Timer? _timer;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -68,7 +70,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 30), () async {
+    _timer = Timer(const Duration(seconds: 5), () async {
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
@@ -90,22 +92,51 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await bleReceiveWAV(widget.btDevice!, (_) {
-        debugPrint("Deepgram Finalized Callback received");
-        setState(() {
-          whispersDiarized.add({});
-        });
-        _initiateTimer();
-      }, (String transcript, Map<int, String> transcriptBySpeaker) {
-        _timer?.cancel();
-        var copy = whispersDiarized[whispersDiarized.length - 1];
-        transcriptBySpeaker.forEach((speaker, transcript) {
-          copy[speaker] = transcript;
-        });
-        setState(() {
-          whispersDiarized[whispersDiarized.length - 1] = copy;
-        });
-      });
+      Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await bleReceiveWAV(
+          btDevice: widget.btDevice!,
+          speechFinalCallback: (_) {
+            debugPrint("Deepgram Finalized Callback received");
+            setState(() {
+              whispersDiarized.add({});
+            });
+            _initiateTimer();
+          },
+          interimCallback: (String transcript, Map<int, String> transcriptBySpeaker) {
+            _timer?.cancel();
+            var copy = whispersDiarized[whispersDiarized.length - 1];
+            transcriptBySpeaker.forEach((speaker, transcript) {
+              copy[speaker] = transcript;
+            });
+            setState(() {
+              whispersDiarized[whispersDiarized.length - 1] = copy;
+            });
+          },
+          onWebsocketConnectionSuccess: () {
+            setState(() {
+              wsConnectionState = WebsocketConnectionStatus.connected;
+              websocketReconnecting = false;
+            });
+          },
+          onWebsocketConnectionFailed: () {
+            // connection couldn't be initiated for some reason.
+            setState(() {
+              wsConnectionState = WebsocketConnectionStatus.failed;
+              websocketReconnecting = false;
+            });
+          },
+          onWebsocketConnectionClosed: () {
+            // connection was closed, either on resetState, or by deepgram, or by some other reason.
+            setState(() {
+              wsConnectionState = WebsocketConnectionStatus.closed;
+            });
+          },
+          onWebsocketConnectionError: (err) {
+            // connection was okay, but then failed.
+            setState(() {
+              wsConnectionState = WebsocketConnectionStatus.error;
+            });
+          });
+
       channel = data.item1;
       streamSubscription = data.item2;
       audioStorage = data.item3;
@@ -119,6 +150,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       whispersDiarized = [{}];
       _timer?.cancel();
       if (resetBLEConnection) {
+        setState(() {
+          websocketReconnecting = true;
+        });
         initBleConnection();
       }
     });
@@ -127,6 +161,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    if (wsConnectionState == WebsocketConnectionStatus.failed ||
+        wsConnectionState == WebsocketConnectionStatus.closed ||
+        wsConnectionState == WebsocketConnectionStatus.error) {
+      return _websocketConnectionIssueUI();
+    }
+
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
     return ListView.separated(
       padding: EdgeInsets.zero,
@@ -155,6 +195,45 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           ),
         );
       },
+    );
+  }
+
+  _websocketConnectionIssueUI() {
+    return Column(
+      children: [
+        Text(
+          wsConnectionState == WebsocketConnectionStatus.failed
+              ? '🚨 Deepgram connection failed'
+              : (wsConnectionState == WebsocketConnectionStatus.closed)
+                  ? 'Deepgram connection closed'
+                  : wsConnectionState == WebsocketConnectionStatus.error
+                      ? 'Deepgram connection error'
+                      : 'Deepgram connection failed',
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        SizedBox(height: websocketReconnecting ? 20 : 12),
+        websocketReconnecting
+            ? CircularProgressIndicator(
+                color: FlutterFlowTheme.of(context).primary,
+              )
+            : TextButton(
+                onPressed: resetState,
+                style: ButtonStyle(
+                  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                      side: const BorderSide(color: Colors.white, width: 0.2),
+                    ),
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    'Retry',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                )),
+      ],
     );
   }
 }

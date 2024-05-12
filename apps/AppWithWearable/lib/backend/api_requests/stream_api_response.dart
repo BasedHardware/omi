@@ -22,6 +22,7 @@ Future streamApiResponse(
   const url = 'https://api.openai.com/v1/chat/completions';
   final prefs = await SharedPreferences.getInstance();
   final apiKey = prefs.getString('openaiApiKey') ?? '';
+  // final apiKey = '123';
   final headers = {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer $apiKey',
@@ -34,8 +35,25 @@ Future streamApiResponse(
     ..body = body;
 
   initAssistantResponse();
-  final http.StreamedResponse response = await client.send(request);
-  _listStream(response, callback);
+  try {
+    final http.StreamedResponse response = await client.send(request);
+    if (response.statusCode == 401) {
+      // TODO: callback for only errors, so that the message is not stored as history
+      debugPrint('Unauthorized request');
+      callback('Incorrect OpenAI API Key provided.');
+      return;
+    } else if (response.statusCode == 429) {
+      callback('You have reached the Open AI API limit.');
+      return;
+    } else if (response.statusCode != 200) {
+      callback('Unknown Error with OpenAI.');
+      return;
+    }
+    debugPrint('Stream response: ${response.statusCode}');
+    _listStream(response, callback);
+  } catch (e) {
+    debugPrint('Error sending request: $e');
+  }
 }
 
 _listStream(response, callback) {

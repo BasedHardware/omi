@@ -13,7 +13,8 @@ Future<void> processTranscriptContent(String content, String? audioFileName) asy
 // Process the creation of memory records
 Future<void> memoryCreationBlock(String rawMemory, String? audioFileName) async {
   changeAppStateMemoryCreating();
-  var structuredMemory = await generateTitleAndSummaryForMemory(rawMemory);
+  List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
+  var structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);

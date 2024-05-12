@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/utils/notifications.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +17,7 @@ void main() async {
 
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
-
+  await initializeNotifications();
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool userOnboarded = prefs.getBool('onboardingCompleted') ?? false;
   if (Env.sentryDSNKey?.isNotEmpty ?? false) {
