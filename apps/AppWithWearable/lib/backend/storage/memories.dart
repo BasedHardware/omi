@@ -87,6 +87,17 @@ class MemoryStorage {
     return filtered;
   }
 
+  static Future<List<MemoryRecord>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {
+    List<MemoryRecord> allMemories = await getAllMemories();
+    DateTime now = DateTime.now();
+    DateTime timeLimit = now.subtract(Duration(minutes: minutes));
+    var filtered = allMemories.where((memory) => memory.date.isAfter(timeLimit)).toList();
+    if (filtered.length > count) {
+      filtered = filtered.sublist(0, count);
+    }
+    return filtered;
+  }
+
   static Future<void> updateMemory(String memoryId, String updatedMemory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];

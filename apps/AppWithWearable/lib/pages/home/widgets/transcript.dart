@@ -70,7 +70,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 30), () async {
+    _timer = Timer(const Duration(seconds: 5), () async {
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
@@ -125,7 +125,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             });
           },
           onWebsocketConnectionClosed: () {
-            // connection was closed, either manually, or by deepgram, or by some other reason.
+            // connection was closed, either on resetState, or by deepgram, or by some other reason.
             setState(() {
               wsConnectionState = WebsocketConnectionStatus.closed;
             });
