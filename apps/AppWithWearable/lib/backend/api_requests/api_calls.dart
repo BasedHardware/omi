@@ -97,10 +97,19 @@ Future<String> executeGptPrompt(String? prompt) async {
   return response;
 }
 
-Future<String> generateTitleAndSummaryForMemory(String? memory) async {
+Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRecord> previousMemories) async {
   final prefs = await SharedPreferences.getInstance();
   final languageCode = prefs.getString('recordingsLanguage') ?? 'en';
   final language = availableLanguagesByCode[languageCode] ?? 'English';
+
+  var prevMemoriesStr = '';
+  // seconds or minutes ago
+  for (var value in previousMemories) {
+    var timePassed = DateTime.now().difference(value.date).inMinutes < 1
+        ? '${DateTime.now().difference(value.date).inSeconds} seconds ago'
+        : '${DateTime.now().difference(value.date).inMinutes} minutes ago';
+    prevMemoriesStr += '$timePassed\n${value.structuredMemory}\n\n';
+  }
 
   var prompt = '''
     ${languageCode == 'en' ? 'Generate a title and a summary for the following recording chunk of a conversation.' : 'Generate a title and a summary in English for the following recording chunk of a conversation that was performed in $language.'} 
@@ -109,9 +118,16 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
     action-items in very concise short points in second person (use bullet points). 
     
     Is possible that the conversation is empty or is useless, in that case output "N/A".
-    Here is the recording ```$memory```.
-    
-    Remember to output using the following format:
+    Here is the recording ```${rawMemory.trim()}```.
+    ${prevMemoriesStr.isNotEmpty ? '''\nFor extra context consider the previous recent memories:
+    These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
+    if there's some connection within those memories and the one that we are structuring right now.
+    For example if the user is talking about a project, and the previous memories explain more about the project, use that information to \
+    structure the new memory.\n
+    ```
+    $prevMemoriesStr
+    ```\n''' : ''}
+    Output using the following format:
     ```
     Title: ... 
     Summary:
@@ -119,7 +135,11 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
     - Action item 2
     ...
     ```
-    ''';
+    '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
+  debugPrint(prompt);
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
