@@ -78,6 +78,7 @@ def handle_update_moment(request):
     new_snapshot = boss_agent.diff_snapshots(previous_snapshot, current_snapshot)
 
     new_snapshot['momentId'] = moment_id
+    new_snapshot['date'] = current_moment['date']
     new_snapshot['transcript'] = current_moment['transcript']
 
     new_transcript = moment_service.update_moment(new_snapshot)

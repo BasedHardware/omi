@@ -15,7 +15,7 @@ const MomentListItem = ({momentId, onItemPress}) => {
   if (!moment) {
     return <Text>Loading moment...</Text>;
   }
-  
+
   const handleDelete = momentId => {
     if (swipeableRef.current) {
       swipeableRef.current.close();
@@ -32,6 +32,7 @@ const MomentListItem = ({momentId, onItemPress}) => {
   );
 
   const formatDate = date => {
+    console.log('date:', date);
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
