@@ -59,6 +59,8 @@ dependencies:
   ml_linalg: ^13.12.2
   sentry_flutter: ^8.1.0
   envied: ^0.5.4+1
+  awesome_notifications_core: ^0.8.0
+  awesome_notifications: any
 
 dependency_overrides:
   http: 1.2.0
