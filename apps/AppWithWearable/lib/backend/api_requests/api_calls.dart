@@ -117,7 +117,9 @@ Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRec
     For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
     action-items in very concise short points in second person (use bullet points). 
     
+    Is possible that the transcript is only 1 speaker, in that case, is most likely the user speaking, so consider that a thought or something he wants to look at in the future and act accordingly.
     Is possible that the conversation is empty or is useless, in that case output "N/A".
+    
     Here is the recording ```${rawMemory.trim()}```.
     ${prevMemoriesStr.isNotEmpty ? '''\nFor extra context consider the previous recent memories:
     These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
