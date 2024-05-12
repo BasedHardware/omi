@@ -54,8 +54,7 @@ For Android (untested):
 6. **Storage**: Each chunk is stored individually, but the Moment is updated with the most recent snapshot.
 
 ## Chat Functionality
-The chat functionality is operational. Integration with RAG is planned and will be completed shortly.
-
+Chat will always query the knowledge base. I would like to add the ability to turn that on or off.
 
 ## BLE Device
 
