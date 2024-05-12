@@ -16,7 +16,7 @@ Future<void> initializeNotifications() async {
             channelKey: 'channel',
             channelName: 'Friend Notifications',
             channelDescription: 'Notification channel for Friend',
-            defaultColor: Color(0xFF9D50DD),
+            defaultColor: const Color(0xFF9D50DD),
             ledColor: Colors.white)
       ],
       // Channel groups are only visual and are not required
