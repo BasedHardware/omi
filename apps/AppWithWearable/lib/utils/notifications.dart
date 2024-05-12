@@ -1,0 +1,56 @@
+import 'dart:ui';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter/material.dart';
+
+// TODO: could install the latest version due to podfile issues, so installed 0.8.3
+// https://pub.dev/packages/awesome_notifications/versions/0.8.3
+
+Future<void> initializeNotifications() async {
+  bool initialized = await AwesomeNotifications().initialize(
+      // set the icon to null if you want to use the default app icon
+      'resource://drawable/res_app_icon',
+      [
+        NotificationChannel(
+            channelGroupKey: 'channel_group_key',
+            channelKey: 'channel',
+            channelName: 'Friend Notifications',
+            channelDescription: 'Notification channel for Friend',
+            defaultColor: const Color(0xFF9D50DD),
+            ledColor: Colors.white)
+      ],
+      // Channel groups are only visual and are not required
+      channelGroups: [
+        NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')
+      ],
+      debug: false);
+  debugPrint('initializeNotifications: $initialized');
+}
+
+void requestNotificationPermissions() {
+  AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
+    debugPrint('requestNotificationPermissions: $isAllowed');
+    if (!isAllowed) {
+      // This is just a basic example. For real apps, you must show some
+      // friendly dialog box before call the request method.
+      // This is very important to not harm the user experience
+      AwesomeNotifications().requestPermissionToSendNotifications();
+    }
+  });
+}
+
+void createNotification({String title = '', String body = ''}) async {
+  var allowed = await AwesomeNotifications().isNotificationAllowed();
+  if (!allowed) return;
+  debugPrint('createNotification ~ Creating notification: ${title}');
+  AwesomeNotifications().createNotification(
+      content: NotificationContent(
+    id: 1,
+    channelKey: 'channel',
+    actionType: ActionType.Default,
+    title: title,
+    body: body,
+  ));
+}
+
+clearNotification(int id) => AwesomeNotifications().cancel(id);

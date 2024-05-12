@@ -7,6 +7,7 @@ import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -65,6 +66,7 @@ class _HomePageState extends State<HomePage> {
     }
     authenticateGCP();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      requestNotificationPermissions();
       // Check if the API keys are set
       final prefs = await SharedPreferences.getInstance();
       final deepgramApiKey = prefs.getString('deepgramApiKey');
@@ -88,12 +90,13 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _device = null;
       });
-      // TODO: throw notification telling to reconnect
+      createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
           setState(() {
             _device = friendDevice;
           });
+          clearNotification(1);
         }
       });
     }, () {
