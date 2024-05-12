@@ -17,7 +17,7 @@ else:
 
 mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
-db = client['paxxium']
+db = client['friend']
 
 def cors_preflight_response():
     cors_headers = {
@@ -65,11 +65,15 @@ def handle_post_message(request):
     chat_history = data.get('chatHistory')
     chat_id = data.get('chatId')
     message_content = user_message['content']
+    query_pipleline = boss_agent.create_vector_pipeline(message_content)
+    results = db["snapshots"].aggregate(query_pipleline)
+    processed_response = boss_agent.prepare_vector_response(results)
+
     chat_service.create_message(chat_id, 'user', message_content)
 
     complete_message = ''
     
-    response_generator = boss_agent.process_message(chat_id, user_message, chat_history)
+    response_generator = boss_agent.process_message(chat_id, user_message, chat_history, processed_response)
 
     # Create a generator to handle streaming and compile the complete message
     def compile_and_stream():

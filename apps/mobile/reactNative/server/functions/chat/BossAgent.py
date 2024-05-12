@@ -123,8 +123,9 @@ class BossAgent:
     def pass_to_boss_agent(self, message_obj):
         new_user_message = message_obj['user_message']
         chat_history = message_obj['chat_history']
+        system_message = message_obj['system_message']
 
-        new_chat_history = self.manage_chat(chat_history, new_user_message)
+        new_chat_history = self.manage_chat(chat_history, new_user_message, system_message)
 
         response = self.openai_client.chat.completions.create(
             model=self.model,
@@ -140,7 +141,7 @@ class BossAgent:
                 }
                 yield stream_obj
 
-    def manage_chat(self, chat_history, new_user_message):
+    def manage_chat(self, chat_history, new_user_message, system_message):
         """
         Takes a chat object extracts x amount of tokens and returns a message
         object ready to pass into OpenAI chat completion
@@ -164,7 +165,7 @@ class BossAgent:
                     "role": "assistant",
                     "content": message['content'],
                 })
-
+        new_name.append(system_message)
         new_name.append({
             "role": "user",
             "content": new_user_message,
@@ -172,11 +173,12 @@ class BossAgent:
         
         return new_name
     
-    def process_message(self, chat_id, user_message, chat_history):
+    def process_message(self, chat_id, user_message, chat_history, system_message):
         message_content = user_message['content']
         message_obj = {
             'user_message': message_content,
-            'chat_history': chat_history
+            'chat_history': chat_history,
+            'system_message': system_message
         }
         for response_chunk in self.pass_to_boss_agent(message_obj):
             response_chunk['chat_id'] = chat_id
@@ -186,17 +188,51 @@ class BossAgent:
         text = []
 
         for item in query_results:
-            if item['score'] > 0.4:
-                print(item)
-                text.append(item['text'])
+            print(item)
+            if item['score'] > 0.2:
+                action_items = ', '.join(item['actionItems'])
+                text.append(item['transcript'])
+                text.append(action_items)
 
         combined_text = ' '.join(text)
-        project_query_instructions = f'''
+        query_instructions = f'''
         \nAnswer the users question based off of the knowledge base provided below, provide 
         a detailed response that is relevant to the users question.\n
         KNOWLEDGE BASE: {combined_text}
         '''
-        return project_query_instructions
+        system_message = {
+            'role': 'system',
+            'content': query_instructions
+        }
+        return system_message
+    
+    def create_vector_pipeline(self, query):
+        embeddings = self.embed_content(query)
+        pipeline = [
+            {
+                '$vectorSearch': {
+                    'index': 'snapshot_index',
+                    'path': 'embeddings',
+                    'queryVector': embeddings,
+                    'numCandidates': 100,
+                    'limit': 5,
+                    # 'filter': {
+                    #     'project_id': project_id
+                    # }
+                }
+            }, {
+                '$project': {
+                    '_id': 0,
+                    'transcript': 1,
+                    'actionItems': 1,
+                    'score': {
+                        '$meta': 'vectorSearchScore'
+                    }
+                }
+            }
+        ]
+    
+        return pipeline
     
     def token_counter(self, message):
         """Return the number of tokens in a string."""
