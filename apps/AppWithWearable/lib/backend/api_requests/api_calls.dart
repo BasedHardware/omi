@@ -41,8 +41,9 @@ dynamic extractContentFromResponse(http.Response? response,
     }
     return data['choices'][0]['message']['content'];
   } else {
+    // TODO: include a global error handler + memory creation
     debugPrint('Error fetching data: ${response?.statusCode}');
-    return null;
+    return {'error': response?.statusCode};
   }
 }
 

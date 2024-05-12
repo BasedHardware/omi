@@ -1,12 +1,12 @@
 ### Tasks
 
-- [ ] It shouldn't require to reconnect every time that you open the app, it should  
+- [X] It shouldn't require to reconnect every time that you open the app, it should  
   load `ConnectDeviceWidget` and in there listen/reconnect to the device.
-- [ ] Device disconnected, display dialog to user asking to reconnect, or take the user back  
+- [X] Device disconnected, display dialog to user asking to reconnect, or take the user back  
   to `find_devices` page.
 - [x] Settings bottom sheet, improve way of handling `***` blurring of api keys, as if you save it  
   while is blurred with *, it sets the key to that value, and you have to set them again
-- [ ] [iOS] memories and chat page on the bottom do not have the blurred colors pattern, but plain  
+- [X] [iOS] memories and chat page on the bottom do not have the blurred colors pattern, but plain  
   primary color
 - [ ] Improve structured memory results performance by sending n previous memories as part of the  
   structuring but as context, not as part of the structure, so that if there's some reference to a  
@@ -23,7 +23,7 @@
     - [X] Use that as context, and ask to the LLM. Retrieve the prompt from the AppStandalone.
     - [ ] Improve function call way of parsing the text sent to the RAG, GPT should format the input
       better for RAG to retrieve better context.
-- [ ] Settings Deepgram + openAI key are forced to be set
+- [X] Settings Deepgram + openAI key are forced to be set
 - [ ] In case an API key fails, either Deepgram WebSocket connection fails, or GPT requests, let
   the user know the error message, either has no more credits, api key is invalid, etc.
 - [ ] Improve connected device page UI, including transcription text, and when memory creates
@@ -40,7 +40,7 @@
 - [ ] If only 1 speaker, set memory prompt creation, explain those are your thoughts, not a
   conversation, also, remove Speaker $i in transcript.
 - [ ] Allow users who don't have a GCP bucket to store their recordings locally.
-- [ ] Improve recordings player.
+- [ ] Improve recordings audio player.
 
 ---  
 

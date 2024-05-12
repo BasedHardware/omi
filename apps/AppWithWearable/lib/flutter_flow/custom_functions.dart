@@ -26,7 +26,7 @@ String? jsonEncodeString(String? regularString) {
   if (regularString.isEmpty | (regularString.length == 1)) return regularString;
 
   String encodedString = jsonEncode(regularString);
-  debugPrint("jsonEncodeString: $encodedString");
+  // debugPrint("jsonEncodeString: $encodedString");
   return encodedString.substring(1, encodedString.length - 1);
 }
 
