@@ -15,8 +15,15 @@ const MainScreen = () => {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: {backgroundColor: '#000', borderTopWidth: 0},
+        tabBarStyle: {
+          backgroundColor: '#000',
+          borderTopWidth: 0,
+          padding: 50,
+          height: 120,
+          marginBottom: 0
+        },
         headerShown: false,
+        tabBarLabel: () => null,
       }}>
       <Tab.Screen
         name="Chat"
@@ -31,13 +38,9 @@ const MainScreen = () => {
         name="Moments"
         component={MomentsStackNavigator}
         options={{
-          tabBarIcon: props => {
+          tabBarIcon: ({color}) => {
             return (
-              <FontAwesomeIcon
-                icon={faCameraRetro}
-                size={24}
-                color={props.color}
-              />
+              <FontAwesomeIcon icon={faCameraRetro} size={24} color={color} />
             );
           },
         }}
@@ -46,10 +49,8 @@ const MainScreen = () => {
         name="Settings"
         component={SettingsStackNavigator}
         options={{
-          tabBarIcon: props => {
-            return (
-              <FontAwesomeIcon icon={faCog} size={24} color={props.color} />
-            );
+          tabBarIcon: ({color}) => {
+            return <FontAwesomeIcon icon={faCog} size={24} color={color} />;
           },
         }}
       />

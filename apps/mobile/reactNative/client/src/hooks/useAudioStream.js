@@ -37,8 +37,7 @@ const useAudioStream = () => {
     if (currentMomentRef.current) {
       try {
         const momentId = currentMomentRef.current.momentId;
-        console.log(currentMomentRef.current);
-        await updateMoment({momentId, transcript});
+        await updateMoment({momentId, transcript, date: new Date()});
       } catch (error) {
         console.error('Error updating moment', error);
       }
@@ -75,6 +74,38 @@ const useAudioStream = () => {
     } else {
       // If no connected device then we stream from phone
       initWebSocket();
+    }
+  };
+
+  const stopRecording = async () => {
+    LiveAudioStream.stop();
+    if (ws.current) {
+      ws.current.send(JSON.stringify({type: 'CloseStream'}));
+      ws.current.close();
+    }
+    setIsRecording(false);
+
+    if (streamingTranscript.current) {
+      await createOrUpdateMoment(streamingTranscript.current);
+      streamingTranscript.current = '';
+      setDisplayTranscript('');
+    }
+
+    // Stop Bluetooth streaming if it was started
+    const connectedPeripherals = await BleManager.getConnectedPeripherals([
+      serviceUUID,
+    ]);
+    if (connectedPeripherals.length > 0) {
+      try {
+        await BleManager.stopNotification(
+          connectedPeripherals[0].id,
+          serviceUUID,
+          audioCharacteristicUUID,
+        );
+        console.log('Stopped Bluetooth notification');
+      } catch (error) {
+        console.error('Stop notification error', error);
+      }
     }
   };
 
@@ -151,21 +182,6 @@ const useAudioStream = () => {
     });
     LiveAudioStream.start();
     setIsRecording(true);
-  };
-
-  const stopRecording = () => {
-    LiveAudioStream.stop();
-    if (ws.current) {
-      ws.current.send(JSON.stringify({type: 'CloseStream'}));
-      ws.current.close();
-    }
-    setIsRecording(false);
-
-    if (streamingTranscript.current) {
-      createOrUpdateMoment(streamingTranscript.current);
-      streamingTranscript.current = '';
-      setDisplayTranscript('');
-    }
   };
 
   const startBluetoothStreaming = peripheralId => {

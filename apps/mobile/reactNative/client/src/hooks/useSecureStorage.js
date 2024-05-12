@@ -5,6 +5,9 @@ export const useSecureStorage = () => {
   const deleteUserData = async () => {
     await EncryptedStorage.removeItem('users');
   };
+  const deleteMoments = async () => {
+    await EncryptedStorage.removeItem('moments');
+  };
 
   const storeItem = async (item, data) => {
     try {
@@ -64,5 +67,6 @@ export const useSecureStorage = () => {
     clearLocalChat,
     deleteLocalChat,
     deleteUserData,
+    deleteMoments,
   };
 };

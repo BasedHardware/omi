@@ -39,7 +39,7 @@ class MomentService:
             moments_collection = self.db['moments']
             moments = list(moments_collection.find({}))
             for moment in moments:
-                moment['momentId'] = str(moment.pop('_id'))
+                moment['id'] = str(moment.pop('_id'))
             return moments
         else:
             print("MongoDB connection is not initialized.")
@@ -116,7 +116,9 @@ class MomentService:
         self._initialize_client()
         if self.db is not None:
             moments_collection = self.db['moments']
+            snapshots_collection = self.db['snapshots']
             result = moments_collection.delete_one({'_id': ObjectId(moment_id)})
+            snapshots_collection.delete_many({'momentId': moment_id})
             return result.deleted_count
         else:
             print("MongoDB connection is not initialized.")

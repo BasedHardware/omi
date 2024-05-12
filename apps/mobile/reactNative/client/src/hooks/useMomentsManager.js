@@ -7,12 +7,11 @@ import {useSecureStorage} from './useSecureStorage';
 export const useMomentsManager = () => {
   const [moments, setMoments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const {storeItem, retrieveItem} = useSecureStorage();
+  const {storeItem, retrieveItem, deleteMoments} = useSecureStorage();
   const {showSnackbar} = useContext(SnackbarContext);
 
   useEffect(() => {
-    // delete all moments so I can test the app
-    // EncryptedStorage.removeItem('moments');
+    // deleteMoments();
     fetchMoments();
   }, []);
 

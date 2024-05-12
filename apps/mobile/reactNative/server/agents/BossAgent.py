@@ -75,7 +75,6 @@ class BossAgent:
             actions_pred = extract_actions(content=content)
             generate_summary_prompt = dspy.ChainOfThought(DocumentContent)
             content_pred = generate_summary_prompt(document=content)
-            print(content_pred.title)
 
             extracted_content = {
                 'title': content_pred.title,

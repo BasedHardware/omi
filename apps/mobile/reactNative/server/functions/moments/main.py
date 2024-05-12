@@ -50,7 +50,7 @@ def handle_add_moment(request):
     action_items_str = "Action Items:\n" + "\n".join(new_moment['actionItems'])
     combined_content = f"Transcript: {new_moment['transcript']}\n{action_items_str}\nSummary: {new_moment['summary']}"
     snapshot_data = new_moment.copy()
-    snapshot_data['embeddings'] = boss_agent.embed_content(combined_content) 
+    snapshot_data['embeddings'] = boss_agent.embed_content(combined_content)
     moment_service.create_snapshot(snapshot_data)
     
     return new_moment
