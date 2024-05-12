@@ -146,58 +146,50 @@ class _MemoriesPageState extends State<MemoriesPage> {
             title: const HomePageHeaderButtons(),
             centerTitle: true,
           ),
-          body: SafeArea(
-            top: true,
-            child: SizedBox(
-                height: MediaQuery.sizeOf(context).height * 1.0,
-                child: Stack(
-                  children: [
-                    const Align(
-                      alignment: AlignmentDirectional(0.0, 0.0),
-                      child: BlurBotWidget(),
-                    ),
-                    ListView(
-                      children: [
-                        const SizedBox(height: 16),
-                        HomePageSummariesButtons(
-                          model: _model,
-                          dailySummary: dailySummary,
-                          weeklySummary: weeklySummary,
-                          monthlySummary: monthlySummary,
-                        ),
-                        const SizedBox(height: 8),
-                        if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
-                              ? const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.only(top: 32.0),
-                                    child: EmptyMemoriesWidget(),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  padding: EdgeInsets.zero,
-                                  primary: false,
-                                  shrinkWrap: true,
-                                  scrollDirection: Axis.vertical,
-                                  itemCount: FFAppState().memories.length,
-                                  itemBuilder: (context, index) {
-                                    return MemoryListItem(
-                                      memory: FFAppState().memories[index],
-                                      model: _model,
-                                      playAudio: _playAudio,
-                                      pauseAudio: _pauseAudio,
-                                      resumeAudio: _resumeAudio,
-                                      stopAudio: _stopAudio,
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
+          body: Stack(
+            children: [
+              const BlurBotWidget(),
+              ListView(
+                children: [
+                  const SizedBox(height: 16),
+                  HomePageSummariesButtons(
+                    model: _model,
+                    dailySummary: dailySummary,
+                    weeklySummary: weeklySummary,
+                    monthlySummary: monthlySummary,
+                  ),
+                  const SizedBox(height: 8),
+                  if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
+                        ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 32.0),
+                        child: EmptyMemoriesWidget(),
+                      ),
                     )
-                  ],
-                )),
+                        : ListView.builder(
+                      padding: EdgeInsets.zero,
+                      primary: false,
+                      shrinkWrap: true,
+                      scrollDirection: Axis.vertical,
+                      itemCount: FFAppState().memories.length,
+                      itemBuilder: (context, index) {
+                        return MemoryListItem(
+                          memory: FFAppState().memories[index],
+                          model: _model,
+                          playAudio: _playAudio,
+                          pauseAudio: _pauseAudio,
+                          resumeAudio: _resumeAudio,
+                          stopAudio: _stopAudio,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              )
+            ],
           ),
         ),
       ),
