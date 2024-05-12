@@ -16,5 +16,5 @@ We welcome contributions from the community! If you are interested in improving 
 
 ### Join a community of builders
 
-[Based Hardware Discord](https://discord.gg/kEXXsnb5b3){: .btn .btn-purple }
+[Based Hardware Discord](https://discord.gg/8MP3b9ymvx){: .btn .btn-purple }
 [Our official repository](https://github.com/BasedHardware/Friend){: .btn .btn-green }
