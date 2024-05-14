@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -55,6 +56,7 @@ Future<dynamic> gptApiCall({
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
   List tools = const [],
+  File? audioFile,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final prefs = await SharedPreferences.getInstance();
@@ -258,4 +260,31 @@ String qaStreamedBody(String context, List<dynamic> chatHistory) {
     "stream": true,
   });
   return body;
+}
+
+Future<String> transcribeAudioFile(File audioFile) async {
+  const url = 'https://api.openai.com/v1/audio/transcriptions';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
+  var request = http.MultipartRequest('POST', Uri.parse(url))
+    ..headers['Authorization'] = 'Bearer $apiKey'
+    ..headers['Content-Type'] = 'multipart/form-data';
+  var file = await http.MultipartFile.fromPath(
+    'file',
+    audioFile.path,
+  );
+
+  request.files.add(file);
+  request.fields['model'] = 'whisper-1';
+  request.fields['timestamp_granularities[]'] = 'word';
+  request.fields['response_format'] = 'verbose_json';
+  request.fields['language'] = 'en';
+  // request.fields['prompt'] =
+  //     'The audio of a conversation recorded with an AI wearable, it could be empty, just random noises, or have multiple speakers.';
+  var response = await request.send();
+  String responseBody = await response.stream.bytesToString();
+  var jsonResponse = jsonDecode(responseBody);
+
+  debugPrint('Transcript response: ${jsonResponse}');
+  return '';
 }
