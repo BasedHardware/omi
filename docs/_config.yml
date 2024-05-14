@@ -13,6 +13,9 @@ collections:
   assembly:
     permalink: "/:collection/:path/"
     output: true
+  developer:
+    permalink: "/:collection/:path/"
+    output: true
   info:
     permalink: "/:collection/:path/"
     output: true
@@ -23,6 +26,8 @@ just_the_docs:
       name: Get Started
     assembly:
       name: Assembly
+    developer:
+      name: Developer
     info:
       name: Info
 
