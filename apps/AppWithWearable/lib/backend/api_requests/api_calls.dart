@@ -90,7 +90,7 @@ Future<String> executeGptPrompt(String? prompt) async {
   var cachedResponse = prefs.getString(promptBase64);
   if (cachedResponse != null) return cachedResponse;
 
-  String response = await gptApiCall(model: 'gpt-4-turbo', messages: [
+  String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}
   ]);
   prefs.setString(promptBase64, response);
@@ -221,7 +221,7 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
   var response = await gptApiCall(
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o',
       messages: [
         {"role": "user", "content": message}
       ],
