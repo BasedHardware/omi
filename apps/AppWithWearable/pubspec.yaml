@@ -61,6 +61,7 @@ dependencies:
   envied: ^0.5.4+1
   awesome_notifications_core: ^0.8.0
   awesome_notifications: any
+  mime: ^1.0.5
 
 dependency_overrides:
   http: 1.2.0

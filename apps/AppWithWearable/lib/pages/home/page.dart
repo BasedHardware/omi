@@ -40,6 +40,7 @@ class _HomePageState extends State<HomePage> {
   final _openaiApiKeyController = TextEditingController();
   final _gcpCredentialsController = TextEditingController();
   final _gcpBucketNameController = TextEditingController();
+  final _customWebsocketUrlController = TextEditingController();
   bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -110,6 +111,7 @@ class _HomePageState extends State<HomePage> {
     _openaiApiKeyController.dispose();
     _gcpCredentialsController.dispose();
     _gcpBucketNameController.dispose();
+    _customWebsocketUrlController.dispose();
     unFocusNode.dispose();
     connectionStateListener?.cancel();
     super.dispose();
@@ -122,6 +124,7 @@ class _HomePageState extends State<HomePage> {
     _openaiApiKeyController.text = prefs.getString('openaiApiKey') ?? '';
     _gcpCredentialsController.text = prefs.getString('gcpCredentials') ?? '';
     _gcpBucketNameController.text = prefs.getString('gcpBucketName') ?? '';
+    _customWebsocketUrlController.text = prefs.getString('customWebsocketUrl') ?? '';
     _selectedLanguage = prefs.getString('recordingsLanguage') ?? 'en';
 
     await showModalBottomSheet(
@@ -147,6 +150,7 @@ class _HomePageState extends State<HomePage> {
                   openaiApiIsVisible: openaiApiIsVisible,
                   gcpCredentialsController: _gcpCredentialsController,
                   gcpBucketNameController: _gcpBucketNameController,
+                  customWebsocketUrlController: _customWebsocketUrlController,
                   selectedLanguage: _selectedLanguage,
                   onLanguageSelected: (String value) {
                     setModalState(() {
@@ -177,14 +181,20 @@ class _HomePageState extends State<HomePage> {
     await prefs.setString('gcpCredentials', _gcpCredentialsController.text.trim());
     await prefs.setString('gcpBucketName', _gcpBucketNameController.text.trim());
 
+    bool requiresReset = false;
     if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
       await prefs.setString('recordingsLanguage', _selectedLanguage);
-      // If the language has changed, restart the deepgram websocket
-      childWidgetKey.currentState?.resetState();
-    } else if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
-      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
-      childWidgetKey.currentState?.resetState();
+      requiresReset = true;
     }
+    if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
+      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
+      requiresReset = true;
+    }
+    if (_customWebsocketUrlController.text != prefs.getString('customWebsocketUrl')) {
+      await prefs.setString('customWebsocketUrl', _customWebsocketUrlController.text.trim());
+      requiresReset = true;
+    }
+    if (requiresReset) childWidgetKey.currentState?.resetState();
 
     if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
