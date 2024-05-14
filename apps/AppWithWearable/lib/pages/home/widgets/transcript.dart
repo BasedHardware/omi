@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/stt/deepgram.dart';
@@ -31,14 +32,19 @@ class TranscriptWidget extends StatefulWidget {
   State<TranscriptWidget> createState() => TranscriptWidgetState();
 }
 
-class TranscriptWidgetState extends State<TranscriptWidget> {
+class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderStateMixin {
   List<Map<int, String>> whispersDiarized = [{}];
   IOWebSocketChannel? channel;
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
   StreamSubscription? streamSubscription;
   WavBytesUtil? audioStorage;
+
   Timer? _timer;
+  Timer? _whisperTranscriptTimer;
+
+  String customWebsocketTranscript = '';
+  IOWebSocketChannel? channelCustomWebsocket;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -69,16 +75,35 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     return transcript;
   }
 
+  _whisperTimer() {
+    _whisperTranscriptTimer?.cancel();
+    _whisperTranscriptTimer = Timer(const Duration(seconds: 10), () async {
+      debugPrint('_whisperTranscriptTimer triggering');
+      File file = await audioStorage!.createWavFile();
+      await transcribeAudioFile(file);
+      // "clear previous bytes"
+      // audioStorage?.clearAudioBytes();
+      _whisperTimer();
+    });
+  }
+
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 5), () async {
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 30), () async {
       debugPrint('Creating memory from whispers');
-      String transcript = _buildDiarizedTranscriptMessage();
-      debugPrint('Transcript: \n${transcript.trim()}');
+      String transcript = '';
+      if (customWebsocketTranscript.trim().isEmpty) {
+        transcript = customWebsocketTranscript.trim();
+      } else {
+        transcript = _buildDiarizedTranscriptMessage();
+      }
+      debugPrint('Transcript: \n$transcript');
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
       processTranscriptContent(transcript, fileName);
       setState(() {
         whispersDiarized = [{}];
+        customWebsocketTranscript = '';
       });
       audioStorage?.clearAudioBytes();
     });
@@ -90,9 +115,15 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     initBleConnection();
   }
 
+  //
+  // @override
+  // void dispose() {
+  //   super.dispose();
+  // }
+
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await bleReceiveWAV(
+      Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
           btDevice: widget.btDevice!,
           speechFinalCallback: (_) {
             debugPrint("Deepgram Finalized Callback received");
@@ -135,19 +166,35 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             setState(() {
               wsConnectionState = WebsocketConnectionStatus.error;
             });
+          },
+          onCustomWebSocketCallback: (String transcript) async {
+            // debugPrint('Custom Websocket Callback: $transcript');
+            for (var word in transcript.split(' ')) {
+              setState(() {
+                customWebsocketTranscript += '$word ';
+              });
+              await Future.delayed(const Duration(milliseconds: 100));
+            }
+            setState(() {
+              customWebsocketTranscript += '\n';
+            });
           });
 
       channel = data.item1;
       streamSubscription = data.item2;
       audioStorage = data.item3;
+      channelCustomWebsocket = data.item4;
+      // _whisperTimer();
     });
   }
 
   void resetState({bool resetBLEConnection = true}) {
     streamSubscription?.cancel();
     channel?.sink.close();
+    channelCustomWebsocket?.sink.close();
     setState(() {
       whispersDiarized = [{}];
+      customWebsocketTranscript = '';
       _timer?.cancel();
       if (resetBLEConnection) {
         setState(() {
@@ -165,6 +212,27 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         wsConnectionState == WebsocketConnectionStatus.closed ||
         wsConnectionState == WebsocketConnectionStatus.error) {
       return _websocketConnectionIssueUI();
+    }
+
+    if (customWebsocketTranscript != '') {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+            child: Text(
+              customWebsocketTranscript,
+              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    letterSpacing: 0.0,
+                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                  ),
+            ),
+          ),
+        ],
+      );
     }
 
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();

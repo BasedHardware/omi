@@ -44,7 +44,8 @@ Future<String?> uploadFile(File file) async {
     );
 
     if (response.statusCode == 200) {
-      // var json = jsonDecode(response.body);
+      var json = jsonDecode(response.body);
+      debugPrint(json.toString());
       debugPrint('Upload successful');
       return fileName;
     } else {
