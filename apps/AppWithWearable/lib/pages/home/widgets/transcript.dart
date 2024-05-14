@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/stt/deepgram.dart';
@@ -39,6 +40,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   StreamSubscription? streamSubscription;
   WavBytesUtil? audioStorage;
   Timer? _timer;
+  Timer? _whisperTranscriptTimer;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -69,8 +71,22 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     return transcript;
   }
 
+  _whisperTimer() {
+    _whisperTranscriptTimer?.cancel();
+    _whisperTranscriptTimer = Timer(const Duration(seconds: 10), () async {
+      debugPrint('_whisperTranscriptTimer triggering');
+      File file = await audioStorage!.createWavFile();
+      await transcribeAudioFile(file);
+      // "clear previous bytes"
+      // audioStorage?.clearAudioBytes();
+      _whisperTimer();
+
+    });
+  }
+
   _initiateTimer() {
-    _timer = Timer(const Duration(seconds: 5), () async {
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 30), () async {
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage();
       debugPrint('Transcript: \n${transcript.trim()}');
@@ -140,6 +156,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       channel = data.item1;
       streamSubscription = data.item2;
       audioStorage = data.item3;
+      // _whisperTimer();
     });
   }
 
