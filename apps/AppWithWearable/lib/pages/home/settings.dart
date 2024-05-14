@@ -8,6 +8,7 @@ class SettingsBottomSheet extends StatelessWidget {
   final TextEditingController openaiApiKeyController;
   final TextEditingController gcpCredentialsController;
   final TextEditingController gcpBucketNameController;
+  final TextEditingController customWebsocketUrlController;
   final bool deepgramApiIsVisible;
   final bool openaiApiIsVisible;
   final String selectedLanguage;
@@ -24,6 +25,7 @@ class SettingsBottomSheet extends StatelessWidget {
       required this.openaiApiKeyController,
       required this.gcpCredentialsController,
       required this.gcpBucketNameController,
+      required this.customWebsocketUrlController,
       required this.deepgramApiIsVisible,
       required this.openaiApiIsVisible,
       required this.selectedLanguage,
@@ -70,7 +72,7 @@ class SettingsBottomSheet extends StatelessWidget {
                         ),
                         onPressed: () {
                           // setModalState(() {
-                            deepgramApiVisibilityCallback();
+                          deepgramApiVisibilityCallback();
                           // });
                         },
                       )),
@@ -98,7 +100,7 @@ class SettingsBottomSheet extends StatelessWidget {
                         ),
                         onPressed: () {
                           // setModalState(() {
-                            openaiApiVisibilityCallback();
+                          openaiApiVisibilityCallback();
                           // });
                         },
                       )),
@@ -125,9 +127,7 @@ class SettingsBottomSheet extends StatelessWidget {
                     menuMaxHeight: 350,
                     value: selectedLanguage,
                     onChanged: (String? newValue) {
-                      // setModalState(() {
-                        onLanguageSelected(newValue!);
-                      // });
+                      onLanguageSelected(newValue!);
                     },
                     dropdownColor: Colors.black,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -181,7 +181,16 @@ class SettingsBottomSheet extends StatelessWidget {
                     onPressed: () {
                       launch('https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console');
                     },
-                    child: _getText('How to create a Google Cloud Storage Bucket', underline: true))
+                    child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
+                const SizedBox(height: 16.0),
+                TextField(
+                  controller: customWebsocketUrlController,
+                  obscureText: false,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: _getTextFieldDecoration('Custom Websocket'),
+                  style: const TextStyle(color: Colors.white),
+                ),
               ],
             )),
             const SizedBox(height: 12),

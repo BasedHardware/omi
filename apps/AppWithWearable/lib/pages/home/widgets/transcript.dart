@@ -32,7 +32,7 @@ class TranscriptWidget extends StatefulWidget {
   State<TranscriptWidget> createState() => TranscriptWidgetState();
 }
 
-class TranscriptWidgetState extends State<TranscriptWidget> {
+class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderStateMixin {
   List<Map<int, String>> whispersDiarized = [{}];
   IOWebSocketChannel? channel;
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
@@ -41,6 +41,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   WavBytesUtil? audioStorage;
   Timer? _timer;
   Timer? _whisperTranscriptTimer;
+
+  String customWebsocketTranscript = '';
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -80,7 +82,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       // "clear previous bytes"
       // audioStorage?.clearAudioBytes();
       _whisperTimer();
-
     });
   }
 
@@ -105,6 +106,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     super.initState();
     initBleConnection();
   }
+
+  //
+  // @override
+  // void dispose() {
+  //   super.dispose();
+  // }
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -151,6 +158,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             setState(() {
               wsConnectionState = WebsocketConnectionStatus.error;
             });
+          },
+          onCustomWebSocketCallback: (String transcript) async {
+            // debugPrint('Custom Websocket Callback: $transcript');
+            for (var word in transcript.split(' ')) {
+              setState(() {
+                customWebsocketTranscript += '$word ';
+              });
+              await Future.delayed(const Duration(milliseconds: 100));
+            }
+            setState(() {
+              customWebsocketTranscript += '\n';
+            });
           });
 
       channel = data.item1;
@@ -182,6 +201,24 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         wsConnectionState == WebsocketConnectionStatus.closed ||
         wsConnectionState == WebsocketConnectionStatus.error) {
       return _websocketConnectionIssueUI();
+    }
+
+    if (customWebsocketTranscript != '') {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+            child: Text(
+              customWebsocketTranscript,
+              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    letterSpacing: 0.0,
+                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                  ),
+            ),
+          ),
+        ],
+      );
     }
 
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
