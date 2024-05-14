@@ -39,10 +39,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
   bool websocketReconnecting = false;
   StreamSubscription? streamSubscription;
   WavBytesUtil? audioStorage;
+
   Timer? _timer;
   Timer? _whisperTranscriptTimer;
 
   String customWebsocketTranscript = '';
+  IOWebSocketChannel? channelCustomWebsocket;
 
   String _buildDiarizedTranscriptMessage() {
     int totalSpeakers = whispersDiarized
@@ -89,13 +91,19 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
     _timer?.cancel();
     _timer = Timer(const Duration(seconds: 30), () async {
       debugPrint('Creating memory from whispers');
-      String transcript = _buildDiarizedTranscriptMessage();
-      debugPrint('Transcript: \n${transcript.trim()}');
+      String transcript = '';
+      if (customWebsocketTranscript.trim().isEmpty) {
+        transcript = customWebsocketTranscript.trim();
+      } else {
+        transcript = _buildDiarizedTranscriptMessage();
+      }
+      debugPrint('Transcript: \n$transcript');
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
       processTranscriptContent(transcript, fileName);
       setState(() {
         whispersDiarized = [{}];
+        customWebsocketTranscript = '';
       });
       audioStorage?.clearAudioBytes();
     });
@@ -115,7 +123,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
 
   void initBleConnection() async {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await bleReceiveWAV(
+      Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
           btDevice: widget.btDevice!,
           speechFinalCallback: (_) {
             debugPrint("Deepgram Finalized Callback received");
@@ -175,6 +183,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
       channel = data.item1;
       streamSubscription = data.item2;
       audioStorage = data.item3;
+      channelCustomWebsocket = data.item4;
       // _whisperTimer();
     });
   }
@@ -182,8 +191,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
   void resetState({bool resetBLEConnection = true}) {
     streamSubscription?.cancel();
     channel?.sink.close();
+    channelCustomWebsocket?.sink.close();
     setState(() {
       whispersDiarized = [{}];
+      customWebsocketTranscript = '';
       _timer?.cancel();
       if (resetBLEConnection) {
         setState(() {
@@ -205,6 +216,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> with TickerProviderS
 
     if (customWebsocketTranscript != '') {
       return Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),

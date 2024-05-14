@@ -180,16 +180,21 @@ class _HomePageState extends State<HomePage> {
     await prefs.setString('openaiApiKey', _openaiApiKeyController.text.trim());
     await prefs.setString('gcpCredentials', _gcpCredentialsController.text.trim());
     await prefs.setString('gcpBucketName', _gcpBucketNameController.text.trim());
-    await prefs.setString('customWebsocketUrl', _customWebsocketUrlController.text.trim());
 
+    bool requiresReset = false;
     if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
       await prefs.setString('recordingsLanguage', _selectedLanguage);
-      // If the language has changed, restart the deepgram websocket
-      childWidgetKey.currentState?.resetState();
-    } else if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
-      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
-      childWidgetKey.currentState?.resetState();
+      requiresReset = true;
     }
+    if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
+      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
+      requiresReset = true;
+    }
+    if (_customWebsocketUrlController.text != prefs.getString('customWebsocketUrl')) {
+      await prefs.setString('customWebsocketUrl', _customWebsocketUrlController.text.trim());
+      requiresReset = true;
+    }
+    if (requiresReset) childWidgetKey.currentState?.resetState();
 
     if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
