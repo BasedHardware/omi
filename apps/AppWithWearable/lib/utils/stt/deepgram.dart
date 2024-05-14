@@ -21,9 +21,9 @@ Future<IOWebSocketChannel?> _initCustomStream({
   void Function(String)? onCustomWebSocketCallback,
 }) async {
   final prefs = await SharedPreferences.getInstance();
-  final serverUrl = prefs.getString('customWebsocketUrl');
+  final serverUrl = prefs.getString('customWebsocketUrl') ?? '';
   final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
-  if (serverUrl == null) {
+  if (serverUrl.isEmpty) {
     debugPrint('Custom Websocket URL not set');
     return null;
   }
@@ -144,7 +144,7 @@ Future<IOWebSocketChannel> _initStream(
   return channel;
 }
 
-Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> bleReceiveWAV({
+Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>> bleReceiveWAV({
   BTDeviceStruct? btDevice,
   void Function(String)? speechFinalCallback,
   void Function(String, Map<int, String>)? interimCallback,
@@ -198,7 +198,8 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> bleReceiv
               });
 
               // return completer.future;
-              return Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>(channel, stream, wavBytesUtil);
+              return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
+                  channel, stream, wavBytesUtil, channel2);
             }
           }
         }
@@ -211,5 +212,6 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> bleReceiv
   } finally {}
 
   // return completer.future;
-  return Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>(null, null, wavBytesUtil);
+  return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
+      null, null, wavBytesUtil, null);
 }
