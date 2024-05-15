@@ -147,26 +147,29 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                               highlightColor: Colors.transparent,
                               mouseCursor: SystemMouseCursors.click,
                               onTap: () async {
-                                // Check if Bluetooth permission is granted
+                                // Check if Bluetooth and location permissions are granted
                                 PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
-                                if (bluetoothStatus.isGranted) {
-                                  // Bluetooth permission is already granted
+                                PermissionStatus locationStatus = await Permission.location.status;
+
+                                if (bluetoothStatus.isGranted && locationStatus.isGranted) {
+                                  // Both permissions are already granted
                                   // Request notification permission
                                   PermissionStatus notificationStatus = await Permission.notification.request();
 
                                   // Navigate to the 'scanDevices' screen
                                   context.goNamed('findDevices');
                                 } else {
-                                  // Bluetooth permission is not granted
-                                  if (await Permission.bluetooth.request().isGranted) {
-                                    // Bluetooth permission is granted now
+                                  // Request both Bluetooth and location permissions
+                                  if (await Permission.bluetooth.request().isGranted &&
+                                      await Permission.location.request().isGranted) {
+                                    // Both permissions are granted now
                                     // Request notification permission
                                     PermissionStatus notificationStatus = await Permission.notification.request();
 
                                     // Navigate to the 'scanDevices' screen
                                     context.goNamed('findDevices');
                                   } else {
-                                    // Bluetooth permission is denied
+                                    // Either permission is denied
                                     // Show a dialog to inform the user and provide an action to open app settings
                                     showDialog(
                                       context: context,
@@ -174,7 +177,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                         return AlertDialog(
                                           backgroundColor: Colors.grey[900],
                                           title: const Text(
-                                            'Bluetooth Required',
+                                            'Permissions Required',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 20,
@@ -182,7 +185,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                             ),
                                           ),
                                           content: const Text(
-                                            'This app needs Bluetooth to function properly. Please enable it in the settings.',
+                                            'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 16,
