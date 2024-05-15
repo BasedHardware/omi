@@ -87,7 +87,8 @@ Future<IOWebSocketChannel> _initStream(
       (event) {
         // debugPrint('Event from Stream: $event');
         final parsedJson = jsonDecode(event);
-        // FIXME Receiver: null ~ Tried calling: []("alternatives")
+        if (parsedJson['channel'] == null || parsedJson['channel']['alternatives'] == null) return;
+
         final data = parsedJson['channel']['alternatives'][0];
         final transcript = data['transcript'];
         final speechFinal = parsedJson['is_final'];
@@ -113,19 +114,20 @@ Future<IOWebSocketChannel> _initStream(
       },
       onError: (err) {
         debugPrint('Websocket Error: $err');
-        addDeepgramEventContext('Websocket Error');
+        addEventToContext('Websocket Error');
         Sentry.captureException(err, stackTrace: err.stackTrace);
         onWebsocketConnectionError(err);
       },
       onDone: (() {
         debugPrint('Websocket Closed');
-        addDeepgramEventContext('Websocket Closed');
+        addEventToContext('Websocket Closed');
+        Sentry.captureMessage('Websocket Closed', level: SentryLevel.warning);
         onWebsocketConnectionClosed();
       }),
       cancelOnError: true,
     );
   }).onError((error, stackTrace) {
-    addDeepgramEventContext('Websocket Unable To Connect');
+    addEventToContext('Websocket Unable To Connect');
     debugPrint("WebsocketChannel was unable to establish connection");
     onWebsocketConnectionFailed();
   });
@@ -133,11 +135,11 @@ Future<IOWebSocketChannel> _initStream(
   try {
     await channel.ready;
     debugPrint('Websocket Opened');
-    addDeepgramEventContext('Websocket Opened');
+    addEventToContext('Websocket Opened');
     onWebsocketConnectionSuccess();
   } catch (err) {
     debugPrint("Websocket was unable to establish connection");
-    addDeepgramEventContext('Websocket Unable To Connect 2');
+    addEventToContext('Websocket Unable To Connect 2');
     onWebsocketConnectionFailed();
     Sentry.captureException(err);
   }
