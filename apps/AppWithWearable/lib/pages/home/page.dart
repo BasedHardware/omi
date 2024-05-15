@@ -91,6 +91,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _device = null;
       });
+      // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
