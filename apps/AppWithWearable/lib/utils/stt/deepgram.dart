@@ -103,7 +103,7 @@ Future<IOWebSocketChannel> _initStream(
           });
           // This is step 1 for diarization, but, sometimes "Speaker 1: Hello how"
           //   but it says it's the previous speaker (e.g. speaker 0), but in the next stream it fixes the transcript, and says it's speaker 1.
-          debugPrint(bySpeaker.toString());
+          // debugPrint(bySpeaker.toString());
           if (speechFinal) {
             interimCallback(transcript, bySpeaker);
             speechFinalCallback('');

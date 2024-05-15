@@ -57,11 +57,13 @@ dependencies:
   googleapis_auth: ^1.6.0
   audioplayers: ^5.2.1
   ml_linalg: ^13.12.2
-  sentry_flutter: ^8.1.0
   envied: ^0.5.4+1
   awesome_notifications_core: ^0.8.0
   awesome_notifications: any
   mime: ^1.0.5
+  sentry_flutter: ^8.2.0
+  sentry_logging: ^8.2.0
+  logging: ^1.2.0
 
 dependency_overrides:
   http: 1.2.0
