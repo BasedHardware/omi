@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -41,8 +42,9 @@ dynamic extractContentFromResponse(http.Response? response,
     }
     return data['choices'][0]['message']['content'];
   } else {
+    // TODO: include a global error handler + memory creation
     debugPrint('Error fetching data: ${response?.statusCode}');
-    return null;
+    return {'error': response?.statusCode};
   }
 }
 
@@ -54,6 +56,7 @@ Future<dynamic> gptApiCall({
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
   List tools = const [],
+  File? audioFile,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final prefs = await SharedPreferences.getInstance();
@@ -89,17 +92,26 @@ Future<String> executeGptPrompt(String? prompt) async {
   var cachedResponse = prefs.getString(promptBase64);
   if (cachedResponse != null) return cachedResponse;
 
-  String response = await gptApiCall(model: 'gpt-4-turbo', messages: [
+  String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}
   ]);
   prefs.setString(promptBase64, response);
   return response;
 }
 
-Future<String> generateTitleAndSummaryForMemory(String? memory) async {
+Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRecord> previousMemories) async {
   final prefs = await SharedPreferences.getInstance();
   final languageCode = prefs.getString('recordingsLanguage') ?? 'en';
   final language = availableLanguagesByCode[languageCode] ?? 'English';
+
+  var prevMemoriesStr = '';
+  // seconds or minutes ago
+  for (var value in previousMemories) {
+    var timePassed = DateTime.now().difference(value.date).inMinutes < 1
+        ? '${DateTime.now().difference(value.date).inSeconds} seconds ago'
+        : '${DateTime.now().difference(value.date).inMinutes} minutes ago';
+    prevMemoriesStr += '$timePassed\n${value.structuredMemory}\n\n';
+  }
 
   var prompt = '''
     ${languageCode == 'en' ? 'Generate a title and a summary for the following recording chunk of a conversation.' : 'Generate a title and a summary in English for the following recording chunk of a conversation that was performed in $language.'} 
@@ -107,10 +119,19 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
     For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
     action-items in very concise short points in second person (use bullet points). 
     
+    Is possible that the transcript is only 1 speaker, in that case, is most likely the user speaking, so consider that a thought or something he wants to look at in the future and act accordingly.
     Is possible that the conversation is empty or is useless, in that case output "N/A".
-    Here is the recording ```$memory```.
     
-    Remember to output using the following format:
+    Here is the recording ```${rawMemory.trim()}```.
+    ${prevMemoriesStr.isNotEmpty ? '''\nFor extra context consider the previous recent memories:
+    These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
+    if there's some connection within those memories and the one that we are structuring right now.
+    For example if the user is talking about a project, and the previous memories explain more about the project, use that information to \
+    structure the new memory.\n
+    ```
+    $prevMemoriesStr
+    ```\n''' : ''}
+    Output using the following format:
     ```
     Title: ... 
     Summary:
@@ -118,7 +139,11 @@ Future<String> generateTitleAndSummaryForMemory(String? memory) async {
     - Action item 2
     ...
     ```
-    ''';
+    '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
+  debugPrint(prompt);
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
@@ -198,7 +223,7 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
   var response = await gptApiCall(
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o',
       messages: [
         {"role": "user", "content": message}
       ],
@@ -235,4 +260,31 @@ String qaStreamedBody(String context, List<dynamic> chatHistory) {
     "stream": true,
   });
   return body;
+}
+
+Future<String> transcribeAudioFile(File audioFile) async {
+  const url = 'https://api.openai.com/v1/audio/transcriptions';
+  final prefs = await SharedPreferences.getInstance();
+  final apiKey = prefs.getString('openaiApiKey') ?? '';
+  var request = http.MultipartRequest('POST', Uri.parse(url))
+    ..headers['Authorization'] = 'Bearer $apiKey'
+    ..headers['Content-Type'] = 'multipart/form-data';
+  var file = await http.MultipartFile.fromPath(
+    'file',
+    audioFile.path,
+  );
+
+  request.files.add(file);
+  request.fields['model'] = 'whisper-1';
+  request.fields['timestamp_granularities[]'] = 'word';
+  request.fields['response_format'] = 'verbose_json';
+  request.fields['language'] = 'en';
+  // request.fields['prompt'] =
+  //     'The audio of a conversation recorded with an AI wearable, it could be empty, just random noises, or have multiple speakers.';
+  var response = await request.send();
+  String responseBody = await response.stream.bytesToString();
+  var jsonResponse = jsonDecode(responseBody);
+
+  debugPrint('Transcript response: ${jsonResponse}');
+  return '';
 }

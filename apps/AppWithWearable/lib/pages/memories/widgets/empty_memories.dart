@@ -81,7 +81,7 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
                               width: 8,
                             ),
                             Text(
-                              'Comind',
+                              'Friend',
                               style: FlutterFlowTheme.of(context).labelMedium.override(
                                     fontFamily: FlutterFlowTheme.of(context).labelMediumFamily,
                                     color: FlutterFlowTheme.of(context).secondary,
