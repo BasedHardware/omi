@@ -5,6 +5,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:sentry_logging/sentry_logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'env/env.dart';
@@ -27,13 +28,10 @@ void main() async {
         options.dsn = Env.sentryDSNKey;
         options.tracesSampleRate = 1.0;
         options.profilesSampleRate = 1.0;
-        options.beforeSend = (SentryEvent event, Hint hint) async {
-          // Modify the event here:
-          debugPrint('Sentry event: ${event.environment}');
-          return event;
-        };
         options.attachScreenshot = false;
         options.debug = false;
+        options.addIntegration(LoggingIntegration());
+        options.enableAutoPerformanceTracing = true;
         // options.environment = Env.environment ?? 'development';
       },
       appRunner: () => runApp(ChangeNotifierProvider(
