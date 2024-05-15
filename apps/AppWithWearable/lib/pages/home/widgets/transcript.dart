@@ -59,13 +59,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.paused) {
       addEventToContext('App is paused');
-      debugPrint('App is paused');
     } else if (state == AppLifecycleState.resumed) {
       addEventToContext('App is resumed');
-      debugPrint('App is resumed');
     } else if (state == AppLifecycleState.hidden) {
       addEventToContext('App is hidden');
-      debugPrint('App is hidden');
     }
   }
 
@@ -142,7 +139,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       streamSubscription = data.item2;
       audioStorage = data.item3;
       channelCustomWebsocket = data.item4;
-      // _whisperTimer();
     });
   }
 
@@ -150,17 +146,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     streamSubscription?.cancel();
     channel?.sink.close();
     channelCustomWebsocket?.sink.close();
+    _memoryCreationTimer?.cancel();
+
     setState(() {
       whispersDiarized = [{}];
       customWebsocketTranscript = '';
-      _memoryCreationTimer?.cancel();
-      if (resetBLEConnection) {
-        setState(() {
-          websocketReconnecting = true;
-        });
-        initBleConnection();
-      }
+      if (resetBLEConnection) websocketReconnecting = true;
     });
+    if (resetBLEConnection) initBleConnection();
   }
 
   int _reconnectionAttempts = 0;
@@ -233,10 +226,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 30), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
       debugPrint('Creating memory from whispers');
       String transcript = '';
-      if (customWebsocketTranscript.trim().isEmpty) {
+      if (customWebsocketTranscript.trim().isNotEmpty) {
         transcript = customWebsocketTranscript.trim();
       } else {
         transcript = _buildDiarizedTranscriptMessage();
@@ -334,7 +327,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
                 color: FlutterFlowTheme.of(context).primary,
               )
             : TextButton(
-                onPressed: resetState,
+                onPressed: (){
+                  if (websocketReconnecting) return;
+                  addEventToContext('Retry Websocket Connection Clicked');
+                  resetState();
+                },
                 style: ButtonStyle(
                   shape: MaterialStateProperty.all<RoundedRectangleBorder>(
                     RoundedRectangleBorder(
