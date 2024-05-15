@@ -226,7 +226,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 30), () async {
       debugPrint('Creating memory from whispers');
       String transcript = '';
       if (customWebsocketTranscript.trim().isNotEmpty) {
