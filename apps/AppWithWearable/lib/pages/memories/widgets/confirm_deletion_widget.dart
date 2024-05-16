@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ConfirmDeletionWidget extends StatefulWidget {
+  final VoidCallback? onDelete;
+
   const ConfirmDeletionWidget({
     super.key,
     required this.memory,
+    required this.onDelete,
   });
 
   final MemoryRecord memory;
@@ -95,6 +98,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                           onPressed: () async {
                             await MemoryStorage.deleteMemory(widget.memory.id);
                             Navigator.pop(context);
+                            widget.onDelete?.call();
                           },
                           text: 'Delete',
                           options: FFButtonOptions(
