@@ -5,7 +5,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 final log = Logger('SentryLogger');
 
 addEventToContext(String event) {
-  debugPrint(event);
+  // debugPrint(event);
   log.info(event);
   Sentry.configureScope((scope) {
     var deepgramData = (scope.contexts['events'] ?? {});

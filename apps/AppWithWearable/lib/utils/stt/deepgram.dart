@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
@@ -68,11 +65,11 @@ Future<IOWebSocketChannel> _initStream(
     void Function(String, Map<int, String>) interimCallback,
     VoidCallback onWebsocketConnectionSuccess,
     void Function(dynamic) onWebsocketConnectionFailed,
-    VoidCallback onWebsocketConnectionClosed,
+    void Function(int?, String?) onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
   final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('deepgramApiKey') ?? '';
-  // final apiKey = '123';
+  // final apiKey = prefs.getString('deepgramApiKey') ?? '';
+  final apiKey = '123';
   final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
 
   var serverUrl =
@@ -113,22 +110,25 @@ Future<IOWebSocketChannel> _initStream(
         }
       },
       onError: (err) {
-        onWebsocketConnectionError(err);
+        // no closing reason or code
+        onWebsocketConnectionError(err); // error during connection
       },
       onDone: (() {
-        onWebsocketConnectionClosed();
+        onWebsocketConnectionClosed(channel.closeCode, channel.closeReason);
       }),
       cancelOnError: true,
     );
-  }).onError((error, stackTrace) {
-    onWebsocketConnectionFailed(error);
+  }).onError((err, stackTrace) {
+    // no closing reason or code
+    onWebsocketConnectionFailed(err); // initial connection failed
   });
 
   try {
     await channel.ready;
     onWebsocketConnectionSuccess();
   } catch (err) {
-    onWebsocketConnectionFailed(err);
+    // no closing reason or code (triggers onError anyways)
+    // onWebsocketConnectionFailed(err);
   }
   return channel;
 }
@@ -139,7 +139,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(String, Map<int, String>)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
   void Function(dynamic)? onWebsocketConnectionFailed,
-  VoidCallback? onWebsocketConnectionClosed,
+  void Function(int?, String?)? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
 }) async {
