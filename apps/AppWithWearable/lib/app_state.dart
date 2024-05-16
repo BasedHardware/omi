@@ -42,7 +42,7 @@ class FFAppState extends ChangeNotifier {
       }
     });
     _safeInit(() async => {
-          memories = await MemoryStorage.getAllMemories(),
+          memories = await MemoryStorage.getAllMemories(filterOutUseless: true),
         });
   }
 
@@ -166,43 +166,12 @@ class FFAppState extends ChangeNotifier {
     _RecordingPopupIsShown = _value;
   }
 
-  List<dynamic> _dailyMemories = [];
-
-  List<dynamic> get dailyMemories => _dailyMemories;
-
-  set dailyMemories(List<dynamic> _value) {
-    _dailyMemories = _value;
-  }
-
   List<MemoryRecord> _memories = [];
 
   List<MemoryRecord> get memories => _memories;
 
   set memories(List<MemoryRecord> value) {
     _memories = value;
-  }
-
-  void addToDailyMemories(dynamic _value) {
-    _dailyMemories.add(_value);
-  }
-
-  void removeFromDailyMemories(dynamic _value) {
-    _dailyMemories.remove(_value);
-  }
-
-  void removeAtIndexFromDailyMemories(int _index) {
-    _dailyMemories.removeAt(_index);
-  }
-
-  void updateDailyMemoriesAtIndex(
-    int _index,
-    dynamic Function(dynamic) updateFn,
-  ) {
-    _dailyMemories[_index] = updateFn(_dailyMemories[_index]);
-  }
-
-  void insertAtIndexInDailyMemories(int _index, dynamic _value) {
-    _dailyMemories.insert(_index, _value);
   }
 
   String _openaidaily = '';
