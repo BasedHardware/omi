@@ -68,8 +68,8 @@ Future<IOWebSocketChannel> _initStream(
     void Function(int?, String?) onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
   final prefs = await SharedPreferences.getInstance();
-  // final apiKey = prefs.getString('deepgramApiKey') ?? '';
-  final apiKey = '123';
+  final apiKey = prefs.getString('deepgramApiKey') ?? '';
+  // final apiKey = '123';
   final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
 
   var serverUrl =
