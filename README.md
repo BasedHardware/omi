@@ -6,7 +6,7 @@ Open Source AI Wearable device that records everything you say, gives you proact
 
 ![Friend Image](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
 
-[![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/8MP3b9ymvx) &ensp;&ensp;&ensp;
+[![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/ZutWMTJnwA) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Friend)](https://github.com/BasedHardware/Friend)
 
