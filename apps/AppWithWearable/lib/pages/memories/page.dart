@@ -174,7 +174,6 @@ class _MemoriesPageState extends State<MemoriesPage> {
                             scrollDirection: Axis.vertical,
                             itemCount: FFAppState().memories.length,
                             itemBuilder: (context, index) {
-                              // TODO: still if recording is like 3 words, skip it?
                               return MemoryListItem(
                                 memory: FFAppState().memories[index],
                                 unFocusNode: unFocusNode,

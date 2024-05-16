@@ -5,6 +5,7 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/find_device/page.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/pages/welcome/page.dart';
 import 'package:provider/provider.dart';
 
@@ -86,6 +87,16 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           name: 'memoriesPage',
           path: '/memoriesPage',
           builder: (context, params) => const MemoriesPage(),
+        ),
+        FFRoute(
+          name: 'memoryDetailPage',
+          path: '/memoryDetailPage',
+          builder: (context, params) => MemoryDetailPage(
+            memory: params.getParam(
+              'memory',
+              ParamType.JSON,
+            ),
+          ),
         ),
         FFRoute(
           name: 'chatPage',

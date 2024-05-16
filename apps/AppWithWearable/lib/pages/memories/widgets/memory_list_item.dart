@@ -37,16 +37,28 @@ class MemoryListItem extends StatefulWidget {
 class _MemoryListItemState extends State<MemoryListItem> {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0x1AF7F4F4),
-        borderRadius: BorderRadius.circular(24.0),
-      ),
-      child: Padding(
-        padding: const EdgeInsetsDirectional.all(8),
-        child: SingleChildScrollView(
+    return GestureDetector(
+      onTap: () {
+        debugPrint('Tapped memory: ${widget.memory.id}');
+        context.pushNamed(
+          'memoryDetailPage',
+          queryParameters: {
+            'memory': serializeParam(
+              widget.memory,
+              ParamType.JSON,
+            ),
+          }.withoutNulls,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        width: double.maxFinite,
+        decoration: BoxDecoration(
+          color: const Color(0x1AF7F4F4),
+          borderRadius: BorderRadius.circular(24.0),
+        ),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.all(8),
           child: Column(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -123,17 +135,16 @@ class _MemoryListItemState extends State<MemoryListItem> {
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsetsDirectional.only(top: 8, bottom: 8, start: 4),
-        child: SelectionArea(
-          child: RichText(
-            textAlign: TextAlign.start,
-            text: TextSpan(
-              children: buildStyledText(displayText.trim()),
-              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                    lineHeight: 1.5,
-                  ),
-            ),
+        child: RichText(
+          // SelectionArea
+          textAlign: TextAlign.start,
+          text: TextSpan(
+            children: buildStyledText(displayText.trim()),
+            style: FlutterFlowTheme.of(context).bodyMedium.override(
+                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                  lineHeight: 1.5,
+                ),
           ),
         ),
       ),
