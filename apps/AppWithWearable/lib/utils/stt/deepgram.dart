@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -17,14 +19,13 @@ const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a12
 Future<IOWebSocketChannel?> _initCustomStream({
   void Function(String)? onCustomWebSocketCallback,
 }) async {
-  final prefs = await SharedPreferences.getInstance();
-  final serverUrl = prefs.getString('customWebsocketUrl') ?? '';
-  final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+  final serverUrl = SharedPreferencesUtil().customWebsocketUrl;
   if (serverUrl.isEmpty) {
     debugPrint('Custom Websocket URL not set');
     return null;
   }
   debugPrint('Websocket Opening');
+  final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
   IOWebSocketChannel channel = IOWebSocketChannel.connect(Uri.parse('$serverUrl?language=$recordingsLanguage'));
   channel.ready.then((_) {
     channel.stream.listen(
@@ -67,17 +68,14 @@ Future<IOWebSocketChannel> _initStream(
     void Function(dynamic) onWebsocketConnectionFailed,
     void Function(int?, String?) onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
-  final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('deepgramApiKey') ?? '';
-  // final apiKey = '123';
-  final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+  final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
 
   var serverUrl =
       'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
 
   debugPrint('Websocket Opening');
-  IOWebSocketChannel channel =
-      IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
+  IOWebSocketChannel channel = IOWebSocketChannel.connect(Uri.parse(serverUrl),
+      headers: {'Authorization': 'Token ${getDeepgramApiKeyForUsage()}'});
 
   channel.ready.then((_) {
     channel.stream.listen(
