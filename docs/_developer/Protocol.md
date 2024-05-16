@@ -8,11 +8,18 @@ nav_order: 1
 
 ## BLE Discovery
 
-The app discovers the device by scanning for BLE devices with the name `Friend`.
+The official app discovers the device by scanning for BLE devices with the name `Friend`.
 
-## BLE Service and Characteristics
+## BLE Services and Characteristics
 
-The Friend wearable device implements one BLE service to stream the audio data to the app.
+The Friend wearable device implements 2 services:
+
+### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)
+
+The service uses the official UUID of 0x180F and exposes the standard Battery Level characteristic with UUID 0x2A19.  
+The characteristic supports notification but it seems the current firmware does not update the battery level after initial device start.
+
+### one BLE service to stream the audio data to the app
 
 The main service has UUID of `19B10000-E8F2-537E-4F6C-D104768A1214` and has two characteristics:
 - Audio data with UUID of `19B10001-E8F2-537E-4F6C-D104768A1214`, used to send the audio data from the device to the app.
@@ -33,7 +40,7 @@ The device default is PCM 8-bit, 16kHz, mono.
 
 The audio data is sent as updates to the audio characteristic. The format of the data depends on the codec type.
 The data is split into packets, with each packet containing 160 samples.
-Each packe talso has thrre byte header:
+Each packet also has a three byte header:
 - The first two bytes are the overall packet number, starting from 0.
 - The third byte is the index of packet in the current batch of packets.
 
