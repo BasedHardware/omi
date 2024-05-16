@@ -12,6 +12,8 @@ class SettingsBottomSheet extends StatelessWidget {
   final bool deepgramApiIsVisible;
   final bool openaiApiIsVisible;
   final String selectedLanguage;
+  final bool useFriendAPIKeys;
+  final void Function(bool?) onUseFriendAPIKeysChanged;
 
   final VoidCallback deepgramApiVisibilityCallback;
   final VoidCallback openaiApiVisibilityCallback;
@@ -29,6 +31,8 @@ class SettingsBottomSheet extends StatelessWidget {
       required this.deepgramApiIsVisible,
       required this.openaiApiIsVisible,
       required this.selectedLanguage,
+      required this.useFriendAPIKeys,
+      required this.onUseFriendAPIKeysChanged,
       required this.deepgramApiVisibilityCallback,
       required this.openaiApiVisibilityCallback,
       required this.onLanguageSelected,
@@ -58,60 +62,114 @@ class SettingsBottomSheet extends StatelessWidget {
                     color: Colors.white,
                   ),
                 )),
-                const SizedBox(height: 16.0),
-                _getText('Deepgram is used for converting speech to text.', underline: false),
-                const SizedBox(height: 8.0),
-                TextField(
-                  controller: deepgramApiKeyController,
-                  obscureText: deepgramApiIsVisible ? false : true,
-                  decoration: _getTextFieldDecoration('Deepgram API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () {
-                          // setModalState(() {
-                          deepgramApiVisibilityCallback();
-                          // });
-                        },
-                      )),
-                  style: const TextStyle(color: Colors.white),
+                // CheckboxListTile(
+                //   value: useFriendAPIKeys,
+                //   onChanged: onUseFriendAPIKeysChanged,
+                //
+                //   title: Align(alignment: Alignment.centerLeft, child: _getText('Use Friend\'s API keys')),
+                // ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: useFriendAPIKeys,
+                      onChanged: onUseFriendAPIKeysChanged,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2.0),
+                      ),
+                      side: MaterialStateBorderSide.resolveWith(
+                        (states) => const BorderSide(width: 1.0, color: Colors.white),
+                      ),
+                    ),
+                    _getText('Use Friend\'s API keys'),
+                  ],
                 ),
-                const SizedBox(height: 8.0),
-                TextButton(
-                    onPressed: () {
-                      launch('https://developers.deepgram.com/docs/create-additional-api-keys');
-                    },
-                    child: _getText('How to generate a Deepgram API key?', underline: true)),
                 const SizedBox(height: 16.0),
-                _getText('OpenAI is used for chat.'),
-                const SizedBox(height: 8.0),
-                TextField(
-                  controller: openaiApiKeyController,
-                  obscureText: openaiApiIsVisible ? false : true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: _getTextFieldDecoration('OpenAI API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                          color: Theme.of(context).primaryColor,
+                Stack(
+                  children: [
+                    if (useFriendAPIKeys)
+                      Container(
+                        width: double.maxFinite,
+                        height: 300,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20.0),
+                          color: Colors.white.withOpacity(0.1),
                         ),
-                        onPressed: () {
-                          // setModalState(() {
-                          openaiApiVisibilityCallback();
-                          // });
-                        },
-                      )),
-                  style: const TextStyle(color: Colors.white),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 8.0),
+                          _getText('Deepgram is used for converting speech to text.',
+                              underline: false, canBeDisabled: true),
+                          const SizedBox(height: 8.0),
+                          TextField(
+                            controller: deepgramApiKeyController,
+                            obscureText: deepgramApiIsVisible ? false : true,
+                            enabled: !useFriendAPIKeys,
+                            decoration: _getTextFieldDecoration('Deepgram API Key',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                                    color: useFriendAPIKeys
+                                        ? Colors.white.withOpacity(0.2)
+                                        : Theme.of(context).primaryColor,
+                                  ),
+                                  onPressed: () {
+                                    // setModalState(() {
+                                    deepgramApiVisibilityCallback();
+                                    // });
+                                  },
+                                ),
+                                canBeDisabled: true),
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          const SizedBox(height: 8.0),
+                          TextButton(
+                              onPressed: () {
+                                launch('https://developers.deepgram.com/docs/create-additional-api-keys');
+                              },
+                              child: _getText('How to generate a Deepgram API key?',
+                                  underline: true, canBeDisabled: true)),
+                          const SizedBox(height: 16.0),
+                          _getText('OpenAI is used for chat.', canBeDisabled: true),
+                          const SizedBox(height: 8.0),
+                          TextField(
+                            controller: openaiApiKeyController,
+                            obscureText: openaiApiIsVisible ? false : true,
+                            enabled: !useFriendAPIKeys,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            decoration: _getTextFieldDecoration('OpenAI API Key',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                                    color: useFriendAPIKeys
+                                        ? Colors.white.withOpacity(0.2)
+                                        : Theme.of(context).primaryColor,
+                                  ),
+                                  onPressed: () {
+                                    // setModalState(() {
+                                    openaiApiVisibilityCallback();
+                                    // });
+                                  },
+                                ),
+                                canBeDisabled: true),
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          const SizedBox(height: 8.0),
+                          TextButton(
+                              onPressed: () {
+                                launch('https://platform.openai.com/api-keys');
+                              },
+                              child:
+                                  _getText('How to generate an OpenAI API key?', underline: true, canBeDisabled: true)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8.0),
-                TextButton(
-                    onPressed: () {
-                      launch('https://platform.openai.com/api-keys');
-                    },
-                    child: _getText('How to generate an OpenAI API key?', underline: true)),
                 const SizedBox(height: 16.0),
                 _getText('Recordings Language:', underline: false),
                 const SizedBox(height: 12),
@@ -202,28 +260,33 @@ class SettingsBottomSheet extends StatelessWidget {
     );
   }
 
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white),
+      enabled: useFriendAPIKeys && canBeDisabled,
+      labelStyle: TextStyle(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       border: const OutlineInputBorder(),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white),
-        borderRadius: BorderRadius.all(Radius.circular(20.0)),
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white),
+      disabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderRadius: const BorderRadius.all(Radius.circular(20.0)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       ),
       suffixIcon: suffixIcon,
     );
   }
 
-  _getText(String text, {bool underline = false}) {
+  _getText(String text, {bool canBeDisabled = false, bool underline = false}) {
     return Center(
       child: Text(
         text,
         style: TextStyle(
-          color: Colors.white,
+          color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
           decoration: underline ? TextDecoration.underline : TextDecoration.none,
         ),
       ),
@@ -233,7 +296,7 @@ class SettingsBottomSheet extends StatelessWidget {
   _getSaveButton(BuildContext context) {
     return ElevatedButton(
       onPressed: () {
-        if (deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) {
+        if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
           showDialog(
             context: context,
             builder: (BuildContext context) {

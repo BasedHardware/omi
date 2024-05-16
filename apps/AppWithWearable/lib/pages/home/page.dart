@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -13,8 +14,6 @@ import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -42,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   final _gcpCredentialsController = TextEditingController();
   final _gcpBucketNameController = TextEditingController();
   final _customWebsocketUrlController = TextEditingController();
+  bool _useFriendApiKeys = true;
   bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -74,11 +74,8 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
       // Check if the API keys are set
-      final prefs = await SharedPreferences.getInstance();
-      final deepgramApiKey = prefs.getString('deepgramApiKey');
-      final openaiApiKey = prefs.getString('openaiApiKey');
-
-      if ((deepgramApiKey?.isNotEmpty ?? false) && (openaiApiKey?.isNotEmpty ?? false)) {
+      final prefs = SharedPreferencesUtil();
+      if ((prefs.deepgramApiKey.isNotEmpty && prefs.openAIApiKey.isNotEmpty) || prefs.useFriendApiKeys) {
         // If both API keys are set, initialize the page and enable the DeviceDataWidget
         setState(() {
           _areApiKeysSet = true;
@@ -141,13 +138,14 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _showSettingsBottomSheet() async {
     // Load API keys from shared preferences
-    final prefs = await SharedPreferences.getInstance();
-    _deepgramApiKeyController.text = prefs.getString('deepgramApiKey') ?? '';
-    _openaiApiKeyController.text = prefs.getString('openaiApiKey') ?? '';
-    _gcpCredentialsController.text = prefs.getString('gcpCredentials') ?? '';
-    _gcpBucketNameController.text = prefs.getString('gcpBucketName') ?? '';
-    _customWebsocketUrlController.text = prefs.getString('customWebsocketUrl') ?? '';
-    _selectedLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+    final prefs = SharedPreferencesUtil();
+    _deepgramApiKeyController.text = prefs.deepgramApiKey;
+    _openaiApiKeyController.text = prefs.openAIApiKey;
+    _gcpCredentialsController.text = prefs.gcpCredentials;
+    _gcpBucketNameController.text = prefs.gcpBucketName;
+    _customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
+    _selectedLanguage = prefs.recordingsLanguage;
+    _useFriendApiKeys = prefs.useFriendApiKeys;
 
     await showModalBottomSheet(
       context: context,
@@ -179,6 +177,12 @@ class _HomePageState extends State<HomePage> {
                       _selectedLanguage = value;
                     });
                   },
+                  useFriendAPIKeys: _useFriendApiKeys,
+                  onUseFriendAPIKeysChanged: (bool? value) {
+                    setModalState(() {
+                      _useFriendApiKeys = value ?? true;
+                    });
+                  },
                   deepgramApiVisibilityCallback: () {
                     setModalState(() {
                       deepgramApiIsVisible = !deepgramApiIsVisible;
@@ -198,22 +202,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('openaiApiKey', _openaiApiKeyController.text.trim());
-    await prefs.setString('gcpCredentials', _gcpCredentialsController.text.trim());
-    await prefs.setString('gcpBucketName', _gcpBucketNameController.text.trim());
+    final prefs = SharedPreferencesUtil();
+    prefs.openAIApiKey = _openaiApiKeyController.text.trim();
+    prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
+    prefs.gcpCredentials = _gcpCredentialsController.text.trim();
+    prefs.gcpBucketName = _gcpBucketNameController.text.trim();
+    prefs.useFriendApiKeys = _useFriendApiKeys;
+    prefs.recordingsLanguage = _selectedLanguage;
+    prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
 
     bool requiresReset = false;
     if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
-      await prefs.setString('recordingsLanguage', _selectedLanguage);
       requiresReset = true;
     }
     if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
-      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
       requiresReset = true;
     }
     if (_customWebsocketUrlController.text != prefs.getString('customWebsocketUrl')) {
-      await prefs.setString('customWebsocketUrl', _customWebsocketUrlController.text.trim());
       requiresReset = true;
     }
     if (requiresReset) childWidgetKey.currentState?.resetState();
