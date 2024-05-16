@@ -192,12 +192,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
           notificationId: 2,
           title: 'Deepgram Connection Error',
           body: 'There was an error with the Deepgram connection, please restart the app and check your credentials.');
+      addEventToContext('Max reconnection attempts reached');
       return;
     }
     setState(() {
       websocketReconnecting = true;
     });
     _reconnectionAttempts++;
+    addEventToContext('Attempting to reconnect Websocket $_reconnectionAttempts');
     await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
     debugPrint('Attempting to reconnect $_reconnectionAttempts time');
     await initBleConnection();
