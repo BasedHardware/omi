@@ -163,7 +163,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     debugPrint('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
-      debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
+      // debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
       if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.uuid.str128.toLowerCase() == audioCharacteristicUuid ||
