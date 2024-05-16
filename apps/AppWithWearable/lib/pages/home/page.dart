@@ -229,6 +229,10 @@ class _HomePageState extends State<HomePage> {
                       key: childWidgetKey,
                     )
                   : const SizedBox.shrink(),
+              // TODO: instead of this, something about transcript will appear here, and an info explanation
+              // TODO: when memory created, do a vanishing effect, and put `memory creating ...` for 2 seconds
+              // TODO: ticket for listing failure memories too in list
+              // TODO: ticket for displaying
             ]),
           ],
         ),
