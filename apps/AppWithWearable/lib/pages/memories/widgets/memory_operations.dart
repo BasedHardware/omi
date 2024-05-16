@@ -52,7 +52,8 @@ geyShareMemoryOperationWidget(MemoryRecord memory, {double iconSize = 20}) {
   );
 }
 
-getEditMemoryOperationWidget(MemoryRecord memory, FocusNode unFocusNode, StateSetter setState, {double iconSize = 20}) {
+getEditMemoryOperationWidget(MemoryRecord memory, FocusNode unFocusNode, StateSetter setState,
+    {double iconSize = 20, Function(String)? onMemoryEdited}) {
   return Builder(
     builder: (context) => InkWell(
       splashColor: Colors.transparent,
@@ -72,7 +73,7 @@ getEditMemoryOperationWidget(MemoryRecord memory, FocusNode unFocusNode, StateSe
                 onTap: () => unFocusNode.canRequestFocus
                     ? FocusScope.of(context).requestFocus(unFocusNode)
                     : FocusScope.of(context).unfocus(),
-                child: EditMemoryWidget(memory: memory),
+                child: EditMemoryWidget(memory: memory, onMemoryEdited: onMemoryEdited),
               ),
             );
           },
