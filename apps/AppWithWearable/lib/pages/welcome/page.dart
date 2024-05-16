@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
@@ -149,9 +151,9 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                               onTap: () async {
                                 // Check if Bluetooth and location permissions are granted
                                 PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
-                                PermissionStatus locationStatus = await Permission.location.status;
+                                bool locationGranted = Platform.isIOS || (await Permission.location.isGranted);
 
-                                if (bluetoothStatus.isGranted && locationStatus.isGranted) {
+                                if (bluetoothStatus.isGranted && locationGranted) {
                                   // Both permissions are already granted
                                   // Request notification permission
                                   PermissionStatus notificationStatus = await Permission.notification.request();

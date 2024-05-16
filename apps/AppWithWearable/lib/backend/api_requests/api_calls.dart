@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -72,11 +73,9 @@ Future<dynamic> gptApiCall({
   File? audioFile,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
-  final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('openaiApiKey') ?? '';
   final headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Authorization': 'Bearer $apiKey',
+    'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
   final String body;
   if (urlSuffix == 'embeddings') {
@@ -100,21 +99,20 @@ Future<dynamic> gptApiCall({
 Future<String> executeGptPrompt(String? prompt) async {
   if (prompt == null) return '';
 
-  var prefs = await SharedPreferences.getInstance();
+  var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
-  var cachedResponse = prefs.getString(promptBase64);
-  if (cachedResponse != null) return cachedResponse;
+  var cachedResponse = prefs.gptCompletionCache(promptBase64);
+  if (prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}
   ]);
-  prefs.setString(promptBase64, response);
+  prefs.setGptCompletionCache(promptBase64, response);
   return response;
 }
 
 Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRecord> previousMemories) async {
-  final prefs = await SharedPreferences.getInstance();
-  final languageCode = prefs.getString('recordingsLanguage') ?? 'en';
+  final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final language = availableLanguagesByCode[languageCode] ?? 'English';
 
   var prevMemoriesStr = '';
@@ -277,10 +275,8 @@ String qaStreamedBody(String context, List<dynamic> chatHistory) {
 
 Future<String> transcribeAudioFile(File audioFile) async {
   const url = 'https://api.openai.com/v1/audio/transcriptions';
-  final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('openaiApiKey') ?? '';
   var request = http.MultipartRequest('POST', Uri.parse(url))
-    ..headers['Authorization'] = 'Bearer $apiKey'
+    ..headers['Authorization'] = 'Bearer ${getOpenAIApiKeyForUsage()}'
     ..headers['Content-Type'] = 'multipart/form-data';
   var file = await http.MultipartFile.fromPath(
     'file',

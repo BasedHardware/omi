@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart';
@@ -9,8 +10,7 @@ import 'package:path_provider/path_provider.dart';
 AuthClient? authClient;
 
 void authenticateGCP() async {
-  var prefs = await SharedPreferences.getInstance();
-  var credentialsBase64 = prefs.getString('gcpCredentials') ?? '';
+  var credentialsBase64 = SharedPreferencesUtil().gcpCredentials;
   if (credentialsBase64.isEmpty) {
     debugPrint('No GCP credentials found');
     return;
@@ -24,8 +24,7 @@ void authenticateGCP() async {
 }
 
 Future<String?> uploadFile(File file) async {
-  var prefs = await SharedPreferences.getInstance();
-  String bucketName = prefs.getString('gcpBucketName') ?? '';
+  String bucketName = SharedPreferencesUtil().gcpBucketName;
   if (bucketName.isEmpty) {
     debugPrint('No bucket name found');
     return null;
@@ -66,8 +65,7 @@ Future<File?> downloadFile(String objectName, String saveFileName) async {
     return File(saveFilePath);
   }
 
-  var prefs = await SharedPreferences.getInstance();
-  String bucketName = prefs.getString('gcpBucketName') ?? '';
+  String bucketName = SharedPreferencesUtil().gcpBucketName;
   if (bucketName.isEmpty) {
     debugPrint('No bucket name found');
     return null;
