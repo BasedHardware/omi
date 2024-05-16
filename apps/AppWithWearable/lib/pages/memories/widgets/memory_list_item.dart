@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,7 +7,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
-import 'package:friend_private/pages/memories/model.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -14,16 +15,16 @@ import 'edit_memory_widget.dart';
 
 class MemoryListItem extends StatefulWidget {
   final MemoryRecord memory;
-  final MemoriesPageModel model;
   final Function(MemoryRecord) playAudio;
   final Function(MemoryRecord) pauseAudio;
   final Function(MemoryRecord) resumeAudio;
   final Function(MemoryRecord) stopAudio;
+  final FocusNode unFocusNode;
 
   const MemoryListItem(
       {super.key,
       required this.memory,
-      required this.model,
+      required this.unFocusNode,
       required this.playAudio,
       required this.pauseAudio,
       required this.resumeAudio,
@@ -52,8 +53,8 @@ class _MemoryListItemState extends State<MemoryListItem> {
             children: [
               _getMemoryHeader(),
               _getMemoryText(),
-              _getAudioPlayer(),
-              // _getOperations()
+              _noInsightsWidget(),
+              // _getAudioPlayer(),
             ],
           ),
         ),
@@ -61,26 +62,20 @@ class _MemoryListItemState extends State<MemoryListItem> {
     );
   }
 
-  // _getMemoryText() {
-  //   var parts = widget.memory.structuredMemory.split('\n');
-  //   return Align(
-  //     alignment: Alignment.centerLeft,
-  //     child: Padding(
-  //       padding: const EdgeInsetsDirectional.only(top: 8, bottom: 8, start: 4),
-  //       child: SelectionArea(
-  //           child: Text(
-  //             (widget.memory.structuredMemory.isEmpty ? widget.memory.rawMemory : widget.memory.structuredMemory).trim(),
-  //             textAlign: TextAlign.start,
-  //             style: FlutterFlowTheme.of(context).bodyMedium.override(
-  //               fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-  //               fontWeight: FontWeight.bold,
-  //               useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-  //               lineHeight: 1.5,
-  //             ),
-  //           )),
-  //     ),
-  //   );
-  // }
+  _noInsightsWidget() {
+    return widget.memory.isUseless
+        ? const Padding(
+            padding: EdgeInsets.only(left: 8, bottom: 4),
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Text(
+                'No insights',
+                style: TextStyle(color: Colors.red, decoration: TextDecoration.underline),
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+  }
 
   _getBoldStyle() {
     return TextStyle(
@@ -100,7 +95,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
 
   _getMemoryText() {
     List<TextSpan> buildStyledText(String text) {
-      if (!text.contains('\n\nSummary:')){
+      if (!text.contains('\n\nSummary:')) {
         text = text.replaceAll('\nSummary:', '\n\nSummary:');
       }
       List<TextSpan> spans = [];
@@ -121,8 +116,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
       return spans;
     }
 
-    String displayText =
-        widget.memory.structuredMemory.isEmpty ? widget.memory.rawMemory : widget.memory.structuredMemory;
+    String displayText = widget.memory.structuredMemory.isEmpty || widget.memory.structuredMemory.contains('N/A')
+        ? widget.memory.rawMemory
+        : widget.memory.structuredMemory;
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
@@ -210,8 +206,8 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       backgroundColor: Colors.transparent,
                       alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                       child: GestureDetector(
-                        onTap: () => widget.model.unfocusNode.canRequestFocus
-                            ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
+                        onTap: () => widget.unFocusNode.canRequestFocus
+                            ? FocusScope.of(context).requestFocus(widget.unFocusNode)
                             : FocusScope.of(context).unfocus(),
                         child: EditMemoryWidget(
                           memory: widget.memory,
@@ -246,8 +242,8 @@ class _MemoryListItemState extends State<MemoryListItem> {
                         backgroundColor: Colors.transparent,
                         alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                         child: GestureDetector(
-                          onTap: () => widget.model.unfocusNode.canRequestFocus
-                              ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
+                          onTap: () => widget.unFocusNode.canRequestFocus
+                              ? FocusScope.of(context).requestFocus(widget.unFocusNode)
                               : FocusScope.of(context).unfocus(),
                           child: ConfirmDeletionWidget(
                             memory: widget.memory,
