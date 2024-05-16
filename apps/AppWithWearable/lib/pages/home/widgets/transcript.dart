@@ -19,6 +19,7 @@ import 'package:web_socket_channel/io.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'info_button.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
 
@@ -285,6 +286,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     }
 
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
+    if (filteredNotEmptyWhispers.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 88.0),
+        child: InfoButton(),
+      );
+    }
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
