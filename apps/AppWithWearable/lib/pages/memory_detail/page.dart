@@ -113,7 +113,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                             children: [
                               geyShareMemoryOperationWidget(memory, iconSize: 22),
                               const SizedBox(width: 16),
-                              getEditMemoryOperationWidget(memory, unFocusNode, setState, iconSize: 22),
+                              getEditMemoryOperationWidget(memory, unFocusNode, setState, iconSize: 22,
+                                  onMemoryEdited: (String updated) {
+                                debugPrint('onMemoryEdited $updated');
+                                setState(() {
+                                  memory.structuredMemory = updated;
+                                });
+                              }),
                             ],
                           ),
                         ),
