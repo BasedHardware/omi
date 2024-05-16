@@ -67,7 +67,7 @@ Future<IOWebSocketChannel> _initStream(
     void Function(String) speechFinalCallback,
     void Function(String, Map<int, String>) interimCallback,
     VoidCallback onWebsocketConnectionSuccess,
-    VoidCallback onWebsocketConnectionFailed,
+    void Function(dynamic) onWebsocketConnectionFailed,
     VoidCallback onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
   final prefs = await SharedPreferences.getInstance();
@@ -113,35 +113,22 @@ Future<IOWebSocketChannel> _initStream(
         }
       },
       onError: (err) {
-        debugPrint('Websocket Error: $err');
-        addEventToContext('Websocket Error');
-        Sentry.captureException(err, stackTrace: err.stackTrace);
         onWebsocketConnectionError(err);
       },
       onDone: (() {
-        debugPrint('Websocket Closed');
-        addEventToContext('Websocket Closed');
-        Sentry.captureMessage('Websocket Closed', level: SentryLevel.warning);
         onWebsocketConnectionClosed();
       }),
       cancelOnError: true,
     );
   }).onError((error, stackTrace) {
-    addEventToContext('Websocket Unable To Connect');
-    debugPrint("WebsocketChannel was unable to establish connection");
-    onWebsocketConnectionFailed();
+    onWebsocketConnectionFailed(error);
   });
 
   try {
     await channel.ready;
-    debugPrint('Websocket Opened');
-    addEventToContext('Websocket Opened');
     onWebsocketConnectionSuccess();
   } catch (err) {
-    debugPrint("Websocket was unable to establish connection");
-    addEventToContext('Websocket Unable To Connect 2');
-    onWebsocketConnectionFailed();
-    Sentry.captureException(err);
+    onWebsocketConnectionFailed(err);
   }
   return channel;
 }
@@ -151,7 +138,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(String)? speechFinalCallback,
   void Function(String, Map<int, String>)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
-  VoidCallback? onWebsocketConnectionFailed,
+  void Function(dynamic)? onWebsocketConnectionFailed,
   VoidCallback? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
@@ -176,6 +163,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     debugPrint('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
+      debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
       if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.uuid.str128.toLowerCase() == audioCharacteristicUuid ||
