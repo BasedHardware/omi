@@ -90,7 +90,7 @@ class _HomePageState extends State<HomePage> {
       // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
       // we don't want either way to trigger the websocket closed event, because it's closed on purpose
       // and we don't want to retry the websocket connection or something
-      childWidgetKey.currentState?.resetState(resetBLEConnection: false, triggerWebsocketClosedEvent: false);
+      childWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;
       });
