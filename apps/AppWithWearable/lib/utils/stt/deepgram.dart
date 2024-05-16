@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
@@ -67,8 +64,8 @@ Future<IOWebSocketChannel> _initStream(
     void Function(String) speechFinalCallback,
     void Function(String, Map<int, String>) interimCallback,
     VoidCallback onWebsocketConnectionSuccess,
-    VoidCallback onWebsocketConnectionFailed,
-    VoidCallback onWebsocketConnectionClosed,
+    void Function(dynamic) onWebsocketConnectionFailed,
+    void Function(int?, String?) onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
   final prefs = await SharedPreferences.getInstance();
   final apiKey = prefs.getString('deepgramApiKey') ?? '';
@@ -113,35 +110,25 @@ Future<IOWebSocketChannel> _initStream(
         }
       },
       onError: (err) {
-        debugPrint('Websocket Error: $err');
-        addEventToContext('Websocket Error');
-        Sentry.captureException(err, stackTrace: err.stackTrace);
-        onWebsocketConnectionError(err);
+        // no closing reason or code
+        onWebsocketConnectionError(err); // error during connection
       },
       onDone: (() {
-        debugPrint('Websocket Closed');
-        addEventToContext('Websocket Closed');
-        Sentry.captureMessage('Websocket Closed', level: SentryLevel.warning);
-        onWebsocketConnectionClosed();
+        onWebsocketConnectionClosed(channel.closeCode, channel.closeReason);
       }),
       cancelOnError: true,
     );
-  }).onError((error, stackTrace) {
-    addEventToContext('Websocket Unable To Connect');
-    debugPrint("WebsocketChannel was unable to establish connection");
-    onWebsocketConnectionFailed();
+  }).onError((err, stackTrace) {
+    // no closing reason or code
+    onWebsocketConnectionFailed(err); // initial connection failed
   });
 
   try {
     await channel.ready;
-    debugPrint('Websocket Opened');
-    addEventToContext('Websocket Opened');
     onWebsocketConnectionSuccess();
   } catch (err) {
-    debugPrint("Websocket was unable to establish connection");
-    addEventToContext('Websocket Unable To Connect 2');
-    onWebsocketConnectionFailed();
-    Sentry.captureException(err);
+    // no closing reason or code (triggers onError anyways)
+    // onWebsocketConnectionFailed(err);
   }
   return channel;
 }
@@ -151,8 +138,8 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(String)? speechFinalCallback,
   void Function(String, Map<int, String>)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
-  VoidCallback? onWebsocketConnectionFailed,
-  VoidCallback? onWebsocketConnectionClosed,
+  void Function(dynamic)? onWebsocketConnectionFailed,
+  void Function(int?, String?)? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
 }) async {
@@ -176,6 +163,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     debugPrint('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
+      debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
       if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.uuid.str128.toLowerCase() == audioCharacteristicUuid ||

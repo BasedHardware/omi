@@ -5,6 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -48,6 +49,8 @@ class _HomePageState extends State<HomePage> {
   final unFocusNode = FocusNode();
 
   StreamSubscription<BluetoothConnectionState>? connectionStateListener;
+  StreamSubscription? bleBatteryLevelListener;
+  int batteryLevel = -1;
 
   @override
   void initState() {
@@ -55,6 +58,7 @@ class _HomePageState extends State<HomePage> {
     if (widget.btDevice != null) {
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
       _initiateConnectionListener();
+      _initiateBleBatteryListener();
     } else {
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
@@ -62,6 +66,7 @@ class _HomePageState extends State<HomePage> {
             _device = friendDevice;
           });
           _initiateConnectionListener();
+          _initiateBleBatteryListener();
         }
       });
     }
@@ -85,12 +90,26 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  _initiateBleBatteryListener() async {
+    if (bleBatteryLevelListener != null) return;
+    bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+      setState(() {
+        batteryLevel = value;
+      });
+    });
+  }
+
   _initiateConnectionListener() async {
     connectionStateListener = getConnectionStateListener(_device!.id, () {
+      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
+      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
+      // and we don't want to retry the websocket connection or something
       childWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;
       });
+      bleBatteryLevelListener?.cancel();
+      bleBatteryLevelListener = null;
       // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
@@ -99,6 +118,7 @@ class _HomePageState extends State<HomePage> {
             _device = friendDevice;
           });
           clearNotification(1);
+          _initiateBleBatteryListener();
         }
       });
     }, () {
@@ -115,6 +135,7 @@ class _HomePageState extends State<HomePage> {
     _customWebsocketUrlController.dispose();
     unFocusNode.dispose();
     connectionStateListener?.cancel();
+    bleBatteryLevelListener?.cancel();
     super.dispose();
   }
 
@@ -323,46 +344,46 @@ class _HomePageState extends State<HomePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          // TextButton( // Test button trigger sentry exception
-          //     onPressed: () {
-          //       var data = {};
-          //       print(data['123']!);
-          //     },
-          //     child: Text('Hiiiii'))
-          // SizedBox(width: 16.0), // TODO: battery score should go in here
-          // Container(
-          //   decoration: BoxDecoration(
-          //     color: Colors.transparent,
-          //     borderRadius: BorderRadius.circular(30),
-          //     border: Border.all(
-          //       color: Colors.white,
-          //       width: 1,
-          //     ),
-          //   ),
-          //   padding: const EdgeInsets.all(8.0),
-          //   child: Row(
-          //     mainAxisSize: MainAxisSize.min,
-          //     children: [
-          //       const Text(
-          //         '100%',
-          //         style: TextStyle(
-          //           color: Colors.white,
-          //           fontSize: 12,
-          //           fontWeight: FontWeight.bold,
-          //         ),
-          //       ),
-          //       const SizedBox(width: 8.0),
-          //       Container(
-          //         width: 10,
-          //         height: 10,
-          //         decoration: const BoxDecoration(
-          //           color: Color.fromARGB(255, 0, 255, 8),
-          //           shape: BoxShape.circle,
-          //         ),
-          //       ),
-          //     ],
-          //   ),
-          // )
+          batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
+          batteryLevel == -1
+              ? const SizedBox.shrink()
+              : Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${batteryLevel.toString()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8.0),
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: batteryLevel > 75
+                              ? const Color.fromARGB(255, 0, 255, 8)
+                              : batteryLevel > 20
+                                  ? Colors.yellow.shade700
+                                  : Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
         ],
       ),
       const SizedBox(height: 64),
