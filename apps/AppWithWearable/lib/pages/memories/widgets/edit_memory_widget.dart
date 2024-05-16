@@ -1,19 +1,19 @@
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:uuid/uuid.dart';
-
-import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'edit_memory_model.dart';
 
 class EditMemoryWidget extends StatefulWidget {
+  final Function(String)? onMemoryEdited;
+
   const EditMemoryWidget({
     super.key,
     this.memory,
+    this.onMemoryEdited,
   });
 
   final MemoryRecord? memory;
@@ -139,27 +139,6 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Align(
-                          alignment: const AlignmentDirectional(0.0, 0.0),
-                          child: Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 10.0),
-                            child: InkWell(
-                              splashColor: Colors.transparent,
-                              focusColor: Colors.transparent,
-                              hoverColor: Colors.transparent,
-                              highlightColor: Colors.transparent,
-                              onTap: () async {
-                                Navigator.pop(context);
-                                await MemoryStorage.deleteMemory(widget.memory!.id);
-                              },
-                              child: FaIcon(
-                                FontAwesomeIcons.trash,
-                                color: FlutterFlowTheme.of(context).secondaryText,
-                                size: 24.0,
-                              ),
-                            ),
-                          ),
-                        ),
                         Row(
                           mainAxisSize: MainAxisSize.max,
                           children: [
@@ -168,9 +147,6 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                               child: FFButtonWidget(
                                 onPressed: () async {
                                   Navigator.pop(context);
-                                  if (widget.memory?.structuredMemory == '') {
-                                    await MemoryStorage.deleteMemory(widget.memory!.id);
-                                  }
                                 },
                                 text: 'Cancel',
                                 options: FFButtonOptions(
@@ -207,7 +183,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                                     await MemoryStorage.addMemory(memory);
                                     _model.createdMemoryManually = memory;
                                   }
-
+                                  widget.onMemoryEdited?.call(_model.textController.text);
                                   setState(() {});
                                 },
                                 text: 'Save',

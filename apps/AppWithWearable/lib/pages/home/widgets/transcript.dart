@@ -234,7 +234,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 30), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
       debugPrint('Creating memory from whispers');
       String transcript = '';
       if (customWebsocketTranscript.trim().isNotEmpty) {
@@ -252,9 +252,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         customWebsocketTranscript = '';
       });
       audioStorage?.clearAudioBytes();
-      // TODO: feedback user when memory is created, "question mark"
+      // TODO: proactive audio, and sends notifications telling like "Dude, don't say x like this, how frequently?
       // TODO: when memory created, do a vanishing effect, and put `memory creating ...` for 2 seconds
-
     });
   }
 

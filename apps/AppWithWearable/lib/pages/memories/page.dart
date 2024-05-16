@@ -14,7 +14,6 @@ import 'package:provider/provider.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/header_buttons.dart';
-import 'model.dart';
 import 'widgets/memory_list_item.dart';
 import 'widgets/memory_processing.dart';
 
@@ -26,13 +25,13 @@ class MemoriesPage extends StatefulWidget {
 }
 
 class _MemoriesPageState extends State<MemoriesPage> {
-  late MemoriesPageModel _model;
   String? dailySummary;
   String? weeklySummary;
   String? monthlySummary;
   late AudioPlayer _audioPlayer;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  final unFocusNode = FocusNode();
 
   _dailySummary() async {
     List<MemoryRecord> memories = await MemoryStorage.getMemoriesByDay(DateTime.now());
@@ -110,7 +109,6 @@ class _MemoriesPageState extends State<MemoriesPage> {
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => MemoriesPageModel());
     _dailySummary();
     _weeklySummary();
     _monthlySummary();
@@ -122,9 +120,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
 
   @override
   void dispose() {
-    _model.dispose();
     _audioPlayer.stop();
     _audioPlayer.dispose();
+    unFocusNode.dispose();
     super.dispose();
   }
 
@@ -134,8 +132,8 @@ class _MemoriesPageState extends State<MemoriesPage> {
 
     return Builder(
       builder: (context) => GestureDetector(
-        onTap: () => _model.unfocusNode.canRequestFocus
-            ? FocusScope.of(context).requestFocus(_model.unfocusNode)
+        onTap: () => unFocusNode.canRequestFocus
+            ? FocusScope.of(context).requestFocus(unFocusNode)
             : FocusScope.of(context).unfocus(),
         child: Scaffold(
           key: scaffoldKey,
@@ -153,7 +151,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
                 children: [
                   const SizedBox(height: 16),
                   HomePageSummariesButtons(
-                    model: _model,
+                    unFocusNode: unFocusNode,
                     dailySummary: dailySummary,
                     weeklySummary: weeklySummary,
                     monthlySummary: monthlySummary,
@@ -164,28 +162,28 @@ class _MemoriesPageState extends State<MemoriesPage> {
                     padding: const EdgeInsets.all(16),
                     child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
                         ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 32.0),
-                        child: EmptyMemoriesWidget(),
-                      ),
-                    )
+                            child: Padding(
+                              padding: EdgeInsets.only(top: 32.0),
+                              child: EmptyMemoriesWidget(),
+                            ),
+                          )
                         : ListView.builder(
-                      padding: EdgeInsets.zero,
-                      primary: false,
-                      shrinkWrap: true,
-                      scrollDirection: Axis.vertical,
-                      itemCount: FFAppState().memories.length,
-                      itemBuilder: (context, index) {
-                        return MemoryListItem(
-                          memory: FFAppState().memories[index],
-                          model: _model,
-                          playAudio: _playAudio,
-                          pauseAudio: _pauseAudio,
-                          resumeAudio: _resumeAudio,
-                          stopAudio: _stopAudio,
-                        );
-                      },
-                    ),
+                            padding: EdgeInsets.zero,
+                            primary: false,
+                            shrinkWrap: true,
+                            scrollDirection: Axis.vertical,
+                            itemCount: FFAppState().memories.length,
+                            itemBuilder: (context, index) {
+                              return MemoryListItem(
+                                memory: FFAppState().memories[index],
+                                unFocusNode: unFocusNode,
+                                playAudio: _playAudio,
+                                pauseAudio: _pauseAudio,
+                                resumeAudio: _resumeAudio,
+                                stopAudio: _stopAudio,
+                              );
+                            },
+                          ),
                   ),
                 ],
               )
