@@ -252,6 +252,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         customWebsocketTranscript = '';
       });
       audioStorage?.clearAudioBytes();
+      // TODO: feedback user when memory is created, "question mark"
+      // TODO: when memory created, do a vanishing effect, and put `memory creating ...` for 2 seconds
+
     });
   }
 
@@ -288,7 +291,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
     if (filteredNotEmptyWhispers.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.only(top: 88.0),
+        padding: EdgeInsets.only(top: 48.0),
         child: InfoButton(),
       );
     }
