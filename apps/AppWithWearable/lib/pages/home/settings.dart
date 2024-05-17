@@ -119,13 +119,7 @@ class SettingsBottomSheet extends StatelessWidget {
                                         : Theme.of(context).primaryColor,
                                   ),
                                   onPressed: () {
-                                    String response = await executeGptPrompt("Test prompt");
-                                    if (response == null) {
-                                      print(response)
-                                      showErrorToast("OpenAI API key is invalid");
-                                    }
                                     deepgramApiVisibilityCallback();
-
                                   },
                                 ),
                                 canBeDisabled: true),
@@ -156,11 +150,6 @@ class SettingsBottomSheet extends StatelessWidget {
                                         : Theme.of(context).primaryColor,
                                   ),
                                   onPressed: () {
-                                    String response = await executeGptPrompt("Test prompt");
-                                    if (response == null) {
-                                      print(response)
-                                      showErrorToast("OpenAI API key is invalid");
-                                    }
                                     openaiApiVisibilityCallback();
                                   },
                                 ),
@@ -303,8 +292,20 @@ class SettingsBottomSheet extends StatelessWidget {
   }
 
   _getSaveButton(BuildContext context) {
+      Future<bool> keysAreValid() async {
+        try {
+          String response = await executeGptPrompt("Test prompt");
+          return response != null;
+        } catch (e) {
+          return false;
+        }
+      }
     return ElevatedButton(
-      onPressed: () {
+      onPressed: () async {
+        if (!await keysAreValid()) {
+          showErrorToast('Your OpenAI Key is invalid or has reached quota.');
+          return;
+        }
         if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
           showDialog(
             context: context,

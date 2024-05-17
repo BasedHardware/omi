@@ -73,6 +73,7 @@ Future<dynamic> gptApiCall({
   File? audioFile,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
+  print(getOpenAIApiKeyForUsage());
   final headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
