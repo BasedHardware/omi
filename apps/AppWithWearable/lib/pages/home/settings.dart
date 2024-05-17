@@ -156,9 +156,12 @@ class SettingsBottomSheet extends StatelessWidget {
                                         : Theme.of(context).primaryColor,
                                   ),
                                   onPressed: () {
-                                    // setModalState(() {
+                                    String response = await executeGptPrompt("Test prompt");
+                                    if (response == null) {
+                                      print(response)
+                                      showErrorToast("OpenAI API key is invalid");
+                                    }
                                     openaiApiVisibilityCallback();
-                                    // });
                                   },
                                 ),
                                 canBeDisabled: true),
