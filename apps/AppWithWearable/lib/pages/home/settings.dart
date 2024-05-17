@@ -294,7 +294,7 @@ class SettingsBottomSheet extends StatelessWidget {
   _getSaveButton(BuildContext context) {
       Future<bool> keysAreValid() async {
         try {
-          String response = await executeGptPrompt("Test prompt");
+          String response = await executeGptPrompt("Test prompt", disableCache: true);
           return response != null;
         } catch (e) {
           return false;
@@ -302,10 +302,6 @@ class SettingsBottomSheet extends StatelessWidget {
       }
     return ElevatedButton(
       onPressed: () async {
-        if (!await keysAreValid()) {
-          showErrorToast('Your OpenAI Key is invalid or has reached quota.');
-          return;
-        }
         if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
           showDialog(
             context: context,
@@ -327,6 +323,10 @@ class SettingsBottomSheet extends StatelessWidget {
           return;
         }
         saveSettings();
+         if (!await keysAreValid()) {
+            showErrorToast('Your OpenAI Key is invalid or has reached quota.');
+            return;
+        } 
         Navigator.pop(context);
       },
       style: ButtonStyle(
