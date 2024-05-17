@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
+import "package:friend_private/utils/toasts.dart";
 
 class SettingsBottomSheet extends StatelessWidget {
   final bool areApiKeysSet;
@@ -100,6 +102,11 @@ class SettingsBottomSheet extends StatelessWidget {
                         ),
                         onPressed: () {
                           // setModalState(() {
+                          String response = await executeGptPrompt("Test prompt");
+                          if (response == null) {
+                            print(response)
+                            showErrorToast("OpenAI API key is invalid");
+                          }
                           openaiApiVisibilityCallback();
                           // });
                         },
