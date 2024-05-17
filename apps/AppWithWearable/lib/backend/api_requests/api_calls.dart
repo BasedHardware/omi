@@ -158,6 +158,37 @@ Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRec
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
+Future<String> adviseOnCurrentConversation(String transcript) async {
+  if (transcript.isEmpty) return '';
+  // if (transcript.contains('Speaker 0') &&
+  //     (!transcript.contains('Speaker 1') && !transcript.contains('Speaker 2') && !transcript.contains('Speaker 3'))) {
+  //   return '';
+  // }
+  // TODO: eventually determine who am I, and improve diarization, deepgram is no good
+  var prompt = '''
+    You are a conversation coach, you provide clear and concise advice for conversations in real time. 
+    The following is a transcript of the conversation (in progress) where most likely I am "Speaker 0", \
+    provide advice on my current way of speaking, and my interactions with the other speaker(s).
+    
+    Transcription:
+    ```
+    $transcript
+    ```
+    
+    Consider that the transcription is not perfect, so there might be mixed up words or sentences between speakers, try to work around that.
+    Also, it's possible that there's nothing word notifying the user about his interactions, in that case, output N/A.
+    Remember that the purpose of this advice, is to notify the user about his way of interacting in real time, so he can improve his communication skills.
+    Be concise and short, respond in 10 to 15 words.
+    '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
+  debugPrint(prompt);
+  var result = await executeGptPrompt(prompt);
+  if (result.contains('N/A')) return '';
+  return result;
+}
+
 Future<String> requestSummary(List<MemoryRecord> memories) async {
   var prompt = '''
     Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 

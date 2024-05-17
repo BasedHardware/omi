@@ -204,22 +204,25 @@ class _HomePageState extends State<HomePage> {
   void _saveSettings() async {
     final prefs = SharedPreferencesUtil();
     prefs.openAIApiKey = _openaiApiKeyController.text.trim();
-    prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
     prefs.gcpCredentials = _gcpCredentialsController.text.trim();
     prefs.gcpBucketName = _gcpBucketNameController.text.trim();
-    prefs.useFriendApiKeys = _useFriendApiKeys;
-    prefs.recordingsLanguage = _selectedLanguage;
-    prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
 
     bool requiresReset = false;
-    if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
+    if (_selectedLanguage != prefs.recordingsLanguage) {
+      prefs.recordingsLanguage = _selectedLanguage;
       requiresReset = true;
     }
-    if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
+    if (_deepgramApiKeyController.text != prefs.deepgramApiKey) {
+      prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
       requiresReset = true;
     }
-    if (_customWebsocketUrlController.text != prefs.getString('customWebsocketUrl')) {
+    if (_customWebsocketUrlController.text != prefs.customWebsocketUrl) {
+      prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
       requiresReset = true;
+    }
+    if (_useFriendApiKeys != prefs.useFriendApiKeys) {
+      requiresReset = true;
+      prefs.useFriendApiKeys = _useFriendApiKeys;
     }
     if (requiresReset) childWidgetKey.currentState?.resetState();
 
