@@ -20,6 +20,7 @@ Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String?
   } catch (e) {
     debugPrint('Error: $e');
     changeAppStateMemoryCreating();
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('There was an error creating your memory, please check your open AI API keys.')));
     return;
@@ -28,6 +29,7 @@ Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String?
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);
     changeAppStateMemoryCreating();
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text(
         'Recent Memory Discarded! Nothing useful. 😄',
@@ -37,6 +39,7 @@ Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String?
     ));
   } else {
     await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
       duration: Duration(seconds: 4),
