@@ -5,8 +5,10 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:sentry_logging/sentry_logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'backend/preferences.dart';
 import 'env/env.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'flutter_flow/internationalization.dart';
@@ -18,8 +20,7 @@ void main() async {
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
   await initializeNotifications();
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  bool userOnboarded = prefs.getBool('onboardingCompleted') ?? false;
+  await SharedPreferencesUtil.init();
   if (Env.sentryDSNKey?.isNotEmpty ?? false) {
     debugPrint('Sentry key: ${Env.sentryDSNKey}');
     await SentryFlutter.init(
@@ -27,19 +28,16 @@ void main() async {
         options.dsn = Env.sentryDSNKey;
         options.tracesSampleRate = 1.0;
         options.profilesSampleRate = 1.0;
-        options.beforeSend = (SentryEvent event, Hint hint) async {
-          // Modify the event here:
-          debugPrint('Sentry event: ${event.environment}');
-          return event;
-        };
         options.attachScreenshot = false;
         options.debug = false;
+        options.addIntegration(LoggingIntegration());
+        options.enableAutoPerformanceTracing = true;
         // options.environment = Env.environment ?? 'development';
       },
       appRunner: () => runApp(ChangeNotifierProvider(
         create: (context) => appState,
         child: MyApp(
-          entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
+          entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
         ),
       )),
     );
@@ -48,7 +46,7 @@ void main() async {
     runApp(ChangeNotifierProvider(
       create: (context) => appState,
       child: MyApp(
-        entryPage: userOnboarded ? const HomePage(btDevice: null) : null,
+        entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
       ),
     ));
   }

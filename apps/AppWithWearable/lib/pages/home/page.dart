@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -12,8 +14,6 @@ import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -41,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   final _gcpCredentialsController = TextEditingController();
   final _gcpBucketNameController = TextEditingController();
   final _customWebsocketUrlController = TextEditingController();
+  bool _useFriendApiKeys = true;
   bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -48,6 +49,8 @@ class _HomePageState extends State<HomePage> {
   final unFocusNode = FocusNode();
 
   StreamSubscription<BluetoothConnectionState>? connectionStateListener;
+  StreamSubscription? bleBatteryLevelListener;
+  int batteryLevel = -1;
 
   @override
   void initState() {
@@ -55,6 +58,7 @@ class _HomePageState extends State<HomePage> {
     if (widget.btDevice != null) {
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
       _initiateConnectionListener();
+      _initiateBleBatteryListener();
     } else {
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
@@ -62,6 +66,7 @@ class _HomePageState extends State<HomePage> {
             _device = friendDevice;
           });
           _initiateConnectionListener();
+          _initiateBleBatteryListener();
         }
       });
     }
@@ -69,11 +74,8 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
       // Check if the API keys are set
-      final prefs = await SharedPreferences.getInstance();
-      final deepgramApiKey = prefs.getString('deepgramApiKey');
-      final openaiApiKey = prefs.getString('openaiApiKey');
-
-      if ((deepgramApiKey?.isNotEmpty ?? false) && (openaiApiKey?.isNotEmpty ?? false)) {
+      final prefs = SharedPreferencesUtil();
+      if ((prefs.deepgramApiKey.isNotEmpty && prefs.openAIApiKey.isNotEmpty) || prefs.useFriendApiKeys) {
         // If both API keys are set, initialize the page and enable the DeviceDataWidget
         setState(() {
           _areApiKeysSet = true;
@@ -85,12 +87,27 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  _initiateBleBatteryListener() async {
+    if (bleBatteryLevelListener != null) return;
+    bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+      setState(() {
+        batteryLevel = value;
+      });
+    });
+  }
+
   _initiateConnectionListener() async {
     connectionStateListener = getConnectionStateListener(_device!.id, () {
+      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
+      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
+      // and we don't want to retry the websocket connection or something
       childWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;
       });
+      bleBatteryLevelListener?.cancel();
+      bleBatteryLevelListener = null;
+      // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
@@ -98,6 +115,7 @@ class _HomePageState extends State<HomePage> {
             _device = friendDevice;
           });
           clearNotification(1);
+          _initiateBleBatteryListener();
         }
       });
     }, () {
@@ -114,18 +132,20 @@ class _HomePageState extends State<HomePage> {
     _customWebsocketUrlController.dispose();
     unFocusNode.dispose();
     connectionStateListener?.cancel();
+    bleBatteryLevelListener?.cancel();
     super.dispose();
   }
 
   Future<void> _showSettingsBottomSheet() async {
     // Load API keys from shared preferences
-    final prefs = await SharedPreferences.getInstance();
-    _deepgramApiKeyController.text = prefs.getString('deepgramApiKey') ?? '';
-    _openaiApiKeyController.text = prefs.getString('openaiApiKey') ?? '';
-    _gcpCredentialsController.text = prefs.getString('gcpCredentials') ?? '';
-    _gcpBucketNameController.text = prefs.getString('gcpBucketName') ?? '';
-    _customWebsocketUrlController.text = prefs.getString('customWebsocketUrl') ?? '';
-    _selectedLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+    final prefs = SharedPreferencesUtil();
+    _deepgramApiKeyController.text = prefs.deepgramApiKey;
+    _openaiApiKeyController.text = prefs.openAIApiKey;
+    _gcpCredentialsController.text = prefs.gcpCredentials;
+    _gcpBucketNameController.text = prefs.gcpBucketName;
+    _customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
+    _selectedLanguage = prefs.recordingsLanguage;
+    _useFriendApiKeys = prefs.useFriendApiKeys;
 
     await showModalBottomSheet(
       context: context,
@@ -157,6 +177,12 @@ class _HomePageState extends State<HomePage> {
                       _selectedLanguage = value;
                     });
                   },
+                  useFriendAPIKeys: _useFriendApiKeys,
+                  onUseFriendAPIKeysChanged: (bool? value) {
+                    setModalState(() {
+                      _useFriendApiKeys = value ?? true;
+                    });
+                  },
                   deepgramApiVisibilityCallback: () {
                     setModalState(() {
                       deepgramApiIsVisible = !deepgramApiIsVisible;
@@ -176,22 +202,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('openaiApiKey', _openaiApiKeyController.text.trim());
-    await prefs.setString('gcpCredentials', _gcpCredentialsController.text.trim());
-    await prefs.setString('gcpBucketName', _gcpBucketNameController.text.trim());
+    final prefs = SharedPreferencesUtil();
+    prefs.openAIApiKey = _openaiApiKeyController.text.trim();
+    prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
+    prefs.gcpCredentials = _gcpCredentialsController.text.trim();
+    prefs.gcpBucketName = _gcpBucketNameController.text.trim();
+    prefs.useFriendApiKeys = _useFriendApiKeys;
+    prefs.recordingsLanguage = _selectedLanguage;
+    prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
 
     bool requiresReset = false;
     if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
-      await prefs.setString('recordingsLanguage', _selectedLanguage);
       requiresReset = true;
     }
     if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
-      await prefs.setString('deepgramApiKey', _deepgramApiKeyController.text.trim());
       requiresReset = true;
     }
     if (_customWebsocketUrlController.text != prefs.getString('customWebsocketUrl')) {
-      await prefs.setString('customWebsocketUrl', _customWebsocketUrlController.text.trim());
       requiresReset = true;
     }
     if (requiresReset) childWidgetKey.currentState?.resetState();
@@ -322,46 +349,46 @@ class _HomePageState extends State<HomePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          // TextButton( // Test button trigger sentry exception
-          //     onPressed: () {
-          //       var data = {};
-          //       print(data['123']!);
-          //     },
-          //     child: Text('Hiiiii'))
-          // SizedBox(width: 16.0), // TODO: battery score should go in here
-          // Container(
-          //   decoration: BoxDecoration(
-          //     color: Colors.transparent,
-          //     borderRadius: BorderRadius.circular(30),
-          //     border: Border.all(
-          //       color: Colors.white,
-          //       width: 1,
-          //     ),
-          //   ),
-          //   padding: const EdgeInsets.all(8.0),
-          //   child: Row(
-          //     mainAxisSize: MainAxisSize.min,
-          //     children: [
-          //       const Text(
-          //         '100%',
-          //         style: TextStyle(
-          //           color: Colors.white,
-          //           fontSize: 12,
-          //           fontWeight: FontWeight.bold,
-          //         ),
-          //       ),
-          //       const SizedBox(width: 8.0),
-          //       Container(
-          //         width: 10,
-          //         height: 10,
-          //         decoration: const BoxDecoration(
-          //           color: Color.fromARGB(255, 0, 255, 8),
-          //           shape: BoxShape.circle,
-          //         ),
-          //       ),
-          //     ],
-          //   ),
-          // )
+          batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
+          batteryLevel == -1
+              ? const SizedBox.shrink()
+              : Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${batteryLevel.toString()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8.0),
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: batteryLevel > 75
+                              ? const Color.fromARGB(255, 0, 255, 8)
+                              : batteryLevel > 20
+                                  ? Colors.yellow.shade700
+                                  : Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
         ],
       ),
       const SizedBox(height: 64),

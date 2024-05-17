@@ -2,18 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/enums/enums.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
-import 'package:friend_private/pages/memories/model.dart';
 import 'package:friend_private/pages/memories/widgets/summary_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class HomePageSummariesButtons extends StatefulWidget {
-  final MemoriesPageModel model;
   final String? dailySummary;
   final String? weeklySummary;
   final String? monthlySummary;
+  final FocusNode unFocusNode;
 
   const HomePageSummariesButtons(
-      {super.key, required this.model, this.dailySummary, this.weeklySummary, this.monthlySummary});
+      {super.key, this.dailySummary, this.weeklySummary, this.monthlySummary, required this.unFocusNode});
 
   @override
   State<HomePageSummariesButtons> createState() => _HomePageSummariesButtonsState();
@@ -124,8 +123,8 @@ class _HomePageSummariesButtonsState extends State<HomePageSummariesButtons> {
           backgroundColor: Colors.transparent,
           alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
           child: GestureDetector(
-            onTap: () => widget.model.unfocusNode.canRequestFocus
-                ? FocusScope.of(context).requestFocus(widget.model.unfocusNode)
+            onTap: () => widget.unFocusNode.canRequestFocus
+                ? FocusScope.of(context).requestFocus(widget.unFocusNode)
                 : FocusScope.of(context).unfocus(),
             child: SummaryWidget(
               summary: summary,

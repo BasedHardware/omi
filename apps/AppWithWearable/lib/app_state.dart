@@ -23,26 +23,16 @@ class FFAppState extends ChangeNotifier {
   Future initializePersistedState() async {
     prefs = await SharedPreferences.getInstance();
     _safeInit(() {
-      _speechWasActivatedByUser = prefs.getBool('ff_speechWasActivatedByUser') ?? _speechWasActivatedByUser;
-    });
-    _safeInit(() {
-      _firstIntroNotificationWasAlreadyCreated =
-          prefs.getBool('ff_firstIntroNotificationWasAlreadyCreated') ?? _firstIntroNotificationWasAlreadyCreated;
-    });
-    _safeInit(() {
-      _selectedLanguage = prefs.getString('ff_selectedLanguage') ?? _selectedLanguage;
-    });
-    _safeInit(() {
       if (prefs.containsKey('ff_chatHistory')) {
         try {
           _chatHistory = jsonDecode(prefs.getString('ff_chatHistory') ?? '');
         } catch (e) {
-          print("Can't decode persisted json. Error: $e.");
+          debugPrint("Can't decode persisted json. Error: $e.");
         }
       }
     });
     _safeInit(() async => {
-          memories = await MemoryStorage.getAllMemories(),
+          memories = await MemoryStorage.getAllMemories(filterOutUseless: true),
         });
   }
 
@@ -141,15 +131,6 @@ class FFAppState extends ChangeNotifier {
     _speechWorkin = _value;
   }
 
-  bool _speechWasActivatedByUser = false;
-
-  bool get speechWasActivatedByUser => _speechWasActivatedByUser;
-
-  set speechWasActivatedByUser(bool _value) {
-    _speechWasActivatedByUser = _value;
-    prefs.setBool('ff_speechWasActivatedByUser', _value);
-  }
-
   String _LastMemoryStructured = '';
 
   String get LastMemoryStructured => _LastMemoryStructured;
@@ -166,43 +147,12 @@ class FFAppState extends ChangeNotifier {
     _RecordingPopupIsShown = _value;
   }
 
-  List<dynamic> _dailyMemories = [];
-
-  List<dynamic> get dailyMemories => _dailyMemories;
-
-  set dailyMemories(List<dynamic> _value) {
-    _dailyMemories = _value;
-  }
-
   List<MemoryRecord> _memories = [];
 
   List<MemoryRecord> get memories => _memories;
 
   set memories(List<MemoryRecord> value) {
     _memories = value;
-  }
-
-  void addToDailyMemories(dynamic _value) {
-    _dailyMemories.add(_value);
-  }
-
-  void removeFromDailyMemories(dynamic _value) {
-    _dailyMemories.remove(_value);
-  }
-
-  void removeAtIndexFromDailyMemories(int _index) {
-    _dailyMemories.removeAt(_index);
-  }
-
-  void updateDailyMemoriesAtIndex(
-    int _index,
-    dynamic Function(dynamic) updateFn,
-  ) {
-    _dailyMemories[_index] = updateFn(_dailyMemories[_index]);
-  }
-
-  void insertAtIndexInDailyMemories(int _index, dynamic _value) {
-    _dailyMemories.insert(_index, _value);
   }
 
   String _openaidaily = '';
@@ -253,15 +203,6 @@ class FFAppState extends ChangeNotifier {
     _testCallBackIncrement = _value;
   }
 
-  bool _firstIntroNotificationWasAlreadyCreated = false;
-
-  bool get firstIntroNotificationWasAlreadyCreated => _firstIntroNotificationWasAlreadyCreated;
-
-  set firstIntroNotificationWasAlreadyCreated(bool _value) {
-    _firstIntroNotificationWasAlreadyCreated = _value;
-    prefs.setBool('ff_firstIntroNotificationWasAlreadyCreated', _value);
-  }
-
   List<LocaleStruct> _languages = [];
 
   List<LocaleStruct> get languages => _languages;
@@ -291,15 +232,6 @@ class FFAppState extends ChangeNotifier {
 
   void insertAtIndexInLanguages(int _index, LocaleStruct _value) {
     _languages.insert(_index, _value);
-  }
-
-  String _selectedLanguage = '';
-
-  String get selectedLanguage => _selectedLanguage;
-
-  set selectedLanguage(String _value) {
-    _selectedLanguage = _value;
-    prefs.setString('ff_selectedLanguage', _value);
   }
 
   String _feedback = '';
