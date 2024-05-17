@@ -241,7 +241,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   bool memoryCreating = false;
 
   _initiateConversationAdvisorTimer() {
-    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60*10), (timer) async {
+    // TODO: improvements
+    // - This triggers every 10 minutes when the app opens, but would be great if it triggered, every 10 min of conversation
+    // - And if the conversation finishes at 6 min, and memory is created, it should grab that portion not advised from, and advise
+    // - Each advice should be stored, and ideally mapped to a memory
+    // - Advice should consider conversations in other languages
+    // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
+    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
       var transcript = _buildDiarizedTranscriptMessage();
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
