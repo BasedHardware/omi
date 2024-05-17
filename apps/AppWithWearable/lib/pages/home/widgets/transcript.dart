@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -49,6 +50,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   String customWebsocketTranscript = '';
   IOWebSocketChannel? channelCustomWebsocket;
 
+  Timer? _conversationAdvisorTimer;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +59,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initBleConnection();
     });
+    _initiateConversationAdvisorTimer();
   }
 
   @override
@@ -73,38 +77,39 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _conversationAdvisorTimer?.cancel();
+    _memoryCreationTimer?.cancel();
+    debugPrint('TranscriptWidget disposed');
     super.dispose();
+
+    // TODO: cancel snackbars properly when in the background
   }
 
-  _pingWsKeepAlive() {
-    // TODO: try later
-    Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (channelCustomWebsocket != null) {
-        channelCustomWebsocket!.sink.add('ping');
-      }
-    });
+  updateTranscript(Map<int, String> transcriptBySpeaker) {
+    if (transcriptBySpeaker.isEmpty) return;
+    // debugPrint('Updating transcript with: $transcriptBySpeaker');
+    var copy = Map<int, String>.from(whispersDiarized.last);
+    transcriptBySpeaker.forEach((speaker, transcript) => copy[speaker] = transcript);
+    whispersDiarized[whispersDiarized.length - 1] = copy;
+    setState(() {});
+    // debugPrint('Updated whispersDiarized: $transcriptBySpeaker');
   }
 
   Future<void> initBleConnection() async {
     Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
         btDevice: widget.btDevice!,
-        speechFinalCallback: (_) {
+        speechFinalCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
           debugPrint("Deepgram Finalized Callback received");
-          setState(() {
+          updateTranscript(transcriptBySpeaker);
+          if (whispersDiarized.last.isNotEmpty) {
             whispersDiarized.add({});
-          });
-          _initiateTimer();
+          }
+          _initiateMemoryCreationTimer();
         },
-        interimCallback: (String transcript, Map<int, String> transcriptBySpeaker) {
+        interimCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
           _memoryCreationTimer?.cancel();
-          var copy = whispersDiarized[whispersDiarized.length - 1];
-          transcriptBySpeaker.forEach((speaker, transcript) {
-            copy[speaker] = transcript;
-          });
-          setState(() {
-            whispersDiarized[whispersDiarized.length - 1] = copy;
-          });
-          _initiateTimer(); // sometimes final speech callback is not made
+          updateTranscript(transcriptBySpeaker);
+          // _initiateTimer(); // FIXME sometimes final speech callback is not made, thus memory timer not started
         },
         onWebsocketConnectionSuccess: () {
           addEventToContext('Websocket Opened');
@@ -237,9 +242,23 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   bool memoryCreating = false;
 
-  _initiateTimer() {
+  _initiateConversationAdvisorTimer() {
+    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60*10), (timer) async {
+      addEventToContext('Conversation Advisor Timer Triggered');
+      var transcript = _buildDiarizedTranscriptMessage();
+      debugPrint('_initiateConversationAdvisorTimer: $transcript');
+      if (transcript.isEmpty || transcript.split(' ').length < 20) return;
+      var advice = await adviseOnCurrentConversation(transcript);
+      if (advice.isNotEmpty) {
+        clearNotification(3);
+        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
+      }
+    });
+  }
+
+  _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
       setState(() {
         memoryCreating = true;
       });
@@ -261,7 +280,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         memoryCreating = false;
       });
       audioStorage?.clearAudioBytes();
-      // TODO: proactive audio, and sends notifications telling like "Dude, don't say x like this, how frequently?
     });
   }
 
@@ -306,8 +324,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       );
     }
 
-    var filteredNotEmptyWhispers = whispersDiarized.where((e) => e.isNotEmpty).toList();
-    if (filteredNotEmptyWhispers.isEmpty) {
+    if (whispersDiarized[0].keys.isEmpty) {
       return const Padding(
         padding: EdgeInsets.only(top: 48.0),
         child: InfoButton(),
@@ -317,13 +334,15 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: filteredNotEmptyWhispers.length,
+      itemCount: whispersDiarized.length,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
-        final data = filteredNotEmptyWhispers[idx];
+        final data = whispersDiarized[idx];
+        var keys = data.keys.map((e) => e);
+        int totalSpeakers = keys.isNotEmpty ? (keys.reduce(max) + 1) : 0;
         String transcriptItem = '';
-        for (int speaker = 0; speaker < data.length; speaker++) {
+        for (int speaker = 0; speaker < totalSpeakers; speaker++) {
           if (data.containsKey(speaker)) {
             transcriptItem += 'Speaker $speaker: ${data[speaker]!} ';
           }
