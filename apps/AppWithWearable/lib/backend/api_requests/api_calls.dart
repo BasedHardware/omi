@@ -56,9 +56,9 @@ dynamic extractContentFromResponse(http.Response? response,
     }
     return data['choices'][0]['message']['content'];
   } else {
-    // TODO: include a global error handler + memory creation
     debugPrint('Error fetching data: ${response?.statusCode}');
-    return {'error': response?.statusCode};
+    throw Exception('Error fetching data: ${response?.statusCode}');
+    // return {'error': response?.statusCode};
   }
 }
 
@@ -108,6 +108,7 @@ Future<String> executeGptPrompt(String? prompt) async {
     {'role': 'system', 'content': prompt}
   ]);
   prefs.setGptCompletionCache(promptBase64, response);
+  debugPrint('executeGptPrompt response: $response');
   return response;
 }
 
@@ -154,7 +155,6 @@ Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRec
       .replaceAll('     ', '')
       .replaceAll('    ', '')
       .trim();
-  debugPrint(prompt);
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
 }
 
