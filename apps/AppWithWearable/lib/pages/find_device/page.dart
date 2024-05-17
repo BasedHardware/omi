@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -78,8 +79,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
 
   void _navigateToConnecting() async {
     if (_friendDevice == null) return;
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setBool('onboardingCompleted', true);
+    SharedPreferencesUtil().onboardingCompleted = true;
 
     context.pushNamed(
       'connectDevice',

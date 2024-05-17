@@ -39,13 +39,13 @@ void requestNotificationPermissions() {
   });
 }
 
-void createNotification({String title = '', String body = ''}) async {
+void createNotification({String title = '', String body = '', int notificationId = 1}) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: ${title}');
   AwesomeNotifications().createNotification(
       content: NotificationContent(
-    id: 1,
+    id: notificationId,
     channelKey: 'channel',
     actionType: ActionType.Default,
     title: title,

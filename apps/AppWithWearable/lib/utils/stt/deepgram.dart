@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
@@ -20,14 +19,13 @@ const String audioCharacteristicFormatUuid = "19b10002-e8f2-537e-4f6c-d104768a12
 Future<IOWebSocketChannel?> _initCustomStream({
   void Function(String)? onCustomWebSocketCallback,
 }) async {
-  final prefs = await SharedPreferences.getInstance();
-  final serverUrl = prefs.getString('customWebsocketUrl') ?? '';
-  final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+  final serverUrl = SharedPreferencesUtil().customWebsocketUrl;
   if (serverUrl.isEmpty) {
     debugPrint('Custom Websocket URL not set');
     return null;
   }
   debugPrint('Websocket Opening');
+  final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
   IOWebSocketChannel channel = IOWebSocketChannel.connect(Uri.parse('$serverUrl?language=$recordingsLanguage'));
   channel.ready.then((_) {
     channel.stream.listen(
@@ -67,27 +65,25 @@ Future<IOWebSocketChannel> _initStream(
     void Function(String) speechFinalCallback,
     void Function(String, Map<int, String>) interimCallback,
     VoidCallback onWebsocketConnectionSuccess,
-    VoidCallback onWebsocketConnectionFailed,
-    VoidCallback onWebsocketConnectionClosed,
+    void Function(dynamic) onWebsocketConnectionFailed,
+    void Function(int?, String?) onWebsocketConnectionClosed,
     void Function(dynamic) onWebsocketConnectionError) async {
-  final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('deepgramApiKey') ?? '';
-  // final apiKey = '123';
-  final recordingsLanguage = prefs.getString('recordingsLanguage') ?? 'en';
+  final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
 
   var serverUrl =
       'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=true&smart_format=true&diarize=true';
 
   debugPrint('Websocket Opening');
-  IOWebSocketChannel channel =
-      IOWebSocketChannel.connect(Uri.parse(serverUrl), headers: {'Authorization': 'Token $apiKey'});
+  IOWebSocketChannel channel = IOWebSocketChannel.connect(Uri.parse(serverUrl),
+      headers: {'Authorization': 'Token ${getDeepgramApiKeyForUsage()}'});
 
   channel.ready.then((_) {
     channel.stream.listen(
       (event) {
         // debugPrint('Event from Stream: $event');
         final parsedJson = jsonDecode(event);
-        // FIXME Receiver: null ~ Tried calling: []("alternatives")
+        if (parsedJson['channel'] == null || parsedJson['channel']['alternatives'] == null) return;
+
         final data = parsedJson['channel']['alternatives'][0];
         final transcript = data['transcript'];
         final speechFinal = parsedJson['is_final'];
@@ -102,7 +98,7 @@ Future<IOWebSocketChannel> _initStream(
           });
           // This is step 1 for diarization, but, sometimes "Speaker 1: Hello how"
           //   but it says it's the previous speaker (e.g. speaker 0), but in the next stream it fixes the transcript, and says it's speaker 1.
-          debugPrint(bySpeaker.toString());
+          // debugPrint(bySpeaker.toString());
           if (speechFinal) {
             interimCallback(transcript, bySpeaker);
             speechFinalCallback('');
@@ -112,34 +108,25 @@ Future<IOWebSocketChannel> _initStream(
         }
       },
       onError: (err) {
-        debugPrint('Websocket Error: $err');
-        addDeepgramEventContext('Websocket Error');
-        Sentry.captureException(err, stackTrace: err.stackTrace);
-        onWebsocketConnectionError(err);
+        // no closing reason or code
+        onWebsocketConnectionError(err); // error during connection
       },
       onDone: (() {
-        debugPrint('Websocket Closed');
-        addDeepgramEventContext('Websocket Closed');
-        onWebsocketConnectionClosed();
+        onWebsocketConnectionClosed(channel.closeCode, channel.closeReason);
       }),
       cancelOnError: true,
     );
-  }).onError((error, stackTrace) {
-    addDeepgramEventContext('Websocket Unable To Connect');
-    debugPrint("WebsocketChannel was unable to establish connection");
-    onWebsocketConnectionFailed();
+  }).onError((err, stackTrace) {
+    // no closing reason or code
+    onWebsocketConnectionFailed(err); // initial connection failed
   });
 
   try {
     await channel.ready;
-    debugPrint('Websocket Opened');
-    addDeepgramEventContext('Websocket Opened');
     onWebsocketConnectionSuccess();
   } catch (err) {
-    debugPrint("Websocket was unable to establish connection");
-    addDeepgramEventContext('Websocket Unable To Connect 2');
-    onWebsocketConnectionFailed();
-    Sentry.captureException(err);
+    // no closing reason or code (triggers onError anyways)
+    // onWebsocketConnectionFailed(err);
   }
   return channel;
 }
@@ -149,8 +136,8 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(String)? speechFinalCallback,
   void Function(String, Map<int, String>)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
-  VoidCallback? onWebsocketConnectionFailed,
-  VoidCallback? onWebsocketConnectionClosed,
+  void Function(dynamic)? onWebsocketConnectionFailed,
+  void Function(int?, String?)? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
 }) async {
@@ -174,6 +161,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     debugPrint('Discovered ${services.length} services');
 
     for (BluetoothService service in services) {
+      // debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
       if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.uuid.str128.toLowerCase() == audioCharacteristicUuid ||

@@ -51,7 +51,7 @@ class MemoryRecord {
 }
 
 _savedMemoryCallback() async {
-  var newMemories = await MemoryStorage.getAllMemories();
+  var newMemories = await MemoryStorage.getAllMemories(filterOutUseless: true);
   FFAppState().update(() {
     FFAppState().memories = newMemories;
   });
@@ -68,11 +68,14 @@ class MemoryStorage {
     _savedMemoryCallback();
   }
 
-  static Future<List<MemoryRecord>> getAllMemories() async {
+  static Future<List<MemoryRecord>> getAllMemories({bool filterOutUseless = true}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     List<MemoryRecord> memories =
         allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    if (!filterOutUseless) {
+      return memories.where((memory) => !(memory.rawMemory.split(' ').length < 10)).toList();
+    }
     return memories.where((memory) => !memory.isUseless).toList();
   }
 
