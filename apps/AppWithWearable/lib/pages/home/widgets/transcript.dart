@@ -81,8 +81,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     _memoryCreationTimer?.cancel();
     debugPrint('TranscriptWidget disposed');
     super.dispose();
-
-    // TODO: cancel snackbars properly when in the background
   }
 
   updateTranscript(Map<int, String> transcriptBySpeaker) {
@@ -258,7 +256,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
       setState(() {
         memoryCreating = true;
       });
