@@ -62,8 +62,8 @@ Future<IOWebSocketChannel?> _initCustomStream({
 }
 
 Future<IOWebSocketChannel> _initStream(
-    void Function(String) speechFinalCallback,
-    void Function(String, Map<int, String>) interimCallback,
+    void Function(Map<int, String>, String) speechFinalCallback,
+    void Function(Map<int, String>, String) interimCallback,
     VoidCallback onWebsocketConnectionSuccess,
     void Function(dynamic) onWebsocketConnectionFailed,
     void Function(int?, String?) onWebsocketConnectionClosed,
@@ -85,25 +85,31 @@ Future<IOWebSocketChannel> _initStream(
         if (parsedJson['channel'] == null || parsedJson['channel']['alternatives'] == null) return;
 
         final data = parsedJson['channel']['alternatives'][0];
+        // debugPrint('parsedJson: ${data.toString()}');
         final transcript = data['transcript'];
         final speechFinal = parsedJson['is_final'];
 
         if (transcript.length > 0) {
-          debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal');
+          debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal ~ ${data.toString()}');
           Map<int, String> bySpeaker = {};
           data['words'].forEach((word) {
             int speaker = word['speaker'];
-            bySpeaker[speaker] ??= '';
             bySpeaker[speaker] = '${(bySpeaker[speaker] ?? '') + word['punctuated_word']} ';
           });
+          int totalSpeakers = bySpeaker.keys.map((e) => e).reduce(max) + 1;
+          String transcriptItem = '';
+          for (int speaker = 0; speaker < totalSpeakers; speaker++) {
+            if (bySpeaker.containsKey(speaker)) {
+              transcriptItem += 'Speaker $speaker: ${bySpeaker[speaker]!} ';
+            }
+          }
           // This is step 1 for diarization, but, sometimes "Speaker 1: Hello how"
           //   but it says it's the previous speaker (e.g. speaker 0), but in the next stream it fixes the transcript, and says it's speaker 1.
           // debugPrint(bySpeaker.toString());
           if (speechFinal) {
-            interimCallback(transcript, bySpeaker);
-            speechFinalCallback('');
+            speechFinalCallback(bySpeaker, transcriptItem);
           } else {
-            interimCallback(transcript, bySpeaker);
+            interimCallback(bySpeaker, transcriptItem);
           }
         }
       },
@@ -133,8 +139,8 @@ Future<IOWebSocketChannel> _initStream(
 
 Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>> bleReceiveWAV({
   BTDeviceStruct? btDevice,
-  void Function(String)? speechFinalCallback,
-  void Function(String, Map<int, String>)? interimCallback,
+  void Function(Map<int, String>, String)? speechFinalCallback,
+  void Function(Map<int, String>, String)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
   void Function(dynamic)? onWebsocketConnectionFailed,
   void Function(int?, String?)? onWebsocketConnectionClosed,
