@@ -28,8 +28,19 @@ Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String?
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);
     changeAppStateMemoryCreating();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text(
+        'Recent Memory Discarded! Nothing useful. 😄',
+        style: TextStyle(color: Colors.white),
+      ),
+      duration: Duration(seconds: 4),
+    ));
   } else {
     await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
+      duration: Duration(seconds: 4),
+    ));
   }
 }
 
