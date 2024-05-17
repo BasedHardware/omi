@@ -104,6 +104,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
           setState(() {
             whispersDiarized[whispersDiarized.length - 1] = copy;
           });
+          _initiateTimer(); // sometimes final speech callback is not made
         },
         onWebsocketConnectionSuccess: () {
           addEventToContext('Websocket Opened');
@@ -234,9 +235,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     return transcript;
   }
 
+  bool memoryCreating = false;
+
   _initiateTimer() {
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
+      setState(() {
+        memoryCreating = true;
+      });
       debugPrint('Creating memory from whispers');
       String transcript = '';
       if (customWebsocketTranscript.trim().isNotEmpty) {
@@ -247,15 +253,15 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       debugPrint('Transcript: \n$transcript');
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
-      processTranscriptContent(transcript, fileName);
+      await processTranscriptContent(context, transcript, fileName);
       addEventToContext('Memory Created');
       setState(() {
         whispersDiarized = [{}];
         customWebsocketTranscript = '';
+        memoryCreating = false;
       });
       audioStorage?.clearAudioBytes();
       // TODO: proactive audio, and sends notifications telling like "Dude, don't say x like this, how frequently?
-      // TODO: when memory created, do a vanishing effect, and put `memory creating ...` for 2 seconds
     });
   }
 
@@ -286,6 +292,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
             ),
           ),
         ],
+      );
+    }
+
+    if (memoryCreating) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 48.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Colors.white,
+          ),
+        ),
       );
     }
 
