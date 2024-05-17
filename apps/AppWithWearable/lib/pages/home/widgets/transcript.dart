@@ -258,7 +258,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
       setState(() {
         memoryCreating = true;
       });
