@@ -247,7 +247,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       debugPrint('Transcript: \n$transcript');
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
-      processTranscriptContent(transcript, fileName);
+      processTranscriptContent(context, transcript, fileName);
       addEventToContext('Memory Created');
       setState(() {
         whispersDiarized = [{}];

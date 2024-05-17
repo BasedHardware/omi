@@ -6,15 +6,24 @@ import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 // Perform actions periodically
-Future<void> processTranscriptContent(String content, String? audioFileName) async {
-  if (content.isNotEmpty) await memoryCreationBlock(content, audioFileName);
+Future<void> processTranscriptContent(BuildContext context, String content, String? audioFileName) async {
+  if (content.isNotEmpty) await memoryCreationBlock(context, content, audioFileName);
 }
 
 // Process the creation of memory records
-Future<void> memoryCreationBlock(String rawMemory, String? audioFileName) async {
+Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String? audioFileName) async {
   changeAppStateMemoryCreating();
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
-  var structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
+  String structuredMemory;
+  try {
+    structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
+  } catch (e) {
+    debugPrint('Error: $e');
+    changeAppStateMemoryCreating();
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('There was an error creating your memory, please check your open AI API keys.')));
+    return;
+  }
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);
