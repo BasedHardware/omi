@@ -80,6 +80,8 @@ apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
 apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
 apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
 apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+apps/AppStandalone/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata
+apps/AppStandalone/ios/Runner.xcodeproj/xcuserdata
 
 apps/AppStandalone/lib/firebase_options.dart
 apps/AppStandalone/firebase.json
@@ -102,3 +104,9 @@ apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginR
 **/classic_triangle/assembly/
 **/classic_triangle/misc/
 **/step-versions/
+
+# vscode configuration
+.vscode/
+
+# test output
+test/recordings
