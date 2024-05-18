@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
 import "package:friend_private/utils/toasts.dart";
 
 class SettingsBottomSheet extends StatelessWidget {
@@ -20,7 +19,7 @@ class SettingsBottomSheet extends StatelessWidget {
   final VoidCallback deepgramApiVisibilityCallback;
   final VoidCallback openaiApiVisibilityCallback;
   final Function(String) onLanguageSelected;
-  final VoidCallback saveSettings;
+  final Future<bool> Function() saveSettings;
 
   const SettingsBottomSheet(
       {super.key,
@@ -292,14 +291,6 @@ class SettingsBottomSheet extends StatelessWidget {
   }
 
   _getSaveButton(BuildContext context) {
-      Future<bool> keysAreValid() async {
-        try {
-          String response = await executeGptPrompt("Test prompt", disableCache: true);
-          return response != null;
-        } catch (e) {
-          return false;
-        }
-      }
     return ElevatedButton(
       onPressed: () async {
         if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
@@ -322,12 +313,13 @@ class SettingsBottomSheet extends StatelessWidget {
           );
           return;
         }
-        saveSettings();
-         if (!await keysAreValid()) {
-            showErrorToast('Your OpenAI Key is invalid or has reached quota.');
-            return;
-        } 
-        Navigator.pop(context);
+        await saveSettings().then((success) {
+          if (success) {
+            Navigator.pop(context);
+          } else {
+            showErrorToast("OpenAI API key is invalid, enable billing and check quota");
+          }
+        });
       },
       style: ButtonStyle(
         backgroundColor: MaterialStateProperty.all<Color>(Colors.white),

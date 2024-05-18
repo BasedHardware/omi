@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
 import 'package:friend_private/pages/home/settings.dart';
@@ -201,7 +202,16 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _saveSettings() async {
+    Future<bool> keysAreValid() async {
+    try {
+      String response = await executeGptPrompt("Test prompt", disableCache: true);
+      return response != null;
+    } catch (e) {
+      return false;
+    }
+  }
+  Future<bool> _saveSettings() async {
+    bool keysValid = true;
     final prefs = SharedPreferencesUtil();
     prefs.openAIApiKey = _openaiApiKeyController.text.trim();
     prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
@@ -214,6 +224,11 @@ class _HomePageState extends State<HomePage> {
     bool requiresReset = false;
     if (_selectedLanguage != prefs.getString('recordingsLanguage')) {
       requiresReset = true;
+    }
+    if (!_useFriendApiKeys && (_openaiApiKeyController.text != prefs.getString('openAIApiKey'))) {
+      if (! await keysAreValid()) {
+        keysValid = false;
+      }
     }
     if (_deepgramApiKeyController.text != prefs.getString('deepgramApiKey')) {
       requiresReset = true;
@@ -229,6 +244,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _areApiKeysSet = true;
     });
+    return keysValid;
   }
 
   @override
