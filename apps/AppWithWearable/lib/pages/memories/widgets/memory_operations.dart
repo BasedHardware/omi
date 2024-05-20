@@ -38,7 +38,7 @@ geyShareMemoryOperationWidget(MemoryRecord memory, {double iconSize = 20}) {
       highlightColor: Colors.transparent,
       onTap: () async {
         await Share.share(
-          '${memory.structuredMemory}  Created with https://www.aisama.co/',
+          '${memory.structuredMemory}',
           sharePositionOrigin: getWidgetBoundingBox(context),
         );
         HapticFeedback.lightImpact();
