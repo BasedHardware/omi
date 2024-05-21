@@ -128,12 +128,6 @@ class _MemoriesPageState extends State<MemoriesPage> {
         child: Scaffold(
           key: scaffoldKey,
           backgroundColor: FlutterFlowTheme.of(context).primary,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: FlutterFlowTheme.of(context).primary,
-            title: const HomePageHeaderButtons(),
-            centerTitle: true,
-          ),
           body: Stack(
             children: [
               const BlurBotWidget(),

@@ -3,9 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
-import 'package:friend_private/pages/home/settings.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -16,17 +13,18 @@ import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
 import 'widgets/transcript.dart';
 
 class HomePage extends StatefulWidget {
   final Function refreshMemories;
   final dynamic btDevice;
+  final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
   const HomePage({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
+    required this.transcriptChildWidgetKey,
   });
 
   @override
@@ -34,20 +32,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  GlobalKey<TranscriptWidgetState> childWidgetKey = GlobalKey();
   BTDeviceStruct? _device;
-  bool deepgramApiIsVisible = false;
-  bool openaiApiIsVisible = false;
-  final _deepgramApiKeyController = TextEditingController();
-  final _openaiApiKeyController = TextEditingController();
-  final _gcpCredentialsController = TextEditingController();
-  final _gcpBucketNameController = TextEditingController();
-  final _customWebsocketUrlController = TextEditingController();
-  bool _useFriendApiKeys = true;
-  bool _areApiKeysSet = false;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  String _selectedLanguage = 'en';
   final unFocusNode = FocusNode();
 
   StreamSubscription<BluetoothConnectionState>? connectionStateListener;
@@ -73,20 +60,6 @@ class _HomePageState extends State<HomePage> {
       });
     }
     authenticateGCP();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      requestNotificationPermissions();
-      // Check if the API keys are set
-      final prefs = SharedPreferencesUtil();
-      if ((prefs.deepgramApiKey.isNotEmpty && prefs.openAIApiKey.isNotEmpty) || prefs.useFriendApiKeys) {
-        // If both API keys are set, initialize the page and enable the DeviceDataWidget
-        setState(() {
-          _areApiKeysSet = true;
-        });
-      } else {
-        // If any of the API keys are not set, show the settings bottom sheet
-        _showSettingsBottomSheet();
-      }
-    });
   }
 
   _initiateBleBatteryListener() async {
@@ -103,7 +76,7 @@ class _HomePageState extends State<HomePage> {
       // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
       // we don't want either way to trigger the websocket closed event, because it's closed on purpose
       // and we don't want to retry the websocket connection or something
-      childWidgetKey.currentState?.resetState(resetBLEConnection: false);
+      widget.transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
       setState(() {
         _device = null;
       });
@@ -121,119 +94,16 @@ class _HomePageState extends State<HomePage> {
         }
       });
     }, () {
-      childWidgetKey.currentState?.resetState(resetBLEConnection: true);
+      widget.transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
     });
   }
 
   @override
   void dispose() {
-    _deepgramApiKeyController.dispose();
-    _openaiApiKeyController.dispose();
-    _gcpCredentialsController.dispose();
-    _gcpBucketNameController.dispose();
-    _customWebsocketUrlController.dispose();
     unFocusNode.dispose();
     connectionStateListener?.cancel();
     bleBatteryLevelListener?.cancel();
     super.dispose();
-  }
-
-  Future<void> _showSettingsBottomSheet() async {
-    // Load API keys from shared preferences
-    final prefs = SharedPreferencesUtil();
-    _deepgramApiKeyController.text = prefs.deepgramApiKey;
-    _openaiApiKeyController.text = prefs.openAIApiKey;
-    _gcpCredentialsController.text = prefs.gcpCredentials;
-    _gcpBucketNameController.text = prefs.gcpBucketName;
-    _customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
-    _selectedLanguage = prefs.recordingsLanguage;
-    _useFriendApiKeys = prefs.useFriendApiKeys;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20.0),
-          topRight: Radius.circular(20.0),
-        ),
-      ),
-      builder: (BuildContext context) {
-        return PopScope(
-            canPop: _areApiKeysSet,
-            child: StatefulBuilder(
-              builder: (context, StateSetter setModalState) {
-                return SettingsBottomSheet(
-                  areApiKeysSet: _areApiKeysSet,
-                  deepgramApiKeyController: _deepgramApiKeyController,
-                  openaiApiKeyController: _openaiApiKeyController,
-                  deepgramApiIsVisible: deepgramApiIsVisible,
-                  openaiApiIsVisible: openaiApiIsVisible,
-                  gcpCredentialsController: _gcpCredentialsController,
-                  gcpBucketNameController: _gcpBucketNameController,
-                  customWebsocketUrlController: _customWebsocketUrlController,
-                  selectedLanguage: _selectedLanguage,
-                  onLanguageSelected: (String value) {
-                    setModalState(() {
-                      _selectedLanguage = value;
-                    });
-                  },
-                  useFriendAPIKeys: _useFriendApiKeys,
-                  onUseFriendAPIKeysChanged: (bool? value) {
-                    setModalState(() {
-                      _useFriendApiKeys = value ?? true;
-                    });
-                  },
-                  deepgramApiVisibilityCallback: () {
-                    setModalState(() {
-                      deepgramApiIsVisible = !deepgramApiIsVisible;
-                    });
-                  },
-                  openaiApiVisibilityCallback: () {
-                    setModalState(() {
-                      openaiApiIsVisible = !openaiApiIsVisible;
-                    });
-                  },
-                  saveSettings: _saveSettings,
-                );
-              },
-            ));
-      },
-    );
-  }
-
-  void _saveSettings() async {
-    final prefs = SharedPreferencesUtil();
-    prefs.openAIApiKey = _openaiApiKeyController.text.trim();
-    prefs.gcpCredentials = _gcpCredentialsController.text.trim();
-    prefs.gcpBucketName = _gcpBucketNameController.text.trim();
-
-    bool requiresReset = false;
-    if (_selectedLanguage != prefs.recordingsLanguage) {
-      prefs.recordingsLanguage = _selectedLanguage;
-      requiresReset = true;
-    }
-    if (_deepgramApiKeyController.text != prefs.deepgramApiKey) {
-      prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
-      requiresReset = true;
-    }
-    if (_customWebsocketUrlController.text != prefs.customWebsocketUrl) {
-      prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
-      requiresReset = true;
-    }
-    if (_useFriendApiKeys != prefs.useFriendApiKeys) {
-      requiresReset = true;
-      prefs.useFriendApiKeys = _useFriendApiKeys;
-    }
-    if (requiresReset) childWidgetKey.currentState?.resetState();
-
-    if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
-      authenticateGCP();
-    }
-    setState(() {
-      _areApiKeysSet = true;
-    });
   }
 
   @override
@@ -245,16 +115,15 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: FlutterFlowTheme.of(context).primary,
-        appBar: _getAppBar(),
         body: Stack(
           children: [
             const BlurBotWidget(),
             ListView(children: [
               ..._getConnectedDeviceWidgets(),
-              _areApiKeysSet && _device != null
+              _device != null
                   ? TranscriptWidget(
                       btDevice: _device!,
-                      key: childWidgetKey,
+                      key: widget.transcriptChildWidgetKey,
                       refreshMemories: widget.refreshMemories,
                     )
                   : const SizedBox.shrink(),
@@ -262,49 +131,6 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-    );
-  }
-
-  _getAppBar() {
-    return AppBar(
-      backgroundColor: FlutterFlowTheme.of(context).primary,
-      automaticallyImplyLeading: false,
-      title: FFButtonWidget(
-        onPressed: () async {
-          context.pushNamed('memoriesPage');
-        },
-        text: 'Memories ↗',
-        options: FFButtonOptions(
-          padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
-          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-          color: FlutterFlowTheme.of(context).primary,
-          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                color: const Color(0xFFF7F4F4),
-                fontSize: 18.0,
-                fontWeight: FontWeight.bold,
-                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-              ),
-          elevation: 0.0,
-          borderSide: const BorderSide(
-            color: Colors.transparent,
-            width: 0.0,
-          ),
-          borderRadius: BorderRadius.circular(24.0),
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(
-            Icons.settings,
-            color: Colors.white,
-            size: 30,
-          ),
-          onPressed: _showSettingsBottomSheet,
-        ),
-      ],
-      centerTitle: false,
-      elevation: 2.0,
     );
   }
 
