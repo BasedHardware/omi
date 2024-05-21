@@ -6,29 +6,27 @@ import '/backend/api_requests/api_calls.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 // Perform actions periodically
-Future<void> processTranscriptContent(BuildContext context, String content, String? audioFileName) async {
-  if (content.isNotEmpty) await memoryCreationBlock(context, content, audioFileName);
+Future<MemoryRecord?> processTranscriptContent(BuildContext context, String content, String? audioFileName) async {
+  if (content.isNotEmpty) return await memoryCreationBlock(context, content, audioFileName);
+  return null;
 }
 
 // Process the creation of memory records
-Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String? audioFileName) async {
-  changeAppStateMemoryCreating();
+Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String rawMemory, String? audioFileName) async {
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
   String structuredMemory;
   try {
     structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
   } catch (e) {
     debugPrint('Error: $e');
-    changeAppStateMemoryCreating();
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('There was an error creating your memory, please check your open AI API keys.')));
-    return;
+    return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
   if (structuredMemory.contains("N/A")) {
     await saveFailureMemory(rawMemory, structuredMemory);
-    changeAppStateMemoryCreating();
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text(
@@ -38,13 +36,15 @@ Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String?
       duration: Duration(seconds: 4),
     ));
   } else {
-    await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
+    MemoryRecord memory = await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
       duration: Duration(seconds: 4),
     ));
+    return memory;
   }
+  return null;
 }
 
 // Save failure memory when structured memory contains NA
@@ -59,19 +59,11 @@ Future<void> saveFailureMemory(String rawMemory, String structuredMemory) async 
   MemoryStorage.addMemory(memory);
 }
 
-// Update app state when starting memory processing
-void changeAppStateMemoryCreating() {
-  FFAppState().update(() {
-    FFAppState().memoryCreationProcessing = !FFAppState().memoryCreationProcessing;
-  });
-}
-
 // Finalize memory record after processing feedback
-Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory, String? audioFilePath) async {
+Future<MemoryRecord> finalizeMemoryRecord(String rawMemory, String structuredMemory, String? audioFilePath) async {
   MemoryRecord createdMemory = await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
-  changeAppStateMemoryCreating();
-  List<double> vector = await getEmbeddingsFromInput(structuredMemory);
-  storeMemoryVector(createdMemory, vector);
+  getEmbeddingsFromInput(structuredMemory).then((vector) => storeMemoryVector(createdMemory, vector));
+  return createdMemory;
   // storeMemoryVector
 }
 

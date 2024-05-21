@@ -170,19 +170,7 @@ class _EditMemoryWidgetState extends State<EditMemoryWidget> {
                               FFButtonWidget(
                                 onPressed: () async {
                                   Navigator.pop(context);
-                                  if ((widget.memory != null) == true) {
-                                    await MemoryStorage.updateMemory(widget.memory!.id, _model.textController.text);
-                                  } else {
-                                    var memory = MemoryRecord(
-                                        id: const Uuid().v4(),
-                                        date: DateTime.now(),
-                                        rawMemory: 'User-added memory',
-                                        structuredMemory: _model.textController.text,
-                                        isEmpty: false,
-                                        isUseless: false);
-                                    await MemoryStorage.addMemory(memory);
-                                    _model.createdMemoryManually = memory;
-                                  }
+                                  await MemoryStorage.updateMemory(widget.memory!.id, _model.textController.text);
                                   widget.onMemoryEdited?.call(_model.textController.text);
                                   setState(() {});
                                 },

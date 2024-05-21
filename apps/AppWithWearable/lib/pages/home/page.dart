@@ -1,39 +1,29 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_widgets.dart';
-import 'package:friend_private/pages/home/settings.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
+import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/device/page.dart';
+import 'package:friend_private/pages/device/settings.dart';
+import 'package:friend_private/pages/device/widgets/transcript.dart';
+import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:friend_private/widgets/scanning_animation.dart';
-import 'package:friend_private/widgets/scanning_ui.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import 'widgets/transcript.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({
-    super.key,
-    required this.btDevice,
-  });
-
+class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
 
+  const HomePageWrapper({super.key, this.btDevice});
+
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
-class _HomePageState extends State<HomePage> {
-  GlobalKey<TranscriptWidgetState> childWidgetKey = GlobalKey();
-  BTDeviceStruct? _device;
+class _HomePageWrapperState extends State<HomePageWrapper> {
+  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
+  int _selectedIndex = 1;
+  List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
+  List<MemoryRecord> memories = [];
   bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
   final _deepgramApiKeyController = TextEditingController();
@@ -42,98 +32,21 @@ class _HomePageState extends State<HomePage> {
   final _gcpBucketNameController = TextEditingController();
   final _customWebsocketUrlController = TextEditingController();
   bool _useFriendApiKeys = true;
-  bool _areApiKeysSet = false;
-
-  final scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedLanguage = 'en';
-  final unFocusNode = FocusNode();
 
-  StreamSubscription<BluetoothConnectionState>? connectionStateListener;
-  StreamSubscription? bleBatteryLevelListener;
-  int batteryLevel = -1;
+  _initiateMemories() async {
+    memories = await MemoryStorage.getAllMemories(filterOutUseless: true);
+    setState(() {});
+  }
 
   @override
   void initState() {
-    super.initState();
-    if (widget.btDevice != null) {
-      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
-      _initiateConnectionListener();
-      _initiateBleBatteryListener();
-    } else {
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          setState(() {
-            _device = friendDevice;
-          });
-          _initiateConnectionListener();
-          _initiateBleBatteryListener();
-        }
-      });
-    }
-    authenticateGCP();
+    // _refreshMemories();
+    _initiateMemories();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
-      // Check if the API keys are set
-      final prefs = SharedPreferencesUtil();
-      if ((prefs.deepgramApiKey.isNotEmpty && prefs.openAIApiKey.isNotEmpty) || prefs.useFriendApiKeys) {
-        // If both API keys are set, initialize the page and enable the DeviceDataWidget
-        setState(() {
-          _areApiKeysSet = true;
-        });
-      } else {
-        // If any of the API keys are not set, show the settings bottom sheet
-        _showSettingsBottomSheet();
-      }
     });
-  }
-
-  _initiateBleBatteryListener() async {
-    if (bleBatteryLevelListener != null) return;
-    bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
-      setState(() {
-        batteryLevel = value;
-      });
-    });
-  }
-
-  _initiateConnectionListener() async {
-    connectionStateListener = getConnectionStateListener(_device!.id, () {
-      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
-      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
-      // and we don't want to retry the websocket connection or something
-      childWidgetKey.currentState?.resetState(resetBLEConnection: false);
-      setState(() {
-        _device = null;
-      });
-      bleBatteryLevelListener?.cancel();
-      bleBatteryLevelListener = null;
-      // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
-      createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          setState(() {
-            _device = friendDevice;
-          });
-          clearNotification(1);
-          _initiateBleBatteryListener();
-        }
-      });
-    }, () {
-      childWidgetKey.currentState?.resetState(resetBLEConnection: true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _deepgramApiKeyController.dispose();
-    _openaiApiKeyController.dispose();
-    _gcpCredentialsController.dispose();
-    _gcpBucketNameController.dispose();
-    _customWebsocketUrlController.dispose();
-    unFocusNode.dispose();
-    connectionStateListener?.cancel();
-    bleBatteryLevelListener?.cancel();
-    super.dispose();
+    super.initState();
   }
 
   Future<void> _showSettingsBottomSheet() async {
@@ -159,11 +72,10 @@ class _HomePageState extends State<HomePage> {
       ),
       builder: (BuildContext context) {
         return PopScope(
-            canPop: _areApiKeysSet,
+            canPop: true,
             child: StatefulBuilder(
               builder: (context, StateSetter setModalState) {
                 return SettingsBottomSheet(
-                  areApiKeysSet: _areApiKeysSet,
                   deepgramApiKeyController: _deepgramApiKeyController,
                   openaiApiKeyController: _openaiApiKeyController,
                   deepgramApiIsVisible: deepgramApiIsVisible,
@@ -224,177 +136,88 @@ class _HomePageState extends State<HomePage> {
       requiresReset = true;
       prefs.useFriendApiKeys = _useFriendApiKeys;
     }
-    if (requiresReset) childWidgetKey.currentState?.resetState();
+    if (requiresReset) transcriptChildWidgetKey.currentState?.resetState();
 
     if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
     }
+  }
+
+  void _onItemTapped(int index) {
     setState(() {
-      _areApiKeysSet = true;
+      _selectedIndex = index;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => unFocusNode.canRequestFocus
-          ? FocusScope.of(context).requestFocus(unFocusNode)
-          : FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
-        appBar: _getAppBar(),
-        body: Stack(
+    return Scaffold(
+      body: Center(
+        child: IndexedStack(
+          index: _selectedIndex,
           children: [
-            const BlurBotWidget(),
-            ListView(children: [
-              ..._getConnectedDeviceWidgets(),
-              _areApiKeysSet && _device != null
-                  ? TranscriptWidget(
-                      btDevice: _device!,
-                      key: childWidgetKey,
-                    )
-                  : const SizedBox.shrink(),
-            ]),
+            MemoriesPage(
+              memories: memories,
+              refreshMemories: _initiateMemories,
+            ),
+            HomePage(
+                btDevice: widget.btDevice,
+                refreshMemories: _initiateMemories,
+                transcriptChildWidgetKey: transcriptChildWidgetKey),
+            const ChatPage(),
           ],
         ),
       ),
-    );
-  }
-
-  _getAppBar() {
-    return AppBar(
-      backgroundColor: FlutterFlowTheme.of(context).primary,
-      automaticallyImplyLeading: false,
-      title: FFButtonWidget(
-        onPressed: () async {
-          context.pushNamed('memoriesPage');
-        },
-        text: 'Memories ↗',
-        options: FFButtonOptions(
-          padding: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
-          iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-          color: FlutterFlowTheme.of(context).primary,
-          textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                color: const Color(0xFFF7F4F4),
-                fontSize: 18.0,
-                fontWeight: FontWeight.bold,
-                useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-              ),
-          elevation: 0.0,
-          borderSide: const BorderSide(
-            color: Colors.transparent,
-            width: 0.0,
-          ),
-          borderRadius: BorderRadius.circular(24.0),
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(
-            Icons.settings,
-            color: Colors.white,
-            size: 30,
-          ),
-          onPressed: _showSettingsBottomSheet,
-        ),
-      ],
-      centerTitle: false,
-      elevation: 2.0,
-    );
-  }
-
-  _getConnectedDeviceWidgets() {
-    if (_device == null) {
-      return [
-        const SizedBox(height: 64),
-        const ScanningAnimation(),
-        const ScanningUI(
-          string1: 'Looking for Friend wearable',
-          string2: 'Locating your Friend device. Keep it near your phone for pairing',
-        ),
-      ];
-    }
-    return [
-      const SizedBox(height: 64),
-      const Center(
-          child: ScanningAnimation(
-        sizeMultiplier: 0.4,
-      )),
-      const SizedBox(height: 16),
-      Center(
-          child: Text(
-        'Connected Device',
-        style: FlutterFlowTheme.of(context).bodyMedium.override(
-              fontFamily: 'SF Pro Display',
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: FlutterFlowTheme.of(context).primary,
+        title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+        elevation: 2.0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.settings,
               color: Colors.white,
-              fontSize: 29.0,
-              letterSpacing: 0.0,
-              fontWeight: FontWeight.w700,
-              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-              lineHeight: 1.2,
+              size: 30,
             ),
-        textAlign: TextAlign.center,
-      )),
-      const SizedBox(height: 8),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '${_device?.name ?? 'Friend'} ~ ${_device?.id.split('-').last.substring(0, 6)}',
-            style: const TextStyle(
-              color: Color.fromARGB(255, 255, 255, 255),
-              fontSize: 16.0,
-              fontWeight: FontWeight.w500,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
-          batteryLevel == -1
-              ? const SizedBox.shrink()
-              : Container(
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 1,
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${batteryLevel.toString()}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8.0),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: batteryLevel > 75
-                              ? const Color.fromARGB(255, 0, 255, 8)
-                              : batteryLevel > 20
-                                  ? Colors.yellow.shade700
-                                  : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+            onPressed: _showSettingsBottomSheet,
+          )
         ],
       ),
-      const SizedBox(height: 64),
-    ];
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: FlutterFlowTheme.of(context).primary,
+        elevation: 0,
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: 'Memories',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bluetooth_connected),
+            label: 'Device',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat),
+            label: 'Chat',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Colors.grey.shade700,
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _deepgramApiKeyController.dispose();
+    _openaiApiKeyController.dispose();
+    _gcpCredentialsController.dispose();
+    _gcpBucketNameController.dispose();
+    _customWebsocketUrlController.dispose();
+    super.dispose();
   }
 }

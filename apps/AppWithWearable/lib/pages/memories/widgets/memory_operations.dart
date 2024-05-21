@@ -20,10 +20,10 @@ getMemoryOperations(MemoryRecord memory, FocusNode unFocusNode, StateSetter setS
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         geyShareMemoryOperationWidget(memory),
-        const SizedBox(width: 10.0),
-        getEditMemoryOperationWidget(memory, unFocusNode, setState),
-        const SizedBox(width: 10.0),
-        getDeleteMemoryOperationWidget(memory, unFocusNode, setState),
+        // const SizedBox(width: 10.0),
+        // getEditMemoryOperationWidget(memory, unFocusNode, setState),
+        // const SizedBox(width: 10.0),
+        // getDeleteMemoryOperationWidget(memory, unFocusNode, setState),
       ],
     ),
   );
@@ -38,7 +38,7 @@ geyShareMemoryOperationWidget(MemoryRecord memory, {double iconSize = 20}) {
       highlightColor: Colors.transparent,
       onTap: () async {
         await Share.share(
-          '${memory.structuredMemory}',
+          memory.structuredMemory,
           sharePositionOrigin: getWidgetBoundingBox(context),
         );
         HapticFeedback.lightImpact();
