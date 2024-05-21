@@ -120,7 +120,7 @@ String qaStreamedBody(String context, List<Message> chatHistory) {
       .replaceAll('    ', '');
   debugPrint(prompt);
   var body = jsonEncode({
-    "model": "gpt-4-turbo",
+    "model": "gpt-4o",
     "messages": [
       {"role": "system", "content": prompt}
     ],

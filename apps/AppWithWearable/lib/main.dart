@@ -25,7 +25,7 @@ void main() async {
         options.tracesSampleRate = 1.0;
         options.profilesSampleRate = 1.0;
         options.attachScreenshot = false;
-        options.debug = false;
+        options.debug = true;
         options.addIntegration(LoggingIntegration());
         options.enableAutoPerformanceTracing = true;
       },
