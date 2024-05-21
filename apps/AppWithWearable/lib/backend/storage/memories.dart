@@ -50,13 +50,6 @@ class MemoryRecord {
       memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n');
 }
 
-_savedMemoryCallback() async {
-  var newMemories = await MemoryStorage.getAllMemories(filterOutUseless: true);
-  FFAppState().update(() {
-    FFAppState().memories = newMemories;
-  });
-}
-
 class MemoryStorage {
   static const String _storageKey = 'memories';
 
@@ -65,7 +58,6 @@ class MemoryStorage {
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     allMemories.add(jsonEncode(memory.toJson()));
     await prefs.setStringList(_storageKey, allMemories);
-    _savedMemoryCallback();
   }
 
   static Future<List<MemoryRecord>> getAllMemories({bool filterOutUseless = true}) async {
@@ -118,7 +110,6 @@ class MemoryStorage {
       allMemories[index] = jsonEncode(updatedRecord.toJson());
       await prefs.setStringList(_storageKey, allMemories);
     }
-    _savedMemoryCallback();
   }
 
   static Future<void> deleteMemory(String memoryId) async {
@@ -129,7 +120,6 @@ class MemoryStorage {
       allMemories.removeAt(index);
       await prefs.setStringList(_storageKey, allMemories);
     }
-    _savedMemoryCallback();
   }
 
   static Future<List<MemoryRecord>> getMemoriesByDay(DateTime day) async {
