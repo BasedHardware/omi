@@ -1,6 +1,10 @@
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/vector_db.dart';
+import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/text_field.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -89,7 +93,7 @@ class _ChatPageState extends State<ChatPage> {
                     onSendPressed: () async {
                       String message = _model.textController.text;
                       if (message.isEmpty) return;
-                      await _prepareStreaming(message);
+                      _prepareStreaming(message);
                       String ragContext = await _retrieveRAGContext(message);
                       debugPrint('RAG Context: $ragContext');
                       await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
@@ -106,12 +110,24 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<String> _retrieveRAGContext(String message) async {
-    // List<Memory> memories = await getMemories(query: message);
-    // return Memory.memoriesToString(memories);
-    return '';
+    String? betterContextQuestion = await determineRequiresContext(message, retrieveMostRecentMessages(_messages));
+    debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
+    if (betterContextQuestion == null) {
+      return '';
+    }
+    List<double> vectorizedMessage = await getEmbeddingsFromInput(
+      message,
+    );
+    List<String> memoriesId = querySimilarVectors(vectorizedMessage);
+    debugPrint('querySimilarVectors memories retrieved: $memoriesId');
+    if (memoriesId.isEmpty) {
+      return '';
+    }
+    List<MemoryRecord> memories = await MemoryStorage.getAllMemoriesByIds(memoriesId);
+    return MemoryRecord.memoriesToString(memories);
   }
 
-  _prepareStreaming(String text) async {
+  _prepareStreaming(String text) {
     var messagesCopy = [..._messages];
     messagesCopy.add(Message(text: text, type: 'human', id: const Uuid().v4()));
     setState(() {
@@ -120,7 +136,7 @@ class _ChatPageState extends State<ChatPage> {
       _model.textController?.clear();
     });
     prefs.chatMessages = messagesCopy;
-    await _moveListToBottom();
+    _moveListToBottom();
     // include initial empty message for streaming to save in
     _messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
   }
