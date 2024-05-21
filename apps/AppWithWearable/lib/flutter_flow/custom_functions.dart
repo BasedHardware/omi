@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/storage/message.dart';
 
 dynamic saveChatHistory(
   dynamic chatHistory,
@@ -38,7 +39,7 @@ bool? stringContainsString(
 }
 
 // TODO: truncate to certain token length instead of messages count
-List<dynamic> retrieveMostRecentMessages(List<dynamic> ogChatHistory, {int count = 5}) {
+List<Message> retrieveMostRecentMessages(List<Message> ogChatHistory, {int count = 5}) {
   if (ogChatHistory.length > count) {
     return ogChatHistory.sublist(ogChatHistory.length - count);
   }
