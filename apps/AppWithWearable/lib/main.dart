@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
-import 'package:friend_private/pages/wrapper.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:sentry_logging/sentry_logging.dart';
@@ -38,7 +38,7 @@ void main() async {
 
 _getRunApp() {
   return runApp(MyApp(
-    entryPage: SharedPreferencesUtil().onboardingCompleted ? const BottomNavWrapper(btDevice: null) : null,
+    entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null,
   ));
 }
 
