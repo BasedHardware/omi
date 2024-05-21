@@ -3,10 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
-import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:sentry_logging/sentry_logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -17,8 +15,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
 
-  final appState = FFAppState(); // Initialize FFAppState
-  await appState.initializePersistedState();
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   if (Env.sentryDSNKey?.isNotEmpty ?? false) {
@@ -32,26 +28,18 @@ void main() async {
         options.debug = false;
         options.addIntegration(LoggingIntegration());
         options.enableAutoPerformanceTracing = true;
-        // options.environment = Env.environment ?? 'development';
       },
-      appRunner: () => runApp(ChangeNotifierProvider(
-        create: (context) => appState,
-        child: MyApp(
-          entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
-        ),
-      )),
+      appRunner: () => _getRunApp(),
     );
-    // Sentry.configureScope((scope) => scope.level = SentryLevel.info);
   } else {
-    runApp(ChangeNotifierProvider(
-      create: (context) => appState,
-      child: MyApp(
-        entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
-      ),
-    ));
+    _getRunApp();
   }
+}
 
-  // bool userOnboarded = false;
+_getRunApp() {
+  return runApp(MyApp(
+    entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null,
+  ));
 }
 
 class MyApp extends StatefulWidget {

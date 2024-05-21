@@ -3,7 +3,6 @@ import 'package:friend_private/backend/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsBottomSheet extends StatelessWidget {
-  final bool areApiKeysSet;
   final TextEditingController deepgramApiKeyController;
   final TextEditingController openaiApiKeyController;
   final TextEditingController gcpCredentialsController;
@@ -22,7 +21,6 @@ class SettingsBottomSheet extends StatelessWidget {
 
   const SettingsBottomSheet(
       {super.key,
-      required this.areApiKeysSet,
       required this.deepgramApiKeyController,
       required this.openaiApiKeyController,
       required this.gcpCredentialsController,

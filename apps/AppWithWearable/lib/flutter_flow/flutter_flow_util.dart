@@ -19,7 +19,6 @@ export 'dart:typed_data' show Uint8List;
 export 'package:intl/intl.dart';
 export 'package:page_transition/page_transition.dart';
 
-export '../app_state.dart';
 export 'flutter_flow_model.dart';
 export 'internationalization.dart' show FFLocalizations;
 export 'lat_lng.dart';

@@ -13,6 +13,7 @@ class MemoryListItem extends StatefulWidget {
   final Function(MemoryRecord) resumeAudio;
   final Function(MemoryRecord) stopAudio;
   final FocusNode unFocusNode;
+  final Function loadMemories;
 
   const MemoryListItem(
       {super.key,
@@ -21,7 +22,8 @@ class MemoryListItem extends StatefulWidget {
       required this.playAudio,
       required this.pauseAudio,
       required this.resumeAudio,
-      required this.stopAudio});
+      required this.stopAudio,
+      required this.loadMemories});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -31,9 +33,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         debugPrint('Tapped memory: ${widget.memory.id}');
-        context.pushNamed(
+        await context.pushNamed(
           'memoryDetailPage',
           queryParameters: {
             'memory': serializeParam(
@@ -42,6 +44,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
             ),
           }.withoutNulls,
         );
+        widget.loadMemories();
       },
       child: Container(
         margin: const EdgeInsets.only(top: 12),
