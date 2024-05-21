@@ -144,4 +144,30 @@ class MemoryStorage {
   static bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+
+  static insertMemoryAtIndex(MemoryRecord memory, {int index = 0}) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
+    allMemories.insert(index, jsonEncode(memory.toJson()));
+    await prefs.setStringList(_storageKey, allMemories);
+  }
+
+  static setMostRecentMemoryInProgress() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
+    if (allMemories.isNotEmpty) {
+      MemoryRecord firstMemory = MemoryRecord.fromJson(jsonDecode(allMemories[0]));
+      if (firstMemory.structuredMemory == 'in_progress') {
+        return;
+      }
+    }
+    insertMemoryAtIndex(MemoryRecord(
+      id: '1',
+      date: DateTime.now(),
+      rawMemory: 'in_progress',
+      structuredMemory: 'in_progress',
+      isEmpty: true,
+      isUseless: true,
+    ));
+  }
 }

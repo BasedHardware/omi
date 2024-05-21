@@ -73,52 +73,6 @@ class _ChatPageState extends State<ChatPage> {
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: FlutterFlowTheme.of(context).primary,
-        appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: false,
-          title: Row(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              FFButtonWidget(
-                onPressed: () async {
-                  context.safePop();
-                },
-                text: '',
-                icon: const Icon(
-                  Icons.arrow_back_rounded,
-                  size: 24.0,
-                ),
-                options: FFButtonOptions(
-                  width: 44.0,
-                  height: 44.0,
-                  padding: const EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 0.0, 0.0),
-                  iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                  color: const Color(0x1AF7F4F4),
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        fontFamily: FlutterFlowTheme.of(context).titleSmallFamily,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleSmallFamily),
-                      ),
-                  elevation: 3.0,
-                  borderSide: const BorderSide(
-                    color: Colors.transparent,
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.circular(24.0),
-                ),
-              ),
-              const Text('Chat'),
-              const SizedBox(width: 32),
-            ],
-          ),
-          actions: const [],
-          centerTitle: false,
-          toolbarHeight: 66.0,
-          elevation: 2.0,
-        ),
         body: Stack(
           children: [
             const BlurBotWidget(),

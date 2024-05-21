@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -88,12 +89,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   updateTranscript(Map<int, String> transcriptBySpeaker) {
     if (transcriptBySpeaker.isEmpty) return;
-    // debugPrint('Updating transcript with: $transcriptBySpeaker');
     var copy = Map<int, String>.from(whispersDiarized.last);
     transcriptBySpeaker.forEach((speaker, transcript) => copy[speaker] = transcript);
     whispersDiarized[whispersDiarized.length - 1] = copy;
     setState(() {});
-    // debugPrint('Updated whispersDiarized: $transcriptBySpeaker');
   }
 
   Future<void> initBleConnection() async {
@@ -265,7 +264,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 5), () async {
+      await MemoryStorage.deleteMemory('1');
+      await MemoryStorage.setMostRecentMemoryInProgress();
+      widget.refreshMemories();
       setState(() {
         memoryCreating = true;
       });
@@ -280,6 +282,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
       await processTranscriptContent(context, transcript, fileName);
+      await MemoryStorage.deleteMemory('1');
+      await widget.refreshMemories();
       addEventToContext('Memory Created');
       setState(() {
         whispersDiarized = [{}];
