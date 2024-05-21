@@ -41,7 +41,7 @@ class ContentResponse {
 class Choices {
   int? index;
   Delta? delta;
-  Message? message;
+  OpenAIMessage? message;
   String? finishReason;
 
   Choices({this.index, this.delta, this.message, this.finishReason}); // Fixed spacing
@@ -50,7 +50,7 @@ class Choices {
     String? a = json['message'].toString();
     index = json['index'];
     delta = json['delta'] != null ? new Delta.fromJson(json['delta']) : null;
-    message = json['message'] != null ? Message.fromJson(json['message']) : null; // Corrected
+    message = json['message'] != null ? OpenAIMessage.fromJson(json['message']) : null; // Corrected
     finishReason = json['finish_reason']; // Fixed assignment syntax
   }
 
@@ -83,13 +83,13 @@ class Delta {
   }
 }
 
-class Message {
+class OpenAIMessage {
   String? role;
   String? content;
 
-  Message({this.role, this.content});
+  OpenAIMessage({this.role, this.content});
 
-  Message.fromJson(Map<String, dynamic> json) {
+  OpenAIMessage.fromJson(Map<String, dynamic> json) {
     role = json['role'];
     content = json['content'];
   }

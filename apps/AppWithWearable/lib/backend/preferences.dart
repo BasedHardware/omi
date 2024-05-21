@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +53,16 @@ class SharedPreferencesUtil {
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key') ?? '';
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
+
+  List<Message> get chatMessages {
+    final List<String> messages = getStringList('messages') ?? [];
+    return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
+  }
+
+  set chatMessages(List<Message> value) {
+    final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('messages', messages);
+  }
 
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
