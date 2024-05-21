@@ -35,7 +35,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   String _selectedLanguage = 'en';
 
   _initiateMemories() async {
-    memories = await MemoryStorage.getAllMemories(filterOutUseless: true);
+    memories = await MemoryStorage.getAllMemories();
     setState(() {});
   }
 

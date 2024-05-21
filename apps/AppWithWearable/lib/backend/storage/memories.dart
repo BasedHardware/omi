@@ -1,58 +1,105 @@
-import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class MemoryRecord {
-  String id;
-  DateTime date;
-  String rawMemory;
-  String structuredMemory;
-  bool isEmpty;
-  bool isUseless;
-  String? audioFileName;
-  PlayerState playerState = PlayerState.stopped;
+class Structured {
+  String title;
+  String overview;
+  List<String> actionItems;
 
-  MemoryRecord({
-    required this.id,
-    required this.date,
-    required this.rawMemory,
-    required this.structuredMemory,
-    required this.isEmpty,
-    required this.isUseless,
-    this.audioFileName,
+  Structured({
+    this.title = "",
+    this.overview = "",
+    required this.actionItems,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'date': date.toIso8601String(),
-      'rawMemory': rawMemory,
-      'structuredMemory': structuredMemory,
-      'isEmpty': isEmpty,
-      'isUseless': isUseless,
-      'audioFileName': audioFileName ?? '',
-    };
+  factory Structured.fromJson(Map<String, dynamic> json) => Structured(
+        title: json['title'],
+        overview: json['overview'],
+        actionItems: List<String>.from(json['action_items']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'overview': overview,
+        'action_items': List<dynamic>.from(actionItems),
+      };
+
+  @override
+  String toString() {
+    var str = '';
+    str += 'Title: $title\n';
+    str += 'Summary: $overview\n';
+    if (actionItems.isNotEmpty) {
+      str += 'Action Items:\n';
+    }
+    for (var item in actionItems) {
+      str += '  - $item\n';
+    }
+    return str;
+  }
+}
+
+class MemoryRecord {
+  String transcript;
+  String id;
+
+  // String uid;
+  DateTime createdAt;
+  Structured structured;
+  bool discarded;
+
+  MemoryRecord({
+    required this.transcript,
+    required this.id,
+    // required this.uid,
+    required this.createdAt,
+    required this.structured,
+    this.discarded = false,
+  });
+
+  factory MemoryRecord.fromJson(Map<String, dynamic> json) => MemoryRecord(
+        transcript: json['transcript'],
+        id: json['id'],
+        // uid: json['uid'],
+        createdAt: DateTime.parse(json['created_at']),
+        structured: Structured.fromJson(json['structured']),
+        discarded: json['discarded'] ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'transcript': transcript,
+        'id': id,
+        // 'uid': uid,
+        'created_at': createdAt.toIso8601String(),
+        'structured': structured.toJson(),
+        'discarded': discarded,
+      };
+
+  static List<MemoryRecord> fromJsonList(List<dynamic> jsonList) {
+    List<MemoryRecord> memories = [];
+    for (var json in jsonList) {
+      memories.add(MemoryRecord.fromJson(json));
+    }
+    return memories;
   }
 
-  factory MemoryRecord.fromJson(Map<String, dynamic> json) {
-    return MemoryRecord(
-      id: json['id'],
-      date: DateTime.parse(json['date']),
-      rawMemory: json['rawMemory'],
-      structuredMemory: json['structuredMemory'],
-      isEmpty: json['isEmpty'],
-      isUseless: json['isUseless'],
-      audioFileName: json['audioFileName'],
-    );
-  }
+  String getStructuredString() => structured.toString();
 
-  static String memoriesToString(List<MemoryRecord> memories) =>
-      memories.map((e) => '${e.date.toIso8601String().split('.')[0]}\n${e.structuredMemory}').join('\n\n');
+  static String memoriesToString(List<MemoryRecord> memories) => memories
+      .map((e) => '''
+      ${e.createdAt.toIso8601String().split('.')[0]}
+      Title: ${e.structured.title}
+      Summary: ${e.structured.overview}
+      ${e.structured.actionItems.isNotEmpty ? 'Action Items:' : ''}
+      ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
+      '''
+          .replaceAll('      ', '')
+          .trim())
+      .join('\n\n');
 }
 
 class MemoryStorage {
-  static const String _storageKey = 'memories';
+  static const String _storageKey = '_memories';
 
   static Future<void> addMemory(MemoryRecord memory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -61,18 +108,12 @@ class MemoryStorage {
     await prefs.setStringList(_storageKey, allMemories);
   }
 
-  static Future<List<MemoryRecord>> getAllMemories({bool filterOutUseless = true}) async {
+  static Future<List<MemoryRecord>> getAllMemories() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     List<MemoryRecord> memories =
-    allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
-    if (!filterOutUseless) {
-      return memories.where((memory) =>
-      !(memory.rawMemory
-          .split(' ')
-          .length < 10)).toList();
-    }
-    return memories.where((memory) => !memory.isUseless).toList();
+        allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    return memories.where((memory) => !memory.discarded).toList();
   }
 
   static Future<List<MemoryRecord>> getAllMemoriesByIds(List<String> memoriesId) async {
@@ -90,29 +131,29 @@ class MemoryStorage {
     List<MemoryRecord> allMemories = await getAllMemories();
     DateTime now = DateTime.now();
     DateTime timeLimit = now.subtract(Duration(minutes: minutes));
-    var filtered = allMemories.where((memory) => memory.date.isAfter(timeLimit)).toList();
+    var filtered = allMemories.where((memory) => memory.createdAt.isAfter(timeLimit)).toList();
     if (filtered.length > count) {
       filtered = filtered.sublist(0, count);
     }
     return filtered;
   }
 
-  static Future<void> updateMemory(String memoryId, String updatedMemory) async {
+  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) =>
-    MemoryRecord
-        .fromJson(jsonDecode(memory))
-        .id == memoryId);
+    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
     if (index >= 0 && index < allMemories.length) {
       MemoryRecord oldMemory = MemoryRecord.fromJson(jsonDecode(allMemories[index]));
       MemoryRecord updatedRecord = MemoryRecord(
         id: oldMemory.id,
-        date: oldMemory.date,
-        rawMemory: oldMemory.rawMemory,
-        structuredMemory: updatedMemory,
-        isEmpty: updatedMemory.isEmpty,
-        isUseless: updatedMemory.isEmpty,
+        createdAt: oldMemory.createdAt,
+        transcript: oldMemory.transcript,
+        structured: Structured(
+          title: updatedTitle,
+          overview: updatedDescription,
+          actionItems: oldMemory.structured.actionItems,
+        ),
+        discarded: oldMemory.discarded,
       );
       allMemories[index] = jsonEncode(updatedRecord.toJson());
       await prefs.setStringList(_storageKey, allMemories);
@@ -122,10 +163,7 @@ class MemoryStorage {
   static Future<void> deleteMemory(String memoryId) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) =>
-    MemoryRecord
-        .fromJson(jsonDecode(memory))
-        .id == memoryId);
+    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
     if (index >= 0 && index < allMemories.length) {
       allMemories.removeAt(index);
       await prefs.setStringList(_storageKey, allMemories);
@@ -134,51 +172,28 @@ class MemoryStorage {
 
   static Future<List<MemoryRecord>> getMemoriesByDay(DateTime day) async {
     List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories.where((memory) => isSameDay(memory.date, day)).toList();
+    return allMemories.where((memory) => isSameDay(memory.createdAt, day)).toList();
   }
 
   static Future<List<MemoryRecord>> getMemoriesOfLastWeek() async {
     DateTime now = DateTime.now();
     DateTime lastWeekStart = now.subtract(Duration(days: now.weekday + 6));
     List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories.where((memory) => memory.date.isAfter(lastWeekStart) && memory.date.isBefore(now)).toList();
+    return allMemories
+        .where((memory) => memory.createdAt.isAfter(lastWeekStart) && memory.createdAt.isBefore(now))
+        .toList();
   }
 
   static Future<List<MemoryRecord>> getMemoriesOfLastMonth() async {
     DateTime now = DateTime.now();
     DateTime lastMonthStart = DateTime(now.year, now.month - 1, 1);
     List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories.where((memory) => memory.date.isAfter(lastMonthStart) && memory.date.isBefore(now)).toList();
+    return allMemories
+        .where((memory) => memory.createdAt.isAfter(lastMonthStart) && memory.createdAt.isBefore(now))
+        .toList();
   }
 
   static bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  static insertMemoryAtIndex(MemoryRecord memory, {int index = 0}) async {
-    debugPrint('insertMemoryAtIndex: ${memory.toJson()}');
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    allMemories.insert(index, jsonEncode(memory.toJson()));
-    await prefs.setStringList(_storageKey, allMemories);
-  }
-
-  static setMostRecentMemoryInProgress() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    if (allMemories.isNotEmpty) {
-      MemoryRecord firstMemory = MemoryRecord.fromJson(jsonDecode(allMemories[0]));
-      if (firstMemory.structuredMemory == 'in_progress') {
-        return;
-      }
-    }
-    insertMemoryAtIndex(MemoryRecord(
-      id: '1',
-      date: DateTime.now(),
-      rawMemory: 'in_progress',
-      structuredMemory: 'in_progress',
-      isEmpty: false,
-      isUseless: false,
-    ));
   }
 }

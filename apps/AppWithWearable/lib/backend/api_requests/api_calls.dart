@@ -112,18 +112,23 @@ Future<String> executeGptPrompt(String? prompt) async {
   return response;
 }
 
+_getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
+  var prevMemoriesStr = MemoryRecord.memoriesToString(previousMemories);
+  return prevMemoriesStr.isNotEmpty
+      ? '''\nFor extra context consider the previous recent memories:
+    These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
+    if there's some connection within those memories and the one that we are structuring right now.
+    For example if the user is talking about a project, and the previous memories explain more about the project, use that information to \
+    structure the new memory.\n
+    ```
+    $prevMemoriesStr
+    ```\n'''
+      : '';
+}
+
 Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRecord> previousMemories) async {
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final language = availableLanguagesByCode[languageCode] ?? 'English';
-
-  var prevMemoriesStr = '';
-  // seconds or minutes ago
-  for (var value in previousMemories) {
-    var timePassed = DateTime.now().difference(value.date).inMinutes < 1
-        ? '${DateTime.now().difference(value.date).inSeconds} seconds ago'
-        : '${DateTime.now().difference(value.date).inMinutes} minutes ago';
-    prevMemoriesStr += '$timePassed\n${value.structuredMemory}\n\n';
-  }
 
   var prompt = '''
     ${languageCode == 'en' ? 'Generate a title and a summary for the following recording chunk of a conversation.' : 'Generate a title and a summary in English for the following recording chunk of a conversation that was performed in $language.'} 
@@ -135,14 +140,8 @@ Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRec
     Is possible that the conversation is empty or is useless, in that case output "N/A".
     
     Here is the recording ```${rawMemory.trim()}```.
-    ${prevMemoriesStr.isNotEmpty ? '''\nFor extra context consider the previous recent memories:
-    These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
-    if there's some connection within those memories and the one that we are structuring right now.
-    For example if the user is talking about a project, and the previous memories explain more about the project, use that information to \
-    structure the new memory.\n
-    ```
-    $prevMemoriesStr
-    ```\n''' : ''}
+    ${_getPrevMemoriesStr(previousMemories)}
+    
     Output using the following format:
     ```
     Title: ... 
@@ -156,6 +155,35 @@ Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRec
       .replaceAll('    ', '')
       .trim();
   return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
+}
+
+Future<Structured> generateTitleAndSummaryForMemory2(String transcript, List<MemoryRecord> previousMemories) async {
+  final languageCode = SharedPreferencesUtil().recordingsLanguage;
+  var prompt =
+      '''Based on the following recording transcript of a conversation, structure the memory in a structured format.
+    The conversation language is $languageCode. Make sure to use English for your response.
+
+    For the title, use the main topic of the conversation.
+    For the overview, use a brief overview of the conversation.
+    For the action items, use a list of actionable steps or bullet points for the conversation. 
+        
+    Here is the transcript ```${transcript.trim()}```.
+    ${_getPrevMemoriesStr(previousMemories)}
+    
+    The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+    As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+    the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+    
+    Here is the output schema:
+    ```
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}}}
+    ```'''
+          .replaceAll('     ', '')
+          .replaceAll('    ', '')
+          .trim();
+  var structured = (await executeGptPrompt(prompt)).replaceAll('```', '').replaceAll('json', '').trim();
+  return Structured.fromJson(jsonDecode(structured));
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
@@ -201,8 +229,8 @@ Future<String> requestSummary(List<MemoryRecord> memories) async {
   return await executeGptPrompt(prompt);
 }
 
-Future<List<double>> getEmbeddingsFromInput(String? input) async {
-  var vector = await gptApiCall(model: 'text-embedding-3-small', urlSuffix: 'embeddings', contentToEmbed: input ?? '');
+Future<List<double>> getEmbeddingsFromInput(String input) async {
+  var vector = await gptApiCall(model: 'text-embedding-3-small', urlSuffix: 'embeddings', contentToEmbed: input);
   return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
 }
 

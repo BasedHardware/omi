@@ -265,8 +265,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
-      // await MemoryStorage.deleteMemory('1');
-      // await MemoryStorage.setMostRecentMemoryInProgress();
       widget.refreshMemories();
       setState(() {
         memoryCreating = true;
@@ -282,7 +280,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
       File file = await audioStorage!.createWavFile();
       String? fileName = await uploadFile(file);
       await processTranscriptContent(context, transcript, fileName);
-      // await MemoryStorage.deleteMemory('1');
       await widget.refreshMemories();
       addEventToContext('Memory Created');
       setState(() {
