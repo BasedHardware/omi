@@ -12,11 +12,12 @@ Future<MemoryRecord?> processTranscriptContent(BuildContext context, String cont
 }
 
 // Process the creation of memory records
-Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String rawMemory, String? audioFileName) async {
+Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcript, String? audioFileName) async {
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
-  String structuredMemory;
+  Structured structuredMemory;
   try {
-    structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
+    // structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
+    structuredMemory = await generateTitleAndSummaryForMemory2(transcript, recentMemories);
   } catch (e) {
     debugPrint('Error: $e');
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -25,8 +26,8 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String rawMemory
     return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
-  if (structuredMemory.contains("N/A")) {
-    await saveFailureMemory(rawMemory, structuredMemory);
+  if (structuredMemory.title.isEmpty) {
+    await saveFailureMemory(transcript, structuredMemory);
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text(
@@ -36,7 +37,7 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String rawMemory
       duration: Duration(seconds: 4),
     ));
   } else {
-    MemoryRecord memory = await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
+    MemoryRecord memory = await finalizeMemoryRecord(transcript, structuredMemory, audioFileName);
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
@@ -47,36 +48,34 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String rawMemory
   return null;
 }
 
-// Save failure memory when structured memory contains NA
-Future<void> saveFailureMemory(String rawMemory, String structuredMemory) async {
+// Save failure memory when structured memory contains empty string
+Future<void> saveFailureMemory(String transcript, Structured structuredMemory) async {
   MemoryRecord memory = MemoryRecord(
       id: const Uuid().v4(),
-      date: DateTime.now(),
-      rawMemory: rawMemory,
-      structuredMemory: structuredMemory,
-      isEmpty: rawMemory == '',
-      isUseless: true);
+      createdAt: DateTime.now(),
+      transcript: transcript,
+      structured: structuredMemory,
+      discarded: true);
   MemoryStorage.addMemory(memory);
 }
 
 // Finalize memory record after processing feedback
-Future<MemoryRecord> finalizeMemoryRecord(String rawMemory, String structuredMemory, String? audioFilePath) async {
-  MemoryRecord createdMemory = await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
-  getEmbeddingsFromInput(structuredMemory).then((vector) => storeMemoryVector(createdMemory, vector));
+Future<MemoryRecord> finalizeMemoryRecord(String transcript, Structured structuredMemory, String? audioFilePath) async {
+  MemoryRecord createdMemory = await createMemoryRecord(transcript, structuredMemory, audioFilePath);
+  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) => storeMemoryVector(createdMemory, vector));
   return createdMemory;
   // storeMemoryVector
 }
 
 // Create memory record
-Future<MemoryRecord> createMemoryRecord(String rawMemory, String structuredMemory, String? audioFileName) async {
+Future<MemoryRecord> createMemoryRecord(String transcript, Structured structured, String? audioFileName) async {
   var memory = MemoryRecord(
-      id: const Uuid().v4(),
-      date: DateTime.now(),
-      rawMemory: rawMemory,
-      structuredMemory: structuredMemory,
-      isEmpty: rawMemory == '',
-      isUseless: false,
-      audioFileName: audioFileName);
+    id: const Uuid().v4(),
+    createdAt: DateTime.now(),
+    transcript: transcript,
+    structured: structured,
+    discarded: false,
+  );
   MemoryStorage.addMemory(memory);
   debugPrint('createMemoryRecord added memory: ${memory.id}');
   return memory;

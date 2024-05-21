@@ -1,29 +1,14 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
-import 'package:friend_private/pages/memories/widgets/structured_memory.dart';
 
 class MemoryListItem extends StatefulWidget {
   final MemoryRecord memory;
-  final Function(MemoryRecord) playAudio;
-  final Function(MemoryRecord) pauseAudio;
-  final Function(MemoryRecord) resumeAudio;
-  final Function(MemoryRecord) stopAudio;
   final FocusNode unFocusNode;
   final Function loadMemories;
 
-  const MemoryListItem(
-      {super.key,
-      required this.memory,
-      required this.unFocusNode,
-      required this.playAudio,
-      required this.pauseAudio,
-      required this.resumeAudio,
-      required this.stopAudio,
-      required this.loadMemories});
+  const MemoryListItem({super.key, required this.memory, required this.unFocusNode, required this.loadMemories});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -57,12 +42,25 @@ class _MemoryListItemState extends State<MemoryListItem> {
           padding: const EdgeInsetsDirectional.all(8),
           child: Column(
             mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _getMemoryHeader(),
-              getStructuredMemoryWidget(context, widget.memory),
-              _noInsightsWidget(),
-              // _getAudioPlayer(),
+              const SizedBox(height: 12),
+              Text(widget.memory.structured.overview,
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
+              if (widget.memory.structured.actionItems.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                const Text('Action Items:',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                ..._getActionItems(),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -70,19 +68,16 @@ class _MemoryListItemState extends State<MemoryListItem> {
     );
   }
 
-  _noInsightsWidget() {
-    return widget.memory.isUseless
-        ? const Padding(
-            padding: EdgeInsets.only(left: 8, bottom: 4),
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Text(
-                'No insights',
-                style: TextStyle(color: Colors.red, decoration: TextDecoration.underline),
-              ),
-            ),
-          )
-        : const SizedBox.shrink();
+  List<Widget> _getActionItems() {
+    return widget.memory.structured.actionItems.map((actionItem) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: Text(
+          '- $actionItem',
+          style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.2),
+        ),
+      );
+    }).toList();
   }
 
   _getMemoryHeader() {
@@ -91,40 +86,12 @@ class _MemoryListItemState extends State<MemoryListItem> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            dateTimeFormat('MMM d, h:mm a', widget.memory.date),
-            style: FlutterFlowTheme.of(context).bodyLarge,
-          ),
+          Expanded(
+              child: Text(widget.memory.structured.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
           getMemoryOperations(widget.memory, widget.unFocusNode, setState),
         ],
       ),
     );
-  }
-
-  _getAudioPlayer() {
-    return (widget.memory.audioFileName?.isNotEmpty ?? false)
-        ? Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Recording:'),
-              IconButton(
-                icon: Icon(widget.memory.playerState == PlayerState.playing ? Icons.pause : Icons.play_arrow),
-                onPressed: widget.memory.playerState == PlayerState.playing
-                    ? () => widget.pauseAudio(widget.memory)
-                    : widget.memory.playerState == PlayerState.paused
-                        ? () => widget.resumeAudio(widget.memory)
-                        : () => widget.playAudio(widget.memory),
-              ),
-              widget.memory.playerState != PlayerState.stopped
-                  ? IconButton(
-                      icon: const Icon(Icons.stop),
-                      onPressed: widget.memory.playerState != PlayerState.stopped
-                          ? () => widget.stopAudio(widget.memory)
-                          : null,
-                    )
-                  : Container(),
-            ],
-          )
-        : Container();
   }
 }

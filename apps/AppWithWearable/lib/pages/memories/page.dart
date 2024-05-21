@@ -54,49 +54,49 @@ class _MemoriesPageState extends State<MemoriesPage> {
     // FIXME implement
   }
 
-  void _playAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    String fileName = memory.audioFileName!;
-    File? gcpFile = await downloadFile(fileName, fileName);
-    if (gcpFile == null) {
-      // show dialog
-      showDialog(
-          context: context,
-          builder: (_) => const AlertDialog(
-                title: Text('Error'),
-                content: Text(
-                    'Failed to retrieve the audio file, please check your credentials and GCP bucket settings are set.'),
-              ));
-      return;
-    }
-    _audioPlayer.play(DeviceFileSource(gcpFile.path ?? ''));
-    debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
-    _resetMemoriesState(memory.id);
-  }
-
-  void _pauseAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.pause();
-    setState(() {
-      memory.playerState = PlayerState.paused;
-    });
-  }
-
-  void _resumeAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.resume();
-    setState(() {
-      memory.playerState = PlayerState.playing;
-    });
-  }
-
-  void _stopAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.stop();
-    setState(() {
-      memory.playerState = PlayerState.stopped;
-    });
-  }
+  // void _playAudio(MemoryRecord memory) async {
+  //   if (memory.audioFileName == null) return;
+  //   String fileName = memory.audioFileName!;
+  //   File? gcpFile = await downloadFile(fileName, fileName);
+  //   if (gcpFile == null) {
+  //     // show dialog
+  //     showDialog(
+  //         context: context,
+  //         builder: (_) => const AlertDialog(
+  //               title: Text('Error'),
+  //               content: Text(
+  //                   'Failed to retrieve the audio file, please check your credentials and GCP bucket settings are set.'),
+  //             ));
+  //     return;
+  //   }
+  //   _audioPlayer.play(DeviceFileSource(gcpFile.path ?? ''));
+  //   debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
+  //   _resetMemoriesState(memory.id);
+  // }
+  //
+  // void _pauseAudio(MemoryRecord memory) async {
+  //   if (memory.audioFileName == null) return;
+  //   await _audioPlayer.pause();
+  //   setState(() {
+  //     memory.playerState = PlayerState.paused;
+  //   });
+  // }
+  //
+  // void _resumeAudio(MemoryRecord memory) async {
+  //   if (memory.audioFileName == null) return;
+  //   await _audioPlayer.resume();
+  //   setState(() {
+  //     memory.playerState = PlayerState.playing;
+  //   });
+  // }
+  //
+  // void _stopAudio(MemoryRecord memory) async {
+  //   if (memory.audioFileName == null) return;
+  //   await _audioPlayer.stop();
+  //   setState(() {
+  //     memory.playerState = PlayerState.stopped;
+  //   });
+  // }
 
   @override
   void initState() {
@@ -156,16 +156,13 @@ class _MemoriesPageState extends State<MemoriesPage> {
                             shrinkWrap: true,
                             scrollDirection: Axis.vertical,
                             itemBuilder: (context, index) {
-                              if (widget.memories[index].rawMemory == 'in_progress') {
-                                return const MemoryProcessing();
-                              }
                               return MemoryListItem(
                                 memory: widget.memories[index],
                                 unFocusNode: unFocusNode,
-                                playAudio: _playAudio,
-                                pauseAudio: _pauseAudio,
-                                resumeAudio: _resumeAudio,
-                                stopAudio: _stopAudio,
+                                // playAudio: _playAudio,
+                                // pauseAudio: _pauseAudio,
+                                // resumeAudio: _resumeAudio,
+                                // stopAudio: _stopAudio,
                                 loadMemories: widget.refreshMemories,
                               );
                             },

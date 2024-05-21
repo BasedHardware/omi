@@ -6,7 +6,7 @@ import 'package:friend_private/backend/storage/memories.dart';
 var collection = DVDB().collection("memories");
 
 Future<void> storeMemoryVector(MemoryRecord memory, List<double> embedding) async {
-  collection.addDocument(memory.id, memory.structuredMemory, Float64List.fromList(embedding));
+  collection.addDocument(memory.id, memory.getStructuredString(), Float64List.fromList(embedding));
 }
 
 List<String> querySimilarVectors(List<double> queryEmbedding) {
