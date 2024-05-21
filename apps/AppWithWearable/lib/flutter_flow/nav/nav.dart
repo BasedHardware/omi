@@ -3,10 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/find_device/page.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/pages/welcome/page.dart';
+import 'package:friend_private/pages/wrapper.dart';
 import 'package:provider/provider.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -69,25 +68,35 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           builder: (context, params) => const WelcomeWidget(),
         ),
         FFRoute(
-          name: 'connectDevice',
-          path: '/connectDevice',
-          builder: (context, params) => HomePage(
+          name: 'home',
+          path: '/home',
+          builder: (context, params) => BottomNavWrapper(
             btDevice: params.getParam(
               'btdevice',
               ParamType.JSON,
             ),
           ),
         ),
+        // FFRoute(
+        //   name: 'connectDevice',
+        //   path: '/connectDevice',
+        //   builder: (context, params) => HomePage(
+        //     btDevice: params.getParam(
+        //       'btdevice',
+        //       ParamType.JSON,
+        //     ),
+        //   ),
+        // ),
         FFRoute(
           name: 'findDevices',
           path: '/findDevices',
           builder: (context, params) => const FindDevicesPage(),
         ),
-        FFRoute(
-          name: 'memoriesPage',
-          path: '/memoriesPage',
-          builder: (context, params) => const MemoriesPage(),
-        ),
+        // FFRoute(
+        //   name: 'memoriesPage',
+        //   path: '/memoriesPage',
+        //   builder: (context, params) => const MemoriesPage(),
+        // ),
         FFRoute(
           name: 'memoryDetailPage',
           path: '/memoryDetailPage',

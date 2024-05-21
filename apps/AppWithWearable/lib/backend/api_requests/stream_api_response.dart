@@ -9,12 +9,6 @@ import './streaming_models.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-initAssistantResponse() {
-  FFAppState().update(() {
-    FFAppState().chatHistory = saveChatHistory(FFAppState().chatHistory, convertToJSONRole("", "assistant"));
-  });
-}
-
 Future streamApiResponse(
   String context,
   Future<dynamic> Function(String) callback,
@@ -27,13 +21,14 @@ Future streamApiResponse(
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
 
-  String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory));
+  String body = qaStreamedBody(context, retrieveMostRecentMessages([]));
+  // String body = qaStreamedBody(context, retrieveMostRecentMessages(FFAppState().chatHistory));
   // String body = qaStreamedFullMemories(FFAppState().memories, retrieveMostRecentMessages(FFAppState().chatHistory));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
 
-  initAssistantResponse();
+  // initAssistantResponse();
   try {
     final http.StreamedResponse response = await client.send(request);
     if (response.statusCode == 401) {

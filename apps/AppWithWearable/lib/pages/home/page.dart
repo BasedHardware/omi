@@ -20,12 +20,14 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'widgets/transcript.dart';
 
 class HomePage extends StatefulWidget {
+  final Function refreshMemories;
+  final dynamic btDevice;
+
   const HomePage({
     super.key,
     required this.btDevice,
+    required this.refreshMemories,
   });
-
-  final dynamic btDevice;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -253,6 +255,7 @@ class _HomePageState extends State<HomePage> {
                   ? TranscriptWidget(
                       btDevice: _device!,
                       key: childWidgetKey,
+                      refreshMemories: widget.refreshMemories,
                     )
                   : const SizedBox.shrink(),
             ]),

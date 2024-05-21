@@ -25,9 +25,12 @@ import 'info_button.dart';
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
 
 class TranscriptWidget extends StatefulWidget {
+  final Function refreshMemories;
+
   const TranscriptWidget({
     super.key,
     required this.btDevice,
+    required this.refreshMemories,
   });
 
   final BTDeviceStruct? btDevice;
@@ -171,7 +174,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   void resetState({bool resetBLEConnection = true}) {
     streamSubscription?.cancel();
     channel?.sink.close(1000); // when closed from here, don't try to reconnect
-    channelCustomWebsocket?.sink.close();
+    channelCustomWebsocket?.sink.close(1000);
     _memoryCreationTimer?.cancel();
 
     setState(() {
@@ -289,7 +292,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
 
   @override
   Widget build(BuildContext context) {
-    context.watch<FFAppState>();
     if (wsConnectionState == WebsocketConnectionStatus.failed ||
         wsConnectionState == WebsocketConnectionStatus.closed ||
         wsConnectionState == WebsocketConnectionStatus.error) {

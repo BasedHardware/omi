@@ -66,8 +66,6 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<FFAppState>();
-
     return GestureDetector(
       onTap: () => _model.unfocusNode.canRequestFocus
           ? FocusScope.of(context).requestFocus(_model.unfocusNode)
@@ -171,7 +169,8 @@ class _ChatPageState extends State<ChatPage> {
                                                 alignment: const AlignmentDirectional(0.0, 1.0),
                                                 child: Builder(
                                                   builder: (context) {
-                                                    final chat = FFAppState().chatHistory.toList().take(100).toList();
+                                                    // final chat = FFAppState().chatHistory.toList().take(100).toList();
+                                                    final chat = [];
                                                     return ListView.builder(
                                                       padding: EdgeInsets.zero,
                                                       shrinkWrap: true,
@@ -591,8 +590,8 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<String> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion =
-        await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
+    String? betterContextQuestion = await determineRequiresContext(message, retrieveMostRecentMessages([]));
+    // await determineRequiresContext(message, retrieveMostRecentMessages(FFAppState().chatHistory));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
       return '';
@@ -610,10 +609,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   uiUpdatesChatQA() async {
-    setState(() {
-      FFAppState().chatHistory = functions.saveChatHistory(
-          FFAppState().chatHistory, functions.convertToJSONRole(_model.textController.text, 'user')!)!;
-    });
+    // setState(() {
+    //   FFAppState().chatHistory = functions.saveChatHistory(
+    //       FFAppState().chatHistory, functions.convertToJSONRole(_model.textController.text, 'user')!)!;
+    // });
     await _model.listViewController?.animateTo(
       _model.listViewController!.position.maxScrollExtent,
       duration: const Duration(milliseconds: 100),
@@ -626,12 +625,12 @@ class _ChatPageState extends State<ChatPage> {
 
   _callbackFunctionChatStreaming() {
     return (String content) async {
-      var chatHistory = FFAppState().chatHistory;
-      var newChatHistory =
-          appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
-      FFAppState().update(() {
-        FFAppState().chatHistory = newChatHistory;
-      });
+      // var chatHistory = FFAppState().chatHistory;
+      // var newChatHistory =
+      //     appendToChatHistoryAtIndex(convertToJSONRole(content, "assistant"), chatHistory.length - 1, chatHistory);
+      // FFAppState().update(() {
+      //   FFAppState().chatHistory = newChatHistory;
+      // });
       setState(() {});
       await _model.listViewController?.animateTo(
         _model.listViewController!.position.maxScrollExtent,

@@ -8,7 +8,6 @@ import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/memories/widgets/summaries_buttons.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 
-import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,7 +17,10 @@ import 'widgets/memory_list_item.dart';
 import 'widgets/memory_processing.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key});
+  final List<MemoryRecord> memories;
+  final Function refreshMemories;
+
+  const MemoriesPage({super.key, required this.memories, required this.refreshMemories});
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
@@ -49,17 +51,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
   }
 
   void _resetMemoriesState(String? memoryId) {
-    var memories = FFAppState().memories;
-    for (var m in memories) {
-      if (memoryId != null && m.id == memoryId) {
-        m.playerState = PlayerState.playing;
-      } else {
-        m.playerState = PlayerState.stopped;
-      }
-    }
-    FFAppState().update(() {
-      FFAppState().memories = memories;
-    });
+    // FIXME implement
   }
 
   void _playAudio(MemoryRecord memory) async {
@@ -128,8 +120,6 @@ class _MemoriesPageState extends State<MemoriesPage> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<FFAppState>();
-
     return Builder(
       builder: (context) => GestureDetector(
         onTap: () => unFocusNode.canRequestFocus
@@ -157,10 +147,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
                     monthlySummary: monthlySummary,
                   ),
                   const SizedBox(height: 8),
-                  if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
                   Padding(
                     padding: const EdgeInsets.all(16),
-                    child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
+                    child: (widget.memories.isEmpty)
                         ? const Center(
                             child: Padding(
                               padding: EdgeInsets.only(top: 32.0),
@@ -168,19 +157,22 @@ class _MemoriesPageState extends State<MemoriesPage> {
                             ),
                           )
                         : ListView.builder(
-                            padding: EdgeInsets.zero,
+                            itemCount: widget.memories.length,
                             primary: false,
                             shrinkWrap: true,
                             scrollDirection: Axis.vertical,
-                            itemCount: FFAppState().memories.length,
                             itemBuilder: (context, index) {
+                              if (widget.memories[index].rawMemory == 'in_progress') {
+                                return const MemoryProcessing();
+                              }
                               return MemoryListItem(
-                                memory: FFAppState().memories[index],
+                                memory: widget.memories[index],
                                 unFocusNode: unFocusNode,
                                 playAudio: _playAudio,
                                 pauseAudio: _pauseAudio,
                                 resumeAudio: _resumeAudio,
                                 stopAudio: _stopAudio,
+                                loadMemories: widget.refreshMemories,
                               );
                             },
                           ),

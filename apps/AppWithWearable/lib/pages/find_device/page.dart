@@ -82,7 +82,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     SharedPreferencesUtil().onboardingCompleted = true;
 
     context.pushNamed(
-      'connectDevice',
+      'home',
       queryParameters: {
         'btdevice': serializeParam(
           _friendDevice!.toMap(),
