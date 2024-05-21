@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/find_device/page.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/pages/welcome/page.dart';
-import 'package:friend_private/pages/wrapper.dart';
+import 'package:friend_private/pages/onboarding/find_device/page.dart';
+import 'package:friend_private/pages/onboarding/welcome/page.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:provider/provider.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -70,7 +70,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
         FFRoute(
           name: 'home',
           path: '/home',
-          builder: (context, params) => BottomNavWrapper(
+          builder: (context, params) => HomePageWrapper(
             btDevice: params.getParam(
               'btdevice',
               ParamType.JSON,
