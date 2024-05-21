@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 Future<http.Response?> makeApiCall({
@@ -206,35 +206,9 @@ Future<List<double>> getEmbeddingsFromInput(String? input) async {
   return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
 }
 
-String qaStreamedFullMemories(List<MemoryRecord> memories, List<dynamic> chatHistory) {
-  var prompt = '''
-    You are an assistant for question-answering tasks. Use the list of stored user audio transcript memories to answer the question. 
-    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
-    
-    Conversation History:
-    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
-
-    Memories:
-    ```
-    ${MemoryRecord.memoriesToString(memories)}
-    ```
-    Answer:
-    '''
-      .replaceAll('    ', '');
-  debugPrint(prompt);
-  var body = jsonEncode({
-    "model": "gpt-4-turbo",
-    "messages": [
-      {"role": "system", "content": prompt}
-    ],
-    "stream": true,
-  });
-  return body;
-}
-
 // ------
 
-Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatHistory) async {
+Future<String?> determineRequiresContext(String lastMessage, List<Message> messages) async {
   var tools = [
     {
       "type": "function",
@@ -259,7 +233,7 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
   ];
   String message = '''
         Conversation:
-        ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}\n
+        ${messages.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         USER:$lastMessage
         '''
       .replaceAll('        ', '');
@@ -275,56 +249,4 @@ Future<String?> determineRequiresContext(String lastMessage, List<dynamic> chatH
     return args['question'];
   }
   return null;
-}
-
-String qaStreamedBody(String context, List<dynamic> chatHistory) {
-  var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
-    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so answer the question casually.
-    
-    Conversation History:
-    ${chatHistory.map((e) => '${e['role'].toString().toUpperCase()}: ${e['content']}').join('\n')}
-
-    Context:
-    ``` 
-    $context
-    ```
-    Answer:
-    '''
-      .replaceAll('    ', '');
-  debugPrint(prompt);
-  var body = jsonEncode({
-    "model": "gpt-4-turbo",
-    "messages": [
-      {"role": "system", "content": prompt}
-    ],
-    "stream": true,
-  });
-  return body;
-}
-
-Future<String> transcribeAudioFile(File audioFile) async {
-  const url = 'https://api.openai.com/v1/audio/transcriptions';
-  var request = http.MultipartRequest('POST', Uri.parse(url))
-    ..headers['Authorization'] = 'Bearer ${getOpenAIApiKeyForUsage()}'
-    ..headers['Content-Type'] = 'multipart/form-data';
-  var file = await http.MultipartFile.fromPath(
-    'file',
-    audioFile.path,
-  );
-
-  request.files.add(file);
-  request.fields['model'] = 'whisper-1';
-  request.fields['timestamp_granularities[]'] = 'word';
-  request.fields['response_format'] = 'verbose_json';
-  request.fields['language'] = 'en';
-  // request.fields['prompt'] =
-  //     'The audio of a conversation recorded with an AI wearable, it could be empty, just random noises, or have multiple speakers.';
-  var response = await request.send();
-  String responseBody = await response.stream.bytesToString();
-  var jsonResponse = jsonDecode(responseBody);
-
-  debugPrint('Transcript response: ${jsonResponse}');
-  return '';
 }
