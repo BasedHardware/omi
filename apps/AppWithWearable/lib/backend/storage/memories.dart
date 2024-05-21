@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -64,9 +65,12 @@ class MemoryStorage {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     List<MemoryRecord> memories =
-        allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
     if (!filterOutUseless) {
-      return memories.where((memory) => !(memory.rawMemory.split(' ').length < 10)).toList();
+      return memories.where((memory) =>
+      !(memory.rawMemory
+          .split(' ')
+          .length < 10)).toList();
     }
     return memories.where((memory) => !memory.isUseless).toList();
   }
@@ -96,7 +100,10 @@ class MemoryStorage {
   static Future<void> updateMemory(String memoryId, String updatedMemory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
+    int index = allMemories.indexWhere((memory) =>
+    MemoryRecord
+        .fromJson(jsonDecode(memory))
+        .id == memoryId);
     if (index >= 0 && index < allMemories.length) {
       MemoryRecord oldMemory = MemoryRecord.fromJson(jsonDecode(allMemories[index]));
       MemoryRecord updatedRecord = MemoryRecord(
@@ -115,7 +122,10 @@ class MemoryStorage {
   static Future<void> deleteMemory(String memoryId) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
+    int index = allMemories.indexWhere((memory) =>
+    MemoryRecord
+        .fromJson(jsonDecode(memory))
+        .id == memoryId);
     if (index >= 0 && index < allMemories.length) {
       allMemories.removeAt(index);
       await prefs.setStringList(_storageKey, allMemories);
@@ -146,6 +156,7 @@ class MemoryStorage {
   }
 
   static insertMemoryAtIndex(MemoryRecord memory, {int index = 0}) async {
+    debugPrint('insertMemoryAtIndex: ${memory.toJson()}');
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     allMemories.insert(index, jsonEncode(memory.toJson()));
@@ -166,8 +177,8 @@ class MemoryStorage {
       date: DateTime.now(),
       rawMemory: 'in_progress',
       structuredMemory: 'in_progress',
-      isEmpty: true,
-      isUseless: true,
+      isEmpty: false,
+      isUseless: false,
     ));
   }
 }
