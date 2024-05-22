@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -90,7 +88,7 @@ Future<IOWebSocketChannel> _initStream(
         final speechFinal = parsedJson['is_final'];
 
         if (transcript.length > 0) {
-          debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal ~ ${data.toString()}');
+          // debugPrint('~~Transcript: $transcript ~ speechFinal: $speechFinal ~ ${data.toString()}');
           Map<int, String> bySpeaker = {};
           data['words'].forEach((word) {
             int speaker = word['speaker'];
