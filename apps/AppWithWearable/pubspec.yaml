@@ -63,6 +63,7 @@ dependencies:
   sentry_flutter: ^8.2.0
   sentry_logging: ^8.2.0
   logging: ^1.2.0
+  instabug_flutter: ^13.0.0
 
 dependency_overrides:
   http: 1.2.0

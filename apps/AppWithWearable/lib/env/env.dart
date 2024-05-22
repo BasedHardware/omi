@@ -12,4 +12,7 @@ abstract class Env {
 
   @EnviedField(varName: 'DEEPGRAM_API_KEY', obfuscate: true)
   static String? deepgramApiKey = _Env.deepgramApiKey;
+
+  @EnviedField(varName: 'INSTABUG_API_KEY', obfuscate: true)
+  static String? instabugApiKey = _Env.instabugApiKey;
 }
