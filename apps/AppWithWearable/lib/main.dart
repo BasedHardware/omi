@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:sentry_logging/sentry_logging.dart';
 
@@ -17,23 +18,28 @@ void main() async {
 
   await initializeNotifications();
   await SharedPreferencesUtil.init();
-  if (Env.sentryDSNKey?.isNotEmpty ?? false) {
-    debugPrint('Sentry key: ${Env.sentryDSNKey}');
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = Env.sentryDSNKey;
-        options.tracesSampleRate = 1.0;
-        options.profilesSampleRate = 1.0;
-        options.attachScreenshot = false;
-        options.debug = true;
-        options.addIntegration(LoggingIntegration());
-        options.enableAutoPerformanceTracing = true;
-      },
-      appRunner: () => _getRunApp(),
-    );
-  } else {
-    _getRunApp();
+  if (Env.instabugApiKey != null) {
+    await Instabug.init(
+        token: Env.instabugApiKey!,
+        invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
   }
+  // if (Env.sentryDSNKey?.isNotEmpty ?? false) {
+  //   debugPrint('Sentry key: ${Env.sentryDSNKey}');
+  //   await SentryFlutter.init(
+  //     (options) {
+  //       options.dsn = Env.sentryDSNKey;
+  //       options.tracesSampleRate = 1.0;
+  //       options.profilesSampleRate = 1.0;
+  //       options.attachScreenshot = false;
+  //       options.debug = true;
+  //       options.addIntegration(LoggingIntegration());
+  //       options.enableAutoPerformanceTracing = true;
+  //     },
+  //     appRunner: () => _getRunApp(),
+  //   );
+  // } else {
+  // }
+  _getRunApp();
 }
 
 _getRunApp() {
