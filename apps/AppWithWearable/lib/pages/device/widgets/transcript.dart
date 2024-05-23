@@ -5,7 +5,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -13,7 +12,6 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/deepgram.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
@@ -87,29 +85,69 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     super.dispose();
   }
 
-  updateTranscript(Map<int, String> transcriptBySpeaker) {
-    if (transcriptBySpeaker.isEmpty) return;
-    var copy = Map<int, String>.from(whispersDiarized.last);
-    transcriptBySpeaker.forEach((speaker, transcript) => copy[speaker] = transcript);
-    whispersDiarized[whispersDiarized.length - 1] = copy;
+  updateTranscript(Map<int, Map<String, dynamic>> current) {
+    var previous = Map<int, String>.from(whispersDiarized.last);
+    List<int> currentOrdered = current.keys.toList()
+      ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
+
+    if (previous.length == 1 && current.length == 1 && previous.keys.toList()[0] == current.keys.toList()[0]) {
+      // Last diarized, it's just 1, and here's just one, just add
+      int speakerIdx = current.keys.toList()[0];
+      previous[speakerIdx] = '${previous[speakerIdx]!} ' + current[current.keys.toList()[0]]!['transcript'];
+      whispersDiarized[whispersDiarized.length - 1] = previous;
+      // Same speaker, just add
+    } else if (previous.length == 1 && current.length == 2 && previous.keys.toList()[0] == currentOrdered[0]) {
+      // TODO: verify this is happening
+      // add that transcript fot the speakers, but append the remaining ones as new speakers
+      // Last diarized it's just 1, and here's 2 but the previous speaker, is one that starts first here
+      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') + current[currentOrdered[0]]!['transcript'];
+      whispersDiarized[whispersDiarized.length - 1] = previous;
+      var newTranscription = <int, String>{};
+      for (var speaker in currentOrdered) {
+        if (speaker != currentOrdered[0]) newTranscription[speaker] = current[speaker]!['transcript'];
+      }
+      whispersDiarized.add(newTranscription);
+    } else if (previous.isEmpty) {
+      // Different speakers, just add
+      current.forEach((speaker, data) {
+        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
+      });
+    } else {
+      // Different speakers, just add
+      whispersDiarized.add({});
+      current.forEach((speaker, data) {
+        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
+      });
+    }
+
+    // iterate speakers by startTime first
     setState(() {});
   }
 
   Future<void> initBleConnection() async {
     Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
         btDevice: widget.btDevice!,
-        speechFinalCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
+        speechFinalCallback: (List<dynamic> words, String transcriptItem) {
           debugPrint("Deepgram Finalized Callback received");
-          updateTranscript(transcriptBySpeaker);
-          if (whispersDiarized.last.isNotEmpty) {
-            whispersDiarized.add({});
+          Map<int, Map<String, dynamic>> bySpeaker = {};
+          for (var word in words) {
+            // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
+            debugPrint('Word: ${word.toString()}');
+            int speaker = word['speaker'];
+            if (bySpeaker[speaker] == null) bySpeaker[speaker] = <String, dynamic>{};
+            String currentSpeakerTranscript = bySpeaker[speaker]!['transcript'] ?? '';
+            bySpeaker[speaker]!['transcript'] = '${currentSpeakerTranscript + word['punctuated_word']} ';
+            bySpeaker[speaker]!['starts'] = min<double>(bySpeaker[speaker]!['starts'] ?? 999999999999.0, word['start']);
+            bySpeaker[speaker]!['ends'] = max<double>(bySpeaker[speaker]!['ends'] ?? -1, word['end']);
           }
+          debugPrint(bySpeaker.toString());
+          updateTranscript(bySpeaker);
           _initiateMemoryCreationTimer();
         },
         interimCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
-          _memoryCreationTimer?.cancel();
-          updateTranscript(transcriptBySpeaker);
-          // _initiateTimer(); // FIXME sometimes final speech callback is not made, thus memory timer not started
+          // debugPrint('interimCallback called');
+          // _memoryCreationTimer?.cancel();
+          // updateTranscript(transcriptBySpeaker); // interim causes makes a bit more complex the
         },
         onWebsocketConnectionSuccess: () {
           addEventToContext('Websocket Opened');
@@ -222,20 +260,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     for (int partIdx = 0; partIdx < whispersDiarized.length; partIdx++) {
       var part = whispersDiarized[partIdx];
       if (part.isEmpty) continue;
+      int totalSpeakers = part.keys.map((e) => e).reduce(max) + 1;
+      String transcriptItem = '';
       for (int speaker = 0; speaker < totalSpeakers; speaker++) {
-        if (part.containsKey(speaker)) {
-          // This part and previous have only 1 speaker, and is the same
-          if (partIdx > 0 &&
-              whispersDiarized[partIdx - 1].containsKey(speaker) &&
-              whispersDiarized[partIdx - 1].length == 1 &&
-              part.length == 1) {
-            transcript += '${part[speaker]!} ';
-          } else {
-            transcript += 'Speaker $speaker: ${part[speaker]!} ';
-          }
-        }
+        if (part.containsKey(speaker)) transcriptItem += 'Speaker $speaker: ${part[speaker]!} ';
       }
-      transcript += '\n';
+      transcript += '$transcriptItem\n\n';
     }
     return transcript;
   }
@@ -300,22 +330,25 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     }
 
     if (customWebsocketTranscript != '') {
-      return Column(
+      return Row(
         mainAxisAlignment: MainAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-            child: Text(
-              customWebsocketTranscript,
-              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                    letterSpacing: 0.0,
-                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                  ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+              child: Text(
+                customWebsocketTranscript,
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
+                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                      letterSpacing: 0.0,
+                      useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                    ),
+              ),
             ),
           ),
+          // Expanded(child: _getDeepgramUI()),
         ],
       );
     }
@@ -337,6 +370,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         child: InfoButton(),
       );
     }
+    return _getDeepgramTranscriptUI();
+  }
+
+  _getDeepgramTranscriptUI() {
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
