@@ -1,20 +1,12 @@
-import 'dart:io';
-
-import 'package:audioplayers/audioplayers.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/memories/widgets/summaries_buttons.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
 import 'widgets/empty_memories.dart';
-import 'widgets/header_buttons.dart';
 import 'widgets/memory_list_item.dart';
-import 'widgets/memory_processing.dart';
 
 class MemoriesPage extends StatefulWidget {
   final List<MemoryRecord> memories;
@@ -30,7 +22,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
   String? dailySummary;
   String? weeklySummary;
   String? monthlySummary;
-  late AudioPlayer _audioPlayer;
+  // late AudioPlayer _audioPlayer;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final unFocusNode = FocusNode();
@@ -104,16 +96,16 @@ class _MemoriesPageState extends State<MemoriesPage> {
     _dailySummary();
     _weeklySummary();
     _monthlySummary();
-    _audioPlayer = AudioPlayer();
-    _audioPlayer.onPlayerComplete.listen((event) {
-      _resetMemoriesState(null);
-    });
+    // _audioPlayer = AudioPlayer();
+    // _audioPlayer.onPlayerComplete.listen((event) {
+    //   _resetMemoriesState(null);
+    // });
   }
 
   @override
   void dispose() {
-    _audioPlayer.stop();
-    _audioPlayer.dispose();
+    // _audioPlayer.stop();
+    // _audioPlayer.dispose();
     unFocusNode.dispose();
     super.dispose();
   }
