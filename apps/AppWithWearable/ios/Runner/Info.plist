@@ -74,5 +74,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSPhotoLibraryUsageDescription</key>
+    <string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
 </dict>
 </plist>
