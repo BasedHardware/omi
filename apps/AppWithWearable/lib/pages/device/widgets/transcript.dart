@@ -169,9 +169,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
           // connection was closed, either on resetState, or by deepgram, or by some other reason.
           addEventToContext('Websocket Closed');
-          setState(() {
-            wsConnectionState = WebsocketConnectionStatus.closed;
-          });
+          try {
+            setState(() {
+              wsConnectionState = WebsocketConnectionStatus.closed;
+            }); // TODO: handle when device disconnect, this widget is not showing anymore so it's disposed.
+          } catch (e) {}
           if (closeCode != 1000) {
             // attempt to reconnect
             _reconnectWebSocket();
