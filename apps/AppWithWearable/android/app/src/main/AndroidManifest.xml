@@ -47,16 +47,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" /> <!-- Here, chose the type according to your app -->
 
     <!-- Add android:stopWithTask option only when necessary. -->
-    <service
-        android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-        android:exported="false"
-        android:stopWithTask="true"
-        android:foregroundServiceType="connectedDevice" /><!-- Here, chose the type according to your app -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="Friend"
         android:requestLegacyExternalStorage="true"
         tools:replace="android:label">
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="connectedDevice" /><!-- Here, chose the type according to your app -->
 
         <activity
             android:name=".MainActivity"
