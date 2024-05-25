@@ -160,7 +160,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
               memories: memories,
               refreshMemories: _initiateMemories,
             ),
-            HomePage(
+            DevicePage(
                 btDevice: widget.btDevice,
                 refreshMemories: _initiateMemories,
                 transcriptChildWidgetKey: transcriptChildWidgetKey),

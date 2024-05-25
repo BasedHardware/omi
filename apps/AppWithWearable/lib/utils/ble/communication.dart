@@ -27,7 +27,6 @@ Future<StreamSubscription?> getBleBatteryLevelListener(
   void Function(int)? onBatteryLevelChange,
 }) async {
   final device = BluetoothDevice.fromId(btDevice.id);
-  // 0000180f-0000-1000-8000-00805f9b34fb
   final services = await device.discoverServices();
   final batteryService = services
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
@@ -40,7 +39,6 @@ Future<StreamSubscription?> getBleBatteryLevelListener(
     var canNotify =
         batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
     if (canRead != null && canNotify != null) {
-      // let percent = (await batteryChar.read())[0];
       await canNotify.setNotifyValue(true);
       return canNotify.lastValueStream.listen((value) {
         debugPrint('Battery level listener: $value');
@@ -50,6 +48,33 @@ Future<StreamSubscription?> getBleBatteryLevelListener(
       });
     }
   }
+  return null;
+}
+
+Future<StreamSubscription?> getBleAudioBytesListener(
+  BluetoothDevice device, {
+  required void Function(List<int>) onAudioBytesReceived,
+}) async {
+  // 0000180f-0000-1000-8000-00805f9b34fb
+  final services = await device.discoverServices();
+  final bytesService = services.firstWhereOrNull((service) =>
+      service.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214' ||
+      service.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+  if (bytesService != null) {
+    var canNotify = bytesService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
+    if (canNotify != null) {
+      // let percent = (await batteryChar.read())[0];
+      await canNotify.setNotifyValue(true);
+      debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
+      return canNotify.lastValueStream.listen((value) {
+        debugPrint('Battery level listener: $value');
+        if (value.isNotEmpty) {
+          onAudioBytesReceived(value);
+        }
+      });
+    }
+  }
+  debugPrint('Desired audio characteristic not found');
   return null;
 }
 

@@ -23,9 +23,8 @@ StreamSubscription<BluetoothConnectionState>? getConnectionStateListener(
     String deviceId, Function onDisconnect, Function onConnect) {
   BluetoothDevice? connectedDevice =
       (FlutterBluePlus.connectedDevices).firstWhereOrNull((e) => e.remoteId.str == deviceId);
-  if (connectedDevice == null) {
-    return null;
-  }
+  if (connectedDevice == null) return null;
+
   StreamSubscription<BluetoothConnectionState>? connectionStateListener =
       connectedDevice.connectionState.listen((event) {
     debugPrint('connectionStateListener: $event');
