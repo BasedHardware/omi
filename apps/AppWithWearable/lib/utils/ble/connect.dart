@@ -1,26 +1,26 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 
-Future<bool> bleConnectDevice(BTDeviceStruct btDevice) async {
+Future<void> bleConnectDevice(BTDeviceStruct btDevice) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   try {
-    await device.connect();
-  } catch (e) {
-    debugPrint(e.toString());
-  }
-  var hasWriteCharacteristic = false;
-  final services = await device.discoverServices();
-  for (BluetoothService service in services) {
-    for (BluetoothCharacteristic characteristic in service.characteristics) {
-      final isWrite = characteristic.properties.write;
-      if (isWrite) {
-        debugPrint('Found write characteristic: ${characteristic.uuid}, ${characteristic.properties}');
-        hasWriteCharacteristic = true;
-      }
+    // Step 1: Connect with autoConnect
+    await device.connect(autoConnect: true, mtu: null);
+
+    // Step 2: Listen to the connection state to ensure the device is connected
+    await device.connectionState.where((state) => state == BluetoothConnectionState.connected).first;
+
+    // Step 3: Request the desired MTU size if the platform is Android
+    if (Platform.isAndroid) {
+      int desiredMtu = 512; // Example MTU size
+      await device.requestMtu(desiredMtu);
     }
+  } catch (e) {
+    debugPrint('bleConnectDevice failed: $e');
   }
-  return hasWriteCharacteristic;
 }
 
 Future bleDisconnectDevice(BTDeviceStruct btDevice) async {
@@ -28,6 +28,6 @@ Future bleDisconnectDevice(BTDeviceStruct btDevice) async {
   try {
     await device.disconnect();
   } catch (e) {
-    debugPrint(e.toString());
+    debugPrint('bleDisconnectDevice failed: $e');
   }
 }

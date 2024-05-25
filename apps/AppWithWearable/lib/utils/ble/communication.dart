@@ -6,21 +6,34 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '/backend/schema/structs/index.dart';
 
-Future<String?> bleReceiveData(BTDeviceStruct btdevice) async {
-  final device = BluetoothDevice.fromId(btdevice.id);
-  final services = await device.discoverServices();
-  for (BluetoothService service in services) {
-    for (BluetoothCharacteristic characteristic in service.characteristics) {
-      final isRead = characteristic.properties.read;
-      final isNotify = characteristic.properties.notify;
-      if (isRead && isNotify) {
-        final value = await characteristic.read();
-        return String.fromCharCodes(value);
-      }
-    }
-  }
-  return null;
-}
+// Future<String?> bleReceiveData(BTDeviceStruct btDevice) async {
+//   final device = BluetoothDevice.fromId(btDevice.id);
+//   final services = await device.discoverServices();
+//   for (BluetoothService service in services) {
+//     for (BluetoothCharacteristic characteristic in service.characteristics) {
+//       final isRead = characteristic.properties.read;
+//       final isNotify = characteristic.properties.notify;
+//       if (isRead && isNotify) {
+//         final value = await characteristic.read();
+//         return String.fromCharCodes(value);
+//       }
+//     }
+//   }
+//   return null;
+// }
+//
+// Future bleSendData(BTDeviceStruct btDevice, String data) async {
+//   final device = BluetoothDevice.fromId(btDevice.id);
+//   final services = await device.discoverServices();
+//   for (BluetoothService service in services) {
+//     for (BluetoothCharacteristic characteristic in service.characteristics) {
+//       final isWrite = characteristic.properties.write;
+//       if (isWrite) {
+//         await characteristic.write(data.codeUnits);
+//       }
+//     }
+//   }
+// }
 
 Future<StreamSubscription?> getBleBatteryLevelListener(
   BTDeviceStruct btDevice, {
@@ -56,7 +69,7 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   required void Function(List<int>) onAudioBytesReceived,
 }) async {
   final device = BluetoothDevice.fromId(btDevice.id);
-  await device.connect();
+  // await device.connect();
   final services = await device.discoverServices();
   final bytesService = services
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
@@ -75,17 +88,4 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   }
   debugPrint('Desired audio characteristic not found');
   return null;
-}
-
-Future bleSendData(BTDeviceStruct btDevice, String data) async {
-  final device = BluetoothDevice.fromId(btDevice.id);
-  final services = await device.discoverServices();
-  for (BluetoothService service in services) {
-    for (BluetoothCharacteristic characteristic in service.characteristics) {
-      final isWrite = characteristic.properties.write;
-      if (isWrite) {
-        await characteristic.write(data.codeUnits);
-      }
-    }
-  }
 }

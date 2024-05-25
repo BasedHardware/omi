@@ -12,6 +12,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice() async {
       await bleConnectDevice(friendDevice);
       return friendDevice;
     } catch (e) {
+      print(e);
       // debugPrint('No matching device found, continue scanning');
     }
     await Future.delayed(const Duration(seconds: 2));
