@@ -9,7 +9,7 @@ Future<void> bleConnectDevice(BTDeviceStruct btDevice) async {
   try {
     // Step 1: Connect with autoConnect
     await device.connect(autoConnect: true, mtu: null);
-
+    // TODO: compare this with the connection state listener, both doing same thing? what's better?
     // Step 2: Listen to the connection state to ensure the device is connected
     await device.connectionState.where((state) => state == BluetoothConnectionState.connected).first;
 
