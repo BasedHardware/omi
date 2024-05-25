@@ -12,7 +12,7 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/deepgram.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -159,7 +159,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         },
         onWebsocketConnectionFailed: (err) {
           addEventToContext('Websocket Unable To Connect');
-          Sentry.captureException(err);
           // connection couldn't be initiated for some reason.
           setState(() {
             wsConnectionState = WebsocketConnectionStatus.failed;
@@ -170,7 +169,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
           // connection was closed, either on resetState, or by deepgram, or by some other reason.
           addEventToContext('Websocket Closed');
-          Sentry.captureMessage('Websocket Closed', level: SentryLevel.warning);
           setState(() {
             wsConnectionState = WebsocketConnectionStatus.closed;
           });
@@ -182,7 +180,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
         onWebsocketConnectionError: (err) {
           // connection was okay, but then failed.
           addEventToContext('Websocket Error');
-          Sentry.captureException(err, stackTrace: err.stackTrace);
+          CrashReporting.reportHandledCrash(err, err.stackTrace);
           setState(() {
             wsConnectionState = WebsocketConnectionStatus.error;
             websocketReconnecting = false;

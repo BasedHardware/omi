@@ -3,6 +3,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -110,6 +111,7 @@ Future<IOWebSocketChannel> _initStream(
   }).onError((err, stackTrace) {
     // no closing reason or code
     onWebsocketConnectionFailed(err); // initial connection failed
+    if (err != null) CrashReporting.reportHandledCrash(err, stackTrace);
   });
 
   try {
