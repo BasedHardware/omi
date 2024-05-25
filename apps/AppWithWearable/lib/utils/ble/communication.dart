@@ -35,7 +35,7 @@ import '/backend/schema/structs/index.dart';
 //   }
 // }
 
-Future<StreamSubscription?> getBleBatteryLevelListener(
+Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
   BTDeviceStruct btDevice, {
   void Function(int)? onBatteryLevelChange,
 }) async {
