@@ -51,13 +51,12 @@ class _DevicePageState extends State<DevicePage> {
             const BlurBotWidget(),
             ListView(children: [
               ..._getConnectedDeviceWidgets(),
-              widget.device != null
-                  ? TranscriptWidget(
-                      btDevice: widget.device!,
-                      key: widget.transcriptChildWidgetKey,
-                      refreshMemories: widget.refreshMemories,
-                    )
-                  : const SizedBox.shrink(),
+              TranscriptWidget(
+                btDevice: widget.device,
+                key: widget.transcriptChildWidgetKey,
+                refreshMemories: widget.refreshMemories,
+              )
+,
             ]),
           ],
         ),

@@ -9,7 +9,7 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
-import 'package:friend_private/pages/device/settings.dart';
+import 'package:friend_private/pages/home/settings.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -198,7 +198,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             _device = connectedDevice;
           });
           _initiateBleBatteryListener();
-          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
+          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: connectedDevice);
           // foreground.startForegroundTask();
         });
   }
@@ -225,6 +225,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           });
           _initiateConnectionListener();
           _initiateBleBatteryListener();
+          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: friendDevice);
           // foreground.startForegroundTask();
         }
       });
