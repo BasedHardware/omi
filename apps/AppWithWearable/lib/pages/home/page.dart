@@ -16,6 +16,7 @@ import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/utils/sentry_log.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -27,7 +28,7 @@ class HomePageWrapper extends StatefulWidget {
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
-class _HomePageWrapperState extends State<HomePageWrapper> {
+class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver {
   GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
@@ -147,15 +148,64 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     });
   }
 
-  StreamSubscription<BluetoothConnectionState>? _connectionStateListener;
+  StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
   // ForegroundUtil foreground = ForegroundUtil();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused) {
+      addEventToContext('App is paused');
+    } else if (state == AppLifecycleState.resumed) {
+      addEventToContext('App is resumed');
+    } else if (state == AppLifecycleState.hidden) {
+      addEventToContext('App is hidden');
+    }
+  }
+
+  _initiateBleBatteryListener() async {
+    _bleBatteryLevelListener?.cancel();
+    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+      setState(() {
+        batteryLevel = value;
+      });
+    });
+  }
+
+  _initiateConnectionListener() async {
+    _connectionStateListener = getConnectionStateListener(
+        deviceId: _device!.id,
+        onDisconnected: () {
+          // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
+          // we don't want either way to trigger the websocket closed event, because it's closed on purpose
+          // and we don't want to retry the websocket connection or something
+          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
+          setState(() {
+            _device = null;
+          });
+          InstabugLog.logWarn('Friend Device Disconnected');
+          // foreground.stopForegroundTask();
+          createNotification(
+              title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+        },
+        onConnected: (BTDeviceStruct connectedDevice) {
+          debugPrint('BLE onConnected');
+          clearNotification(1);
+          setState(() {
+            _device = connectedDevice;
+          });
+          _initiateBleBatteryListener();
+          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
+          // foreground.startForegroundTask();
+        });
+  }
 
   @override
   void initState() {
+    WidgetsBinding.instance.addObserver(this);
     _initiateMemories();
     // foreground.requestPermissionForAndroid();
     // foreground.initForegroundTask();
@@ -183,48 +233,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     super.initState();
   }
 
-  _initiateBleBatteryListener() async {
-    _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
-      setState(() {
-        batteryLevel = value;
-      });
-    });
-  }
-
-  _initiateConnectionListener() async {
-    _connectionStateListener?.cancel();
-    _connectionStateListener = getConnectionStateListener(_device!.id, () {
-      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
-      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
-      // and we don't want to retry the websocket connection or something
-      transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
-      setState(() {
-        _device = null;
-      });
-      _bleBatteryLevelListener?.cancel();
-      _bleBatteryLevelListener = null;
-      InstabugLog.logWarn('Friend Device Disconnected');
-      // foreground.stopForegroundTask();
-      createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
-
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          debugPrint('scanAndConnectDevice $friendDevice');
-          setState(() {
-            _device = friendDevice;
-          });
-          clearNotification(1);
-          _initiateConnectionListener();
-          _initiateBleBatteryListener();
-          // foreground.startForegroundTask();
-        }
-      });
-    }, () {
-      transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -237,10 +245,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
               refreshMemories: _initiateMemories,
             ),
             DevicePage(
-                device: _device,
-                refreshMemories: _initiateMemories,
-                transcriptChildWidgetKey: transcriptChildWidgetKey,
-            batteryLevel: batteryLevel,),
+              device: _device,
+              refreshMemories: _initiateMemories,
+              transcriptChildWidgetKey: transcriptChildWidgetKey,
+              batteryLevel: batteryLevel,
+            ),
             const ChatPage(),
           ],
         ),
@@ -290,6 +299,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _deepgramApiKeyController.dispose();
     _openaiApiKeyController.dispose();
     _gcpCredentialsController.dispose();

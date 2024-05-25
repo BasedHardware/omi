@@ -81,9 +81,11 @@ Future<StreamSubscription?> getBleAudioBytesListener(
     if (canNotify != null) {
       await canNotify.setNotifyValue(true);
       debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
-      return canNotify.lastValueStream.listen((value) {
+      var listener = canNotify.lastValueStream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
       });
+      device.cancelWhenDisconnected(listener);
+      return listener;
     }
   }
   debugPrint('Desired audio characteristic not found');
