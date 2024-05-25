@@ -1,16 +1,21 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/foreground.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'widgets/transcript.dart';
@@ -38,16 +43,21 @@ class _DevicePageState extends State<DevicePage> {
   final unFocusNode = FocusNode();
 
   StreamSubscription<BluetoothConnectionState>? connectionStateListener;
-  StreamSubscription? bleBatteryLevelListener;
+  StreamSubscription<List<int>>? bleBatteryLevelListener;
   int batteryLevel = -1;
+  ForegroundUtil foreground = ForegroundUtil();
 
   @override
   void initState() {
     super.initState();
+    foreground.requestPermissionForAndroid();
+    foreground.initForegroundTask();
+
     if (widget.btDevice != null) {
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
       _initiateConnectionListener();
       _initiateBleBatteryListener();
+      foreground.startForegroundTask();
     } else {
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
@@ -56,14 +66,17 @@ class _DevicePageState extends State<DevicePage> {
           });
           _initiateConnectionListener();
           _initiateBleBatteryListener();
+          foreground.startForegroundTask();
         }
       });
     }
     authenticateGCP();
+    // WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // });
   }
 
   _initiateBleBatteryListener() async {
-    if (bleBatteryLevelListener != null) return;
+    bleBatteryLevelListener?.cancel();
     bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
       setState(() {
         batteryLevel = value;
@@ -72,6 +85,7 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   _initiateConnectionListener() async {
+    connectionStateListener?.cancel();
     connectionStateListener = getConnectionStateListener(_device!.id, () {
       // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
       // we don't want either way to trigger the websocket closed event, because it's closed on purpose
@@ -82,18 +96,20 @@ class _DevicePageState extends State<DevicePage> {
       });
       bleBatteryLevelListener?.cancel();
       bleBatteryLevelListener = null;
-      // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
-      // TODO: retry connecting 5 times every 10 seconds
-
+      InstabugLog.logWarn('Friend Device Disconnected');
+      foreground.stopForegroundTask();
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
 
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
+          debugPrint('scanAndConnectDevice $friendDevice');
           setState(() {
             _device = friendDevice;
           });
           clearNotification(1);
+          _initiateConnectionListener();
           _initiateBleBatteryListener();
+          foreground.startForegroundTask();
         }
       });
     }, () {
@@ -111,7 +127,8 @@ class _DevicePageState extends State<DevicePage> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return WithForegroundTask(
+        child: GestureDetector(
       onTap: () => unFocusNode.canRequestFocus
           ? FocusScope.of(context).requestFocus(unFocusNode)
           : FocusScope.of(context).unfocus(),
@@ -134,7 +151,7 @@ class _DevicePageState extends State<DevicePage> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   _getConnectedDeviceWidgets() {
