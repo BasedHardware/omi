@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -132,7 +133,6 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
 }) async {
-  final device = BluetoothDevice.fromId(btDevice!.id);
   WavBytesUtil wavBytesUtil = WavBytesUtil();
 
   try {
@@ -152,48 +152,25 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     //   onWebsocketConnectionClosed,
     //   onWebsocketConnectionError,
     // );
+    IOWebSocketChannel? channel2;
 
-    IOWebSocketChannel? channel2 = null;
+    final device = BluetoothDevice.fromId(btDevice!.id);
     await device.connect();
-    debugPrint('Connected to device: ${device.remoteId}');
-    List<BluetoothService> services = await device.discoverServices();
-    debugPrint('Discovered ${services.length} services');
 
-    for (BluetoothService service in services) {
-      // debugPrint('Service UUID: ${service.uuid.str128.toLowerCase()} ${service.characteristics}');
-      if (service.uuid.str128.toLowerCase() == audioServiceUuid) {
-        for (BluetoothCharacteristic characteristic in service.characteristics) {
-          if (characteristic.uuid.str128.toLowerCase() == audioCharacteristicUuid ||
-              characteristic.uuid.str128.toLowerCase() == audioCharacteristicFormatUuid) {
-            final isNotify = characteristic.properties.notify;
-
-            if (isNotify) {
-              await characteristic.setNotifyValue(true);
-              debugPrint('Subscribed to characteristic: ${characteristic.uuid.str128}');
-
-              StreamSubscription stream = characteristic.value.listen((List<int> value) {
-                if (value.isEmpty) return;
-                value.removeRange(0, 3);
-                for (int i = 0; i < value.length; i += 2) {
-                  int byte1 = value[i];
-                  int byte2 = value[i + 1];
-                  int int16Value = (byte2 << 8) | byte1;
-                  wavBytesUtil.addAudioBytes([int16Value]);
-                }
-                channel.sink.add(value);
-                channel2?.sink.add(value);
-              });
-
-              // return completer.future;
-              return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
-                  channel, stream, wavBytesUtil, channel2);
-            }
-          }
-        }
+    StreamSubscription? stream = await getBleAudioBytesListener(device, onAudioBytesReceived: (List<int> value) {
+      if (value.isEmpty) return;
+      value.removeRange(0, 3);
+      for (int i = 0; i < value.length; i += 2) {
+        int byte1 = value[i];
+        int byte2 = value[i + 1];
+        int int16Value = (byte2 << 8) | byte1;
+        wavBytesUtil.addAudioBytes([int16Value]);
       }
-    }
-
-    debugPrint('Desired characteristic not found');
+      channel.sink.add(value);
+      channel2?.sink.add(value);
+    });
+    return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
+        channel, stream, wavBytesUtil, channel2);
   } catch (e) {
     debugPrint('Error receiving data: $e');
   } finally {}

@@ -15,12 +15,12 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'widgets/transcript.dart';
 
-class HomePage extends StatefulWidget {
+class DevicePage extends StatefulWidget {
   final Function refreshMemories;
   final dynamic btDevice;
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
-  const HomePage({
+  const DevicePage({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
@@ -28,10 +28,10 @@ class HomePage extends StatefulWidget {
   });
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<DevicePage> createState() => _DevicePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _DevicePageState extends State<DevicePage> {
   BTDeviceStruct? _device;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -83,6 +83,7 @@ class _HomePageState extends State<HomePage> {
       bleBatteryLevelListener?.cancel();
       bleBatteryLevelListener = null;
       // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
+      // TODO: retry connecting 5 times every 10 seconds
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
