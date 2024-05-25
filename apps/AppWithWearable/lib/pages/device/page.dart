@@ -1,35 +1,25 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:isolate';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/foreground.dart';
-import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'widgets/transcript.dart';
 
 class DevicePage extends StatefulWidget {
   final Function refreshMemories;
-  final dynamic btDevice;
+  final BTDeviceStruct? device;
+  final int batteryLevel;
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
   const DevicePage({
     super.key,
-    required this.btDevice,
+    required this.device,
     required this.refreshMemories,
     required this.transcriptChildWidgetKey,
+    required this.batteryLevel,
   });
 
   @override
@@ -37,91 +27,12 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-  BTDeviceStruct? _device;
-
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final unFocusNode = FocusNode();
-
-  StreamSubscription<BluetoothConnectionState>? connectionStateListener;
-  StreamSubscription<List<int>>? bleBatteryLevelListener;
-  int batteryLevel = -1;
-  ForegroundUtil foreground = ForegroundUtil();
-
-  @override
-  void initState() {
-    super.initState();
-    foreground.requestPermissionForAndroid();
-    foreground.initForegroundTask();
-
-    if (widget.btDevice != null) {
-      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
-      _initiateConnectionListener();
-      _initiateBleBatteryListener();
-      foreground.startForegroundTask();
-    } else {
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          setState(() {
-            _device = friendDevice;
-          });
-          _initiateConnectionListener();
-          _initiateBleBatteryListener();
-          foreground.startForegroundTask();
-        }
-      });
-    }
-    authenticateGCP();
-    // WidgetsBinding.instance.addPostFrameCallback((_) async {
-    // });
-  }
-
-  _initiateBleBatteryListener() async {
-    bleBatteryLevelListener?.cancel();
-    bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
-      setState(() {
-        batteryLevel = value;
-      });
-    });
-  }
-
-  _initiateConnectionListener() async {
-    connectionStateListener?.cancel();
-    connectionStateListener = getConnectionStateListener(_device!.id, () {
-      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
-      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
-      // and we don't want to retry the websocket connection or something
-      widget.transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
-      setState(() {
-        _device = null;
-      });
-      bleBatteryLevelListener?.cancel();
-      bleBatteryLevelListener = null;
-      InstabugLog.logWarn('Friend Device Disconnected');
-      foreground.stopForegroundTask();
-      createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
-
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          debugPrint('scanAndConnectDevice $friendDevice');
-          setState(() {
-            _device = friendDevice;
-          });
-          clearNotification(1);
-          _initiateConnectionListener();
-          _initiateBleBatteryListener();
-          foreground.startForegroundTask();
-        }
-      });
-    }, () {
-      widget.transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
-    });
-  }
 
   @override
   void dispose() {
     unFocusNode.dispose();
-    connectionStateListener?.cancel();
-    bleBatteryLevelListener?.cancel();
     super.dispose();
   }
 
@@ -140,9 +51,9 @@ class _DevicePageState extends State<DevicePage> {
             const BlurBotWidget(),
             ListView(children: [
               ..._getConnectedDeviceWidgets(),
-              _device != null
+              widget.device != null
                   ? TranscriptWidget(
-                      btDevice: _device!,
+                      btDevice: widget.device!,
                       key: widget.transcriptChildWidgetKey,
                       refreshMemories: widget.refreshMemories,
                     )
@@ -155,7 +66,7 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   _getConnectedDeviceWidgets() {
-    if (_device == null) {
+    if (widget.device == null) {
       return [
         const SizedBox(height: 64),
         const ScanningAnimation(),
@@ -192,7 +103,7 @@ class _DevicePageState extends State<DevicePage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '${_device?.name ?? 'Friend'} ~ ${_device?.id.split('-').last.substring(0, 6)}',
+            '${widget.device?.name ?? 'Friend'} ~ ${widget.device?.id.split('-').last.substring(0, 6)}',
             style: const TextStyle(
               color: Color.fromARGB(255, 255, 255, 255),
               fontSize: 16.0,
@@ -201,8 +112,8 @@ class _DevicePageState extends State<DevicePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
-          batteryLevel == -1
+          widget.batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
+          widget.batteryLevel == -1
               ? const SizedBox.shrink()
               : Container(
                   decoration: BoxDecoration(
@@ -218,7 +129,7 @@ class _DevicePageState extends State<DevicePage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${batteryLevel.toString()}%',
+                        '${widget.batteryLevel.toString()}%',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -230,9 +141,9 @@ class _DevicePageState extends State<DevicePage> {
                         width: 10,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: batteryLevel > 75
+                          color: widget.batteryLevel > 75
                               ? const Color.fromARGB(255, 0, 255, 8)
-                              : batteryLevel > 20
+                              : widget.batteryLevel > 20
                                   ? Colors.yellow.shade700
                                   : Colors.red,
                           shape: BoxShape.circle,
