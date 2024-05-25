@@ -40,6 +40,7 @@ class TranscriptWidget extends StatefulWidget {
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
+  BTDeviceStruct? btDevice;
   bool websocketReconnecting = false;
   List<Map<int, String>> whispersDiarized = [{}];
 
@@ -56,13 +57,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   @override
   void initState() {
-    super.initState();
+    btDevice = widget.btDevice;
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initBleConnection();
     });
     _initiateConversationAdvisorTimer();
+    super.initState();
   }
-
 
   @override
   void dispose() {
@@ -112,8 +113,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Future<void> initBleConnection() async {
+    debugPrint('initBleConnection: $btDevice');
+    if (btDevice == null) return;
     Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
-        btDevice: widget.btDevice!,
+        btDevice: btDevice!,
         speechFinalCallback: (List<dynamic> words, String transcriptItem) {
           Map<int, Map<String, dynamic>> bySpeaker = {};
           for (var word in words) {
@@ -155,11 +158,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
           // connection was closed, either on resetState, or by deepgram, or by some other reason.
           addEventToContext('Websocket Closed');
-          try {
-            setState(() {
-              wsConnectionState = WebsocketConnectionStatus.closed;
-            }); // TODO: handle when device disconnect, this widget is not showing anymore so it's disposed.
-          } catch (e) {}
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.closed;
+          });
           if (closeCode != 1000) {
             // attempt to reconnect
             _reconnectWebSocket();
@@ -194,7 +195,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     channelCustomWebsocket = data.item4;
   }
 
-  void resetState({bool resetBLEConnection = true}) {
+  void resetState({bool resetBLEConnection = true, BTDeviceStruct? btDevice}) {
+    debugPrint('transcript.dart resetState called');
     streamSubscription?.cancel();
     channel?.sink.close(1000); // when closed from here, don't try to reconnect
     channelCustomWebsocket?.sink.close(1000);
@@ -203,6 +205,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     setState(() {
       // whispersDiarized = [{}];
       // customWebsocketTranscript = '';
+      if (btDevice != null) this.btDevice = btDevice;
       if (resetBLEConnection) websocketReconnecting = true;
     });
     if (resetBLEConnection) initBleConnection();
@@ -395,42 +398,43 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   _websocketConnectionIssueUI() {
     return Column(
       children: [
-        Text(
-          wsConnectionState == WebsocketConnectionStatus.failed
-              ? '🚨 Deepgram connection failed'
-              : (wsConnectionState == WebsocketConnectionStatus.closed)
-                  ? 'Deepgram connection closed'
-                  : wsConnectionState == WebsocketConnectionStatus.error
-                      ? 'Deepgram connection error'
-                      : 'Deepgram connection failed',
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        SizedBox(height: websocketReconnecting ? 20 : 12),
+        // Text(
+        //   wsConnectionState == WebsocketConnectionStatus.failed
+        //       ? '🚨 Deepgram connection failed'
+        //       : (wsConnectionState == WebsocketConnectionStatus.closed)
+        //           ? 'Deepgram connection closed'
+        //           : wsConnectionState == WebsocketConnectionStatus.error
+        //               ? 'Deepgram connection error'
+        //               : 'Deepgram connection failed',
+        //   style: const TextStyle(color: Colors.white, fontSize: 16),
+        // ),
+        // SizedBox(height: websocketReconnecting ? 20 : 12),
         websocketReconnecting
             ? CircularProgressIndicator(
                 color: FlutterFlowTheme.of(context).primary,
               )
-            : TextButton(
-                onPressed: () {
-                  if (websocketReconnecting) return;
-                  addEventToContext('Retry Websocket Connection Clicked');
-                  resetState();
-                },
-                style: ButtonStyle(
-                  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0),
-                      side: const BorderSide(color: Colors.white, width: 0.2),
-                    ),
-                  ),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    'Retry',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                )),
+            : const SizedBox.shrink()
+        // : TextButton(
+        //     onPressed: () {
+        //       if (websocketReconnecting) return;
+        //       addEventToContext('Retry Websocket Connection Clicked');
+        //       resetState();
+        //     },
+        //     style: ButtonStyle(
+        //       shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+        //         RoundedRectangleBorder(
+        //           borderRadius: BorderRadius.circular(12.0),
+        //           side: const BorderSide(color: Colors.white, width: 0.2),
+        //         ),
+        //       ),
+        //     ),
+        //     child: const Padding(
+        //       padding: EdgeInsets.symmetric(horizontal: 16.0),
+        //       child: Text(
+        //         'Retry',
+        //         style: TextStyle(color: Colors.white, fontSize: 18),
+        //       ),
+        //     )),
       ],
     );
   }
