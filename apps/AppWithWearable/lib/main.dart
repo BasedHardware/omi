@@ -4,8 +4,6 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:sentry_logging/sentry_logging.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -15,37 +13,21 @@ import 'flutter_flow/internationalization.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
-
+  // FlutterBluePlus.setLogLevel(LogLevel.verbose, color: false);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
         token: Env.instabugApiKey!,
         invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
+    Instabug.setColorTheme(ColorTheme.dark);
   }
-  // if (Env.sentryDSNKey?.isNotEmpty ?? false) {
-  //   debugPrint('Sentry key: ${Env.sentryDSNKey}');
-  //   await SentryFlutter.init(
-  //     (options) {
-  //       options.dsn = Env.sentryDSNKey;
-  //       options.tracesSampleRate = 1.0;
-  //       options.profilesSampleRate = 1.0;
-  //       options.attachScreenshot = false;
-  //       options.debug = true;
-  //       options.addIntegration(LoggingIntegration());
-  //       options.enableAutoPerformanceTracing = true;
-  //     },
-  //     appRunner: () => _getRunApp(),
-  //   );
-  // } else {
-  // }
   _getRunApp();
 }
 
 _getRunApp() {
-  return runApp(MyApp(
-    entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null,
-  ));
+  return runApp(
+      MyApp(entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null));
 }
 
 class MyApp extends StatefulWidget {
