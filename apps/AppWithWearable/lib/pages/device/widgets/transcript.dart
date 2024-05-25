@@ -132,7 +132,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
           Map<int, Map<String, dynamic>> bySpeaker = {};
           for (var word in words) {
             // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
-            debugPrint('Word: ${word.toString()}');
+            // debugPrint('Word: ${word.toString()}');
             int speaker = word['speaker'];
             if (bySpeaker[speaker] == null) bySpeaker[speaker] = <String, dynamic>{};
             String currentSpeakerTranscript = bySpeaker[speaker]!['transcript'] ?? '';

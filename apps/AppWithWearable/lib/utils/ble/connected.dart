@@ -1,23 +1,8 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import '/backend/schema/structs/index.dart';
 import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-
-Future<List<BTDeviceStruct>> getConnectedDevices({includeRssi = true}) async {
-  final connectedDevices = FlutterBluePlus.connectedDevices;
-  List<BTDeviceStruct> devices = [];
-
-  for (var device in connectedDevices) {
-    devices.add(BTDeviceStruct(
-      name: device.advName,
-      id: device.remoteId.str,
-      rssi: includeRssi ? (await device.readRssi()) : null,
-    ));
-  }
-  return devices;
-}
 
 StreamSubscription<BluetoothConnectionState>? getConnectionStateListener(
     String deviceId, Function onDisconnect, Function onConnect) {

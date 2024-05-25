@@ -5,7 +5,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/utils.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:http/http.dart' as http;
 
 Future<http.Response?> makeApiCall({
@@ -14,29 +13,17 @@ Future<http.Response?> makeApiCall({
   required String body,
   required String method,
 }) async {
-  final transaction = Sentry.startTransaction(
-    'webrequest',
-    'request',
-    bindToScope: true,
-  );
-  var response;
-  var client = SentryHttpClient();
-
   try {
     if (method == 'POST') {
-      response = await client.post(Uri.parse(url), headers: headers, body: body);
+      return await http.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
-      response = await client.get(Uri.parse(url), headers: headers);
+      return await http.get(Uri.parse(url), headers: headers);
     }
   } catch (e) {
     debugPrint('HTTP request failed: $e');
-    await transaction.finish(status: const SpanStatus.unknownError());
     return null;
-  } finally {
-    client.close();
-  }
-  await transaction.finish(status: const SpanStatus.ok());
-  return response;
+  } finally {}
+  return null;
 }
 
 // Function to extract content from the API response.
