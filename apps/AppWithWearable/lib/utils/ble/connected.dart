@@ -3,21 +3,22 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 
-StreamSubscription<BluetoothConnectionState>? getConnectionStateListener(
-    String deviceId, Function onDisconnect, Function onConnect) {
-  BluetoothDevice? connectedDevice =
-      (FlutterBluePlus.connectedDevices).firstWhereOrNull((e) => e.remoteId.str == deviceId);
-  if (connectedDevice == null) return null;
-
-  StreamSubscription<BluetoothConnectionState>? connectionStateListener =
-      connectedDevice.connectionState.listen((event) {
-    debugPrint('connectionStateListener: $event');
-    if (event == BluetoothConnectionState.disconnected) {
-      onDisconnect();
-    } else if (event == BluetoothConnectionState.connected) {
-      onConnect();
+StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
+    {required String deviceId, required Function onDisconnected, required Function(BTDeviceStruct) onConnected}) {
+  return FlutterBluePlus.events.onConnectionStateChanged.listen((event) async {
+    debugPrint('onConnectionStateChanged: ${event.device.remoteId.str} ${event.connectionState}');
+    if (event.device.remoteId.str == deviceId) {
+      if (event.connectionState == BluetoothConnectionState.disconnected) {
+        onDisconnected();
+      } else if (event.connectionState == BluetoothConnectionState.connected) {
+        onConnected(BTDeviceStruct(
+          id: event.device.remoteId.str,
+          name: event.device.platformName,
+          rssi: await event.device.readRssi(),
+        ));
+      }
     }
   });
-  return connectionStateListener;
 }

@@ -38,7 +38,7 @@ class TranscriptWidget extends StatefulWidget {
   State<TranscriptWidget> createState() => TranscriptWidgetState();
 }
 
-class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingObserver {
+class TranscriptWidgetState extends State<TranscriptWidget> {
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
   List<Map<int, String>> whispersDiarized = [{}];
@@ -57,28 +57,15 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initBleConnection();
     });
     _initiateConversationAdvisorTimer();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused) {
-      addEventToContext('App is paused');
-    } else if (state == AppLifecycleState.resumed) {
-      addEventToContext('App is resumed');
-    } else if (state == AppLifecycleState.hidden) {
-      addEventToContext('App is hidden');
-    }
-  }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _conversationAdvisorTimer?.cancel();
     _memoryCreationTimer?.cancel();
     debugPrint('TranscriptWidget disposed');
