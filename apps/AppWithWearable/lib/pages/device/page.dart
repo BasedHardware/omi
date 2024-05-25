@@ -87,6 +87,7 @@ class _DevicePageState extends State<DevicePage> {
 
       // SHOUDLNT reconnect be happening already?
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {
           setState(() {
