@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -8,7 +12,11 @@ import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/settings.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/ble/connected.dart';
+import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -37,16 +45,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
     setState(() {});
-  }
-
-  @override
-  void initState() {
-    // _refreshMemories();
-    _initiateMemories();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      requestNotificationPermissions();
-    });
-    super.initState();
   }
 
   Future<void> _showSettingsBottomSheet() async {
@@ -149,6 +147,84 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     });
   }
 
+  StreamSubscription<BluetoothConnectionState>? _connectionStateListener;
+  StreamSubscription<List<int>>? _bleBatteryLevelListener;
+  int batteryLevel = -1;
+  BTDeviceStruct? _device;
+
+  // ForegroundUtil foreground = ForegroundUtil();
+
+  @override
+  void initState() {
+    _initiateMemories();
+    // foreground.requestPermissionForAndroid();
+    // foreground.initForegroundTask();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      requestNotificationPermissions();
+    });
+    if (widget.btDevice != null) {
+      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      _initiateConnectionListener();
+      _initiateBleBatteryListener();
+      // foreground.startForegroundTask();
+    } else {
+      scanAndConnectDevice().then((friendDevice) {
+        if (friendDevice != null) {
+          setState(() {
+            _device = friendDevice;
+          });
+          _initiateConnectionListener();
+          _initiateBleBatteryListener();
+          // foreground.startForegroundTask();
+        }
+      });
+    }
+    authenticateGCP();
+    super.initState();
+  }
+
+  _initiateBleBatteryListener() async {
+    _bleBatteryLevelListener?.cancel();
+    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+      setState(() {
+        batteryLevel = value;
+      });
+    });
+  }
+
+  _initiateConnectionListener() async {
+    _connectionStateListener?.cancel();
+    _connectionStateListener = getConnectionStateListener(_device!.id, () {
+      // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
+      // we don't want either way to trigger the websocket closed event, because it's closed on purpose
+      // and we don't want to retry the websocket connection or something
+      transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
+      setState(() {
+        _device = null;
+      });
+      _bleBatteryLevelListener?.cancel();
+      _bleBatteryLevelListener = null;
+      InstabugLog.logWarn('Friend Device Disconnected');
+      // foreground.stopForegroundTask();
+      createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+
+      scanAndConnectDevice().then((friendDevice) {
+        if (friendDevice != null) {
+          debugPrint('scanAndConnectDevice $friendDevice');
+          setState(() {
+            _device = friendDevice;
+          });
+          clearNotification(1);
+          _initiateConnectionListener();
+          _initiateBleBatteryListener();
+          // foreground.startForegroundTask();
+        }
+      });
+    }, () {
+      transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,9 +237,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
               refreshMemories: _initiateMemories,
             ),
             DevicePage(
-                btDevice: widget.btDevice,
+                device: _device,
                 refreshMemories: _initiateMemories,
-                transcriptChildWidgetKey: transcriptChildWidgetKey),
+                transcriptChildWidgetKey: transcriptChildWidgetKey,
+            batteryLevel: batteryLevel,),
             const ChatPage(),
           ],
         ),
@@ -218,6 +295,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     _gcpCredentialsController.dispose();
     _gcpBucketNameController.dispose();
     _customWebsocketUrlController.dispose();
+    _connectionStateListener?.cancel();
+    _bleBatteryLevelListener?.cancel();
     super.dispose();
   }
 }
