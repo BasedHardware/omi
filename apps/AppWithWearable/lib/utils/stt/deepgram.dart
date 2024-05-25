@@ -3,7 +3,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -124,7 +123,7 @@ Future<IOWebSocketChannel> _initStream(
 }
 
 Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>> bleReceiveWAV({
-  BTDeviceStruct? btDevice,
+  required BTDeviceStruct? btDevice,
   void Function(List<dynamic>, String)? speechFinalCallback,
   void Function(Map<int, String>, String)? interimCallback,
   VoidCallback? onWebsocketConnectionSuccess,
@@ -154,10 +153,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
     // );
     IOWebSocketChannel? channel2;
 
-    final device = BluetoothDevice.fromId(btDevice!.id);
-    await device.connect();
-
-    StreamSubscription? stream = await getBleAudioBytesListener(device, onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
       for (int i = 0; i < value.length; i += 2) {
