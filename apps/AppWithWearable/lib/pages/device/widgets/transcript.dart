@@ -128,7 +128,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> with WidgetsBindingO
     Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
         btDevice: widget.btDevice!,
         speechFinalCallback: (List<dynamic> words, String transcriptItem) {
-          debugPrint("Deepgram Finalized Callback received");
           Map<int, Map<String, dynamic>> bySpeaker = {};
           for (var word in words) {
             // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append

@@ -91,7 +91,7 @@ Future<IOWebSocketChannel> _initStream(
         final transcript = data['transcript'];
         final speechFinal = parsedJson['is_final'];
         if (transcript.length > 0) {
-          debugPrint('Transcript: ${data['words']}');
+          // debugPrint('Transcript: ${data['words']}');
           if (speechFinal) {
             speechFinalCallback(data['words'], '');
           } else {
