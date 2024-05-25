@@ -84,6 +84,8 @@ class _DevicePageState extends State<DevicePage> {
       bleBatteryLevelListener = null;
       // Sentry.captureMessage('Friend Device Disconnected', level: SentryLevel.warning);
       // TODO: retry connecting 5 times every 10 seconds
+
+      // SHOUDLNT reconnect be happening already?
       createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
       scanAndConnectDevice().then((friendDevice) {
         if (friendDevice != null) {

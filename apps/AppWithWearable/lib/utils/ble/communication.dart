@@ -41,7 +41,7 @@ Future<StreamSubscription?> getBleBatteryLevelListener(
     if (canRead != null && canNotify != null) {
       await canNotify.setNotifyValue(true);
       return canNotify.lastValueStream.listen((value) {
-        debugPrint('Battery level listener: $value');
+        // debugPrint('Battery level listener: $value');
         if (value.isNotEmpty) {
           onBatteryLevelChange!(value[0]);
         }
@@ -52,25 +52,24 @@ Future<StreamSubscription?> getBleBatteryLevelListener(
 }
 
 Future<StreamSubscription?> getBleAudioBytesListener(
-  BluetoothDevice device, {
+  BTDeviceStruct btDevice, {
   required void Function(List<int>) onAudioBytesReceived,
 }) async {
-  // 0000180f-0000-1000-8000-00805f9b34fb
+  final device = BluetoothDevice.fromId(btDevice.id);
+  await device.connect();
   final services = await device.discoverServices();
-  final bytesService = services.firstWhereOrNull((service) =>
-      service.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214' ||
-      service.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+  final bytesService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
+
   if (bytesService != null) {
-    var canNotify = bytesService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
+    var canNotify = bytesService.characteristics.firstWhereOrNull((characteristic) =>
+        characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214' ||
+        characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
     if (canNotify != null) {
-      // let percent = (await batteryChar.read())[0];
       await canNotify.setNotifyValue(true);
       debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
       return canNotify.lastValueStream.listen((value) {
-        debugPrint('Battery level listener: $value');
-        if (value.isNotEmpty) {
-          onAudioBytesReceived(value);
-        }
+        if (value.isNotEmpty) onAudioBytesReceived(value);
       });
     }
   }
