@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -16,7 +18,12 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    if (!_preferences!.containsKey('uuid')) {
+      _preferences!.setString('uuid', const Uuid().v4());
+    }
   }
+
+  String get uid => getString('uuid') ?? '';
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 

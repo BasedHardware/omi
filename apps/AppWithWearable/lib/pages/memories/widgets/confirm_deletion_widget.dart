@@ -1,3 +1,4 @@
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -96,6 +97,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                         padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
                         child: FFButtonWidget(
                           onPressed: () async {
+                            deleteVector(widget.memory.id);
                             await MemoryStorage.deleteMemory(widget.memory.id);
                             Navigator.pop(context);
                             widget.onDelete?.call();

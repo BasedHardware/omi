@@ -15,4 +15,14 @@ abstract class Env {
 
   @EnviedField(varName: 'INSTABUG_API_KEY', obfuscate: true)
   static String? instabugApiKey = _Env.instabugApiKey;
+
+  // Pinecone
+  @EnviedField(varName: 'PINECONE_API_KEY')
+  static const String pineconeApiKey = _Env.pineconeApiKey;
+
+  @EnviedField(varName: 'PINECONE_INDEX_URL')
+  static const String pineconeIndexUrl = _Env.pineconeIndexUrl;
+
+  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE')
+  static const String pineconeIndexNamespace = _Env.pineconeIndexNamespace;
 }
