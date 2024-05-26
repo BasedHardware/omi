@@ -18,12 +18,12 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
-    if (!_preferences!.containsKey('uuid')) {
-      _preferences!.setString('uuid', const Uuid().v4());
+    if (!_preferences!.containsKey('uid')) {
+      _preferences!.setString('uid', const Uuid().v4());
     }
   }
 
-  String get uid => getString('uuid') ?? '';
+  String get uid => getString('uid') ?? '';
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 

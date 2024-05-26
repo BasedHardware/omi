@@ -267,7 +267,7 @@ Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> v
         'metadata': {
           'created_at': DateTime.now(),
           'memory_id': id,
-          'uuid': SharedPreferencesUtil().uid,
+          'uid': SharedPreferencesUtil().uid,
         }
       };
     }).toList(),
@@ -287,7 +287,7 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
         'metadata': {
           'created_at': DateTime.now().toIso8601String(),
           'memory_id': memoryId,
-          'uuid': SharedPreferencesUtil().uid,
+          'uid': SharedPreferencesUtil().uid,
         }
       }
     ],
@@ -306,7 +306,7 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList) async {
     'includeValues': false,
     'includeMetadata': false,
     'filter': {
-      'uuid': {'\$eq': SharedPreferencesUtil().uid},
+      'uid': {'\$eq': SharedPreferencesUtil().uid},
     }
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
