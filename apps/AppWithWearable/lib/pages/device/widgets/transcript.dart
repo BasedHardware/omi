@@ -256,7 +256,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       }
       transcript += '$transcriptItem\n\n';
     }
-    return transcript;
+    return transcript.trim();
   }
 
   bool memoryCreating = false;
@@ -272,7 +272,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       addEventToContext('Conversation Advisor Timer Triggered');
       var transcript = _buildDiarizedTranscriptMessage();
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
-      if (transcript.isEmpty || transcript.split(' ').length < 20) return;
       var advice = await adviseOnCurrentConversation(transcript);
       if (advice.isNotEmpty) {
         clearNotification(3);

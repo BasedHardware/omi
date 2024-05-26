@@ -113,37 +113,6 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
       : '';
 }
 
-Future<String> generateTitleAndSummaryForMemory(String rawMemory, List<MemoryRecord> previousMemories) async {
-  final languageCode = SharedPreferencesUtil().recordingsLanguage;
-  final language = availableLanguagesByCode[languageCode] ?? 'English';
-
-  var prompt = '''
-    ${languageCode == 'en' ? 'Generate a title and a summary for the following recording chunk of a conversation.' : 'Generate a title and a summary in English for the following recording chunk of a conversation that was performed in $language.'} 
-    For the title, use the most important topic or the most important action-item in the conversation.
-    For the summary, Identify the specific details in the conversation and specific facts that are important to remember or
-    action-items in very concise short points in second person (use bullet points). 
-    
-    Is possible that the transcript is only 1 speaker, in that case, is most likely the user speaking, so consider that a thought or something he wants to look at in the future and act accordingly.
-    Is possible that the conversation is empty or is useless, in that case output "N/A".
-    
-    Here is the recording ```${rawMemory.trim()}```.
-    ${_getPrevMemoriesStr(previousMemories)}
-    
-    Output using the following format:
-    ```
-    Title: ... 
-    Summary:
-    - Action item 1
-    - Action item 2
-    ...
-    ```
-    '''
-      .replaceAll('     ', '')
-      .replaceAll('    ', '')
-      .trim();
-  return (await executeGptPrompt(prompt)).replaceAll('```', '').trim();
-}
-
 Future<Structured> generateTitleAndSummaryForMemory2(String transcript, List<MemoryRecord> previousMemories) async {
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   var prompt =
@@ -175,11 +144,12 @@ Future<Structured> generateTitleAndSummaryForMemory2(String transcript, List<Mem
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
   if (transcript.isEmpty) return '';
+  if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it
   // if (transcript.contains('Speaker 0') &&
   //     (!transcript.contains('Speaker 1') && !transcript.contains('Speaker 2') && !transcript.contains('Speaker 3'))) {
   //   return '';
   // }
-  // TODO: eventually determine who am I, and improve diarization, deepgram is no good
+
   var prompt = '''
     You are a conversation coach, you provide clear and concise advice for conversations in real time. 
     The following is a transcript of the conversation (in progress) where most likely I am "Speaker 0", \
@@ -191,16 +161,19 @@ Future<String> adviseOnCurrentConversation(String transcript) async {
     ```
     
     Consider that the transcription is not perfect, so there might be mixed up words or sentences between speakers, try to work around that.
-    Also, it's possible that there's nothing word notifying the user about his interactions, in that case, output N/A.
+    
+    Also, it's possible that there's nothing worth notifying the user about his interactions, in that case, output N/A.
     Remember that the purpose of this advice, is to notify the user about his way of interacting in real time, so he can improve his communication skills.
     Be concise and short, respond in 10 to 15 words.
+    
+    IMPORTANT: Is this feedback so valuable that its worth to interrupt a busy entrepreneur? If not, output N/A.
     '''
       .replaceAll('     ', '')
       .replaceAll('    ', '')
       .trim();
   debugPrint(prompt);
   var result = await executeGptPrompt(prompt);
-  if (result.contains('N/A')) return '';
+  if (result.contains('N/A') || result.split(' ').length < 5) return '';
   return result;
 }
 
