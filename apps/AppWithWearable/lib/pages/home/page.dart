@@ -166,16 +166,30 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     }
   }
 
-  _initiateBleBatteryListener() async {
-    _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
-      setState(() {
-        batteryLevel = value;
-      });
+  @override
+  void initState() {
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      requestNotificationPermissions();
     });
+
+    _initiateMemories();
+    authenticateGCP();
+
+    if (widget.btDevice != null) {
+      // Only used when onboarding flow
+      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      _initiateConnectionListener();
+      _initiateBleBatteryListener();
+    } else {
+      // default flow
+      scanAndConnectDevice().then(_onConnected);
+    }
+    super.initState();
   }
 
   _initiateConnectionListener() async {
+    if (_connectionStateListener != null) return;
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
@@ -184,51 +198,30 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             _device = null;
           });
           InstabugLog.logWarn('Friend Device Disconnected');
-          // foreground.stopForegroundTask();
           createNotification(
               title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
         },
-        onConnected: (BTDeviceStruct connectedDevice) {
-          debugPrint('BLE onConnected');
-          clearNotification(1);
-          setState(() {
-            _device = connectedDevice;
-          });
-          _initiateBleBatteryListener();
-          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: connectedDevice);
-          // foreground.startForegroundTask();
-        });
+        onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
   }
 
-  @override
-  void initState() {
-    WidgetsBinding.instance.addObserver(this);
-    _initiateMemories();
-    // foreground.requestPermissionForAndroid();
-    // foreground.initForegroundTask();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      requestNotificationPermissions();
+  _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+    if (connectedDevice == null) return;
+    clearNotification(1);
+    setState(() {
+      _device = connectedDevice;
     });
-    if (widget.btDevice != null) {
-      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
-      _initiateConnectionListener();
-      _initiateBleBatteryListener();
-      // foreground.startForegroundTask();
-    } else {
-      scanAndConnectDevice().then((friendDevice) {
-        if (friendDevice != null) {
-          setState(() {
-            _device = friendDevice;
-          });
-          _initiateConnectionListener();
-          _initiateBleBatteryListener();
-          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: friendDevice);
-          // foreground.startForegroundTask();
-        }
+    if (initiateConnectionListener) _initiateConnectionListener();
+    _initiateBleBatteryListener();
+    transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: connectedDevice);
+  }
+
+  _initiateBleBatteryListener() async {
+    _bleBatteryLevelListener?.cancel();
+    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+      setState(() {
+        batteryLevel = value;
       });
-    }
-    authenticateGCP();
-    super.initState();
+    });
   }
 
   @override
