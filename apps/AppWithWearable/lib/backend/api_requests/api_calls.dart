@@ -115,6 +115,8 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
   if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: []);
+  // TODO: this has to be toggled and played around
+  // TODO: probably best to determine usefulness with function call before executing this prompt
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
