@@ -204,11 +204,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     setState(() {
       // whispersDiarized = [{}];
-      // customWebsocketTranscript = '';
       if (btDevice != null) this.btDevice = btDevice;
       if (resetBLEConnection) websocketReconnecting = true;
     });
     if (resetBLEConnection) initBleConnection();
+    if (resetBLEConnection &&
+        whispersDiarized.isNotEmpty &&
+        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty)) _initiateMemoryCreationTimer();
   }
 
   int _reconnectionAttempts = 0;
@@ -281,6 +283,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _initiateMemoryCreationTimer() {
+    debugPrint('_initiateMemoryCreationTimer');
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
       widget.refreshMemories();
