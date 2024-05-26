@@ -27,20 +27,20 @@ class _MemoriesPageState extends State<MemoriesPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final unFocusNode = FocusNode();
 
-  _dailySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesByDay(DateTime.now());
-    dailySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
-
-  _weeklySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastWeek();
-    weeklySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
-
-  _monthlySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastMonth();
-    monthlySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
+  // _dailySummary() async {
+  //   List<MemoryRecord> memories = await MemoryStorage.getMemoriesByDay(DateTime.now());
+  //   dailySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
+  // }
+  //
+  // _weeklySummary() async {
+  //   List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastWeek();
+  //   weeklySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
+  // }
+  //
+  // _monthlySummary() async {
+  //   List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastMonth();
+  //   monthlySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
+  // }
 
   void _resetMemoriesState(String? memoryId) {
     // FIXME implement
@@ -93,9 +93,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
   @override
   void initState() {
     super.initState();
-    _dailySummary();
-    _weeklySummary();
-    _monthlySummary();
+    // _dailySummary();
+    // _weeklySummary();
+    // _monthlySummary();
     // _audioPlayer = AudioPlayer();
     // _audioPlayer.onPlayerComplete.listen((event) {
     //   _resetMemoriesState(null);
@@ -125,14 +125,14 @@ class _MemoriesPageState extends State<MemoriesPage> {
               const BlurBotWidget(),
               ListView(
                 children: [
-                  const SizedBox(height: 16),
-                  HomePageSummariesButtons(
-                    unFocusNode: unFocusNode,
-                    dailySummary: dailySummary,
-                    weeklySummary: weeklySummary,
-                    monthlySummary: monthlySummary,
-                  ),
-                  const SizedBox(height: 8),
+                  // const SizedBox(height: 16),
+                  // HomePageSummariesButtons(
+                  //   unFocusNode: unFocusNode,
+                  //   dailySummary: dailySummary,
+                  //   weeklySummary: weeklySummary,
+                  //   monthlySummary: monthlySummary,
+                  // ),
+                  // const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: (widget.memories.isEmpty)
