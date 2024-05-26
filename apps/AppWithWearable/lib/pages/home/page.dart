@@ -179,9 +179,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          // when bluetooth disconnected we don't want to reset the BLE connection as there's no point, no device connected
-          // we don't want either way to trigger the websocket closed event, because it's closed on purpose
-          // and we don't want to retry the websocket connection or something
           transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
           setState(() {
             _device = null;
