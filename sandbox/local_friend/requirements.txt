@@ -1,0 +1,3 @@
+bleak
+pyobjc
+pyaudio
