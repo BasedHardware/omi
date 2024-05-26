@@ -17,12 +17,15 @@ abstract class Env {
   static String? instabugApiKey = _Env.instabugApiKey;
 
   // Pinecone
-  @EnviedField(varName: 'PINECONE_API_KEY')
+  @EnviedField(varName: 'PINECONE_API_KEY', obfuscate: true)
   static const String pineconeApiKey = _Env.pineconeApiKey;
 
-  @EnviedField(varName: 'PINECONE_INDEX_URL')
+  @EnviedField(varName: 'PINECONE_INDEX_URL', obfuscate: true)
   static const String pineconeIndexUrl = _Env.pineconeIndexUrl;
 
-  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE')
+  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true)
   static const String pineconeIndexNamespace = _Env.pineconeIndexNamespace;
+
+  @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
+  static String? mixpanelProjectToken = _Env.mixpanelProjectToken;
 }
