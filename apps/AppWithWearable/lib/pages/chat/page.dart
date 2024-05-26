@@ -118,7 +118,8 @@ class _ChatPageState extends State<ChatPage> {
     List<double> vectorizedMessage = await getEmbeddingsFromInput(
       message,
     );
-    List<String> memoriesId = querySimilarVectors(vectorizedMessage);
+    // List<String> memoriesId = querySimilarVectors(vectorizedMessage);
+    List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('querySimilarVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
       return '';

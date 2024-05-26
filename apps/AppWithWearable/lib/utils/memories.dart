@@ -61,7 +61,10 @@ Future<void> saveFailureMemory(String transcript, Structured structuredMemory) a
 // Finalize memory record after processing feedback
 Future<MemoryRecord> finalizeMemoryRecord(String transcript, Structured structuredMemory, String? audioFilePath) async {
   MemoryRecord createdMemory = await createMemoryRecord(transcript, structuredMemory, audioFilePath);
-  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) => storeMemoryVector(createdMemory, vector));
+  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
+    storeMemoryVector(createdMemory, vector);
+    createPineconeVector(createdMemory.id, vector);
+  });
   return createdMemory;
   // storeMemoryVector
 }
