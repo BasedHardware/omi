@@ -16,8 +16,7 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcrip
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
   Structured structuredMemory;
   try {
-    // structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
-    structuredMemory = await generateTitleAndSummaryForMemory2(transcript, recentMemories);
+    structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
   } catch (e) {
     debugPrint('Error: $e');
     ScaffoldMessenger.of(context).removeCurrentSnackBar();

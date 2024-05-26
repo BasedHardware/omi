@@ -15,7 +15,7 @@ class Structured {
   factory Structured.fromJson(Map<String, dynamic> json) => Structured(
         title: json['title'],
         overview: json['overview'],
-        actionItems: List<String>.from(json['action_items']),
+        actionItems: List<String>.from(json['action_items'] ?? []),
       );
 
   Map<String, dynamic> toJson() => {

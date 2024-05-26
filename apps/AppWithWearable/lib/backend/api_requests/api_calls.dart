@@ -113,15 +113,19 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
       : '';
 }
 
-Future<Structured> generateTitleAndSummaryForMemory2(String transcript, List<MemoryRecord> previousMemories) async {
+Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
+  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: []);
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   var prompt =
-      '''Based on the following recording transcript of a conversation, structure the memory in a structured format.
+      '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
     The conversation language is $languageCode. Make sure to use English for your response.
 
+    It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
+    The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
+     
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
-    For the action items, use a list of actionable steps or bullet points for the conversation. 
+    For the action items, use a list of actionable steps or bullet points for the conversation.
         
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
