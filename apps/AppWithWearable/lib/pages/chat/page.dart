@@ -1,5 +1,6 @@
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
@@ -96,6 +97,7 @@ class _ChatPageState extends State<ChatPage> {
                       _prepareStreaming(message);
                       String ragContext = await _retrieveRAGContext(message);
                       debugPrint('RAG Context: $ragContext');
+                      MixpanelManager().chatMessageSent(message);
                       await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
                         prefs.chatMessages = _messages;
                       });

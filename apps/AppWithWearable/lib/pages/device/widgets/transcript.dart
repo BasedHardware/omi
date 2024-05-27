@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -13,6 +14,7 @@ import 'package:friend_private/utils/stt/deepgram.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -276,6 +278,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
       var advice = await adviseOnCurrentConversation(transcript);
       if (advice.isNotEmpty) {
+        MixpanelManager().coachAdvisorFeedback(transcript, advice);
         clearNotification(3);
         createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
       }

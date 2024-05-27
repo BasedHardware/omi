@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
@@ -136,6 +137,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       setState(() {
                         editingTitle = false;
                       });
+                      MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'title');
                     }),
                     const SizedBox(height: 32),
                     _getFieldHeader('overview', focusOverviewField),
@@ -151,6 +153,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       setState(() {
                         editingOverview = false;
                       });
+                      MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'overview');
                     }),
                     const SizedBox(height: 32),
                     memory.structured.actionItems.isNotEmpty

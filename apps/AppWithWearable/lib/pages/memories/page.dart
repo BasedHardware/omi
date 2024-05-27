@@ -22,6 +22,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
   String? dailySummary;
   String? weeklySummary;
   String? monthlySummary;
+
   // late AudioPlayer _audioPlayer;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -149,12 +150,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
                             scrollDirection: Axis.vertical,
                             itemBuilder: (context, index) {
                               return MemoryListItem(
+                                memoryIdx: index,
                                 memory: widget.memories[index],
                                 unFocusNode: unFocusNode,
-                                // playAudio: _playAudio,
-                                // pauseAudio: _pauseAudio,
-                                // resumeAudio: _resumeAudio,
-                                // stopAudio: _stopAudio,
                                 loadMemories: widget.refreshMemories,
                               );
                             },

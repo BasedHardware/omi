@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:uuid/uuid.dart';
@@ -25,6 +26,7 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcrip
     return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
+
   if (structuredMemory.title.isEmpty) {
     await saveFailureMemory(transcript, structuredMemory);
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -37,6 +39,7 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcrip
     ));
   } else {
     MemoryRecord memory = await finalizeMemoryRecord(transcript, structuredMemory, audioFileName);
+    MixpanelManager().memoryCreated(memory);
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
@@ -48,7 +51,7 @@ Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcrip
 }
 
 // Save failure memory when structured memory contains empty string
-Future<void> saveFailureMemory(String transcript, Structured structuredMemory) async {
+Future<MemoryRecord> saveFailureMemory(String transcript, Structured structuredMemory) async {
   MemoryRecord memory = MemoryRecord(
       id: const Uuid().v4(),
       createdAt: DateTime.now(),
@@ -56,6 +59,8 @@ Future<void> saveFailureMemory(String transcript, Structured structuredMemory) a
       structured: structuredMemory,
       discarded: true);
   MemoryStorage.addMemory(memory);
+  MixpanelManager().memoryCreated(memory);
+  return memory;
 }
 
 // Finalize memory record after processing feedback
