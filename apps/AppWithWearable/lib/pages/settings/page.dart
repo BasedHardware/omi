@@ -25,6 +25,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool useFriendAPIKeys;
   late bool optInAnalytics;
+  late bool devModeEnabled;
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     useFriendAPIKeys = SharedPreferencesUtil().useFriendApiKeys;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
+    devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     super.initState();
   }
 
@@ -47,8 +49,22 @@ class _SettingsPageState extends State<SettingsPage> {
         backgroundColor: FlutterFlowTheme.of(context).primary,
         automaticallyImplyLeading: true,
         title: const Text('Settings'),
-        centerTitle: true,
+        centerTitle: false,
         elevation: 2.0,
+        actions: [
+          MaterialButton(
+            onPressed: _saveSettings,
+            color: Colors.transparent,
+            elevation: 0,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: Text(
+                'Save',
+                style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 16),
+              ),
+            ),
+          )
+        ],
       ),
       body: Stack(
         children: [
@@ -59,233 +75,87 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(
+              child: ListView(
                 children: [
-                  Expanded(
-                      child: ListView(
-                    children: [
-                      const SizedBox(height: 16.0),
-                      _getText('Recordings Language:', underline: false),
-                      const SizedBox(height: 12),
-                      Center(
-                          child: Container(
-                        height: 50,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                        child: DropdownButton<String>(
-                          menuMaxHeight: 350,
-                          value: _selectedLanguage,
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              _selectedLanguage = newValue!;
-                            });
-                          },
-                          dropdownColor: Colors.black,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          underline: Container(
-                            height: 0,
-                            color: Colors.white,
-                          ),
-                          isExpanded: false,
-                          itemHeight: 48,
-                          items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
-                            return DropdownMenuItem<String>(
-                              value: availableLanguages[key],
-                              child: Text(
-                                '$key (${availableLanguages[key]})',
-                                style: TextStyle(
-                                    color:
-                                        _selectedLanguage == availableLanguages[key] ? Colors.blue[400] : Colors.white,
-                                    fontSize: 16),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      )),
-                      const SizedBox(height: 16.0),
-                      SwitchListTile(
-                        value: optInAnalytics,
-                        onChanged: (v) {
-                          //
-                        },
-                        title: const Text(
-                          'Opt In Analytics',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-                      // SwitchListTile(
-                      //   value: optInAnalytics,
-                      //   onChanged: (v) {
-                      //     //
-                      //   },
-                      //   title: const Text(
-                      //     'Developer Mode',
-                      //     style: TextStyle(color: Colors.white),
-                      //   ),
-                      // ),
-                      const SizedBox(height: 24.0),
-                      Container(
-                        height: 0.2,
-                        color: Colors.grey[400],
-                        width: double.infinity,
-                      ),
-                      const SizedBox(height: 16.0),
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: useFriendAPIKeys,
-                            onChanged: (v) {
-                              setState(() {
-                                useFriendAPIKeys = v!;
-                              });
-                            },
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2.0),
-                            ),
-                            side: WidgetStateBorderSide.resolveWith(
-                              (states) => const BorderSide(width: 1.0, color: Colors.white),
-                            ),
-                          ),
-                          _getText('Use Friend\'s API keys'),
-                        ],
-                      ),
-                      const SizedBox(height: 16.0),
-                      Stack(
-                        children: [
-                          if (useFriendAPIKeys)
-                            Container(
-                              width: double.maxFinite,
-                              height: 300,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20.0),
-                                color: Colors.white.withOpacity(0.1),
-                              ),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 8.0),
-                                _getText('Deepgram is used for converting speech to text.',
-                                    underline: false, canBeDisabled: true),
-                                const SizedBox(height: 8.0),
-                                TextField(
-                                  controller: deepgramApiKeyController,
-                                  obscureText: deepgramApiIsVisible ? false : true,
-                                  enabled: !useFriendAPIKeys,
-                                  decoration: _getTextFieldDecoration('Deepgram API Key',
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                                          color: useFriendAPIKeys
-                                              ? Colors.white.withOpacity(0.2)
-                                              : Theme.of(context).primaryColor,
-                                        ),
-                                        onPressed: () {
-                                          // setModalState(() {
-                                          setState(() {
-                                            deepgramApiIsVisible = !deepgramApiIsVisible;
-                                          });
-                                          // });
-                                        },
-                                      ),
-                                      canBeDisabled: true),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                const SizedBox(height: 8.0),
-                                TextButton(
-                                    onPressed: () {
-                                      launchUrl(
-                                          Uri.parse('https://developers.deepgram.com/docs/create-additional-api-keys'));
-                                    },
-                                    child: _getText('How to generate a Deepgram API key?',
-                                        underline: true, canBeDisabled: true)),
-                                const SizedBox(height: 16.0),
-                                _getText('OpenAI is used for chat.', canBeDisabled: true),
-                                const SizedBox(height: 8.0),
-                                TextField(
-                                  controller: openaiApiKeyController,
-                                  obscureText: openaiApiIsVisible ? false : true,
-                                  enabled: !useFriendAPIKeys,
-                                  autocorrect: false,
-                                  enableSuggestions: false,
-                                  decoration: _getTextFieldDecoration('OpenAI API Key',
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                                          color: useFriendAPIKeys
-                                              ? Colors.white.withOpacity(0.2)
-                                              : Theme.of(context).primaryColor,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            openaiApiIsVisible = !openaiApiIsVisible;
-                                          });
-                                        },
-                                      ),
-                                      canBeDisabled: true),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                const SizedBox(height: 8.0),
-                                TextButton(
-                                    onPressed: () {
-                                      launchUrl(Uri.parse('https://platform.openai.com/api-keys'));
-                                    },
-                                    child: _getText('How to generate an OpenAI API key?',
-                                        underline: true, canBeDisabled: true)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16.0),
-                      _getText('[Optional] Store your recordings in Google Cloud', underline: false),
-                      const SizedBox(height: 16.0),
-                      TextField(
-                        controller: gcpCredentialsController,
-                        obscureText: false,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        enabled: true,
-                        decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16.0),
-                      TextField(
-                        controller: gcpBucketNameController,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('GCP Bucket Name'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 12),
-                      TextButton(
-                          onPressed: () {
-                            launchUrl(Uri.parse(
-                                'https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console'));
-                          },
-                          child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
-                      const SizedBox(height: 16.0),
-                      TextField(
-                        controller: customWebsocketUrlController,
-                        obscureText: false,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        enabled: true,
-                        decoration: _getTextFieldDecoration('Custom Websocket'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  )),
+                  const SizedBox(height: 32.0),
+                  // _getText('Recordings Language:', underline: false),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      'Recordings Language:',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
                   const SizedBox(height: 12),
-                  _getSaveButton(context),
-                  const SizedBox(height: 18),
+                  Center(
+                      child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    child: DropdownButton<String>(
+                      menuMaxHeight: 350,
+                      value: _selectedLanguage,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedLanguage = newValue!;
+                        });
+                      },
+                      dropdownColor: Colors.black,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      underline: Container(
+                        height: 0,
+                        color: Colors.white,
+                      ),
+                      isExpanded: true,
+                      itemHeight: 48,
+                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+                        return DropdownMenuItem<String>(
+                          value: availableLanguages[key],
+                          child: Text(
+                            '$key (${availableLanguages[key]})',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight:
+                                    _selectedLanguage == availableLanguages[key] ? FontWeight.w600 : FontWeight.w500,
+                                fontSize: 16),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  )),
+                  const SizedBox(height: 24.0),
+                  SwitchListTile(
+                    value: optInAnalytics,
+                    activeColor: Colors.deepPurple,
+                    onChanged: (v) {
+                      setState(() {
+                        optInAnalytics = v;
+                      });
+                    },
+                    title: const Text(
+                      'Opt In Analytics',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  SwitchListTile(
+                    value: devModeEnabled,
+                    activeColor: Colors.deepPurple,
+                    onChanged: (v) {
+                      setState(() {
+                        devModeEnabled = v;
+                      });
+                    },
+                    title: const Text(
+                      'Developer Mode',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  ..._getDeveloperOnlyFields(),
                 ],
               ),
             ),
@@ -293,6 +163,166 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  _getDeveloperOnlyFields() {
+    if (!devModeEnabled) {
+      return [const SizedBox.shrink()];
+    }
+    return [
+      const SizedBox(height: 24.0),
+      Container(
+        height: 0.2,
+        color: Colors.grey[400],
+        width: double.infinity,
+      ),
+      const SizedBox(height: 16.0),
+      Row(
+        children: [
+          Checkbox(
+            value: useFriendAPIKeys,
+            onChanged: (v) {
+              setState(() {
+                useFriendAPIKeys = v!;
+              });
+            },
+            fillColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return Colors.deepPurple;
+              }
+              return Colors.transparent;
+            }),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2.0),
+            ),
+            side: WidgetStateBorderSide.resolveWith(
+              (states) => const BorderSide(width: 1.0, color: Colors.white),
+            ),
+          ),
+          _getText('Use Friend\'s API keys'),
+        ],
+      ),
+      const SizedBox(height: 16.0),
+      Stack(
+        children: [
+          if (useFriendAPIKeys)
+            Container(
+              width: double.maxFinite,
+              height: 300,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20.0),
+                color: Colors.white.withOpacity(0.1),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 8.0),
+                _getText('Deepgram is used for converting speech to text.', underline: false, canBeDisabled: true),
+                const SizedBox(height: 8.0),
+                TextField(
+                  controller: deepgramApiKeyController,
+                  obscureText: deepgramApiIsVisible ? false : true,
+                  enabled: !useFriendAPIKeys,
+                  decoration: _getTextFieldDecoration('Deepgram API Key',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
+                        ),
+                        onPressed: () {
+                          // setModalState(() {
+                          setState(() {
+                            deepgramApiIsVisible = !deepgramApiIsVisible;
+                          });
+                          // });
+                        },
+                      ),
+                      canBeDisabled: true),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 8.0),
+                TextButton(
+                    onPressed: () {
+                      launchUrl(Uri.parse('https://developers.deepgram.com/docs/create-additional-api-keys'));
+                    },
+                    child: _getText('How to generate a Deepgram API key?', underline: true, canBeDisabled: true)),
+                const SizedBox(height: 16.0),
+                _getText('OpenAI is used for chat.', canBeDisabled: true),
+                const SizedBox(height: 8.0),
+                TextField(
+                  controller: openaiApiKeyController,
+                  obscureText: openaiApiIsVisible ? false : true,
+                  enabled: !useFriendAPIKeys,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: _getTextFieldDecoration('OpenAI API Key',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            openaiApiIsVisible = !openaiApiIsVisible;
+                          });
+                        },
+                      ),
+                      canBeDisabled: true),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 8.0),
+                TextButton(
+                    onPressed: () {
+                      launchUrl(Uri.parse('https://platform.openai.com/api-keys'));
+                    },
+                    child: _getText('How to generate an OpenAI API key?', underline: true, canBeDisabled: true)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16.0),
+      _getText('[Optional] Store your recordings in Google Cloud', underline: false),
+      const SizedBox(height: 16.0),
+      TextField(
+        controller: gcpCredentialsController,
+        obscureText: false,
+        autocorrect: false,
+        enableSuggestions: false,
+        enabled: true,
+        decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 16.0),
+      TextField(
+        controller: gcpBucketNameController,
+        obscureText: false,
+        autocorrect: false,
+        enabled: true,
+        enableSuggestions: false,
+        decoration: _getTextFieldDecoration('GCP Bucket Name'),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 12),
+      TextButton(
+          onPressed: () {
+            launchUrl(
+                Uri.parse('https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console'));
+          },
+          child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
+      const SizedBox(height: 16.0),
+      TextField(
+        controller: customWebsocketUrlController,
+        obscureText: false,
+        autocorrect: false,
+        enableSuggestions: false,
+        enabled: true,
+        decoration: _getTextFieldDecoration('Custom Websocket'),
+        style: const TextStyle(color: Colors.white),
+      )
+    ];
   }
 
   _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false}) {
@@ -328,56 +358,29 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  _getSaveButton(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () {
-        if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Error'),
-                content: const Text('Deepgram and OpenAI API keys are required'),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('OK'),
-                  ),
-                ],
-              );
-            },
+  _saveSettings() {
+    if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Error'),
+            content: const Text('Deepgram and OpenAI API keys are required'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('OK'),
+              ),
+            ],
           );
-          return;
-        }
-        saveSettings();
-        Navigator.pop(context);
-      },
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.all<Color>(Colors.white),
-        shape: WidgetStateProperty.all<RoundedRectangleBorder>(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-        ),
-        overlayColor: WidgetStateProperty.resolveWith<Color>(
-          (Set<WidgetState> states) {
-            if (states.contains(WidgetState.pressed)) {
-              return Colors.grey[200]!;
-            }
-            return Colors.transparent;
-          },
-        ),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16.0),
-        child: Text(
-          'Save',
-          style: TextStyle(color: Colors.black),
-        ),
-      ),
-    );
+        },
+      );
+      return;
+    }
+    saveSettings();
+    Navigator.pop(context);
   }
 
   void saveSettings() async {
@@ -385,6 +388,10 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
+    prefs.optInAnalytics = optInAnalytics;
+    prefs.devModeEnabled = devModeEnabled;
+
+    optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
