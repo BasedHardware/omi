@@ -17,7 +17,7 @@ void main() async {
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
-  // await MixpanelManager.init();
+  await MixpanelManager.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
         token: Env.instabugApiKey!,

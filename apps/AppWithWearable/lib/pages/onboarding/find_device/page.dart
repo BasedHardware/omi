@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
@@ -80,6 +81,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   void _navigateToConnecting() async {
     if (_friendDevice == null) return;
     SharedPreferencesUtil().onboardingCompleted = true;
+    MixpanelManager().track('Onboarding Completed');
 
     context.pushNamed(
       'home',
