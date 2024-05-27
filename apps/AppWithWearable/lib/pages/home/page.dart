@@ -43,6 +43,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _customWebsocketUrlController = TextEditingController();
   bool _useFriendApiKeys = true;
   String _selectedLanguage = 'en';
+  bool _optInAnalytics = true;
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
@@ -59,6 +60,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
     _selectedLanguage = prefs.recordingsLanguage;
     _useFriendApiKeys = prefs.useFriendApiKeys;
+    _optInAnalytics = prefs.optInAnalytics;
 
     await showModalBottomSheet(
       context: context,
@@ -84,6 +86,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   gcpBucketNameController: _gcpBucketNameController,
                   customWebsocketUrlController: _customWebsocketUrlController,
                   selectedLanguage: _selectedLanguage,
+                  optInAnalytics: _optInAnalytics,
                   onLanguageSelected: (String value) {
                     setModalState(() {
                       _selectedLanguage = value;

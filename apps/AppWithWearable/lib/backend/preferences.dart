@@ -59,6 +59,10 @@ class SharedPreferencesUtil {
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
 
+  bool get optInAnalytics => getBool('optInAnalytics') ?? true;
+
+  set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
+
   List<Message> get chatMessages {
     final List<String> messages = getStringList('messages') ?? [];
     return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
