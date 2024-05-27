@@ -63,6 +63,10 @@ class SharedPreferencesUtil {
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
 
+  bool get devModeEnabled => getBool('devModeEnabled') ?? false;
+
+  set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
+
   List<Message> get chatMessages {
     final List<String> messages = getStringList('messages') ?? [];
     return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
