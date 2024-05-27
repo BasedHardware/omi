@@ -123,6 +123,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
       requiresReset = true;
+      MixpanelManager().recordingLanguageChanged(_selectedLanguage);
     }
     if (_deepgramApiKeyController.text != prefs.deepgramApiKey) {
       prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
@@ -142,13 +143,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       authenticateGCP();
     }
 
-    MixpanelManager().track('Settings Saved');
+    MixpanelManager().settingsSaved();
   }
 
   void _onItemTapped(int index) {
-    MixpanelManager().track('Tab Clicked', properties: {
-      'tab': ['Memories', 'Device', 'Chat'][index]
-    });
+    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     setState(() {
       _selectedIndex = index;
     });
@@ -206,6 +205,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           InstabugLog.logWarn('Friend Device Disconnected');
           createNotification(
               title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+          MixpanelManager().deviceDisconnected();
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
   }
@@ -219,6 +219,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
     transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: connectedDevice);
+    MixpanelManager().deviceConnected();
   }
 
   _initiateBleBatteryListener() async {
@@ -266,7 +267,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             ),
             onPressed: () {
               _showSettingsBottomSheet();
-              MixpanelManager().track('Settings Clicked');
+              MixpanelManager().settingsOpened();
             },
           )
         ],

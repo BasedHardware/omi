@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MemoryListItem extends StatefulWidget {
+  final int memoryIdx;
   final MemoryRecord memory;
   final FocusNode unFocusNode;
   final Function loadMemories;
 
-  const MemoryListItem({super.key, required this.memory, required this.unFocusNode, required this.loadMemories});
+  const MemoryListItem(
+      {super.key,
+      required this.memory,
+      required this.unFocusNode,
+      required this.loadMemories,
+      required this.memoryIdx});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -20,6 +28,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         debugPrint('Tapped memory: ${widget.memory.id}');
+        MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         await context.pushNamed(
           'memoryDetailPage',
           queryParameters: {

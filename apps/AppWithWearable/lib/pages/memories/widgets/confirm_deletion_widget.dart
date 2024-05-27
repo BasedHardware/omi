@@ -1,4 +1,5 @@
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -101,6 +102,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                             await MemoryStorage.deleteMemory(widget.memory.id);
                             Navigator.pop(context);
                             widget.onDelete?.call();
+                            MixpanelManager().memoryDeleted(widget.memory);
                           },
                           text: 'Delete',
                           options: FFButtonOptions(

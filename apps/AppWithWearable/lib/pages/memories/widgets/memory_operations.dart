@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
@@ -32,6 +33,7 @@ geyShareMemoryOperationWidget(MemoryRecord memory, {double iconSize = 20}) {
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: () async {
+        MixpanelManager().memoryShareButtonClick(memory);
         await Share.share(
           memory.getStructuredString(),
           sharePositionOrigin: getWidgetBoundingBox(context),

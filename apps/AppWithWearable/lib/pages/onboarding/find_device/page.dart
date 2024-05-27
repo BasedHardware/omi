@@ -81,7 +81,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   void _navigateToConnecting() async {
     if (_friendDevice == null) return;
     SharedPreferencesUtil().onboardingCompleted = true;
-    MixpanelManager().track('Onboarding Completed');
+    MixpanelManager().onboardingCompleted();
 
     context.pushNamed(
       'home',
