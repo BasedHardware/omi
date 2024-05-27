@@ -8,9 +8,9 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
-import 'package:friend_private/pages/home/settings.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -34,119 +34,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
-  bool deepgramApiIsVisible = false;
-  bool openaiApiIsVisible = false;
-  final _deepgramApiKeyController = TextEditingController();
-  final _openaiApiKeyController = TextEditingController();
-  final _gcpCredentialsController = TextEditingController();
-  final _gcpBucketNameController = TextEditingController();
-  final _customWebsocketUrlController = TextEditingController();
-  bool _useFriendApiKeys = true;
-  String _selectedLanguage = 'en';
-  bool _optInAnalytics = true;
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
     setState(() {});
-  }
-
-  Future<void> _showSettingsBottomSheet() async {
-    // Load API keys from shared preferences
-    final prefs = SharedPreferencesUtil();
-    _deepgramApiKeyController.text = prefs.deepgramApiKey;
-    _openaiApiKeyController.text = prefs.openAIApiKey;
-    _gcpCredentialsController.text = prefs.gcpCredentials;
-    _gcpBucketNameController.text = prefs.gcpBucketName;
-    _customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
-    _selectedLanguage = prefs.recordingsLanguage;
-    _useFriendApiKeys = prefs.useFriendApiKeys;
-    _optInAnalytics = prefs.optInAnalytics;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20.0),
-          topRight: Radius.circular(20.0),
-        ),
-      ),
-      builder: (BuildContext context) {
-        return PopScope(
-            canPop: true,
-            child: StatefulBuilder(
-              builder: (context, StateSetter setModalState) {
-                return SettingsBottomSheet(
-                  deepgramApiKeyController: _deepgramApiKeyController,
-                  openaiApiKeyController: _openaiApiKeyController,
-                  deepgramApiIsVisible: deepgramApiIsVisible,
-                  openaiApiIsVisible: openaiApiIsVisible,
-                  gcpCredentialsController: _gcpCredentialsController,
-                  gcpBucketNameController: _gcpBucketNameController,
-                  customWebsocketUrlController: _customWebsocketUrlController,
-                  selectedLanguage: _selectedLanguage,
-                  optInAnalytics: _optInAnalytics,
-                  onLanguageSelected: (String value) {
-                    setModalState(() {
-                      _selectedLanguage = value;
-                    });
-                  },
-                  useFriendAPIKeys: _useFriendApiKeys,
-                  onUseFriendAPIKeysChanged: (bool? value) {
-                    setModalState(() {
-                      _useFriendApiKeys = value ?? true;
-                    });
-                  },
-                  deepgramApiVisibilityCallback: () {
-                    setModalState(() {
-                      deepgramApiIsVisible = !deepgramApiIsVisible;
-                    });
-                  },
-                  openaiApiVisibilityCallback: () {
-                    setModalState(() {
-                      openaiApiIsVisible = !openaiApiIsVisible;
-                    });
-                  },
-                  saveSettings: _saveSettings,
-                );
-              },
-            ));
-      },
-    );
-  }
-
-  void _saveSettings() async {
-    final prefs = SharedPreferencesUtil();
-    prefs.openAIApiKey = _openaiApiKeyController.text.trim();
-    prefs.gcpCredentials = _gcpCredentialsController.text.trim();
-    prefs.gcpBucketName = _gcpBucketNameController.text.trim();
-
-    bool requiresReset = false;
-    if (_selectedLanguage != prefs.recordingsLanguage) {
-      prefs.recordingsLanguage = _selectedLanguage;
-      requiresReset = true;
-      MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-    }
-    if (_deepgramApiKeyController.text != prefs.deepgramApiKey) {
-      prefs.deepgramApiKey = _deepgramApiKeyController.text.trim();
-      requiresReset = true;
-    }
-    if (_customWebsocketUrlController.text != prefs.customWebsocketUrl) {
-      prefs.customWebsocketUrl = _customWebsocketUrlController.text.trim();
-      requiresReset = true;
-    }
-    if (_useFriendApiKeys != prefs.useFriendApiKeys) {
-      requiresReset = true;
-      prefs.useFriendApiKeys = _useFriendApiKeys;
-    }
-    if (requiresReset) transcriptChildWidgetKey.currentState?.resetState();
-
-    if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
-      authenticateGCP();
-    }
-
-    MixpanelManager().settingsSaved();
   }
 
   void _onItemTapped(int index) {
@@ -268,9 +159,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               color: Colors.white,
               size: 30,
             ),
-            onPressed: () {
-              _showSettingsBottomSheet();
+            onPressed: () async {
               MixpanelManager().settingsOpened();
+              var language = SharedPreferencesUtil().recordingsLanguage;
+              var deepgram = SharedPreferencesUtil().deepgramApiKey;
+              var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
+
+              await context.pushNamed('settings');
+
+              if (language != SharedPreferencesUtil().recordingsLanguage ||
+                  deepgram != SharedPreferencesUtil().deepgramApiKey ||
+                  useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
+                transcriptChildWidgetKey.currentState?.resetState();
+              }
             },
           )
         ],
@@ -304,11 +205,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _deepgramApiKeyController.dispose();
-    _openaiApiKeyController.dispose();
-    _gcpCredentialsController.dispose();
-    _gcpBucketNameController.dispose();
-    _customWebsocketUrlController.dispose();
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
     super.dispose();
