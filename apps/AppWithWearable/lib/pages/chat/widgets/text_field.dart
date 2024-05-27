@@ -4,12 +4,17 @@ import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/pages/chat/model.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class ChatTextField extends StatelessWidget {
+class ChatTextField extends StatefulWidget {
   final ChatModel model;
   final VoidCallback onSendPressed;
 
   const ChatTextField({super.key, required this.model, required this.onSendPressed});
 
+  @override
+  State<ChatTextField> createState() => _ChatTextFieldState();
+}
+
+class _ChatTextFieldState extends State<ChatTextField> {
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -44,8 +49,8 @@ class ChatTextField extends StatelessWidget {
                       child: SizedBox(
                         width: 300.0,
                         child: TextFormField(
-                          controller: model.textController,
-                          focusNode: model.textFieldFocusNode,
+                          controller: widget.model.textController,
+                          focusNode: widget.model.textFieldFocusNode,
                           textCapitalization: TextCapitalization.sentences,
                           obscureText: false,
                           decoration: InputDecoration(
@@ -125,7 +130,7 @@ class ChatTextField extends StatelessWidget {
                         size: 30.0,
                       ),
                       showLoadingIndicator: true,
-                      onPressed: onSendPressed,
+                      onPressed: widget.onSendPressed,
                     ),
                   ],
                 ),
