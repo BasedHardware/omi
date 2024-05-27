@@ -14,6 +14,7 @@ class ChatModel extends FlutterFlowModel<ChatPage> {
   void initState(BuildContext context) {
     columnController = ScrollController();
     listViewController = ScrollController();
+    textFieldFocusNode = FocusNode();
   }
 
   @override
