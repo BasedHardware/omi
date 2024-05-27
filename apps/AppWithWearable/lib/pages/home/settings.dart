@@ -12,6 +12,7 @@ class SettingsBottomSheet extends StatelessWidget {
   final bool openaiApiIsVisible;
   final String selectedLanguage;
   final bool useFriendAPIKeys;
+  final bool optInAnalytics;
   final void Function(bool?) onUseFriendAPIKeysChanged;
 
   final VoidCallback deepgramApiVisibilityCallback;
@@ -30,6 +31,7 @@ class SettingsBottomSheet extends StatelessWidget {
       required this.openaiApiIsVisible,
       required this.selectedLanguage,
       required this.useFriendAPIKeys,
+      required this.optInAnalytics,
       required this.onUseFriendAPIKeysChanged,
       required this.deepgramApiVisibilityCallback,
       required this.openaiApiVisibilityCallback,
@@ -206,6 +208,17 @@ class SettingsBottomSheet extends StatelessWidget {
                     }).toList(),
                   ),
                 )),
+                const SizedBox(height: 16.0),
+                SwitchListTile(
+                  value: optInAnalytics,
+                  onChanged: (v) {
+                    //
+                  },
+                  title: const Text(
+                    'Opt In Analytics',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
                 const SizedBox(height: 24.0),
                 Container(
                   height: 0.2,
