@@ -18,13 +18,13 @@ abstract class Env {
 
   // Pinecone
   @EnviedField(varName: 'PINECONE_API_KEY', obfuscate: true)
-  static const String pineconeApiKey = _Env.pineconeApiKey;
+  static String pineconeApiKey = _Env.pineconeApiKey;
 
   @EnviedField(varName: 'PINECONE_INDEX_URL', obfuscate: true)
-  static const String pineconeIndexUrl = _Env.pineconeIndexUrl;
+  static String pineconeIndexUrl = _Env.pineconeIndexUrl;
 
   @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true)
-  static const String pineconeIndexNamespace = _Env.pineconeIndexNamespace;
+  static String pineconeIndexNamespace = _Env.pineconeIndexNamespace;
 
   @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
   static String? mixpanelProjectToken = _Env.mixpanelProjectToken;
