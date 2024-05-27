@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -140,9 +141,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (_gcpCredentialsController.text.isNotEmpty && _gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
     }
+
+    MixpanelManager().track('Settings Saved');
   }
 
   void _onItemTapped(int index) {
+    MixpanelManager().track('Tab Clicked', properties: {
+      'tab': ['Memories', 'Device', 'Chat'][index]
+    });
     setState(() {
       _selectedIndex = index;
     });
@@ -258,7 +264,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               color: Colors.white,
               size: 30,
             ),
-            onPressed: _showSettingsBottomSheet,
+            onPressed: () {
+              _showSettingsBottomSheet();
+              MixpanelManager().track('Settings Clicked');
+            },
           )
         ],
       ),
