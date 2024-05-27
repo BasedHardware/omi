@@ -24,9 +24,15 @@ class MixpanelManager {
 
   MixpanelManager._internal();
 
-  void optInTracking() => _mixpanel?.optInTracking();
+  void optInTracking() {
+    _mixpanel?.optInTracking();
+    identify();
+  }
 
-  void optOutTracking() => _mixpanel?.optOutTracking();
+  void optOutTracking() {
+    _mixpanel?.optOutTracking();
+    _mixpanel?.reset();
+  }
 
   void identify() => _mixpanel?.identify(_preferences.uid);
 
