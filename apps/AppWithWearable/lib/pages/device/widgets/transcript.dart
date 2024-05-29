@@ -15,6 +15,7 @@ import 'package:friend_private/utils/stt/deepgram.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:lottie/lottie.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
@@ -89,7 +90,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       whispersDiarized[whispersDiarized.length - 1] = previous;
       // Same speaker, just add
     } else if (previous.length == 1 && current.length == 2 && previous.keys.toList()[0] == currentOrdered[0]) {
-      // TODO: verify this is happening
       // add that transcript fot the speakers, but append the remaining ones as new speakers
       // Last diarized it's just 1, and here's 2 but the previous speaker, is one that starts first here
       previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') + current[currentOrdered[0]]!['transcript'];
@@ -213,8 +213,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     String currTranscript = '';
     int sameSpeakerFromIdx = 0;
     // TODO: don't fully clear the audio, maybe cut 29 first seconds?
-    // TODO: why is wave file creating twice? is the request happening twice?
-    // TODO: test the voice identification
+    // TODO: test the voice identification, first do yesterday tasks to test it
 
     for (int i = 0; i < data.length; i++) {
       var segment = data[i];
@@ -227,7 +226,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         currTranscript = segment.text;
         sameSpeakerFromIdx = i;
       } else {
-        // TODO: doesn't work well for idx 0?
         currTranscript = segment.text;
         sameSpeakerFromIdx = i;
       }
@@ -402,12 +400,20 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (whispersDiarized[0].keys.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 48.0),
-        child: InfoButton(),
+      return Padding(
+        padding: const EdgeInsets.only(top: 48.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const InfoButton(),
+            Lottie.asset('assets/lottie_animations/wave.json', width: 80),
+            // TODO: Transcriptions will start appearing after 30 secs
+          ],
+        ), // TODO: display lottie animation only if first bytes received
       );
+      // TODO: target path createWaveFile, should always be a temp file with same name, to save space
     }
-    return _getDeepgramTranscriptUI();
+    return _getDeepgramTranscriptUI(); // TODO: display lottie animation always here
   }
 
   _getDeepgramTranscriptUI() {
