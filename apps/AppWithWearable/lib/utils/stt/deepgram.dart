@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
@@ -133,8 +136,10 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(int?, String?)? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
+  void Function(List<TranscriptSegment>)? onCustomTranscriptProcessor,
 }) async {
   WavBytesUtil wavBytesUtil = WavBytesUtil();
+  WavBytesUtil toProcessBytes = WavBytesUtil();
 
   try {
     IOWebSocketChannel channel = await _initStream(
@@ -163,7 +168,21 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
         int byte2 = value[i + 1];
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
+        toProcessBytes.addAudioBytes([int16Value]);
       }
+      if (toProcessBytes.audioBytes.length % 240000 == 0) {
+        // lock so that it happens only once at a time
+        var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
+        toProcessBytes.clearAudioBytes();
+        WavBytesUtil.createWavFile(bytesCopy).then((f) async {
+          debugPrint('Wav file created: ${f.path}');
+          // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+          List<TranscriptSegment> segments = await transcribeAudioFile(f, 'joan');
+          onCustomTranscriptProcessor?.call(segments);
+        });
+      }
+      // value.length = 160, and parsing fixing on wavBytes is 80
+      // debugPrint('Received audio bytes: ${value.length}');
       channel.sink.add(value);
       channel2?.sink.add(value);
     });
