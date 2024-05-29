@@ -173,7 +173,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
       }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
-        toProcessBytes.clearAudioBytes();
+        toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
           List<TranscriptSegment> segments = await transcribeAudioFile(f, 'joan');

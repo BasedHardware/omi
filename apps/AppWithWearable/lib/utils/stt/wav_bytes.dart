@@ -26,25 +26,10 @@ class WavBytesUtil {
     debugPrint('Cleared audio bytes');
   }
 
-  void cleanAudioBytes() {
-    // Assuming empty audio bytes mean zeros
-    _audioBytes.removeWhere((byte) => byte == 0);
+  void clearAudioBytesSegment({required int remainingSeconds}) {
+    _audioBytes.removeRange(0, (_audioBytes.length) - (remainingSeconds * 8000));
+    debugPrint('clearAudioBytesSegment ${_audioBytes.length}');
   }
-
-  // Method to clean out the silent parts based on a given threshold
-  // void removeSilentSegments({int silenceThreshold = 10}) {
-  //   // Identify segments with sound (above the silenceThreshold)
-  //   List<int> cleanedBytes = [];
-  //   for (int byte in _audioBytes) {
-  //     if (byte.abs() > silenceThreshold) {
-  //       cleanedBytes.add(byte);
-  //     }
-  //   }
-  //   _audioBytes
-  //     ..clear()
-  //     ..addAll(cleanedBytes);
-  //   debugPrint('Cleaned silent segments');
-  // }
 
   // Method to create a WAV file from the stored audio bytes
   static Future<File> createWavFile(List<int> audioBytes, {String? filename}) async {
