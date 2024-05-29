@@ -47,14 +47,17 @@ class WavBytesUtil {
   // }
 
   // Method to create a WAV file from the stored audio bytes
-  static Future<File> createWavFile(List<int> audioBytes) async {
+  static Future<File> createWavFile(List<int> audioBytes, {String? filename}) async {
     debugPrint('Creating WAV file...');
-    // TODO: remove empty sounds without words
-    // removeSilentSegments();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    // TODO: include VAD somewhere onnx pico-voice
+
+    if (filename == null) {
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      filename = 'recording-$timestamp.wav';
+    }
+
     final wavHeader = buildWavHeader(audioBytes.length * 2);
     final wavBytes = Uint8List.fromList(wavHeader + convertToLittleEndianBytes(audioBytes));
-    final filename = 'recording-$timestamp.wav';
 
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$filename');

@@ -406,14 +406,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const InfoButton(),
-            Lottie.asset('assets/lottie_animations/wave.json', width: 80),
-            // TODO: Transcriptions will start appearing after 30 secs
+            // const Text(
+            //   'Transcriptions will start appearing\nafter 30 seconds',
+            //   style: TextStyle(color: Colors.white, fontSize: 14),
+            //   textAlign: TextAlign.center,
+            // ),
+            btDevice == null ? const SizedBox.shrink() : Lottie.asset('assets/lottie_animations/wave.json', width: 80),
           ],
-        ), // TODO: display lottie animation only if first bytes received
+        ),
       );
-      // TODO: target path createWaveFile, should always be a temp file with same name, to save space
     }
-    return _getDeepgramTranscriptUI(); // TODO: display lottie animation always here
+    return _getDeepgramTranscriptUI();
   }
 
   _getDeepgramTranscriptUI() {
@@ -421,10 +424,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: whispersDiarized.length,
+      itemCount: whispersDiarized.length + 1,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
+        if (idx == whispersDiarized.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 0),
+            child: Lottie.asset('assets/lottie_animations/wave.json',
+                width: 80, height: 60, alignment: Alignment.center, fit: BoxFit.contain),
+          );
+        }
         final data = whispersDiarized[idx];
         var keys = data.keys.map((e) => e);
         int totalSpeakers = keys.isNotEmpty ? (keys.reduce(max) + 1) : 0;
