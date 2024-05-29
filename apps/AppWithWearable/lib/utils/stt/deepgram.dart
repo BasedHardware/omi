@@ -142,14 +142,15 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   WavBytesUtil toProcessBytes = WavBytesUtil();
 
   try {
-    IOWebSocketChannel channel = await _initStream(
-      speechFinalCallback!,
-      interimCallback!,
-      onWebsocketConnectionSuccess!,
-      onWebsocketConnectionFailed!,
-      onWebsocketConnectionClosed!,
-      onWebsocketConnectionError!,
-    );
+    // IOWebSocketChannel channel = await _initStream(
+    //   speechFinalCallback!,
+    //   interimCallback!,
+    //   onWebsocketConnectionSuccess!,
+    //   onWebsocketConnectionFailed!,
+    //   onWebsocketConnectionClosed!,
+    //   onWebsocketConnectionError!,
+    // );
+    IOWebSocketChannel? channel;
 
     // IOWebSocketChannel? channel2 = await _initCustomStream(
     //   onCustomWebSocketCallback,
@@ -171,11 +172,9 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
         toProcessBytes.addAudioBytes([int16Value]);
       }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
-        // lock so that it happens only once at a time
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         toProcessBytes.clearAudioBytes();
         WavBytesUtil.createWavFile(bytesCopy).then((f) async {
-          debugPrint('Wav file created: ${f.path}');
           // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
           List<TranscriptSegment> segments = await transcribeAudioFile(f, 'joan');
           onCustomTranscriptProcessor?.call(segments);
@@ -183,8 +182,8 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
       }
       // value.length = 160, and parsing fixing on wavBytes is 80
       // debugPrint('Received audio bytes: ${value.length}');
-      channel.sink.add(value);
-      channel2?.sink.add(value);
+      // channel.sink.add(value);
+      // channel2?.sink.add(value);
     });
     return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
         channel, stream, wavBytesUtil, channel2);

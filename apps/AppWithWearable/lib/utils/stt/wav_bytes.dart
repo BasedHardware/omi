@@ -48,6 +48,7 @@ class WavBytesUtil {
 
   // Method to create a WAV file from the stored audio bytes
   static Future<File> createWavFile(List<int> audioBytes) async {
+    debugPrint('Creating WAV file...');
     // TODO: remove empty sounds without words
     // removeSilentSegments();
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
