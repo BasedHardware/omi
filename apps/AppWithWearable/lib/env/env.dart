@@ -28,4 +28,7 @@ abstract class Env {
 
   @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
   static String? mixpanelProjectToken = _Env.mixpanelProjectToken;
+
+  @EnviedField(varName: 'CUSTOM_TRANSCRIPT_API_BASE_URL', obfuscate: true)
+  static String? customTranscriptApiBaseUrl = _Env.customTranscriptApiBaseUrl;
 }

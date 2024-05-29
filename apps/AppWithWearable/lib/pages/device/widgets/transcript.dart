@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -76,6 +77,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   updateTranscript(Map<int, Map<String, dynamic>> current) {
+    debugPrint('updateTranscript: $current');
     var previous = Map<int, String>.from(whispersDiarized.last);
     List<int> currentOrdered = current.keys.toList()
       ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
@@ -120,20 +122,20 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
         btDevice: btDevice!,
         speechFinalCallback: (List<dynamic> words, String transcriptItem) {
-          Map<int, Map<String, dynamic>> bySpeaker = {};
-          for (var word in words) {
-            // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
-            // debugPrint('Word: ${word.toString()}');
-            int speaker = word['speaker'];
-            if (bySpeaker[speaker] == null) bySpeaker[speaker] = <String, dynamic>{};
-            String currentSpeakerTranscript = bySpeaker[speaker]!['transcript'] ?? '';
-            bySpeaker[speaker]!['transcript'] = '${currentSpeakerTranscript + word['punctuated_word']} ';
-            bySpeaker[speaker]!['starts'] = min<double>(bySpeaker[speaker]!['starts'] ?? 999999999999.0, word['start']);
-            bySpeaker[speaker]!['ends'] = max<double>(bySpeaker[speaker]!['ends'] ?? -1, word['end']);
-          }
-          debugPrint(bySpeaker.toString());
-          updateTranscript(bySpeaker);
-          _initiateMemoryCreationTimer();
+          // Map<int, Map<String, dynamic>> bySpeaker = {};
+          // for (var word in words) {
+          //   // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
+          //   // debugPrint('Word: ${word.toString()}');
+          //   int speaker = word['speaker'];
+          //   if (bySpeaker[speaker] == null) bySpeaker[speaker] = <String, dynamic>{};
+          //   String currentSpeakerTranscript = bySpeaker[speaker]!['transcript'] ?? '';
+          //   bySpeaker[speaker]!['transcript'] = '${currentSpeakerTranscript + word['punctuated_word']} ';
+          //   bySpeaker[speaker]!['starts'] = min<double>(bySpeaker[speaker]!['starts'] ?? 999999999999.0, word['start']);
+          //   bySpeaker[speaker]!['ends'] = max<double>(bySpeaker[speaker]!['ends'] ?? -1, word['end']);
+          // }
+          // // debugPrint(bySpeaker.toString());
+          // updateTranscript(bySpeaker);
+          // _initiateMemoryCreationTimer();
         },
         interimCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
           // debugPrint('interimCallback called');
@@ -189,12 +191,53 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           setState(() {
             customWebsocketTranscript += '\n';
           });
-        });
+        },
+        onCustomTranscriptProcessor: processCustomTranscript);
 
     channel = data.item1;
     streamSubscription = data.item2;
     audioStorage = data.item3;
     channelCustomWebsocket = data.item4;
+  }
+
+  _manualTranscriptUpdate(int idx, String transcript, double starts, double ends) {
+    updateTranscript({
+      idx: {'transcript': transcript, 'starts': starts, 'ends': ends}
+    });
+  }
+
+  void processCustomTranscript(List<TranscriptSegment> data) {
+    if (data.isEmpty) return;
+
+    int prevSpeakerId = -1;
+    String currTranscript = '';
+    int sameSpeakerFromIdx = 0;
+    // TODO: don't fully clear the audio, maybe cut 29 first seconds?
+    // TODO: why is wave file creating twice? is the request happening twice?
+    // TODO: test the voice identification
+
+    for (int i = 0; i < data.length; i++) {
+      var segment = data[i];
+      debugPrint('Segment: ${segment.toString()}');
+      int currentSpeakerId = int.parse(segment.speaker.split('_')[1]);
+      if (prevSpeakerId == currentSpeakerId) {
+        currTranscript += ' ${segment.text}';
+      } else if (prevSpeakerId != -1) {
+        _manualTranscriptUpdate(prevSpeakerId, currTranscript, data[sameSpeakerFromIdx].start, data[i - 1].end);
+        currTranscript = segment.text;
+        sameSpeakerFromIdx = i;
+      } else {
+        // TODO: doesn't work well for idx 0?
+        currTranscript = segment.text;
+        sameSpeakerFromIdx = i;
+      }
+      prevSpeakerId = currentSpeakerId;
+    }
+
+    if (currTranscript.isNotEmpty) {
+      _manualTranscriptUpdate(prevSpeakerId, currTranscript, data[sameSpeakerFromIdx].start, data[data.length - 1].end);
+    }
+    _initiateMemoryCreationTimer();
   }
 
   void resetState({bool resetBLEConnection = true, BTDeviceStruct? btDevice}) {
@@ -286,7 +329,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _initiateMemoryCreationTimer() {
-    debugPrint('_initiateMemoryCreationTimer');
+    // debugPrint('_initiateMemoryCreationTimer');
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
       widget.refreshMemories();
@@ -301,7 +344,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         transcript = _buildDiarizedTranscriptMessage();
       }
       debugPrint('Transcript: \n$transcript');
-      File file = await audioStorage!.createWavFile();
+      File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
       await processTranscriptContent(context, transcript, fileName);
       await widget.refreshMemories();
