@@ -138,7 +138,7 @@ class MemoryStorage {
     return filtered;
   }
 
-  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription) async {
+  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription, List<String> updatedActionItems) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
@@ -151,7 +151,7 @@ class MemoryStorage {
         structured: Structured(
           title: updatedTitle,
           overview: updatedDescription,
-          actionItems: oldMemory.structured.actionItems,
+          actionItems: updatedActionItems, // Use updatedActionItems here
         ),
         discarded: oldMemory.discarded,
       );
