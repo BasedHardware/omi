@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -139,18 +137,16 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(List<TranscriptSegment>)? onCustomTranscriptProcessor,
 }) async {
   WavBytesUtil wavBytesUtil = WavBytesUtil();
-  WavBytesUtil toProcessBytes = WavBytesUtil();
 
   try {
-    // IOWebSocketChannel channel = await _initStream(
-    //   speechFinalCallback!,
-    //   interimCallback!,
-    //   onWebsocketConnectionSuccess!,
-    //   onWebsocketConnectionFailed!,
-    //   onWebsocketConnectionClosed!,
-    //   onWebsocketConnectionError!,
-    // );
-    IOWebSocketChannel? channel;
+    IOWebSocketChannel channel = await _initStream(
+      speechFinalCallback!,
+      interimCallback!,
+      onWebsocketConnectionSuccess!,
+      onWebsocketConnectionFailed!,
+      onWebsocketConnectionClosed!,
+      onWebsocketConnectionError!,
+    );
 
     // IOWebSocketChannel? channel2 = await _initCustomStream(
     //   onCustomWebSocketCallback,
@@ -169,20 +165,10 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
         int byte2 = value[i + 1];
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
-        toProcessBytes.addAudioBytes([int16Value]);
-      }
-      if (toProcessBytes.audioBytes.length % 240000 == 0) {
-        var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
-        toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
-          // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
-          List<TranscriptSegment> segments = await transcribeAudioFile(f, 'joan');
-          onCustomTranscriptProcessor?.call(segments);
-        });
       }
       // value.length = 160, and parsing fixing on wavBytes is 80
       // debugPrint('Received audio bytes: ${value.length}');
-      // channel.sink.add(value);
+      channel.sink.add(value);
       // channel2?.sink.add(value);
     });
     return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
