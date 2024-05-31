@@ -53,12 +53,6 @@ static struct bt_gatt_attr audio_attrs[] = {
 };
 static struct bt_gatt_service primary_service = BT_GATT_SERVICE(audio_attrs);
 
-// Control service with UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
-// exposes two characteristics:
-// - Reset (UUID 814b9b7c-25fd-4acd-8604-d28877beee6e) to reset the device
-// - OTA Update (UUID 814b9b7c-25fd-4acd-8604-d28877beee6f) to start the OTA update process
-// static struct bt_uuid_128 control_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x814b9b7c, 0x25fd, 0x4acd, 0x8604, 0xd28877beee6d));
-
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
