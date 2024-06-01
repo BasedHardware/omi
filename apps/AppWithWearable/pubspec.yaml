@@ -35,7 +35,7 @@ dependencies:
   go_router: 7.1.1
   google_fonts: 6.1.0
   http: ^1.2.1
-  intl: 0.18.1
+  intl: ^0.19.0
   json_path: 0.6.2
   mime_type: 1.0.0
   page_transition: 2.1.0
