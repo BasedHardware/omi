@@ -2,7 +2,7 @@
 
 # **Friend**
 
-Open Source AI Wearable device that records everything you say, gives you proactive feedback and advice. 24h+ on single charge.
+Open Source AI Wearable device that records everything you say, gives you proactive feedback and advice. 6+ days on a single charge.
 
 ![Friend Image](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
 
