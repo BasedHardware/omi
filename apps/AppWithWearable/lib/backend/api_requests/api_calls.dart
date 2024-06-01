@@ -351,3 +351,15 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
   }
   return [];
 }
+
+Future<bool> userHasSpeakerProfile(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}profile?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('userHasSpeakerProfile: ${response.body}');
+  return jsonDecode(response.body)['has_profile'] ?? false;
+}

@@ -106,13 +106,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Future<void> initiateBytesProcessing() async {
-    debugPrint('initBleConnection: $btDevice');
     if (btDevice == null) return;
     WavBytesUtil wavBytesUtil = WavBytesUtil();
     WavBytesUtil toProcessBytes = WavBytesUtil();
     StreamSubscription? stream = await getBleAudioBytesListener(btDevice!, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
+      // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
+      // so we are losing lots of resolution, and bit depth
       for (int i = 0; i < value.length; i += 2) {
         int byte1 = value[i];
         int byte2 = value[i + 1];
@@ -248,11 +249,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       debugPrint('Transcript: \n$transcript');
       File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
+      whispersDiarized = [{}];
       await processTranscriptContent(context, transcript, fileName);
       await widget.refreshMemories();
       addEventToContext('Memory Created');
       setState(() {
-        whispersDiarized = [{}];
         memoryCreating = false;
       });
       audioStorage?.clearAudioBytes();

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -40,6 +41,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  _setupHasSpeakerProfile() async {
+    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+  }
+
   void _onItemTapped(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     setState(() {
@@ -74,6 +79,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     _initiateMemories();
     authenticateGCP();
+    _setupHasSpeakerProfile();
 
     if (widget.btDevice != null) {
       // Only used when onboarding flow
