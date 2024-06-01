@@ -96,6 +96,7 @@ Follow these steps to get started with your Friend.
 ## More links:
 
 - [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
+- [Roadmap and Tasks](https://github.com/orgs/BasedHardware/projects/1)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
 
 ## Made by the Community, with -❤️-:
