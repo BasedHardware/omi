@@ -1,5 +1,3 @@
-Here's the updated guide including the command to upgrade Flutter:
-
 ## Friend App
 
 This guide walks you through the steps required to run the app locally on your machine. Please
