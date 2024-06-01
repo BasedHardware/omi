@@ -186,8 +186,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 useFriendAPIKeys = v!;
               });
             },
-            fillColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
+            fillColor: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.selected)) {
                 return Colors.deepPurple;
               }
               return Colors.transparent;
@@ -195,9 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(2.0),
             ),
-            side: WidgetStateBorderSide.resolveWith(
-              (states) => const BorderSide(width: 1.0, color: Colors.white),
-            ),
+            side: const BorderSide(width: 1.0, color: Colors.white),
           ),
           _getText('Use Friend\'s API keys'),
         ],
