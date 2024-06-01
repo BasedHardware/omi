@@ -98,6 +98,7 @@ Follow these steps to get started with your Friend.
 - [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
 - [Roadmap and Tasks](https://github.com/orgs/BasedHardware/projects/1)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
+- [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
 
 ## Made by the Community, with -❤️-:
 
