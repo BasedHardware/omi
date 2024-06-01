@@ -36,10 +36,10 @@ Before starting, make sure you have the following installed:
     ```
 
 4. **Environment Configuration**:
-   Rename the environment configuration file:
+   Create `.env` using template `.env.template`
     ```
     cd ..
-    mv .env.template .env
+    cat .env.template > .env
     ```
 
 5. **API Keys**:
