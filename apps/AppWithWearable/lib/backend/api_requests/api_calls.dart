@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -346,3 +348,39 @@ Future<List<Plugin>> retrievePlugins() async {
 }
 
 // TODO: update vectors when fields updated
+
+Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.customTranscriptApiBaseUrl}transcribe?language=en&uid=$uid'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      debugPrint('Response body: ${response.body}');
+      return TranscriptSegment.fromJsonList(data);
+    } else {
+      debugPrint('Failed to upload file. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred transcribeAudioFile: $e');
+  }
+  return [];
+}
+
+Future<bool> userHasSpeakerProfile(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}profile?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('userHasSpeakerProfile: ${response.body}');
+  return jsonDecode(response.body)['has_profile'] ?? false;
+}

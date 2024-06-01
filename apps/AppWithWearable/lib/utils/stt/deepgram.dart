@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:flutter/material.dart';
@@ -133,6 +134,7 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
   void Function(int?, String?)? onWebsocketConnectionClosed,
   void Function(dynamic)? onWebsocketConnectionError,
   void Function(String)? onCustomWebSocketCallback,
+  void Function(List<TranscriptSegment>)? onCustomTranscriptProcessor,
 }) async {
   WavBytesUtil wavBytesUtil = WavBytesUtil();
 
@@ -164,8 +166,10 @@ Future<Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocke
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
       }
+      // value.length = 160, and parsing fixing on wavBytes is 80
+      // debugPrint('Received audio bytes: ${value.length}');
       channel.sink.add(value);
-      channel2?.sink.add(value);
+      // channel2?.sink.add(value);
     });
     return Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?>(
         channel, stream, wavBytesUtil, channel2);

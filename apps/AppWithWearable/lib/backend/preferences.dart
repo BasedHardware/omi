@@ -78,6 +78,10 @@ class SharedPreferencesUtil {
     saveStringList('messages', messages);
   }
 
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+
+  set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return plugins.map((e) => Plugin.fromJson(jsonDecode(e))).toList();
