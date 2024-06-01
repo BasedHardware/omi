@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
   const PluginsPage({Key? key}) : super(key: key);
@@ -14,208 +17,212 @@ class PluginsPage extends StatefulWidget {
 }
 
 class _PluginsPageState extends State<PluginsPage> {
-  late SharedPreferences prefs;
-  late http.Client httpClient;
   bool isLoading = true;
   String searchQuery = '';
+  List<Plugin> plugins = [];
+
+  Future<void> _fetchPlugins() async {
+    var plugins = SharedPreferencesUtil().pluginsList;
+    var pluginsId = SharedPreferencesUtil().pluginsEnabled;
+    for (var plugin in plugins) {
+      plugin.isEnabled = pluginsId.contains(plugin.id);
+    }
+    this.plugins = plugins;
+    setState(() => isLoading = false);
+  }
 
   @override
   void initState() {
+    _fetchPlugins();
     super.initState();
-    httpClient = http.Client();
-    _initPrefs();
-  }
-
-  Future<void> _initPrefs() async {
-    prefs = await SharedPreferences.getInstance();
-    await _fetchPlugins();
-  }
-
-  Future<void> _fetchPlugins() async {
-    setState(() => isLoading = true);
-    final response = await httpClient.get(Uri.parse('https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json'));
-    if (response.statusCode == 200) {
-      final List<dynamic> fetchedPlugins = json.decode(response.body) as List<dynamic>;
-      final List<dynamic> storedPlugins = _getStoredPluginData();
-      final Set<String> fetchedPluginIds = fetchedPlugins.map((plugin) => plugin['id'].toString()).toSet();
-      final List<dynamic> updatedPlugins = fetchedPlugins.map((plugin) {
-        final existingPlugin = storedPlugins.firstWhere((storedPlugin) => storedPlugin['id'] == plugin['id'], orElse: () => {});
-        final isEnabled = existingPlugin.isNotEmpty ? existingPlugin['isEnabled'] : false;
-        return {...plugin, 'isEnabled': isEnabled};
-      }).toList();
-      await prefs.setString('plugins', json.encode(updatedPlugins));
-      setState(() => isLoading = false);
-    } else {
-      setState(() => isLoading = false);
-    }
   }
 
   Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
-    final List<dynamic> storedPlugins = _getStoredPluginData();
+    // FOR NOW ENABLE SINGLE PLUGIN
     if (isEnabled) {
-      for (var plugin in storedPlugins) {
-        plugin['isEnabled'] = false;
+      SharedPreferencesUtil().pluginsEnabled = [pluginId];
+      for (var p in plugins) {
+        p.isEnabled = p.id == pluginId;
+      }
+    } else {
+      SharedPreferencesUtil().pluginsEnabled = [];
+      for (var p in plugins) {
+        p.isEnabled = false;
       }
     }
-    final int pluginIndex = storedPlugins.indexWhere((plugin) => plugin['id'].toString() == pluginId);
-    if (pluginIndex != -1) {
-      storedPlugins[pluginIndex]['isEnabled'] = true;
-      await prefs.setString('plugins', json.encode(storedPlugins));
-      setState(() {});
-    }
+    setState(() {});
   }
 
-  @override
-  void dispose() {
-    httpClient.close();
-    super.dispose();
-  }
-
-  List<dynamic> _getStoredPluginData() {
-    final String? storedPluginsString = prefs.getString('plugins');
-    if (storedPluginsString != null) {
-      return json.decode(storedPluginsString) as List<dynamic>;
-    }
-    return [];
-  }
-
-  List<dynamic> _filteredPlugins() {
-    final plugins = _getStoredPluginData();
+  List<Plugin> _filteredPlugins() {
     if (searchQuery.isEmpty) {
       return plugins;
-    } else {
-      return plugins.where((plugin) => plugin['name'].toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
     }
+    return plugins.where((plugin) => plugin.name.toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredPlugins = _filteredPlugins();
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: FlutterFlowTheme.of(context).primaryColor,
-        automaticallyImplyLeading: true,
-        title: const Text('Plugins'),
-        centerTitle: false,
-        elevation: 2.0,
-      ),
-      body: Column(
-        children: [
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              style: const TextStyle(color: Colors.black),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.black12,
-                labelText: 'Search Plugins',
-                labelStyle: const TextStyle(color: Colors.black),
-                hintText: 'Enter a search term',
-                hintStyle: const TextStyle(color: Colors.black54),
-                border: OutlineInputBorder(borderSide: BorderSide(color: Colors.black)),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.black)),
-                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white)),
-                suffixIcon: const Icon(Icons.search, color: Colors.black),
-              ),
-              onChanged: (value) => setState(() => searchQuery = value),
-            ),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                const BlurBotWidget(),
-                if (isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else if (filteredPlugins.isNotEmpty)
-                  ListWheelScrollView.useDelegate(
-                    perspective: 0.0015,
-                    itemExtent: 200,
-                    physics: const FixedExtentScrollPhysics(),
-                    childDelegate: ListWheelChildBuilderDelegate(
-                      builder: (BuildContext context, int index) {
-                        if (index < 0 || index >= filteredPlugins.length) return null;
-                        final plugin = filteredPlugins[index];
-                        final isEnabled = plugin['isEnabled'] as bool? ?? false;
-                        return Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20.0),
-                          ),
-                          color: Colors.black,
-                          margin: const EdgeInsets.all(10),
-                          child: Container(
-                            width: 350,
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  plugin['name'] ?? 'Unnamed Plugin',
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'By ${plugin['author'] ?? 'Unknown'}',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white70,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 10),
-                                Expanded(
-                                  child: Text(
-                                    plugin['description'] ?? 'No description provided.',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white60,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 3,
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Switch(
-                                      value: isEnabled,
-                                      onChanged: (value) {
-                                        _togglePlugin(plugin['id'].toString(), value);
-                                      },
-                                      activeTrackColor: Colors.greenAccent,
-                                      activeColor: Colors.green,
-                                      inactiveTrackColor: Colors.white30,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                      childCount: filteredPlugins.length,
+    final unFocusNode = FocusNode();
+    return GestureDetector(
+      onTap: () => unFocusNode.canRequestFocus
+          ? FocusScope.of(context).requestFocus(unFocusNode)
+          : FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: FlutterFlowTheme.of(context).primaryColor,
+          automaticallyImplyLeading: true,
+          title: const Text('Plugins'),
+          centerTitle: false,
+          elevation: 2.0,
+          actions: [
+            TextButton(
+                onPressed: () {
+                  launchUrl(Uri.parse('https://github.com/BasedHardware/Friend/blob/main/plugins-instruction.md'));
+                },
+                child: const Row(
+                  children: [
+                    Text(
+                      'Create Yours',
+                      style: TextStyle(color: Colors.white),
                     ),
-                  )
-                else
-                  const Center(
-                    child: Text(
-                      'No plugins available',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    SizedBox(
+                      width: 8,
+                    ),
+                    // Icon(
+                    //   Icons.build,
+                    //   color: Colors.white,
+                    // ),
+                  ],
+                ))
+          ],
+        ),
+        body: Stack(
+          children: [
+            const BlurBotWidget(),
+            Column(
+              children: [
+                const SizedBox(
+                  height: 32,
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AF7F4F4),
+                    boxShadow: const [
+                      BoxShadow(
+                        blurRadius: 3.0,
+                        color: Color(0x33000000),
+                        offset: Offset(0.0, 1.0),
+                      )
+                    ],
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: TextField(
+                    onChanged: (value) {
+                      setState(() {
+                        searchQuery = value;
+                      });
+                    },
+                    obscureText: false,
+                    decoration: InputDecoration(
+                      hintText: 'Search your plugin',
+                      hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
+                            fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                            color: FlutterFlowTheme.of(context).primaryText,
+                            fontSize: 14.0,
+                            fontWeight: FontWeight.w500,
+                            useGoogleFonts:
+                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
+                          ),
+                      enabledBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Color(0x00000000),
+                          width: 1.0,
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(4.0),
+                          topRight: Radius.circular(4.0),
+                        ),
+                      ),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Color(0x00000000),
+                          width: 1.0,
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(4.0),
+                          topRight: Radius.circular(4.0),
+                        ),
+                      ),
+                      errorBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Color(0x00000000),
+                          width: 1.0,
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(4.0),
+                          topRight: Radius.circular(4.0),
+                        ),
+                      ),
+                      focusedErrorBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Color(0x00000000),
+                          width: 1.0,
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(4.0),
+                          topRight: Radius.circular(4.0),
+                        ),
                       ),
                     ),
+                    style: FlutterFlowTheme.of(context).bodyMedium.override(
+                          fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                          color: FlutterFlowTheme.of(context).primaryText,
+                          fontWeight: FontWeight.w500,
+                          useGoogleFonts:
+                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                        ),
                   ),
+                ),
+                ListView.builder(
+                  itemCount: filteredPlugins.length,
+                  scrollDirection: Axis.vertical,
+                  shrinkWrap: true,
+                  itemBuilder: (context, index) {
+                    if (index < 0 || index >= filteredPlugins.length) return null;
+                    final plugin = filteredPlugins[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
+                      child: ListTile(
+                        title: Text(
+                          plugin.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            plugin.description,
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ),
+                        trailing: Switch(
+                          value: plugin.isEnabled,
+                          activeColor: Colors.deepPurple,
+                          onChanged: (value) {
+                            _togglePlugin(plugin.id.toString(), value);
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

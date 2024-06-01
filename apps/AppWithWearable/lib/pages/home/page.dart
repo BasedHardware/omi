@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -40,6 +41,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  Future<void> _initiatePlugins() async {
+    var plugins = await retrievePlugins();
+    SharedPreferencesUtil().pluginsList = plugins;
+  }
+
   void _onItemTapped(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     setState(() {
@@ -73,6 +79,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
 
     _initiateMemories();
+    _initiatePlugins();
     authenticateGCP();
 
     if (widget.btDevice != null) {
@@ -181,7 +188,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             color: Colors.white,
             size: 30,
           ),
-          onPressed: () async{
+          onPressed: () async {
             MixpanelManager().pluginsOpened();
             await context.pushNamed('plugins');
           },
