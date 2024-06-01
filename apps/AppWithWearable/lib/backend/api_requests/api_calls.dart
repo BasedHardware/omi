@@ -120,8 +120,15 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   // TODO: this has to be toggled and played around
   // TODO: probably best to determine usefulness with function call before executing this prompt
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
+  String storedPluginsString = SharedPreferencesUtil().storedPluginsString;
+  List<dynamic> plugins = jsonDecode(storedPluginsString);
+  List<dynamic> enabledPlugins = plugins.where((plugin) => plugin['isEnabled'] == true).toList();
+  String combinedPluginPrompt = "";
+  for (var plugin in enabledPlugins) {
+    combinedPluginPrompt += plugin['prompt'] + " "; 
+  }
   var prompt =
-      '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
+      '''$combinedPluginPrompt Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
     The conversation language is $languageCode. Make sure to use English for your response.
 
     It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 

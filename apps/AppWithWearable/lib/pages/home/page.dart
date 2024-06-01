@@ -175,6 +175,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             },
           )
         ],
+        leading: IconButton(
+          icon: const Icon(
+            Icons.extension,
+            color: Colors.white,
+            size: 30,
+          ),
+          onPressed: () async{
+            MixpanelManager().pluginsOpened();
+            await context.pushNamed('plugins');
+          },
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,

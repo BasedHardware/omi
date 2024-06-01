@@ -21,6 +21,8 @@ class SharedPreferencesUtil {
     }
   }
 
+  String get storedPluginsString => getString('plugins') ?? '';
+
   String get uid => getString('uid') ?? '';
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
