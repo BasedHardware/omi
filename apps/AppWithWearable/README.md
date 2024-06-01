@@ -1,7 +1,7 @@
 ## Friend App
 
 This guide walks you through the steps required to run the app locally on your machine. Please
-follow the instructions carefully toblc ensure a smooth setup.
+follow the instructions carefully to ensure a smooth setup.
 
 ### Prerequisites
 
