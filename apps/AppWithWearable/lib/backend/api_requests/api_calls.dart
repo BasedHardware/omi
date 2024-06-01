@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
@@ -117,11 +119,13 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
   if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: []);
-  // TODO: this has to be toggled and played around
-  // TODO: probably best to determine usefulness with function call before executing this prompt
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
+  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+  final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
+  var pluginPrompt = plugin?.prompt ?? '';
+
   var prompt =
-      '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
+      '''$pluginPrompt\nBased on the following recording transcript of a conversation, provide structure and clarity to the memory.
     The conversation language is $languageCode. Make sure to use English for your response.
 
     It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
@@ -146,6 +150,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim();
+  // debugPrint(prompt);
   var structured = (await executeGptPrompt(prompt)).replaceAll('```', '').replaceAll('json', '').trim();
   return Structured.fromJson(jsonDecode(structured));
 }
@@ -322,6 +327,22 @@ Future<bool> deleteVector(String memoryId) async {
   var response = await pineconeApiCall(urlSuffix: 'vectors/delete', body: body);
   debugPrint(response.toString());
   return true;
+}
+
+Future<List<Plugin>> retrievePlugins() async {
+  var response = await makeApiCall(
+      url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
+      headers: {},
+      body: '',
+      method: 'GET');
+  if (response?.statusCode == 200) {
+    try {
+      return Plugin.fromJsonList(jsonDecode(response!.body));
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
 }
 
 // TODO: update vectors when fields updated
