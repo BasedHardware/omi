@@ -5,5 +5,19 @@
         "author": "Akshay Narisetti",
         "description": "Elegant Clinical Notes for Doctors",
         "prompt": "You will receive a text transcription of a conversation between a doctor and a patient. Your task is to process this transcription by identifying and extracting key medical information such as symptoms, diagnoses, treatments, and follow-up care. Using this information, generate elegant clinical notes that are structured and formatted according to medical documentation standards. The final note should include patient identification, a summary of symptoms and complaints, relevant medical history, clinical findings, the concluded diagnosis, prescribed treatment plans, and recommendations for follow-up. If any required details are not provided you can Not Mentioned. Ensure that the notes are concise, grammatically correct, and professionally presented while adhering to privacy laws and ensuring patient confidentiality. This process aims to reduce the time healthcare professionals spend on documentation, thereby allowing them to focus more on patient care."
+    },
+    {
+        "id": "therapist-patient-notes",
+        "name": "Therapist Patient Notes",
+        "author": "Claude",
+        "description": "Structured Psychotherapy Session Notes",
+        "prompt": "You will be provided with a transcription of a conversation between a therapist and their patient. Your task is to analyze the conversation and extract important information related to the patient's mental health, such as their presenting problems, relevant history, cognitive and emotional patterns, and any therapeutic interventions or techniques used by the therapist. Use this information to create well-structured psychotherapy session notes that adhere to the SOAP (Subjective, Objective, Assessment, Plan) format commonly used in mental health documentation. The notes should maintain patient confidentiality, be written in clear and professional language, and provide a concise summary of the session that can be easily understood by other mental health professionals. If any necessary information is missing from the conversation, indicate it as 'Not Mentioned' in the appropriate section."
+    },
+    {
+        "id": "medical-history-summary", 
+        "name": "Medical History Summary",
+        "author": "Claude",
+        "description": "Concise Summary of Patient's Medical History",
+        "prompt": "You will receive a conversation between a healthcare provider and a patient discussing the patient's medical history. Your task is to carefully review the conversation and identify key information about the patient's past and current health conditions, surgeries, medications, allergies, family history, and any other relevant medical details mentioned. Use this information to generate a clear, concise, and well-organized summary of the patient's medical history. The summary should be divided into appropriate sections such as 'Past Medical History', 'Surgical History', 'Medications', 'Allergies', 'Family History', and 'Social History'. Ensure that the summary is written using professional medical terminology and maintains patient confidentiality. If any important aspects of the medical history are not discussed in the conversation, note them as 'Not Mentioned' under the relevant section headings."
     }
 ]
