@@ -77,6 +77,10 @@ class SharedPreferencesUtil {
     saveStringList('messages', messages);
   }
 
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+
+  set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
+
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
   }

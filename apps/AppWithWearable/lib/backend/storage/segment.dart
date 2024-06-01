@@ -29,7 +29,7 @@ class TranscriptSegment {
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     return TranscriptSegment(
       text: json['text'] as String,
-      speaker: json['speaker'] as String,
+      speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: json['is_user'] as bool,
       start: json['start'] as double,
       end: json['end'] as double,
