@@ -149,6 +149,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           });
         },
         onWebsocketConnectionFailed: (err) {
+          print(err);
           addEventToContext('Websocket Unable To Connect');
           // connection couldn't be initiated for some reason.
           setState(() {
@@ -170,6 +171,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         },
         onWebsocketConnectionError: (err) {
           // connection was okay, but then failed.
+          print(err);
           addEventToContext('Websocket Error');
           CrashReporting.reportHandledCrash(err, err.stackTrace);
           setState(() {
