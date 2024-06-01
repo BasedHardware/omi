@@ -67,7 +67,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   updateTranscript(Map<int, Map<String, dynamic>> current) {
-    debugPrint('updateTranscript: $current');
     var previous = Map<int, String>.from(whispersDiarized.last);
     List<int> currentOrdered = current.keys.toList()
       ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
@@ -155,7 +154,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     for (int i = 0; i < data.length; i++) {
       var segment = data[i];
-      debugPrint('Segment: ${segment.toString()}');
+      debugPrint(segment.toString());
       int currentSpeakerId = segment.isUser ? -1 : int.parse(segment.speaker.split('_')[1]);
       if (prevSpeakerId == currentSpeakerId) {
         currTranscript += ' ${segment.text}';
