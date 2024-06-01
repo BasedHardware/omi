@@ -113,4 +113,4 @@ test/recordings
 
 #Flutter
 
-.env.g.dart
+env.g.dart
