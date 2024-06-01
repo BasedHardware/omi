@@ -1,5 +1,6 @@
 [
     {
+        "id": "doctor-patient-notes"
         "name": "Doctor Patient Notes",
         "author": "Akshay Narisetti",
         "description": "Elegant Clinical Notes for Doctors",
