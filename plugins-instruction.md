@@ -1,4 +1,5 @@
-Community Plugins format
+**Community Plugins format**
+
 To add your plugin to the list, make a pull request to the [community-plugins.json](https://github.com/BasedHardware/Friend/blob/feature-plugins/community-plugins.json) file. Please add your plugin to the end of the list.
 
 Plugins allow to modify prompts that process audio transcriptions. You can create plugins/prompts for every possible usecase, starting from doctor/patient conversation, ending with student's summary of classes
