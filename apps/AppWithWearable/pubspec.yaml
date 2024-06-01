@@ -62,6 +62,7 @@ dependencies:
   provider: ^6.1.2
   flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.3.1
+  nordic_dfu: ^6.1.4+hotfix
 
 dependency_overrides:
   http: 1.2.0
@@ -109,6 +110,7 @@ flutter:
     - assets/lottie_animations/
     - assets/rive_animations/
     - assets/pdfs/
+    - assets/firmware/
   fonts:
     - family: 'SF Pro Display'
       fonts:
@@ -132,7 +134,7 @@ flutter:
           weight: 900
           style: italic
 
-  
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 
@@ -158,4 +160,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
-

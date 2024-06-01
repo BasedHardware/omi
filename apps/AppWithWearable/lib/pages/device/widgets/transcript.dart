@@ -22,8 +22,15 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'info_button.dart';
+import 'ota_update_button.dart';
 
-enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
+enum WebsocketConnectionStatus {
+  notConnected,
+  connected,
+  failed,
+  closed,
+  error
+}
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -41,7 +48,8 @@ class TranscriptWidget extends StatefulWidget {
 }
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
-  WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
+  WebsocketConnectionStatus wsConnectionState =
+      WebsocketConnectionStatus.notConnected;
   BTDeviceStruct? btDevice;
   bool websocketReconnecting = false;
   List<Map<int, String>> whispersDiarized = [{}];
@@ -80,33 +88,42 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     List<int> currentOrdered = current.keys.toList()
       ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
 
-    if (previous.length == 1 && current.length == 1 && previous.keys.toList()[0] == current.keys.toList()[0]) {
+    if (previous.length == 1 &&
+        current.length == 1 &&
+        previous.keys.toList()[0] == current.keys.toList()[0]) {
       // Last diarized, it's just 1, and here's just one, just add
       int speakerIdx = current.keys.toList()[0];
-      previous[speakerIdx] = '${previous[speakerIdx]!} ' + current[current.keys.toList()[0]]!['transcript'];
+      previous[speakerIdx] = '${previous[speakerIdx]!} ' +
+          current[current.keys.toList()[0]]!['transcript'];
       whispersDiarized[whispersDiarized.length - 1] = previous;
       // Same speaker, just add
-    } else if (previous.length == 1 && current.length == 2 && previous.keys.toList()[0] == currentOrdered[0]) {
+    } else if (previous.length == 1 &&
+        current.length == 2 &&
+        previous.keys.toList()[0] == currentOrdered[0]) {
       // TODO: verify this is happening
       // add that transcript fot the speakers, but append the remaining ones as new speakers
       // Last diarized it's just 1, and here's 2 but the previous speaker, is one that starts first here
-      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') + current[currentOrdered[0]]!['transcript'];
+      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') +
+          current[currentOrdered[0]]!['transcript'];
       whispersDiarized[whispersDiarized.length - 1] = previous;
       var newTranscription = <int, String>{};
       for (var speaker in currentOrdered) {
-        if (speaker != currentOrdered[0]) newTranscription[speaker] = current[speaker]!['transcript'];
+        if (speaker != currentOrdered[0])
+          newTranscription[speaker] = current[speaker]!['transcript'];
       }
       whispersDiarized.add(newTranscription);
     } else if (previous.isEmpty) {
       // Different speakers, just add
       current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
+        whispersDiarized[whispersDiarized.length - 1][speaker] =
+            data['transcript'];
       });
     } else {
       // Different speakers, just add
       whispersDiarized.add({});
       current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
+        whispersDiarized[whispersDiarized.length - 1][speaker] =
+            data['transcript'];
       });
     }
 
@@ -117,79 +134,89 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   Future<void> initBleConnection() async {
     debugPrint('initBleConnection: $btDevice');
     if (btDevice == null) return;
-    Tuple4<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data = await bleReceiveWAV(
-        btDevice: btDevice!,
-        speechFinalCallback: (List<dynamic> words, String transcriptItem) {
-          Map<int, Map<String, dynamic>> bySpeaker = {};
-          for (var word in words) {
-            // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
-            // debugPrint('Word: ${word.toString()}');
-            int speaker = word['speaker'];
-            if (bySpeaker[speaker] == null) bySpeaker[speaker] = <String, dynamic>{};
-            String currentSpeakerTranscript = bySpeaker[speaker]!['transcript'] ?? '';
-            bySpeaker[speaker]!['transcript'] = '${currentSpeakerTranscript + word['punctuated_word']} ';
-            bySpeaker[speaker]!['starts'] = min<double>(bySpeaker[speaker]!['starts'] ?? 999999999999.0, word['start']);
-            bySpeaker[speaker]!['ends'] = max<double>(bySpeaker[speaker]!['ends'] ?? -1, word['end']);
-          }
-          debugPrint(bySpeaker.toString());
-          updateTranscript(bySpeaker);
-          _initiateMemoryCreationTimer();
-        },
-        interimCallback: (Map<int, String> transcriptBySpeaker, String transcriptItem) {
-          // debugPrint('interimCallback called');
-          // _memoryCreationTimer?.cancel();
-          // updateTranscript(transcriptBySpeaker); // interim causes makes a bit more complex the
-        },
-        onWebsocketConnectionSuccess: () {
-          addEventToContext('Websocket Opened');
-          setState(() {
-            wsConnectionState = WebsocketConnectionStatus.connected;
-            websocketReconnecting = false;
-            _reconnectionAttempts = 0; // Reset counter on successful connection
-          });
-        },
-        onWebsocketConnectionFailed: (err) {
-          addEventToContext('Websocket Unable To Connect');
-          // connection couldn't be initiated for some reason.
-          setState(() {
-            wsConnectionState = WebsocketConnectionStatus.failed;
-            websocketReconnecting = false;
-          });
-          _reconnectWebSocket();
-        },
-        onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
-          // connection was closed, either on resetState, or by deepgram, or by some other reason.
-          addEventToContext('Websocket Closed');
-          setState(() {
-            wsConnectionState = WebsocketConnectionStatus.closed;
-          });
-          if (closeCode != 1000) {
-            // attempt to reconnect
-            _reconnectWebSocket();
-          }
-        },
-        onWebsocketConnectionError: (err) {
-          // connection was okay, but then failed.
-          addEventToContext('Websocket Error');
-          CrashReporting.reportHandledCrash(err, err.stackTrace);
-          setState(() {
-            wsConnectionState = WebsocketConnectionStatus.error;
-            websocketReconnecting = false;
-          });
-          _reconnectWebSocket();
-        },
-        onCustomWebSocketCallback: (String transcript) async {
-          // debugPrint('Custom Websocket Callback: $transcript');
-          for (var word in transcript.split(' ')) {
-            setState(() {
-              customWebsocketTranscript += '$word ';
+    Tuple4<IOWebSocketChannel?,
+            StreamSubscription?, WavBytesUtil, IOWebSocketChannel?> data =
+        await bleReceiveWAV(
+            btDevice: btDevice!,
+            speechFinalCallback: (List<dynamic> words, String transcriptItem) {
+              Map<int, Map<String, dynamic>> bySpeaker = {};
+              for (var word in words) {
+                // LATER: get words for speaker 0, idx 0 to 5, then next speaker 1 on 6-7, then again speaker 0, do not just append
+                // debugPrint('Word: ${word.toString()}');
+                int speaker = word['speaker'];
+                if (bySpeaker[speaker] == null)
+                  bySpeaker[speaker] = <String, dynamic>{};
+                String currentSpeakerTranscript =
+                    bySpeaker[speaker]!['transcript'] ?? '';
+                bySpeaker[speaker]!['transcript'] =
+                    '${currentSpeakerTranscript + word['punctuated_word']} ';
+                bySpeaker[speaker]!['starts'] = min<double>(
+                    bySpeaker[speaker]!['starts'] ?? 999999999999.0,
+                    word['start']);
+                bySpeaker[speaker]!['ends'] =
+                    max<double>(bySpeaker[speaker]!['ends'] ?? -1, word['end']);
+              }
+              debugPrint(bySpeaker.toString());
+              updateTranscript(bySpeaker);
+              _initiateMemoryCreationTimer();
+            },
+            interimCallback:
+                (Map<int, String> transcriptBySpeaker, String transcriptItem) {
+              // debugPrint('interimCallback called');
+              // _memoryCreationTimer?.cancel();
+              // updateTranscript(transcriptBySpeaker); // interim causes makes a bit more complex the
+            },
+            onWebsocketConnectionSuccess: () {
+              addEventToContext('Websocket Opened');
+              setState(() {
+                wsConnectionState = WebsocketConnectionStatus.connected;
+                websocketReconnecting = false;
+                _reconnectionAttempts =
+                    0; // Reset counter on successful connection
+              });
+            },
+            onWebsocketConnectionFailed: (err) {
+              addEventToContext('Websocket Unable To Connect');
+              // connection couldn't be initiated for some reason.
+              setState(() {
+                wsConnectionState = WebsocketConnectionStatus.failed;
+                websocketReconnecting = false;
+              });
+              _reconnectWebSocket();
+            },
+            onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
+              // connection was closed, either on resetState, or by deepgram, or by some other reason.
+              addEventToContext('Websocket Closed');
+              setState(() {
+                wsConnectionState = WebsocketConnectionStatus.closed;
+              });
+              if (closeCode != 1000) {
+                // attempt to reconnect
+                _reconnectWebSocket();
+              }
+            },
+            onWebsocketConnectionError: (err) {
+              // connection was okay, but then failed.
+              addEventToContext('Websocket Error');
+              CrashReporting.reportHandledCrash(err, err.stackTrace);
+              setState(() {
+                wsConnectionState = WebsocketConnectionStatus.error;
+                websocketReconnecting = false;
+              });
+              _reconnectWebSocket();
+            },
+            onCustomWebSocketCallback: (String transcript) async {
+              // debugPrint('Custom Websocket Callback: $transcript');
+              for (var word in transcript.split(' ')) {
+                setState(() {
+                  customWebsocketTranscript += '$word ';
+                });
+                await Future.delayed(const Duration(milliseconds: 100));
+              }
+              setState(() {
+                customWebsocketTranscript += '\n';
+              });
             });
-            await Future.delayed(const Duration(milliseconds: 100));
-          }
-          setState(() {
-            customWebsocketTranscript += '\n';
-          });
-        });
 
     channel = data.item1;
     streamSubscription = data.item2;
@@ -212,7 +239,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (resetBLEConnection) initBleConnection();
     if (resetBLEConnection &&
         whispersDiarized.isNotEmpty &&
-        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty)) _initiateMemoryCreationTimer();
+        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty))
+      _initiateMemoryCreationTimer();
   }
 
   int _reconnectionAttempts = 0;
@@ -228,7 +256,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       createNotification(
           notificationId: 2,
           title: 'Deepgram Connection Error',
-          body: 'There was an error with the Deepgram connection, please restart the app and check your credentials.');
+          body:
+              'There was an error with the Deepgram connection, please restart the app and check your credentials.');
       addEventToContext('Max reconnection attempts reached');
       return;
     }
@@ -236,7 +265,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       websocketReconnecting = true;
     });
     _reconnectionAttempts++;
-    addEventToContext('Attempting to reconnect Websocket $_reconnectionAttempts');
+    addEventToContext(
+        'Attempting to reconnect Websocket $_reconnectionAttempts');
     await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
     debugPrint('Attempting to reconnect $_reconnectionAttempts time');
     await initBleConnection();
@@ -256,7 +286,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       int totalSpeakers = part.keys.map((e) => e).reduce(max) + 1;
       String transcriptItem = '';
       for (int speaker = 0; speaker < totalSpeakers; speaker++) {
-        if (part.containsKey(speaker)) transcriptItem += 'Speaker $speaker: ${part[speaker]!} ';
+        if (part.containsKey(speaker))
+          transcriptItem += 'Speaker $speaker: ${part[speaker]!} ';
       }
       transcript += '$transcriptItem\n\n';
     }
@@ -272,7 +303,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // - Each advice should be stored, and ideally mapped to a memory
     // - Advice should consider conversations in other languages
     // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
-    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
+    _conversationAdvisorTimer =
+        Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
       var transcript = _buildDiarizedTranscriptMessage();
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
@@ -280,7 +312,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       if (advice.isNotEmpty) {
         MixpanelManager().coachAdvisorFeedback(transcript, advice);
         clearNotification(3);
-        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
+        createNotification(
+            notificationId: 3,
+            title: 'Your Conversation Coach Says',
+            body: advice);
       }
     });
   }
@@ -331,13 +366,15 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         children: [
           Expanded(
             child: Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+              padding:
+                  const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
               child: Text(
                 customWebsocketTranscript,
                 style: FlutterFlowTheme.of(context).bodyMedium.override(
                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                       letterSpacing: 0.0,
-                      useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                      useGoogleFonts: GoogleFonts.asMap().containsKey(
+                          FlutterFlowTheme.of(context).bodyMediumFamily),
                     ),
               ),
             ),
@@ -359,9 +396,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (whispersDiarized[0].keys.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 48.0),
-        child: InfoButton(),
+      return Padding(
+        padding: const EdgeInsets.only(top: 48.0),
+        child: OtaUpdateButton(btDevice: btDevice),
       );
     }
     return _getDeepgramTranscriptUI();
@@ -392,7 +429,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             style: FlutterFlowTheme.of(context).bodyMedium.override(
                   fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                   letterSpacing: 0.0,
-                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                  useGoogleFonts: GoogleFonts.asMap().containsKey(
+                      FlutterFlowTheme.of(context).bodyMediumFamily),
                 ),
           ),
         );

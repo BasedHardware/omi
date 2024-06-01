@@ -9,9 +9,11 @@ class BTDeviceStruct extends BaseStruct {
     String? name,
     String? id,
     int? rssi,
+    int? fwver,
   })  : _name = name,
         _id = id,
-        _rssi = rssi;
+        _rssi = rssi,
+        _fwver = fwver;
 
   // "name" field.
   String? _name;
@@ -32,10 +34,17 @@ class BTDeviceStruct extends BaseStruct {
   void incrementRssi(int amount) => _rssi = rssi + amount;
   bool hasRssi() => _rssi != null;
 
+  // "fwver" field.
+  int? _fwver;
+  int get fwver => _fwver ?? 0;
+  set fwver(int? val) => _fwver = val;
+  bool hasFwver() => _fwver != null;
+
   static BTDeviceStruct fromMap(Map<String, dynamic> data) => BTDeviceStruct(
         name: data['name'] as String?,
         id: data['id'] as String?,
         rssi: castToType<int>(data['rssi']),
+        fwver: castToType<int>(data['fwver']),
       );
 
   static BTDeviceStruct? maybeFromMap(dynamic data) =>
@@ -45,6 +54,7 @@ class BTDeviceStruct extends BaseStruct {
         'name': _name,
         'id': _id,
         'rssi': _rssi,
+        'fwver': _fwver,
       }.withoutNulls;
 
   @override
@@ -61,6 +71,10 @@ class BTDeviceStruct extends BaseStruct {
           _rssi,
           ParamType.int,
         ),
+        'fwver': serializeParam(
+          _fwver,
+          ParamType.int,
+        )
       }.withoutNulls;
 
   static BTDeviceStruct fromSerializableMap(Map<String, dynamic> data) =>
@@ -80,6 +94,11 @@ class BTDeviceStruct extends BaseStruct {
           ParamType.int,
           false,
         ),
+        fwver: deserializeParam(
+          data['fwver'],
+          ParamType.int,
+          false,
+        ),
       );
 
   @override
@@ -90,7 +109,8 @@ class BTDeviceStruct extends BaseStruct {
     return other is BTDeviceStruct &&
         name == other.name &&
         id == other.id &&
-        rssi == other.rssi;
+        rssi == other.rssi &&
+        fwver == other.fwver;
   }
 
   @override
@@ -101,9 +121,11 @@ BTDeviceStruct createBTDeviceStruct({
   String? name,
   String? id,
   int? rssi,
+  int? fwver,
 }) =>
     BTDeviceStruct(
       name: name,
       id: id,
       rssi: rssi,
+      fwver: fwver,
     );
