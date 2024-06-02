@@ -12,6 +12,7 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
+import '../../utils/string_utils.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -140,7 +141,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
     
-    The output should be formatted as a JSON instance that conforms to the JSON schema below.
+    The output should be formatted as a JSON instance that conforms to the JSON schema below. You must always generate valid language and respond according to the format values to the keys in json.
 
     As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
     the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
@@ -153,7 +154,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
           .replaceAll('    ', '')
           .trim();
   // debugPrint(prompt);
-  var structured = (await executeGptPrompt(prompt)).replaceAll('```', '').replaceAll('json', '').trim();
+  var structured = extractJson(await executeGptPrompt(prompt));
   return Structured.fromJson(jsonDecode(structured));
 }
 
