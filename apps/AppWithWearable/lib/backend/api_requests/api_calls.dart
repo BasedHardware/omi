@@ -212,47 +212,37 @@ Future<List<double>> getEmbeddingsFromInput(String input) async {
 
 // ------
 
-Future<String?> determineRequiresContext(String lastMessage, List<Message> messages) async {
-  var tools = [
-    {
-      "type": "function",
-      "function": {
-        "name": "retrieve_rag_context",
-        "description": "Retrieve pieces of user memories as context.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "question": {
-              "type": "string",
-              "description": '''
-              Based on the current conversation, determine if the message is a question and if there's 
-              context that needs to be retrieved from the user recorded audio memories in order to answer that question.
-              If that's the case, return the question better parsed so that retrieved pieces of context are better.
-              ''',
-            },
-          },
-        },
-      },
-    }
-  ];
+Future<String?> determineRequiresContext(List<Message> messages) async {
   String message = '''
+        Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
+        More context could mean, user stored old conversations, notes, or information that seems very user-specific.
+        
+        - First determine if the conversation requires context, in the field "requires_context".
+        - If it does, provide the topic (1 or 2 words, e.g. "Startups" "Funding" "Business Meetings") that is going to be used to retrieve more context, in the field "query". Leave empty if not context is needed.
+        
         Conversation:
         ${messages.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}\n
-        USER:$lastMessage
+        
+        The output should be formatted as a JSON instance that conforms to the JSON schema below.
+        As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+        the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+
+        Here is the output schema:
+        ```
+        {"properties": {"requires_context": {"title": "Requires context", \"description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "bool"}, "query": {"title": "Query", "description": "If context is required, the main topic to retrieve context from", "default": "", "type": "string"}, }}
+        ```
         '''
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
-  var response = await gptApiCall(
-      model: 'gpt-4o',
-      messages: [
-        {"role": "user", "content": message}
-      ],
-      tools: tools);
-  if (response.toString().contains('retrieve_rag_context')) {
-    var args = jsonDecode(response[0]['function']['arguments']);
-    return args['question'];
+  var response = await gptApiCall(model: 'gpt-4o', messages: [
+    {"role": "user", "content": message}
+  ]);
+  debugPrint('determineRequiresContext response: $response');
+  try {
+    return jsonDecode(response.toString().replaceAll('```','').replaceAll('json', '').trim())['query'];
+  } catch (e) {
+    return null;
   }
-  return null;
 }
 
 Future<dynamic> pineconeApiCall({required String urlSuffix, required String body}) async {
