@@ -352,7 +352,7 @@ Future<List<Plugin>> retrievePlugins() async {
 Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.customTranscriptApiBaseUrl}transcribe?language=en&uid=$uid'),
+    Uri.parse('${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 

@@ -60,7 +60,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="Friend"
         android:requestLegacyExternalStorage="true"
-        tools:replace="android:label">
+        tools:replace="android:label"
+        android:usesCleartextTraffic="true">
         <!--        <service-->
         <!--            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"-->
         <!--            android:exported="false"-->
