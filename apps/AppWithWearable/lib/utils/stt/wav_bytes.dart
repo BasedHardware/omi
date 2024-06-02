@@ -20,6 +20,10 @@ class WavBytesUtil {
     _audioBytes.addAll(bytes);
   }
 
+  void insertAudioBytes(List<int> bytes) {
+    _audioBytes.insertAll(0, bytes);
+  }
+
   // Method to clear audio bytes
   void clearAudioBytes() {
     _audioBytes.clear();

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_silero_vad/flutter_silero_vad.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -14,6 +15,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:friend_private/utils/vad.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
@@ -108,6 +110,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (btDevice == null) return;
     WavBytesUtil wavBytesUtil = WavBytesUtil();
     WavBytesUtil toProcessBytes = WavBytesUtil();
+
     StreamSubscription? stream = await getBleAudioBytesListener(btDevice!, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
@@ -120,16 +123,20 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
       }
+      // TODO: process here some way with
+      // - https://github.com/Telosnex/fonnx/blob/main/example/lib/silero_vad_widget.dart
+      // - https://github.com/snakers4/silero-vad/blob/master/files/silero_vad.onnx
+
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        // TODO: process here some way with
-        // - https://github.com/Telosnex/fonnx/blob/main/example/lib/silero_vad_widget.dart
-        // - https://github.com/snakers4/silero-vad/blob/master/files/silero_vad.onnx
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
-          List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
-          processCustomTranscript(segments);
-          // TODO: if this request fails for some reason, ideally insert the bytes on audioBytes
+          try {
+            List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            processCustomTranscript(segments);
+          } catch (e) {
+            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
+          }
           // TODO: if there's no wifi for doing the request or something, keep them in localStorage some way
         });
       }

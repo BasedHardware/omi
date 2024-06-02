@@ -353,7 +353,8 @@ Future<List<Plugin>> retrievePlugins() async {
 Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
+    Uri.parse(
+        '${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -367,9 +368,11 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
       return TranscriptSegment.fromJsonList(data);
     } else {
       debugPrint('Failed to upload file. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
     }
   } catch (e) {
     debugPrint('An error occurred transcribeAudioFile: $e');
+    throw Exception('An error occurred transcribeAudioFile: $e');
   }
   return [];
 }
