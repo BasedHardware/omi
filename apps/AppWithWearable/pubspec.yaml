@@ -39,7 +39,7 @@ dependencies:
   json_path: 0.6.2
   mime_type: 1.0.0
   page_transition: 2.1.0
-  permission_handler: 11.3.0
+  permission_handler: ^11.3.1
   share_plus: 7.2.1
   shared_preferences: ^2.2.3
   smooth_page_indicator: 1.1.0
