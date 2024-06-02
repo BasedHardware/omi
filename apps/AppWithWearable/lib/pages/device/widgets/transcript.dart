@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_silero_vad/flutter_silero_vad.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -110,6 +109,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (btDevice == null) return;
     WavBytesUtil wavBytesUtil = WavBytesUtil();
     WavBytesUtil toProcessBytes = WavBytesUtil();
+    // VadUtil vad = VadUtil();
+    // await vad.init();
 
     StreamSubscription? stream = await getBleAudioBytesListener(btDevice!, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
@@ -123,21 +124,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
       }
-      // TODO: process here some way with
-      // - https://github.com/Telosnex/fonnx/blob/main/example/lib/silero_vad_widget.dart
-      // - https://github.com/snakers4/silero-vad/blob/master/files/silero_vad.onnx
-
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
+          // var containsAudio = await vad.predict(f.readAsBytesSync());
           try {
             List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
             processCustomTranscript(segments);
           } catch (e) {
             toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
           }
-          // TODO: if there's no wifi for doing the request or something, keep them in localStorage some way
         });
       }
     });
