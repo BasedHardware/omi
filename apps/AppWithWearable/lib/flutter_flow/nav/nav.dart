@@ -7,6 +7,7 @@ import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:provider/provider.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -112,6 +113,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           name: 'settings',
           path: '/settings',
           builder: (context, params) => SettingsPage(),
+        ),
+        FFRoute(
+          name: 'plugins',
+          path: '/plugins',
+          builder: (context, params) => PluginsPage(),
         ),
         FFRoute(
           name: 'chatPage',

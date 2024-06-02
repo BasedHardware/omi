@@ -47,6 +47,8 @@ class MixpanelManager {
 
   void settingsSaved() => track('Settings Saved');
 
+  void pluginsOpened() => track('Settings Saved');
+
   void devModeEnabled() => track('Dev Mode Enabled');
 
   void devModeDisabled() => track('Dev Mode Disabled');

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tilt/flutter_tilt.dart';
@@ -149,70 +150,65 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                               highlightColor: Colors.transparent,
                               mouseCursor: SystemMouseCursors.click,
                               onTap: () async {
-                                // Check if Bluetooth and location permissions are granted
-                                PermissionStatus bluetoothStatus = await Permission.bluetooth.status;
-                                bool locationGranted = Platform.isIOS || (await Permission.location.isGranted);
-
-                                if (bluetoothStatus.isGranted && locationGranted) {
-                                  // Both permissions are already granted
-                                  // Request notification permission
-                                  PermissionStatus notificationStatus = await Permission.notification.request();
-
-                                  // Navigate to the 'scanDevices' screen
-                                  context.goNamed('findDevices');
+                                bool permissionsAccepted = false;
+                                if (Platform.isIOS) {
+                                  PermissionStatus bleStatus = await Permission.bluetooth.request();
+                                  debugPrint('bleStatus: $bleStatus');
+                                  permissionsAccepted = bleStatus.isGranted;
+                                  // TODO: apparently only needed for ios?
                                 } else {
-                                  // Request both Bluetooth and location permissions
-                                  if (await Permission.bluetooth.request().isGranted &&
-                                      await Permission.location.request().isGranted) {
-                                    // Both permissions are granted now
-                                    // Request notification permission
-                                    PermissionStatus notificationStatus = await Permission.notification.request();
+                                  PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
+                                  PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
+                                  // PermissionStatus locationStatus = await Permission.location.request();
 
-                                    // Navigate to the 'scanDevices' screen
-                                    context.goNamed('findDevices');
-                                  } else {
-                                    // Either permission is denied
-                                    // Show a dialog to inform the user and provide an action to open app settings
-                                    showDialog(
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          backgroundColor: Colors.grey[900],
-                                          title: const Text(
-                                            'Permissions Required',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                  permissionsAccepted = bleConnectStatus.isGranted &&
+                                      bleScanStatus.isGranted; // && locationStatus.isGranted;
+
+                                  debugPrint(
+                                      'bleScanStatus: $bleScanStatus ~ bleConnectStatus: $bleConnectStatus');
+                                }
+                                if (!permissionsAccepted) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        backgroundColor: Colors.grey[900],
+                                        title: const Text(
+                                          'Permissions Required',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
                                           ),
-                                          content: const Text(
-                                            'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                            ),
+                                        ),
+                                        content: const Text(
+                                          'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
                                           ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.of(context).pop();
-                                                openAppSettings();
-                                              },
-                                              child: const Text(
-                                                'OK',
-                                                style: TextStyle(
-                                                  color: Colors.blue,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              openAppSettings();
+                                            },
+                                            child: const Text(
+                                              'OK',
+                                              style: TextStyle(
+                                                color: Colors.blue,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  }
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                } else {
+                                  context.pushReplacementNamed('findDevices');
                                 }
                               },
                               child: ShaderMask(

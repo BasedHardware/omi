@@ -12,7 +12,6 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/flutter_flow/permissions_util.dart';
 
 class FindDevicesPage extends StatefulWidget {
   const FindDevicesPage({super.key});
@@ -30,43 +29,13 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-
-    _fetchDevices(); // meaningless?
-    // Automatically scan for devices when the screen loads
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scanDevices();
     });
   }
 
-  Future<void> _fetchDevices() async {
-    // TODO: handle permission asking better
-    if (await getPermissionStatus(bluetoothPermission)) {
-      // List<BTDeviceStruct> fetchedConnectedDevices = await actions.ble0getConnectedDevices();
-      // setState(() {
-      //   _model.connectedDevices = fetchedConnectedDevices.toList().cast<BTDeviceStruct>();
-      // });
-      // _model.devices = await actions.ble0findDevices();
-      // setState(() {
-      //   _model.connectedDevices = _model.devices!.toList().cast<BTDeviceStruct>();
-      // });
-    } else {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Error'),
-          content: const Text('Bluetooth off'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
   Future<void> _scanDevices() async {
+    // TODO: validate bluetooth turned on=
     BTDeviceStruct? friendDevice = await scanAndConnectDevice();
     if (friendDevice != null) {
       setState(() {
