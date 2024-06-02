@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -75,6 +76,36 @@ class SharedPreferencesUtil {
   set chatMessages(List<Message> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('messages', messages);
+  }
+
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+
+  set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
+
+  List<Plugin> get pluginsList {
+    final List<String> plugins = getStringList('pluginsList') ?? [];
+    return plugins.map((e) => Plugin.fromJson(jsonDecode(e))).toList();
+  }
+
+  set pluginsList(List<Plugin> value) {
+    final List<String> plugins = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('pluginsList', plugins);
+  }
+
+  List<String> get pluginsEnabled => getStringList('pluginsEnabled') ?? [];
+
+  set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
+
+  enablePlugin(String value) {
+    final List<String> plugins = pluginsEnabled;
+    plugins.add(value);
+    pluginsEnabled = plugins;
+  }
+
+  disablePlugin(String value) {
+    final List<String> plugins = pluginsEnabled;
+    plugins.remove(value);
+    pluginsEnabled = plugins;
   }
 
   Future<bool> saveString(String key, String value) async {

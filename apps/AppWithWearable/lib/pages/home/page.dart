@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -40,6 +41,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  _setupHasSpeakerProfile() async {
+    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+  }
+
+  Future<void> _initiatePlugins() async {
+    var plugins = await retrievePlugins();
+    SharedPreferencesUtil().pluginsList = plugins;
+  }
+
   void _onItemTapped(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     setState(() {
@@ -73,7 +83,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
 
     _initiateMemories();
+    _initiatePlugins();
     authenticateGCP();
+    _setupHasSpeakerProfile();
 
     if (widget.btDevice != null) {
       // Only used when onboarding flow
@@ -92,7 +104,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: false);
+          transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() {
             _device = null;
           });
@@ -112,7 +124,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    transcriptChildWidgetKey.currentState?.resetState(resetBLEConnection: true, btDevice: connectedDevice);
+    transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
   }
 
@@ -175,6 +187,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             },
           )
         ],
+        leading: IconButton(
+          icon: const Icon(
+            Icons.extension,
+            color: Colors.white,
+            size: 30,
+          ),
+          onPressed: () async {
+            MixpanelManager().pluginsOpened();
+            await context.pushNamed('plugins');
+          },
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,

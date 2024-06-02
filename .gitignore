@@ -110,3 +110,7 @@ apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginR
 
 # test output
 test/recordings
+
+#Flutter
+
+env.g.dart

@@ -55,8 +55,8 @@ class _DevicePageState extends State<DevicePage> {
                 btDevice: widget.device,
                 key: widget.transcriptChildWidgetKey,
                 refreshMemories: widget.refreshMemories,
-              )
-,
+              ),
+              const SizedBox(height: 16)
             ]),
           ],
         ),

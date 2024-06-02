@@ -1,13 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
+import '../../utils/string_utils.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -117,11 +122,13 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
   if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: []);
-  // TODO: this has to be toggled and played around
-  // TODO: probably best to determine usefulness with function call before executing this prompt
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
+  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+  final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
+  var pluginPrompt = plugin?.prompt ?? '';
+
   var prompt =
-      '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory.
+      '''$pluginPrompt\nBased on the following recording transcript of a conversation, provide structure and clarity to the memory.
     The conversation language is $languageCode. Make sure to use English for your response.
 
     It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
@@ -134,7 +141,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
     
-    The output should be formatted as a JSON instance that conforms to the JSON schema below.
+    The output should be formatted as a JSON instance that conforms to the JSON schema below. You must always generate valid language and respond according to the format values to the keys in json.
 
     As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
     the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
@@ -146,7 +153,8 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim();
-  var structured = (await executeGptPrompt(prompt)).replaceAll('```', '').replaceAll('json', '').trim();
+  // debugPrint(prompt);
+  var structured = extractJson(await executeGptPrompt(prompt));
   return Structured.fromJson(jsonDecode(structured));
 }
 
@@ -324,4 +332,56 @@ Future<bool> deleteVector(String memoryId) async {
   return true;
 }
 
+Future<List<Plugin>> retrievePlugins() async {
+  var response = await makeApiCall(
+      url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
+      headers: {},
+      body: '',
+      method: 'GET');
+  if (response?.statusCode == 200) {
+    try {
+      return Plugin.fromJsonList(jsonDecode(response!.body));
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+}
+
 // TODO: update vectors when fields updated
+
+Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      debugPrint('Response body: ${response.body}');
+      return TranscriptSegment.fromJsonList(data);
+    } else {
+      debugPrint('Failed to upload file. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred transcribeAudioFile: $e');
+  }
+  return [];
+}
+
+Future<bool> userHasSpeakerProfile(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}profile?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('userHasSpeakerProfile: ${response.body}');
+  return jsonDecode(response.body)['has_profile'] ?? false;
+}
