@@ -54,7 +54,7 @@ class AIMessage extends StatelessWidget {
                   children: [
                     SelectionArea(
                         child: AutoSizeText(
-                      message.text,
+                      message.text.replaceAll(r'\n', '\n'),
                       style: FlutterFlowTheme.of(context).titleMedium.override(
                             fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
                             color: FlutterFlowTheme.of(context).secondary,
