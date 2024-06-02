@@ -19,39 +19,51 @@
 //
 
 static struct bt_conn_cb _callback_references;
+
+static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
-static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
-static ssize_t device_factory_reset_write_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
-static ssize_t device_ota_update_write_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+
+static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static ssize_t dfu_version_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+
+static uint8_t dfu_version_value[] = {0x01, 0x00};
 
 //
 // Service and Characteristic
 //
 
-// Primary service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
+// Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
 // - Audio codec (UUID 19B10002-E8F2-537E-4F6C-D104768A1214) to send audio codec type (read)
-// - Device reset (UUID 814b9b7c-25fd-4acd-8604-d28877beee6e) to factory reset the device (write)
-// - Device OTA Update (UUID 814b9b7c-25fd-4acd-8604-d28877beee6f) to start the OTA update process (write)
-// TODO: This UUID seems to come from old Intel sample code, we should change it
-// to UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
-// TODO: Factory reset and OTA update should be protected and require some kind of authentication from the calling app
+// TODO: The current audio service UUID seems to come from old Intel sample code,
+// we should change it to UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
 static struct bt_uuid_128 primary_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-static struct bt_uuid_128 device_characteristic_reset_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x814b9b7c, 0x25fd, 0x4acd, 0x8604, 0xd28877beee6e));
-static struct bt_uuid_128 device_characteristic_ota_update_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x814b9b7c, 0x25fd, 0x4acd, 0x8604, 0xd28877beee6f));
-static struct bt_gatt_attr audio_attrs[] = {
+
+// Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
+// exposes following characteristics:
+// - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
+// - DFU version (UUID 00001534-1212-EFDE-1523-785FEABCD123) to return to the client the bootloader version (read)
+static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+static struct bt_uuid_128 dfu_version_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001534, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+
+static struct bt_gatt_attr gatt_attrs[] = {
     BT_GATT_PRIMARY_SERVICE(&primary_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-    BT_GATT_CHARACTERISTIC(&device_characteristic_reset_uuid.uuid, BT_GATT_CHRC_WRITE_WITHOUT_RESP, BT_GATT_PERM_WRITE, NULL, device_factory_reset_write_characteristic, NULL),
-    BT_GATT_CHARACTERISTIC(&device_characteristic_ota_update_uuid.uuid, BT_GATT_CHRC_WRITE_WITHOUT_RESP, BT_GATT_PERM_WRITE, NULL, device_ota_update_write_characteristic, NULL),
+    BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
+    BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
+    BT_GATT_CCC(ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&dfu_version_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, dfu_version_read, NULL, dfu_version_value),
 };
-static struct bt_gatt_service primary_service = BT_GATT_SERVICE(audio_attrs);
+
+static struct bt_gatt_service primary_service = BT_GATT_SERVICE(gatt_attrs);
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -63,6 +75,7 @@ static const struct bt_data bt_ad[] = {
 // Scan response data
 static const struct bt_data bt_sd[] = {
     BT_DATA(BT_DATA_NAME_COMPLETE, "Friend", sizeof("Friend") - 1),
+    BT_DATA(BT_DATA_UUID128_ALL, dfu_service_uuid.val, sizeof(dfu_service_uuid.val)),
 };
 
 //
@@ -72,19 +85,6 @@ static const struct bt_data bt_sd[] = {
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
-
-static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
-{
-    printk("audio_data_read_characteristic\n");
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, NULL, 0);
-}
-
-static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
-{
-    printk("audio_codec_read_characteristic\n");
-    uint8_t value[1] = {CODEC_ID};
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
-}
 
 static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -102,20 +102,42 @@ static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t
     }
 }
 
-static ssize_t device_factory_reset_write_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("device_factory_reset_write_characteristic\n");
-    // TODO: Reset the device settings
+    printk("audio_data_read_characteristic\n");
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, NULL, 0);
+}
+
+static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    printk("audio_codec_read_characteristic\n");
+    uint8_t value[1] = {CODEC_ID};
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
+}
+
+static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    printk("dfu_control_point_write_handler\n");
+    if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
+    {
+        NRF_POWER->GPREGRET = 0xA8;
+        NVIC_SystemReset();
+    }
+    else if (len == 2 && ((uint8_t *)buf)[0] == 0x01)
+    {
+        uint8_t notification_value = 0x10;
+        bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
+
+        NRF_POWER->GPREGRET = 0xA8;
+        NVIC_SystemReset();
+    }
     return len;
 }
 
-// Restart into bootloader OTA mode
-static ssize_t device_ota_update_write_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+static ssize_t dfu_version_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("device_ota_update_write_characteristic\n");
-    NRF_POWER->GPREGRET = 0xA8;
-    NVIC_SystemReset();
-    return len;
+    const uint8_t *value = attr->user_data;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(dfu_version_value));
 }
 
 //
