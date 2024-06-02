@@ -75,21 +75,55 @@ Follow these steps to get started with your Friend.
 
 ### Install the app
 
-1. Clone the repo `git clone https://github.com/BasedHardware/friend.git`
-2. Choose which version of the app you want to install (see Structure).
-   - Don't have the device? run `cd apps/AppStandalone` in terminal
-   - Have the device/NRF Board? run `cd apps/AppWithWearable` in terminal
-3. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-4. Install your environment variables
+Before starting, make sure you have the following installed:
 
-   - For AppStandalone, update variables in in .env.template file
-   - For AppWithWearable, you can set the api keys needed on the mobile App from the settings page itself
+- Flutter SDK
+- Dart SDK
+- Xcode (for iOS)
+- Android Studio (for Android)
+- CocoaPods (for iOS dependencies)
 
-5. iOS: [Install XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier.
-   Android: Download/install [android Studio ](https://developer.android.com/studio) then navigate to the Android folder
-   Don't run in web/simulator: Bluetooth will not work
-6. Run `flutter clean ` then `flutter pub get` then `pod install`
-7. When everything is installed, run `flutter run `, this should run your app on a selected device
+### Setup Instructions
+
+1. **Upgrade Flutter**:
+   Before proceeding, make sure your Flutter SDK is up to date:
+    ```
+    flutter upgrade
+    ```
+
+2. **Get Flutter Dependencies**:
+   From within `apps/AppStandalone`, install flutter packages:
+    ```
+    flutter pub get
+    ```
+
+3. **Install iOS Pods**:
+   Navigate to the iOS directory and install the CocoaPods dependencies:
+    ```
+    cd ios
+    pod install
+    pod repo update
+    ```
+
+4. **Environment Configuration**:
+   Create `.env` using template `.env.template`
+    ```
+    cd ..
+    cat .env.template > .env
+    ```
+
+5. **API Keys**:
+   Add your API keys to the `.env` file. (Sentry is not needed)
+
+6. **Run Build Runner**:
+   Generate necessary files with Build Runner:
+    ```
+    dart run build_runner build
+    ```
+
+7. **Run the App**:
+    - Select your target device in Xcode or Android Studio.
+    - Run the app.
 
 [Next Step: Buying Guide →](https://basedhardware.github.io/Friend/assembly/Buying_Guide/)
 
