@@ -114,3 +114,5 @@ test/recordings
 #Flutter
 
 env.g.dart
+*/upload-keystore.jks
+*/key.properties

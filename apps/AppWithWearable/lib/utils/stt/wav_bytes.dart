@@ -20,6 +20,10 @@ class WavBytesUtil {
     _audioBytes.addAll(bytes);
   }
 
+  void insertAudioBytes(List<int> bytes) {
+    _audioBytes.insertAll(0, bytes);
+  }
+
   // Method to clear audio bytes
   void clearAudioBytes() {
     _audioBytes.clear();
@@ -41,14 +45,18 @@ class WavBytesUtil {
       filename = 'recording-$timestamp.wav';
     }
 
-    final wavHeader = buildWavHeader(audioBytes.length * 2);
-    final wavBytes = Uint8List.fromList(wavHeader + convertToLittleEndianBytes(audioBytes));
+    final wavBytes = getUInt8ListBytes(audioBytes);
 
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$filename');
     await file.writeAsBytes(wavBytes);
     debugPrint('WAV file created: ${file.path}');
     return file;
+  }
+
+  static Uint8List getUInt8ListBytes(List<int> audioBytes) {
+    final wavHeader = buildWavHeader(audioBytes.length * 2);
+    return Uint8List.fromList(wavHeader + convertToLittleEndianBytes(audioBytes));
   }
 
   // Utility to convert audio data to little-endian format
