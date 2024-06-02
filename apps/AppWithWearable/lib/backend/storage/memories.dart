@@ -5,23 +5,27 @@ class Structured {
   String title;
   String overview;
   List<String> actionItems;
+  List<String> pluginsResponse;
 
   Structured({
     this.title = "",
     this.overview = "",
     required this.actionItems,
+    required this.pluginsResponse,
   });
 
   factory Structured.fromJson(Map<String, dynamic> json) => Structured(
         title: json['title'],
         overview: json['overview'],
         actionItems: List<String>.from(json['action_items'] ?? []),
+        pluginsResponse: List<String>.from(json['pluginsResponse'] ?? []),
       );
 
   Map<String, dynamic> toJson() => {
         'title': title,
         'overview': overview,
         'action_items': List<dynamic>.from(actionItems),
+        'pluginsResponse': List<dynamic>.from(pluginsResponse),
       };
 
   @override
@@ -35,6 +39,12 @@ class Structured {
     for (var item in actionItems) {
       str += '  - $item\n';
     }
+    if (pluginsResponse.isNotEmpty) {
+      str += 'Plugins Response:\n';
+    }
+    for (var response in pluginsResponse) {
+      str += '  - $response\n';
+    }
     return str;
   }
 }
@@ -42,8 +52,6 @@ class Structured {
 class MemoryRecord {
   String transcript;
   String id;
-
-  // String uid;
   DateTime createdAt;
   Structured structured;
   bool discarded;
@@ -51,7 +59,6 @@ class MemoryRecord {
   MemoryRecord({
     required this.transcript,
     required this.id,
-    // required this.uid,
     required this.createdAt,
     required this.structured,
     this.discarded = false,
@@ -60,7 +67,6 @@ class MemoryRecord {
   factory MemoryRecord.fromJson(Map<String, dynamic> json) => MemoryRecord(
         transcript: json['transcript'],
         id: json['id'],
-        // uid: json['uid'],
         createdAt: DateTime.parse(json['created_at']),
         structured: Structured.fromJson(json['structured']),
         discarded: json['discarded'] ?? false,
@@ -69,7 +75,6 @@ class MemoryRecord {
   Map<String, dynamic> toJson() => {
         'transcript': transcript,
         'id': id,
-        // 'uid': uid,
         'created_at': createdAt.toIso8601String(),
         'structured': structured.toJson(),
         'discarded': discarded,
@@ -92,6 +97,8 @@ class MemoryRecord {
       Summary: ${e.structured.overview}
       ${e.structured.actionItems.isNotEmpty ? 'Action Items:' : ''}
       ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
+      ${e.structured.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
+      ${e.structured.pluginsResponse.map((response) => '  - $response').join('\n')}
       '''
           .replaceAll('      ', '')
           .trim())
@@ -138,7 +145,7 @@ class MemoryStorage {
     return filtered;
   }
 
-  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription, List<String> updatedActionItems) async {
+  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription, List<String> updatedActionItems, List<String> updatedPluginsResponse) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
@@ -151,7 +158,8 @@ class MemoryStorage {
         structured: Structured(
           title: updatedTitle,
           overview: updatedDescription,
-          actionItems: updatedActionItems, // Use updatedActionItems here
+          actionItems: updatedActionItems,
+          pluginsResponse: updatedPluginsResponse ?? [], // Use updatedPluginsResponse here
         ),
         discarded: oldMemory.discarded,
       );
