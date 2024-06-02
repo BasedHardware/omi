@@ -22,12 +22,13 @@ class _PluginsPageState extends State<PluginsPage> {
   List<Plugin> plugins = [];
 
   Future<void> _fetchPlugins() async {
-    var plugins = SharedPreferencesUtil().pluginsList;
-    var pluginsId = SharedPreferencesUtil().pluginsEnabled;
-    for (var plugin in plugins) {
+    var prefs = SharedPreferencesUtil();
+    var pluginsList = prefs.pluginsList;
+    var pluginsId = prefs.pluginsEnabled;
+    for (var plugin in pluginsList) {
       plugin.isEnabled = pluginsId.contains(plugin.id);
     }
-    this.plugins = plugins;
+    plugins = pluginsList;
     setState(() => isLoading = false);
   }
 
@@ -38,26 +39,22 @@ class _PluginsPageState extends State<PluginsPage> {
   }
 
   Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
-    // FOR NOW ENABLE SINGLE PLUGIN
+    var prefs = SharedPreferencesUtil();
     if (isEnabled) {
-      SharedPreferencesUtil().pluginsEnabled = [pluginId];
-      for (var p in plugins) {
-        p.isEnabled = p.id == pluginId;
-      }
+      prefs.enablePlugin(pluginId);
     } else {
-      SharedPreferencesUtil().pluginsEnabled = [];
-      for (var p in plugins) {
-        p.isEnabled = false;
-      }
+      prefs.disablePlugin(pluginId);
     }
-    setState(() {});
+    _fetchPlugins();
   }
 
   List<Plugin> _filteredPlugins() {
-    if (searchQuery.isEmpty) {
-      return plugins;
-    }
-    return plugins.where((plugin) => plugin.name.toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
+    return searchQuery.isEmpty
+        ? plugins
+        : plugins
+            .where((plugin) =>
+                plugin.name.toLowerCase().contains(searchQuery.toLowerCase()))
+            .toList();
   }
 
   @override
@@ -78,7 +75,8 @@ class _PluginsPageState extends State<PluginsPage> {
           actions: [
             TextButton(
                 onPressed: () {
-                  launchUrl(Uri.parse('https://github.com/BasedHardware/Friend/blob/main/plugins-instruction.md'));
+                  launchUrl(Uri.parse(
+                      'https://github.com/BasedHardware/Friend/blob/main/plugins-instruction.md'));
                 },
                 child: const Row(
                   children: [
@@ -89,10 +87,6 @@ class _PluginsPageState extends State<PluginsPage> {
                     SizedBox(
                       width: 8,
                     ),
-                    // Icon(
-                    //   Icons.build,
-                    //   color: Colors.white,
-                    // ),
                   ],
                 ))
           ],
@@ -107,7 +101,8 @@ class _PluginsPageState extends State<PluginsPage> {
                 ),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
                     color: const Color(0x1AF7F4F4),
@@ -129,13 +124,16 @@ class _PluginsPageState extends State<PluginsPage> {
                     obscureText: false,
                     decoration: InputDecoration(
                       hintText: 'Search your plugin',
-                      hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                            fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                      hintStyle: FlutterFlowTheme.of(context)
+                          .bodySmall
+                          .override(
+                            fontFamily:
+                                FlutterFlowTheme.of(context).bodySmallFamily,
                             color: FlutterFlowTheme.of(context).primaryText,
                             fontSize: 14.0,
                             fontWeight: FontWeight.w500,
-                            useGoogleFonts:
-                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
+                            useGoogleFonts: GoogleFonts.asMap().containsKey(
+                                FlutterFlowTheme.of(context).bodySmallFamily),
                           ),
                       enabledBorder: const UnderlineInputBorder(
                         borderSide: BorderSide(
@@ -179,45 +177,50 @@ class _PluginsPageState extends State<PluginsPage> {
                       ),
                     ),
                     style: FlutterFlowTheme.of(context).bodyMedium.override(
-                          fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                          fontFamily:
+                              FlutterFlowTheme.of(context).bodyMediumFamily,
                           color: FlutterFlowTheme.of(context).primaryText,
                           fontWeight: FontWeight.w500,
-                          useGoogleFonts:
-                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                          useGoogleFonts: GoogleFonts.asMap().containsKey(
+                              FlutterFlowTheme.of(context).bodyMediumFamily),
                         ),
                   ),
                 ),
-                ListView.builder(
-                  itemCount: filteredPlugins.length,
-                  scrollDirection: Axis.vertical,
-                  shrinkWrap: true,
-                  itemBuilder: (context, index) {
-                    if (index < 0 || index >= filteredPlugins.length) return null;
-                    final plugin = filteredPlugins[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
-                      child: ListTile(
-                        title: Text(
-                          plugin.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            plugin.description,
-                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: filteredPlugins.length,
+                    itemBuilder: (context, index) {
+                      final plugin = filteredPlugins[index];
+                      return Padding(
+                        padding:
+                            const EdgeInsets.only(top: 16, left: 10, right: 10),
+                        child: ListTile(
+                          title: Text(
+                            plugin.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontSize: 16),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              plugin.description,
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 14),
+                            ),
+                          ),
+                          trailing: Switch(
+                            value: plugin.isEnabled,
+                            activeColor: Colors.deepPurple,
+                            onChanged: (value) {
+                              _togglePlugin(plugin.id.toString(), value);
+                            },
                           ),
                         ),
-                        trailing: Switch(
-                          value: plugin.isEnabled,
-                          activeColor: Colors.deepPurple,
-                          onChanged: (value) {
-                            _togglePlugin(plugin.id.toString(), value);
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
