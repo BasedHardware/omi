@@ -33,6 +33,13 @@ Open Source AI Wearable device that records everything you say, gives you proact
 - [Build the device](https://basedhardware.github.io/Friend/assembly/Build_the_device/)
 - [Install firmware](https://basedhardware.github.io/Friend/assembly/Install_firmware/)
 
+## Contribution:
+
+We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Friend/issues)
+
+We also want to give back to the community - and therefore, some of the tasks are paid bounties 💰! You can check which ones by the "Paid Bounty" label, [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+
+
 ## How it works
 
 ```mermaid
@@ -40,21 +47,26 @@ graph TD;
    A[Device] -- Streams Audio --> B[Phone App];
    B -- Transmits --> C[Deepgram];
    C -- Returns Transcript --> D[Phone App];
-   D -- Saves Transcript --> E[Phone Storage];
+   D -- Sends Transcript to Plugins Enabled --> G[Community Plugins];
+   D -- Saves Original Transcript --> E[Phone Storage];
+   G -- Saves Plugin Responses --> E;
 
 classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
 classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
 
 classDef lightModeLinks stroke:#333333;
 classDef darkModeLinks stroke:#FFFFFF;
+    
+class A,B,C,D,E,G lightMode;
+class A,B,C,D,E,G darkMode;
+    
+linkStyle 0 stroke:#FF4136, stroke-width:2px;
+linkStyle 1 stroke:#1ABC9C, stroke-width:2px;
+linkStyle 2 stroke:#0074D9, stroke-width:2px;
+linkStyle 3 stroke:#FFCC00, stroke-width:2px;
+linkStyle 4 stroke:#2ECC40, stroke-width:2px;
+linkStyle 5 stroke:#B10DC9, stroke-width:2px;
 
-class A,B,C,D,E lightMode
-class A,B,C,D,E darkMode
-
-linkStyle 0 stroke:#FF4136, stroke-width:2px
-linkStyle 1 stroke:#1ABC9C, stroke-width:2px
-linkStyle 2 stroke:#FFCC00, stroke-width:2px
-linkStyle 3 stroke:#2ECC40, stroke-width:2px
 ``` 
 
 ## Structure
@@ -130,9 +142,10 @@ Before starting, make sure you have the following installed:
 ## More links:
 
 - [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
-- [Roadmap and Tasks](https://github.com/orgs/BasedHardware/projects/1)
+- [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
+- [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
 ## Made by the Community, with -❤️-:
 

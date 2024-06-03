@@ -1,7 +1,7 @@
 ---
 layout: default
 title: App-device protocol
-nav_order: 1
+nav_order: 2
 ---
 
 # App-device protocol
