@@ -15,6 +15,25 @@ Before starting, make sure you have the following installed:
 
 ### Setup Instructions
 
+#### Automatic Setup
+
+For your convenience, we have provided an `initialsetup.bash` script that automates the setup process. To use the script:
+
+1. **Run the setup script**:
+   In the terminal, navigate to the root directory of the project and run the `initialsetup.bash` script:
+    ```
+    ./initialsetup.bash
+    ```
+   The script will guide you through the setup process, including upgrading Flutter, getting dependencies, installing iOS pods, creating the `.env` file, and running the Build Runner.
+
+2. **Run the App**:
+    - Select your target device in Xcode or Android Studio.
+    - Run the app.
+
+#### Manual Setup
+
+If you prefer to set up the project manually, follow these steps:
+
 1. **Upgrade Flutter**:
    Before proceeding, make sure your Flutter SDK is up to date:
     ```
