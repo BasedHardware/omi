@@ -47,21 +47,26 @@ graph TD;
    A[Device] -- Streams Audio --> B[Phone App];
    B -- Transmits --> C[Deepgram];
    C -- Returns Transcript --> D[Phone App];
-   D -- Saves Transcript --> E[Phone Storage];
+   D -- Sends Transcript to Plugins Enabled --> G[Community Plugins];
+   D -- Saves Original Transcript --> E[Phone Storage];
+   G -- Saves Plugin Responses --> E;
 
 classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
 classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
 
 classDef lightModeLinks stroke:#333333;
 classDef darkModeLinks stroke:#FFFFFF;
+    
+class A,B,C,D,E,G lightMode;
+class A,B,C,D,E,G darkMode;
+    
+linkStyle 0 stroke:#FF4136, stroke-width:2px;
+linkStyle 1 stroke:#1ABC9C, stroke-width:2px;
+linkStyle 2 stroke:#0074D9, stroke-width:2px;
+linkStyle 3 stroke:#FFCC00, stroke-width:2px;
+linkStyle 4 stroke:#2ECC40, stroke-width:2px;
+linkStyle 5 stroke:#B10DC9, stroke-width:2px;
 
-class A,B,C,D,E lightMode
-class A,B,C,D,E darkMode
-
-linkStyle 0 stroke:#FF4136, stroke-width:2px
-linkStyle 1 stroke:#1ABC9C, stroke-width:2px
-linkStyle 2 stroke:#FFCC00, stroke-width:2px
-linkStyle 3 stroke:#2ECC40, stroke-width:2px
 ``` 
 
 ## Structure
@@ -140,6 +145,7 @@ Before starting, make sure you have the following installed:
 - [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
+- [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
 ## Made by the Community, with -❤️-:
 
