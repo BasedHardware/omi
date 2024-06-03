@@ -47,8 +47,9 @@ graph TD;
    A[Device] -- Streams Audio --> B[Phone App];
    B -- Transmits --> C[Deepgram];
    C -- Returns Transcript --> D[Phone App];
-   D -- Saves Transcript --> E[Phone Storage];
-   E -- Processed by Community Plugins --> G[Community Plugins];
+   D -- Sends Transcript to Plugins Enabled --> G[Community Plugins];
+   D -- Saves Original Transcript --> E[Phone Storage];
+   G -- Saves Plugin Responses --> E;
 
 classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
 classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
@@ -61,9 +62,10 @@ class A,B,C,D,E,G darkMode;
     
 linkStyle 0 stroke:#FF4136, stroke-width:2px;
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px;
-linkStyle 2 stroke:#FFCC00, stroke-width:2px;
-linkStyle 3 stroke:#2ECC40, stroke-width:2px;
-linkStyle 4 stroke:#B10DC9, stroke-width:2px;
+linkStyle 2 stroke:#0074D9, stroke-width:2px;
+linkStyle 3 stroke:#FFCC00, stroke-width:2px;
+linkStyle 4 stroke:#2ECC40, stroke-width:2px;
+linkStyle 5 stroke:#B10DC9, stroke-width:2px;
 
 ``` 
 
