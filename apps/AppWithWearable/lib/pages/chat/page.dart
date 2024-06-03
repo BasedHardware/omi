@@ -117,13 +117,13 @@ class _ChatPageState extends State<ChatPage> {
                                 decoration: InputDecoration(
                                   hintText: 'Chat with memories...',
                                   hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                                    fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
-                                    color: FlutterFlowTheme.of(context).primaryText,
-                                    fontSize: 14.0,
-                                    fontWeight: FontWeight.w500,
-                                    useGoogleFonts: GoogleFonts.asMap()
-                                        .containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
-                                  ),
+                                        fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                                        color: FlutterFlowTheme.of(context).primaryText,
+                                        fontSize: 14.0,
+                                        fontWeight: FontWeight.w500,
+                                        useGoogleFonts: GoogleFonts.asMap()
+                                            .containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
+                                      ),
                                   enabledBorder: const UnderlineInputBorder(
                                     borderSide: BorderSide(
                                       color: Color(0x00000000),
@@ -166,12 +166,12 @@ class _ChatPageState extends State<ChatPage> {
                                   ),
                                 ),
                                 style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                  color: FlutterFlowTheme.of(context).primaryText,
-                                  fontWeight: FontWeight.w500,
-                                  useGoogleFonts: GoogleFonts.asMap()
-                                      .containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                                ),
+                                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                      color: FlutterFlowTheme.of(context).primaryText,
+                                      fontWeight: FontWeight.w500,
+                                      useGoogleFonts: GoogleFonts.asMap()
+                                          .containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                    ),
                                 maxLines: 8,
                                 minLines: 1,
                                 keyboardType: TextInputType.multiline,
@@ -218,14 +218,12 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<String> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion = await determineRequiresContext(message, retrieveMostRecentMessages(_messages));
+    String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
       return '';
     }
-    List<double> vectorizedMessage = await getEmbeddingsFromInput(
-      message,
-    );
+    List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
     List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('queryPineconeVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
