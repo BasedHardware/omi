@@ -33,6 +33,13 @@ Open Source AI Wearable device that records everything you say, gives you proact
 - [Build the device](https://basedhardware.github.io/Friend/assembly/Build_the_device/)
 - [Install firmware](https://basedhardware.github.io/Friend/assembly/Install_firmware/)
 
+## Contribution:
+
+We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Friend/issues)
+
+We also want to give back to the community - and therefore, some of the tasks are paid bounties 💰! You can check which ones by the "Paid Bounty" label, [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+
+
 ## How it works
 
 ```mermaid
@@ -130,7 +137,7 @@ Before starting, make sure you have the following installed:
 ## More links:
 
 - [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
-- [Roadmap and Tasks](https://github.com/orgs/BasedHardware/projects/1)
+- [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
 
