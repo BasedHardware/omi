@@ -21,7 +21,7 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
           final device = BluetoothDevice.fromId(widget.btDevice!.id);
           await device.disconnect();
           await Future.delayed(const Duration(seconds: 2));
-          await startDfu(widget.btDevice!.id);
+          await startDfu(widget.btDevice!.id, '');
         },
         child: const Text(
           'Update Firmware',
@@ -32,12 +32,12 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
         ));
   }
 
-  Future<void> startDfu(String deviceId) async {
+  Future<void> startDfu(String deviceId, String firmwareFile, {bool fileInAssets = false}) async {
     NordicDfu dfu = NordicDfu();
     await dfu.startDfu(
       deviceId,
-      'assets/firmware/friend.1.0.4.zip',
-      fileInAsset: true,
+      firmwareFile,
+      fileInAsset: fileInAssets,
       numberOfPackets: 8,
       enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
       iosSpecialParameter: const IosSpecialParameter(
