@@ -73,39 +73,32 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     List<int> currentOrdered = current.keys.toList()
       ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
 
-    if (previous.length == 1 &&
-        current.length == 1 &&
-        previous.keys.toList()[0] == current.keys.toList()[0]) {
+    if (previous.length == 1 && current.length == 1 && previous.keys.toList()[0] == current.keys.toList()[0]) {
       // Last diarized, it's just 1, and here's just one, just add
       int speakerIdx = current.keys.toList()[0];
-      previous[speakerIdx] = '${previous[speakerIdx]!} ' +
-          current[current.keys.toList()[0]]!['transcript'];
+      previous[speakerIdx] = '${previous[speakerIdx]!} ' + current[current.keys.toList()[0]]!['transcript'];
       whispersDiarized[whispersDiarized.length - 1] = previous;
       // Same speaker, just add
     } else if (previous.length == 1 && current.length == 2 && previous.keys.toList()[0] == currentOrdered[0]) {
       // add that transcript fot the speakers, but append the remaining ones as new speakers
       // Last diarized it's just 1, and here's 2 but the previous speaker, is one that starts first here
-      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') +
-          current[currentOrdered[0]]!['transcript'];
+      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') + current[currentOrdered[0]]!['transcript'];
       whispersDiarized[whispersDiarized.length - 1] = previous;
       var newTranscription = <int, String>{};
       for (var speaker in currentOrdered) {
-        if (speaker != currentOrdered[0])
-          newTranscription[speaker] = current[speaker]!['transcript'];
+        if (speaker != currentOrdered[0]) newTranscription[speaker] = current[speaker]!['transcript'];
       }
       whispersDiarized.add(newTranscription);
     } else if (previous.isEmpty) {
       // Different speakers, just add
       current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] =
-            data['transcript'];
+        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
       });
     } else {
       // Different speakers, just add
       whispersDiarized.add({});
       current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] =
-            data['transcript'];
+        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
       });
     }
 
@@ -198,8 +191,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (restartBytesProcessing) initiateBytesProcessing();
     if (restartBytesProcessing &&
         whispersDiarized.isNotEmpty &&
-        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty))
-      _initiateMemoryCreationTimer();
+        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty)) _initiateMemoryCreationTimer();
   }
 
   String _buildDiarizedTranscriptMessage() {
@@ -236,8 +228,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // - Each advice should be stored, and ideally mapped to a memory
     // - Advice should consider conversations in other languages
     // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
-    _conversationAdvisorTimer =
-        Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
+    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
       var transcript = _buildDiarizedTranscriptMessage();
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
@@ -245,10 +236,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       if (advice.isNotEmpty) {
         MixpanelManager().coachAdvisorFeedback(transcript, advice);
         clearNotification(3);
-        createNotification(
-            notificationId: 3,
-            title: 'Your Conversation Coach Says',
-            body: advice);
+        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
       }
     });
   }
@@ -346,8 +334,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             style: FlutterFlowTheme.of(context).bodyMedium.override(
                   fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                   letterSpacing: 0.0,
-                  useGoogleFonts: GoogleFonts.asMap().containsKey(
-                      FlutterFlowTheme.of(context).bodyMediumFamily),
+                  useGoogleFonts: GoogleFonts.asMap().containsKey( FlutterFlowTheme.of(context).bodyMediumFamily),
                 ),
           ),
         );
