@@ -140,6 +140,7 @@ Before starting, make sure you have the following installed:
 - [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://basedhardware.github.io/Friend/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
+- [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
 ## Made by the Community, with -❤️-:
 
