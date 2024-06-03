@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -38,8 +38,7 @@ class _DevicePageState extends State<DevicePage> {
 
   @override
   Widget build(BuildContext context) {
-    return WithForegroundTask(
-        child: GestureDetector(
+    return GestureDetector(
       onTap: () => unFocusNode.canRequestFocus
           ? FocusScope.of(context).requestFocus(unFocusNode)
           : FocusScope.of(context).unfocus(),
@@ -61,7 +60,7 @@ class _DevicePageState extends State<DevicePage> {
           ],
         ),
       ),
-    ));
+    );
   }
 
   _getConnectedDeviceWidgets() {
