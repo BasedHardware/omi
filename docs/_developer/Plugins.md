@@ -1,3 +1,9 @@
+---
+layout: default
+title: Community Plugins
+nav_order: 1
+---
+
 # Community Plugins
 
 Community Plugins allow modification of prompts that process audio transcriptions into structured data for a multitude of use cases.
