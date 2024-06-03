@@ -334,7 +334,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             style: FlutterFlowTheme.of(context).bodyMedium.override(
                   fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                   letterSpacing: 0.0,
-                  useGoogleFonts: GoogleFonts.asMap().containsKey( FlutterFlowTheme.of(context).bodyMediumFamily),
+                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                 ),
           ),
         );
