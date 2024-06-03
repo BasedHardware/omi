@@ -6,9 +6,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice() async {
   while (true) {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     try {
-      final friendDevice = foundDevices.firstWhere(
-        (device) => device.name == 'Friend' || device.name == 'Super',
-      );
+      final friendDevice = foundDevices.first;
       await bleConnectDevice(friendDevice);
       return friendDevice;
     } catch (e) {
