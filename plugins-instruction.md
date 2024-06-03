@@ -1,18 +1,59 @@
-**Community Plugins format**
+# Community Plugins
 
-To add your plugin to the list, make a pull request to the [community-plugins.json](https://github.com/BasedHardware/Friend/blob/feature-plugins/community-plugins.json) file. Please add your plugin to the end of the list.
+Community Plugins allow modification of prompts that process audio transcriptions into structured data for a multitude of use cases.
 
-Plugins allow to modify prompts that process audio transcriptions. You can create plugins/prompts for every possible usecase, starting from doctor/patient conversation, ending with student's summary of classes
+## Contribution Process
 
-Structure: <br>
-- Id: A unique ID for your plugin. Make sure this is the same one you have in your manifest.json.<br>
-- Name: The name of your plugin.<br>
-- Author: The author's name. <br>
-- Description: A short description of what your plugin does.<br>
-- Prompt: Describe the prompt of how the transcription should be processes. Each transcription is a conversation between one or multiple users. Conversations are chunked by 30sec+ silence pause<br>
+To add your plugin to the community list, create a pull request on the [community-plugins.json](https://github.com/BasedHardware/Friend/blob/main/community-plugins.json) file on GitHub, appending your plugin at the end.
 
+### Plugin Structure
 
-How community plugins are pulled
-- You add your plugin to the [list](https://github.com/BasedHardware/Friend/blob/feature-plugins/community-plugins.json) 
-- Based Hardware team will read the list of plugins in community-plugins.json and approve it
-- The plugin becomes available in the Plugins marketplace of the FRIEND mobile app and users can install it
+- `id`: Unique identifier for your plugin, aligned with your manifest.json
+- `name`: Descriptive name of your plugin
+- `author`: Name of the plugin creator
+- `description`: Short summary of what your plugin achieves
+- `prompt`: Instructions on processing the transcription, starting with "You will be given a conversation."
+
+#### Good Prompt Example
+
+```json
+{
+    "id": "thoughtful-therapy-notes",
+    "name": "Thoughtful Therapy Notes",
+    "author": "John",
+    "description": "Transform therapy conversations into structured SOAP notes.",
+    "prompt": "You will be given a conversation between a therapist and a patient. Use this information to create detailed session notes by identifying presenting problems, therapeutic interventions, and patient progress. Structure your notes according to the SOAP format without prompting further input. Respect patient confidentiality, and clearly denote any missing information as 'Not Mentioned'."
+}
+```
+
+This prompt is considered good because it is clear, specifies the formatting structure, outlines how to handle missing information, and emphasizes confidentiality. It does not anticipate any response or interaction.
+
+#### Bad Prompt Example
+
+```json
+{
+    "id": "generic-mentor-guide",
+    "name": "Generic Mentor Guide",
+    "author": "John",
+    "description": "Offers guidance on business issues.",
+    "prompt": "You are a mentor. Give good advice. Ask questions if needed."
+}
+```
+
+This prompt falls short as it's too vague, doesn't specify the structure or formatting of the advice, implies the possibility of an interactive exchange which isn't possible, and lacks instructions on handling missing details.
+
+### Submission Details
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Add your plugin entry to `community-plugins.json`.
+4. Commit with a message like "Add [PluginName] to community plugins."
+5. Open a pull request with a clear plugin description.
+
+Plugin submissions will be reviewed for integration into the main repository.
+
+## How Community Plugins are Pulled
+
+1. **Adding Your Plugin**: Submit your plugin by adding it to the `community-plugins.json` list via a pull request.
+2. **Approval**: The Based Hardware team will review your plugin entry for completeness, coherence, and functionality. 
+3. **Marketplace Availability**: Once approved, your plugin will be listed in the FRIEND mobile app’s Plugins marketplace, where users can easily browse and install it.
