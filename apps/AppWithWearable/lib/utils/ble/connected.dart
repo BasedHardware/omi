@@ -6,12 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 
 StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
-    {required String deviceId,
-    required Function onDisconnected,
-    required Function(BTDeviceStruct) onConnected}) {
+    {required String deviceId, required Function onDisconnected, required Function(BTDeviceStruct) onConnected}) {
   return FlutterBluePlus.events.onConnectionStateChanged.listen((event) async {
-    debugPrint(
-        'onConnectionStateChanged: ${event.device.remoteId.str} ${event.connectionState}');
+    debugPrint('onConnectionStateChanged: ${event.device.remoteId.str} ${event.connectionState}');
     if (event.device.remoteId.str == deviceId) {
       if (event.connectionState == BluetoothConnectionState.disconnected) {
         onDisconnected();
@@ -24,9 +21,7 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
                 services
                     .map((service) => service.characteristics)
                     .expand((element) => element)
-                    .firstWhereOrNull((characteristic) =>
-                        characteristic.uuid.str ==
-                        '00002a26-0000-1000-8000-00805f9b34fb')
+                    .firstWhereOrNull((characteristic) => characteristic.uuid.str == '00002a26-0000-1000-8000-00805f9b34fb')
                     ?.read()
                     .then((value) => value[0]))));
       }
