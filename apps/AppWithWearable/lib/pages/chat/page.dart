@@ -54,111 +54,104 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: Stack(
-        children: [
-          const BlurBotWidget(),
-          Column(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: ListView.builder(
-                    scrollDirection: Axis.vertical,
-                    itemCount: _messages.length,
-                    itemBuilder: (context, chatIndex) {
-                      final message = _messages[chatIndex];
-                      if (message.type == 'ai') return AIMessage(message: message);
-                      if (message.type == 'human') {
-                        return HumanMessage(message: message);
-                      }
-                      return const SizedBox.shrink();
-                    },
-                    controller: listViewController,
-                  ),
+    return Stack(
+      children: [
+        const BlurBotWidget(),
+        Column(
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: ListView.builder(
+                  scrollDirection: Axis.vertical,
+                  itemCount: _messages.length,
+                  itemBuilder: (context, chatIndex) {
+                    final message = _messages[chatIndex];
+                    if (message.type == 'ai') return AIMessage(message: message);
+                    if (message.type == 'human') {
+                      return HumanMessage(message: message);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                  controller: listViewController,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(12.0, 16.0, 12.0, 12.0),
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AF7F4F4),
-                    boxShadow: const [
-                      BoxShadow(
-                        blurRadius: 3.0,
-                        color: Color(0x33000000),
-                        offset: Offset(0.0, 1.0),
-                      )
-                    ],
-                    borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(20.0, 12, 10.0, 8),
-                    child: SizedBox(
-                      width: 300.0,
-                      child: TextField(
-                        controller: textController,
-                        textCapitalization: TextCapitalization.sentences,
-                        obscureText: false,
-                        // focusNode: widget.textFieldFocusNode,
-                        autofocus: false,
-                        canRequestFocus: true,
-                        decoration: InputDecoration(
-                            hintText: 'Chat with memories...',
-                            hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            suffixIcon: IconButton(
-                              icon: loading
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.send_rounded,
-                                      color: Color(0xFFF7F4F4),
-                                      size: 30.0,
-                                    ),
-                              onPressed: loading
-                                  ? null
-                                  : () async {
-                                      String message = textController.text;
-                                      if (message.isEmpty) return;
-                                      changeLoadingState();
-                                      _prepareStreaming(message);
-                                      String ragContext = await _retrieveRAGContext(message);
-                                      debugPrint('RAG Context: $ragContext');
-                                      MixpanelManager().chatMessageSent(message);
-                                      await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages,
-                                          () {
-                                        prefs.chatMessages = _messages;
-                                      });
-                                      changeLoadingState();
-                                    },
-                            )),
-                        maxLines: 8,
-                        minLines: 1,
-                        keyboardType: TextInputType.multiline,
-                        style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsetsDirectional.fromSTEB(20.0, 12, 10.0, 8),
+              margin: const EdgeInsetsDirectional.fromSTEB(12.0, 16.0, 12.0, 12.0),
+              decoration: BoxDecoration(
+                color: const Color(0x1AF7F4F4),
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 3.0,
+                    color: Color(0x33000000),
+                    offset: Offset(0.0, 1.0),
+                  )
+                ],
+                borderRadius: BorderRadius.circular(12.0),
+              ),
+              child: SizedBox(
+                width: 300.0,
+                child: TextField(
+                  onTap: () {
+                    widget.textFieldFocusNode.requestFocus();
+                  },
+                  enabled: true,
+                  controller: textController,
+                  textCapitalization: TextCapitalization.sentences,
+                  obscureText: false,
+                  focusNode: widget.textFieldFocusNode,
+                  canRequestFocus: true,
+                  decoration: InputDecoration(
+                      hintText: 'Chat with memories...',
+                      hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      suffixIcon: IconButton(
+                        icon: loading
+                            ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                            : const Icon(
+                          Icons.send_rounded,
+                          color: Color(0xFFF7F4F4),
+                          size: 30.0,
+                        ),
+                        onPressed: loading
+                            ? null
+                            : () async {
+                          String message = textController.text;
+                          if (message.isEmpty) return;
+                          changeLoadingState();
+                          _prepareStreaming(message);
+                          String ragContext = await _retrieveRAGContext(message);
+                          debugPrint('RAG Context: $ragContext');
+                          MixpanelManager().chatMessageSent(message);
+                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
+                            prefs.chatMessages = _messages;
+                          });
+                          changeLoadingState();
+                        },
+                      )),
+                  maxLines: 8,
+                  minLines: 1,
+                  keyboardType: TextInputType.multiline,
+                  style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ],
-      ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ],
     );
   }
 

@@ -35,7 +35,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
-  FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: false);
+  FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
@@ -144,6 +144,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       body: GestureDetector(
         onTap: (){
           FocusScope.of(context).unfocus();
+          chatTextFieldFocusNode.unfocus();
         },
         child: Center(
           child: IndexedStack(
