@@ -8,11 +8,8 @@ import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../flutter_flow/flutter_flow_icon_button.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -33,16 +30,19 @@ class _ChatPageState extends State<ChatPage> {
   var prefs = SharedPreferencesUtil();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  bool loading = false;
+
+  changeLoadingState() {
+    setState(() {
+      loading = !loading;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     _messages = prefs.chatMessages;
-
-    // On page load action.
-    SchedulerBinding.instance.addPostFrameCallback((_) async {
-      _moveListToBottom(initial: true);
-    });
+    SchedulerBinding.instance.addPostFrameCallback((_) => _moveListToBottom(initial: true));
   }
 
   @override
@@ -99,109 +99,57 @@ class _ChatPageState extends State<ChatPage> {
                     borderRadius: BorderRadius.circular(12.0),
                   ),
                   child: Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(20.0, 4.0, 10.0, 4.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            width: 300.0,
-                            child: TextField(
-                              controller: textController,
-                              textCapitalization: TextCapitalization.sentences,
-                              obscureText: false,
-                              // focusNode: widget.textFieldFocusNode,
-                              autofocus: false,
-                              canRequestFocus: true,
-                              decoration: InputDecoration(
-                                hintText: 'Chat with memories...',
-                                hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                                      fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
-                                      color: FlutterFlowTheme.of(context).primaryText,
-                                      fontSize: 14.0,
-                                      fontWeight: FontWeight.w500,
-                                      useGoogleFonts:
-                                          GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
+                    padding: const EdgeInsetsDirectional.fromSTEB(20.0, 12, 10.0, 8),
+                    child: SizedBox(
+                      width: 300.0,
+                      child: TextField(
+                        controller: textController,
+                        textCapitalization: TextCapitalization.sentences,
+                        obscureText: false,
+                        // focusNode: widget.textFieldFocusNode,
+                        autofocus: false,
+                        canRequestFocus: true,
+                        decoration: InputDecoration(
+                            hintText: 'Chat with memories...',
+                            hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            suffixIcon: IconButton(
+                              icon: loading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.send_rounded,
+                                      color: Color(0xFFF7F4F4),
+                                      size: 30.0,
                                     ),
-                                enabledBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color(0x00000000),
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(4.0),
-                                    topRight: Radius.circular(4.0),
-                                  ),
-                                ),
-                                focusedBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color(0x00000000),
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(4.0),
-                                    topRight: Radius.circular(4.0),
-                                  ),
-                                ),
-                                errorBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color(0x00000000),
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(4.0),
-                                    topRight: Radius.circular(4.0),
-                                  ),
-                                ),
-                                focusedErrorBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color(0x00000000),
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(4.0),
-                                    topRight: Radius.circular(4.0),
-                                  ),
-                                ),
-                              ),
-                              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                    color: FlutterFlowTheme.of(context).primaryText,
-                                    fontWeight: FontWeight.w500,
-                                    useGoogleFonts:
-                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                                  ),
-                              maxLines: 8,
-                              minLines: 1,
-                              keyboardType: TextInputType.multiline,
-                            ),
-                          ),
-                        ),
-                        FlutterFlowIconButton(
-                          borderColor: Colors.transparent,
-                          borderRadius: 30.0,
-                          borderWidth: 1.0,
-                          buttonSize: 60.0,
-                          icon: const Icon(
-                            Icons.send_rounded,
-                            color: Color(0xFFF7F4F4),
-                            size: 30.0,
-                          ),
-                          showLoadingIndicator: true,
-                          onPressed: () async {
-                            String message = textController.text;
-                            if (message.isEmpty) return;
-                            _prepareStreaming(message);
-                            String ragContext = await _retrieveRAGContext(message);
-                            debugPrint('RAG Context: $ragContext');
-                            MixpanelManager().chatMessageSent(message);
-                            await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
-                              prefs.chatMessages = _messages;
-                            });
-                          },
-                        ),
-                      ],
+                              onPressed: loading
+                                  ? null
+                                  : () async {
+                                      String message = textController.text;
+                                      if (message.isEmpty) return;
+                                      changeLoadingState();
+                                      _prepareStreaming(message);
+                                      String ragContext = await _retrieveRAGContext(message);
+                                      debugPrint('RAG Context: $ragContext');
+                                      MixpanelManager().chatMessageSent(message);
+                                      await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages,
+                                          () {
+                                        prefs.chatMessages = _messages;
+                                      });
+                                      changeLoadingState();
+                                    },
+                            )),
+                        maxLines: 8,
+                        minLines: 1,
+                        keyboardType: TextInputType.multiline,
+                        style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                      ),
                     ),
                   ),
                 ),
