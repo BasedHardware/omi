@@ -119,11 +119,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           path: '/plugins',
           builder: (context, params) => PluginsPage(),
         ),
-        FFRoute(
-          name: 'chatPage',
-          path: '/chatPage',
-          builder: (context, params) => const ChatPage(),
-        ),
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );
 

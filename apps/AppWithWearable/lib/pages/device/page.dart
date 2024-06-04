@@ -27,39 +27,22 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-  final scaffoldKey = GlobalKey<ScaffoldState>();
-  final unFocusNode = FocusNode();
-
-  @override
-  void dispose() {
-    unFocusNode.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => unFocusNode.canRequestFocus
-          ? FocusScope.of(context).requestFocus(unFocusNode)
-          : FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
-        body: Stack(
-          children: [
-            const BlurBotWidget(),
-            ListView(children: [
-              ..._getConnectedDeviceWidgets(),
-              TranscriptWidget(
-                btDevice: widget.device,
-                key: widget.transcriptChildWidgetKey,
-                refreshMemories: widget.refreshMemories,
-              ),
-              const SizedBox(height: 16)
-            ]),
-          ],
-        ),
-      ),
+    return Stack(
+      children: [
+        const BlurBotWidget(),
+        ListView(children: [
+          ..._getConnectedDeviceWidgets(),
+          TranscriptWidget(
+            btDevice: widget.device,
+            key: widget.transcriptChildWidgetKey,
+            refreshMemories: widget.refreshMemories,
+          ),
+          const SizedBox(height: 16)
+        ]),
+      ],
     );
   }
 

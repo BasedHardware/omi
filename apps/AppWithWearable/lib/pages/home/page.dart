@@ -35,6 +35,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
+  FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: false);
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
@@ -140,22 +141,27 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            MemoriesPage(
-              memories: memories,
-              refreshMemories: _initiateMemories,
-            ),
-            DevicePage(
-              device: _device,
-              refreshMemories: _initiateMemories,
-              transcriptChildWidgetKey: transcriptChildWidgetKey,
-              batteryLevel: batteryLevel,
-            ),
-            const ChatPage(),
-          ],
+      body: GestureDetector(
+        onTap: (){
+          FocusScope.of(context).unfocus();
+        },
+        child: Center(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              MemoriesPage(
+                memories: memories,
+                refreshMemories: _initiateMemories,
+              ),
+              DevicePage(
+                device: _device,
+                refreshMemories: _initiateMemories,
+                transcriptChildWidgetKey: transcriptChildWidgetKey,
+                batteryLevel: batteryLevel,
+              ),
+              ChatPage(textFieldFocusNode: chatTextFieldFocusNode,),
+            ],
+          ),
         ),
       ),
       appBar: AppBar(
@@ -178,7 +184,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
 
               await context.pushNamed('settings');
-
               if (language != SharedPreferencesUtil().recordingsLanguage ||
                   deepgram != SharedPreferencesUtil().deepgramApiKey ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {

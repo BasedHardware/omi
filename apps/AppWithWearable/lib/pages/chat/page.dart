@@ -17,7 +17,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key});
+  final FocusNode textFieldFocusNode;
+
+  const ChatPage({super.key, required this.textFieldFocusNode});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -52,11 +54,11 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: scaffoldKey,
-      backgroundColor: FlutterFlowTheme.of(context).primary,
-      // appBar: getChatAppBar(context),
-      body: Stack(
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Stack(
         children: [
           const BlurBotWidget(),
           Column(
@@ -109,16 +111,19 @@ class _ChatPageState extends State<ChatPage> {
                               controller: textController,
                               textCapitalization: TextCapitalization.sentences,
                               obscureText: false,
+                              // focusNode: widget.textFieldFocusNode,
+                              autofocus: false,
+                              canRequestFocus: true,
                               decoration: InputDecoration(
                                 hintText: 'Chat with memories...',
                                 hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                                  fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
-                                  color: FlutterFlowTheme.of(context).primaryText,
-                                  fontSize: 14.0,
-                                  fontWeight: FontWeight.w500,
-                                  useGoogleFonts: GoogleFonts.asMap()
-                                      .containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
-                                ),
+                                      fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                                      color: FlutterFlowTheme.of(context).primaryText,
+                                      fontSize: 14.0,
+                                      fontWeight: FontWeight.w500,
+                                      useGoogleFonts:
+                                          GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
+                                    ),
                                 enabledBorder: const UnderlineInputBorder(
                                   borderSide: BorderSide(
                                     color: Color(0x00000000),
@@ -161,17 +166,15 @@ class _ChatPageState extends State<ChatPage> {
                                 ),
                               ),
                               style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                color: FlutterFlowTheme.of(context).primaryText,
-                                fontWeight: FontWeight.w500,
-                                useGoogleFonts: GoogleFonts.asMap()
-                                    .containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                              ),
+                                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                    color: FlutterFlowTheme.of(context).primaryText,
+                                    fontWeight: FontWeight.w500,
+                                    useGoogleFonts:
+                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                                  ),
                               maxLines: 8,
                               minLines: 1,
                               keyboardType: TextInputType.multiline,
-                              // FIXME
-                              // validator: model.textControllerValidator.asValidator(context),
                             ),
                           ),
                         ),
