@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 
-import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -17,6 +15,7 @@ class RecordSampleTab extends StatefulWidget {
   final SpeakerIdSample sample;
   final int sampleIdx;
   final int totalSamples;
+  final VoidCallback onRecordCompleted;
 
   const RecordSampleTab({
     super.key,
@@ -24,6 +23,7 @@ class RecordSampleTab extends StatefulWidget {
     required this.btDevice,
     required this.sampleIdx,
     required this.totalSamples,
+    required this.onRecordCompleted,
   });
 
   @override
@@ -71,22 +71,19 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
   }
 
   Future<void> confirmRecording() async {
-    var bytes = audioStorage?.audioBytes ?? [];
-    debugPrint('Uploading Bytes: ${bytes.length}');
-    if (bytes.isEmpty) return;
-    await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
-    File file = await WavBytesUtil.createWavFile(bytes, filename: '${widget.sample.id}.wav');
-    audioBytesStream?.cancel();
-    audioStorage?.clearAudioBytes();
-    debugPrint('File created: ${file.path}');
+    if ((audioStorage?.audioBytes ?? []).isEmpty) return;
+    var bytes = audioStorage!.audioBytes;
     setState(() {
       recording = false;
       speechRecorded = true;
-    }); // TODO: add state processing while this happens
-    var result = await uploadSample(file, SharedPreferencesUtil().uid);
-    if (result) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sample uploaded ${widget.sample.id}')));
-    }
+    });
+    widget.onRecordCompleted();
+
+    await Future.delayed(const Duration(milliseconds: 500)); // wait for bytes streaming to stream all
+    audioBytesStream?.cancel();
+    File file = await WavBytesUtil.createWavFile(bytes, filename: '${widget.sample.id}.wav');
+    await uploadSample(file, SharedPreferencesUtil().uid); // optimistic request
+    // TODO: handle failures + url: null, retry sample
   }
 
   Future<void> cancelRecording() async {
@@ -95,6 +92,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
     setState(() {
       recording = false;
       speechRecorded = false;
+      bucket = List.filled(40000, 0).toList(growable: true);
     });
   }
 
@@ -109,6 +107,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
 
   @override
   Widget build(BuildContext context) {
+    int seconds = (audioStorage?.audioBytes.length ?? 0) ~/ 8000;
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
@@ -128,20 +127,36 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
           ),
         ),
         const SizedBox(height: 80),
-        SizedBox(
-          height: 80,
-          child: Row(
-            children: [
-              Text('${(audioStorage?.audioBytes.length ?? 0) ~/ 8000}'),
-              Expanded(
-                child: CustomPaint(
-                  painter: DashedLinePainter(bucket),
-                  child: Container(),
+        recording || speechRecorded
+            ? SizedBox(
+                height: 80,
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    Text('${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                          color: Colors.grey.shade200,
+                          fontSize: 18,
+                        )),
+                    const SizedBox(
+                      width: 16,
+                    ),
+                    Expanded(
+                      child: CustomPaint(
+                        painter: DashedLinePainter(bucket),
+                        child: Container(),
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 16,
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-        ),
+              )
+            : const SizedBox(height: 80),
+        const SizedBox(height: 12),
         !recording && !speechRecorded
             ? Center(
                 child: IconButton(
@@ -151,36 +166,43 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
               )
             : const SizedBox.shrink(),
         recording
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: cancelRecording,
-                    icon: const Icon(Icons.delete, color: Colors.white, size: 32),
-                  ),
-                  const SizedBox(width: 24),
-                  IconButton(
-                    onPressed: confirmRecording,
-                    icon: const Icon(Icons.send, color: Colors.black87, size: 40),
-                  ),
-                ],
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      onPressed: cancelRecording,
+                      icon: const Icon(Icons.stop_circle, color: Colors.red, size: 32),
+                    ),
+                    const SizedBox(width: 24),
+                    IconButton(
+                      onPressed: confirmRecording,
+                      icon: Icon(Icons.check_circle, color: Colors.grey.shade200, size: 32),
+                    ),
+                  ],
+                ),
               )
             : const SizedBox.shrink(),
         speechRecorded
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: listenRecording,
-                    icon: const Icon(Icons.play_arrow, color: Colors.orange, size: 48),
-                  ),
-                  IconButton(
-                    onPressed: cancelRecording,
-                    icon: const Icon(Icons.cancel, color: Colors.red, size: 48),
-                  ),
-                ],
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: cancelRecording,
+                      icon: const Icon(Icons.refresh, color: Colors.white, size: 40),
+                    ),
+                    // const SizedBox(width: 24),
+                    // IconButton(
+                    //   onPressed: listenRecording,
+                    //   icon: Icon(Icons.play_arrow, color: Colors.grey.shade200, size: 32),
+                    // ),
+                  ],
+                ),
               )
             : const SizedBox.shrink(),
         const SizedBox(height: 32),

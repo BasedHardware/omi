@@ -69,7 +69,6 @@ dependencies:
     git:
       url: https://github.com/Telosnex/fonnx.git
       ref: main
-  audio_waveforms: ^1.0.5
 
 dependency_overrides:
   http: 1.2.0
