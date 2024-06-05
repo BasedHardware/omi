@@ -9,7 +9,7 @@ Future<List<BTDeviceStruct>> bleFindDevices() async {
   StreamSubscription<List<ScanResult>>? scanSubscription;
 
   try {
-    if ((await FlutterBluePlus.isSupported) == false) return devices;
+    if ((await FlutterBluePlus.isSupported) == false) return [];
 
     // Listen to scan results
     scanSubscription = FlutterBluePlus.scanResults.listen(

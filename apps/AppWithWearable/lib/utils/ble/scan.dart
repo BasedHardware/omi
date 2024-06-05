@@ -7,7 +7,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice() async {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     try {
       final friendDevice = foundDevices.first;
-      await bleConnectDevice(friendDevice);
+      await bleConnectDevice(friendDevice.id);
       return friendDevice;
     } catch (e) {
       print(e);
