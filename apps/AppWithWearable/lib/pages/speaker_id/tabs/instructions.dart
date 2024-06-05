@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 
 class InstructionsTab extends StatefulWidget {
   const InstructionsTab({super.key});
@@ -69,7 +70,16 @@ class _InstructionsTabState extends State<InstructionsTab> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 48),
+        SharedPreferencesUtil().hasSpeakerProfile
+            ? const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24.0),
+                child: Text(
+                  '✅ You already have a speaker profile. Feel free to record new samples to improve your profile quality.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              )
+            : const SizedBox.shrink(),
       ],
     );
   }

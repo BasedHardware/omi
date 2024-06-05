@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 
 class CompletionTab extends StatefulWidget {
   const CompletionTab({super.key});
@@ -9,14 +10,32 @@ class CompletionTab extends StatefulWidget {
 
 class _CompletionTabState extends State<CompletionTab> {
   @override
+  void initState() {
+    SharedPreferencesUtil().hasSpeakerProfile = true;
+    super.initState();
+  }
+  @override
   Widget build(BuildContext context) {
-    return const Column(children: [
-      SizedBox(height: 48),
-      Text(
-        'Completed!',
-        style: TextStyle(color: Colors.white, fontSize: 20),
-      ),
-      SizedBox(height: 24),
-    ]);
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(height: 48),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0),
+          child: Center(
+            child: Text(
+              'Your speech profile\nis ready 🎉',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

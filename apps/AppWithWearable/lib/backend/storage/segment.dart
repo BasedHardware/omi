@@ -1,6 +1,7 @@
 class TranscriptSegment {
   String text;
-  String speaker;
+  String? speaker;
+  late int speakerId;
   bool isUser;
   double start;
   double end;
@@ -11,7 +12,9 @@ class TranscriptSegment {
     required this.isUser,
     required this.start,
     required this.end,
-  });
+  }) {
+    speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+  }
 
   @override
   String toString() {
@@ -34,6 +37,7 @@ class TranscriptSegment {
     return {
       'text': text,
       'speaker': speaker,
+      'speaker_id': speakerId,
       'is_user': isUser,
       'start': start,
       'end': end,
