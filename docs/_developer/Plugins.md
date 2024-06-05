@@ -19,7 +19,7 @@ To add your plugin to the community list, create a pull request on the [communit
 - `author`: Name of the plugin creator
 - `description`: Short summary of what your plugin achieves
 - `prompt`: Instructions on processing the transcription, starting with "You will be given a conversation."
-- `image`: URL or path to an image that represents your plugin. The image should be named `{plugin_id}.png` and placed in the `/assets/plugin_images` directory. Images should be in PNG format with a recommended size of 512x512 pixels. You can create the image using AI tools like DALL-E, Midjourney, or design it yourself.
+- `image`: URL or path to an image that represents your plugin. The image should be named `{plugin_id}.png` and placed in the `/assets/plugin_images` directory. Images should be in PNG format with a recommended size of 300x300 pixels. You can create the image using AI tools like DALL-E, Midjourney, or design it yourself.
 
 #### Good Prompt Example
 
