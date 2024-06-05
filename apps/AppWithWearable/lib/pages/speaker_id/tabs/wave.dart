@@ -4,7 +4,7 @@ class DashedLinePainter extends CustomPainter {
   final List<int> bucket;
   final int maxHeight;
 
-  DashedLinePainter(this.bucket, {this.maxHeight = 2000});
+  DashedLinePainter(this.bucket, {this.maxHeight = 1500});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -18,7 +18,7 @@ class DashedLinePainter extends CustomPainter {
     double dashSpace = 5.0;
     double x = 0.0;
     double centerY = size.height / 2;
-    int windowSize = 40000;
+    int windowSize = 24000;
     int startIndex = (bucket.length > windowSize) ? bucket.length - windowSize : 0;
 
     // Apply smoothing to the bucket values
