@@ -7,6 +7,8 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
+import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/ble/connected.dart';
@@ -30,6 +32,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   _init() async {
     samples = await getUserSamplesState(SharedPreferencesUtil().uid);
     _controller = TabController(length: 2 + samples.length, vsync: this);
+    debugPrint('_init _controller.length: ${_controller?.length}');
     var btDevice = BluetoothDevice.fromId(SharedPreferencesUtil().deviceId);
     _device = BTDeviceStruct(id: btDevice.remoteId.str, name: btDevice.platformName);
     _initiateConnectionListener();
@@ -62,7 +65,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
       appBar: AppBar(
         backgroundColor: FlutterFlowTheme.of(context).primary,
         automaticallyImplyLeading: true,
-        title: const Text('Speaker ID'),
+        title: const Text('Speech Profile'),
         centerTitle: false,
         elevation: 2.0,
       ),
@@ -76,37 +79,54 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
               : Column(
                   children: [
                     Expanded(
-                      child: TabBarView(controller: _controller, children: [
-                        const InstructionsTab(),
-                        ...samples.map<Widget>((sample) => RecordSampleTab(sample: sample, btDevice: _device)),
-                        const InstructionsTab()
-                      ]),
+                      child: TabBarView(
+                        controller: _controller,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          const InstructionsTab(),
+                          ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
+                                sample: sample,
+                                btDevice: _device,
+                                sampleIdx: index,
+                                totalSamples: samples.length,
+                              )),
+                          const CompletionTab(),
+                        ],
+                      ),
                     ),
-                    TextButton(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: ElevatedButton(
                         onPressed: _controller == null
                             ? null
                             : () async {
-                                if (_currentIdx == (_controller?.length ?? 0) - 1) return;
-                                if (_currentIdx == 0) {
-                                  await startSamplesRecording();
-                                }
-                                _controller?.animateTo(_currentIdx++);
+                                debugPrint('Current Index: $_currentIdx');
+                                if (_currentIdx == _controller!.length - 1) return;
                                 _currentIdx += 1;
+                                _controller?.animateTo(_currentIdx);
+                                setState(() {});
                               },
-                        child: const Text(
-                          'Next',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        )),
-                    const SizedBox(height: 32),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8), // Rounded corners
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        child: Text(
+                          _currentIdx == 0 ? 'START' : 'NEXT',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 48),
                   ],
-                )
+                ),
         ],
       ),
     );
-  }
-
-  startSamplesRecording() async {
-    _controller?.animateTo(_currentIdx++);
-    _currentIdx += 1;
   }
 }
