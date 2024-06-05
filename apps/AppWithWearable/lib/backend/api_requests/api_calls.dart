@@ -378,7 +378,6 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
     debugPrint('An error occurred transcribeAudioFile: $e');
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
-  return [];
 }
 
 Future<bool> userHasSpeakerProfile(String uid) async {
@@ -403,4 +402,28 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
   if (response == null) return [];
   debugPrint('getUserSamplesState: ${response.body}');
   return SpeakerIdSample.fromJsonList(jsonDecode(response.body));
+}
+
+Future<bool> uploadSample(File file, String uid) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.customTranscriptApiBaseUrl}samples/upload?uid=$uid'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('uploadSample Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadSample: $e');
+    throw Exception('An error occurred uploadSample: $e');
+  }
 }
