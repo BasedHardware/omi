@@ -91,6 +91,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (widget.btDevice != null) {
       // Only used when onboarding flow
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      SharedPreferencesUtil().deviceId = _device!.id;
       _initiateConnectionListener();
       _initiateBleBatteryListener();
     } else {
@@ -127,6 +128,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateBleBatteryListener();
     transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
+    SharedPreferencesUtil().deviceId = _device!.id;
   }
 
   _initiateBleBatteryListener() async {
