@@ -1,9 +1,0 @@
-{
-  "platforms": ["ios", "tvos", "android", "web"],
-  "ios": {
-    "modules": ["HardwareModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.hardware.HardwareModule"]
-  }
-}
