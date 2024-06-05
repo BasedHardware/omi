@@ -1,4 +1,5 @@
 .env
+env.g.dart
 __pycache__/
 libraries/
 myenv/
@@ -11,6 +12,7 @@ node_modules
 yarn.lock
 
 # General
+.vscode/
 .idea/
 .dart_tool/
 .flutter-plugins
@@ -88,6 +90,7 @@ apps/AppStandalone/firebase.json
 apps/AppStandalone/android/app/google-services.json
 apps/AppStandalone/ios/Runner/GoogleService-Info.plist
 apps/AppStandalone/lib/env/env.g.dart
+env.g.dart
 apps/AppStandalone/ios/Flutter/flutter_export_environment.sh
 apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.h
 apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.m

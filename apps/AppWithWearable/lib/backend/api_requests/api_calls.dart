@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,8 @@ import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
+import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import '../../utils/string_utils.dart';
@@ -90,20 +93,25 @@ Future<dynamic> gptApiCall({
       isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
 }
 
-Future<String> executeGptPrompt(String? prompt) async {
-  if (prompt == null) return '';
-
+Future<String> executeGptPrompt(String? prompt, {bool jsonResponseFormat = false, String llmModelName = 'gpt-4o'}) async {
+  if (prompt == null) {
+    developer.log('Warning: empty prompt was sent to execution', name: 'executeGptPrompt', level: 1000);
+    return ''; // or should we use addEventToContext()?
+  }
+  prompt = cleanPrompt(prompt);
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
   if (prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
 
-  String response = await gptApiCall(model: 'gpt-4o', messages: [
-    {'role': 'system', 'content': prompt}
-  ]);
+  String response = await gptApiCall(
+    model: llmModelName,
+    messages: [{'role': 'system', 'content': prompt}],
+    jsonResponseFormat: jsonResponseFormat,
+  );
   prefs.setGptCompletionCache(promptBase64, response);
   debugPrint('executeGptPrompt response: $response');
-  return response;
+  return cleanResponse(response);
 }
 
 _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
@@ -134,7 +142,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
 
     It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
     The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
-     
+
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, use a list of actionable steps or bullet points for the conversation.
@@ -150,11 +158,10 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     Here is the output schema:
     ```
     {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}}}
-    ```'''
-          .replaceAll('     ', '')
-          .replaceAll('    ', '')
-          .trim();
+    ```''';
+  prompt = cleanPrompt(prompt);
   // debugPrint(prompt);
+
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
         '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
@@ -170,6 +177,16 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
 }
 
+/// Provides advice on the current conversation based on the transcript.
+///
+/// If the feedback is not valuable enough or if the transcript is empty or too short, returns an empty string.
+/// Otherwise, generates advice on the user's current way of speaking and interactions with other speakers.
+///
+/// Parameters:
+/// - transcript: The transcript of the conversation.
+///
+/// Returns:
+/// - A string containing advice on the conversation.
 Future<String> adviseOnCurrentConversation(String transcript) async {
   if (transcript.isEmpty) return '';
   if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it
@@ -195,13 +212,27 @@ Future<String> adviseOnCurrentConversation(String transcript) async {
     Be concise and short, respond in 10 to 15 words.
     
     IMPORTANT: Is this feedback so valuable that its worth to interrupt a busy entrepreneur? If not, output N/A.
-    '''
-      .replaceAll('     ', '')
-      .replaceAll('    ', '')
-      .trim();
+    ''';
   debugPrint(prompt);
   var result = await executeGptPrompt(prompt);
   if (result.contains('N/A') || result.split(' ').length < 5) return '';
+  return result;
+}
+
+Future<String> smartReminder(String transcript) async {
+  if (transcript.isEmpty) return '';
+  if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it
+  var prompt = '''
+    Based on the following transcript, check if user has commitet to any action item with a specific
+    deadline or time frame mentioned. If so, answer with a JSON. Example transcript: "I will send the financial report in 
+    half an hour or an hour max". Example JSON response: {'action_item': 'send the report', 'due_minutes': 60}.
+    If there is no specific time frame mentioned, output an empty JSON.
+    Transcription:
+    ```
+    $transcript
+    ```
+    ''';
+  var result = await executeGptPrompt(prompt, jsonResponseFormat: true);
   return result;
 }
 
@@ -224,6 +255,20 @@ Future<List<double>> getEmbeddingsFromInput(String input) async {
 
 // ------
 
+/// Determines if the last message in the conversation requires context retrieval.
+///
+/// This function takes the last message in the conversation and a list of messages as input.
+/// It checks if the last message is a question and if there is context that needs to be retrieved
+/// from the user's recorded audio memories in order to answer that question.
+/// If context retrieval is required, it returns the question with better parsing to incorporate
+/// the retrieved pieces of context.
+///
+/// Parameters:
+/// - messages: A `List` of `Messages` in the conversation.
+///
+/// Returns:
+/// - A `String` representing the question with better parsing if context retrieval is required,
+///   otherwise returns `null`.
 Future<String?> determineRequiresContext(List<Message> messages) async {
   String message = '''
         Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
@@ -243,8 +288,8 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
         ```
         {"properties": {"requires_context": {"title": "Requires context", \"description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "bool"}, "query": {"title": "Query", "description": "If context is required, the main topic to retrieve context from", "default": "", "type": "string"}, }}
         ```
-        '''
-      .replaceAll('        ', '');
+        ''';
+  message = cleanPrompt(message);
   debugPrint('determineRequiresContext message: $message');
   var response = await gptApiCall(model: 'gpt-4o', messages: [
     {"role": "user", "content": message}

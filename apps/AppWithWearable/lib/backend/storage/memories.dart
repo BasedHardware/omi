@@ -1,5 +1,6 @@
 import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:friend_private/flutter_flow/custom_functions.dart';
 
 class Structured {
   String title;
@@ -91,19 +92,20 @@ class MemoryRecord {
   String getStructuredString() => structured.toString();
 
   static String memoriesToString(List<MemoryRecord> memories) => memories
-      .map((e) => '''
-      ${e.createdAt.toIso8601String().split('.')[0]}
-      Title: ${e.structured.title}
-      Summary: ${e.structured.overview}
-      ${e.structured.actionItems.isNotEmpty ? 'Action Items:' : ''}
-      ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
-      ${e.structured.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
-      ${e.structured.pluginsResponse.map((response) => '  - $response').join('\n')}
-      '''
-          .replaceAll('      ', '')
-          .trim())
-      .join('\n\n');
-}
+    .map((e) {
+      var memoryString = '''
+        ${e.createdAt.toIso8601String().split('.')[0]}
+        Title: ${e.structured.title}
+        Summary: ${e.structured.overview}
+        ${e.structured.actionItems.isNotEmpty ? 'Action Items:' : ''}
+        ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
+        ${e.structured.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
+        ${e.structured.pluginsResponse.map((response) => '  - $response').join('\n')}
+        ''';
+      return cleanPrompt(memoryString);
+    })
+    .join('\n\n');
+  }
 
 class MemoryStorage {
   static const String _storageKey = '_memories';

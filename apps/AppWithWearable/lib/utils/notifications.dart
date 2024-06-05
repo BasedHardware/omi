@@ -37,18 +37,21 @@ Future<void> requestNotificationPermissions() async {
   }
 }
 
-void createNotification({String title = '', String body = '', int notificationId = 1}) async {
+void createNotification({String title = '', String body = '', int notificationId = 1, int? delayMinutes}) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
-  debugPrint('createNotification ~ Creating notification: ${title}');
+  debugPrint('createNotification ~ Creating notification: $title');
+  var scheduleInterval = delayMinutes != null ? NotificationInterval(interval: delayMinutes) : null;
   AwesomeNotifications().createNotification(
-      content: NotificationContent(
-    id: notificationId,
-    channelKey: 'channel',
-    actionType: ActionType.Default,
-    title: title,
-    body: body,
-  ));
+    content: NotificationContent(
+      id: notificationId,
+      channelKey: 'channel',
+      actionType: ActionType.Default,
+      title: title,
+      body: body,
+    ),
+    schedule: scheduleInterval,
+  );
 }
 
 clearNotification(int id) => AwesomeNotifications().cancel(id);
