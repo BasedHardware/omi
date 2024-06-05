@@ -13,7 +13,7 @@ class WavBytesUtil {
   // List to hold audio data in bytes
   final List<int> _audioBytes = [];
 
-  get audioBytes => _audioBytes;
+  List<int> get audioBytes => _audioBytes;
 
   // Method to add audio bytes (now accepts List<int> instead of Uint8List)
   void addAudioBytes(List<int> bytes) {
@@ -32,7 +32,6 @@ class WavBytesUtil {
 
   void clearAudioBytesSegment({required int remainingSeconds}) {
     _audioBytes.removeRange(0, (_audioBytes.length) - (remainingSeconds * 8000));
-    debugPrint('clearAudioBytesSegment ${_audioBytes.length}');
   }
 
   // Method to create a WAV file from the stored audio bytes
