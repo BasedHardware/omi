@@ -192,9 +192,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         ),
                         child: Padding(
                           padding: const EdgeInsets.only(top: 8.0),
-                          child: Text(
-                            response,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                          child: SelectionArea(
+                            child: Text(
+                              response,
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                            ),
                           ),
                         ),
                       )),
@@ -213,9 +215,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      memory.transcript,
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                    child: SelectionArea(
+                      child: Text(
+                        memory.transcript,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                      ),
                     ),
                   ),
                 ),
@@ -273,18 +277,24 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   }
 
   _getEditTextField(TextEditingController controller, bool enabled, FocusNode focusNode) {
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.multiline,
-      focusNode: focusNode,
-      maxLines: null,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(borderSide: BorderSide.none),
-        contentPadding: EdgeInsets.all(0),
-      ),
-      enabled: enabled,
-      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-    );
+    return enabled
+        ? TextField(
+            controller: controller,
+            keyboardType: TextInputType.multiline,
+            focusNode: focusNode,
+            maxLines: null,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(borderSide: BorderSide.none),
+              contentPadding: EdgeInsets.all(0),
+            ),
+            enabled: enabled,
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+          )
+        : SelectionArea(
+            child: Text(
+            controller.text,
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+          ));
   }
 
   _getEditTextFieldButtons(bool display, VoidCallback onCanceled, VoidCallback onSaved) {

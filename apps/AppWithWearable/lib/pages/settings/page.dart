@@ -130,18 +130,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   )),
                   const SizedBox(height: 24.0),
-                  // ListTile(
-                  //   onTap: () {
-                  //     context.pushNamed('speaker_id');
-                  //   },
-                  //   title: const Text(
-                  //     'Setup your speech profile  🎤',
-                  //     style: TextStyle(
-                  //       color: Colors.white,
-                  //     ),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 12.0),
+                  ListTile(
+                    onTap: () {
+                      context.pushNamed('speaker_id');
+                    },
+                    title: const Text(
+                      'Setup your speech profile  🎤',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12.0),
                   SwitchListTile(
                     value: optInAnalytics,
                     activeColor: Colors.deepPurple,
