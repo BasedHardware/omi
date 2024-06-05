@@ -19,6 +19,7 @@ To add your plugin to the community list, create a pull request on the [communit
 - `author`: Name of the plugin creator
 - `description`: Short summary of what your plugin achieves
 - `prompt`: Instructions on processing the transcription, starting with "You will be given a conversation."
+- `image`: URL or path to an image that represents your plugin. The image should be named `{plugin_id}.png` and placed in the `/assets/plugin_images` directory. Images should be in PNG format with a recommended size of 512x512 pixels. You can create the image using AI tools like DALL-E, Midjourney, or design it yourself.
 
 #### Good Prompt Example
 
@@ -28,7 +29,8 @@ To add your plugin to the community list, create a pull request on the [communit
     "name": "Thoughtful Therapy Notes",
     "author": "John",
     "description": "Transform therapy conversations into structured SOAP notes.",
-    "prompt": "You will be given a conversation between a therapist and a patient. Use this information to create detailed session notes by identifying presenting problems, therapeutic interventions, and patient progress. Structure your notes according to the SOAP format without prompting further input. Respect patient confidentiality, and clearly denote any missing information as 'Not Mentioned'."
+    "prompt": "You will be given a conversation between a therapist and a patient. Use this information to create detailed session notes by identifying presenting problems, therapeutic interventions, and patient progress. Structure your notes according to the SOAP format without prompting further input. Respect patient confidentiality, and clearly denote any missing information as 'Not Mentioned'.",
+    "image": "/assets/plugin_images/thoughtful-therapy-notes.png"
 }
 ```
 
@@ -42,7 +44,8 @@ This prompt is considered good because it is clear, specifies the formatting str
     "name": "Generic Mentor Guide",
     "author": "John",
     "description": "Offers guidance on business issues.",
-    "prompt": "You are a mentor. Give good advice. Ask questions if needed."
+    "prompt": "You are a mentor. Give good advice. Ask questions if needed.",
+    "image": "/assets/plugin_images/generic-mentor-guide.png"
 }
 ```
 
@@ -53,13 +56,14 @@ This prompt falls short as it's too vague, doesn't specify the structure or form
 1. Fork the repository.
 2. Create a feature branch.
 3. Add your plugin entry to `community-plugins.json`.
-4. Commit with a message like "Add [PluginName] to community plugins."
-5. Open a pull request with a clear plugin description.
+4. Create an image for your plugin and place it in the `/assets/plugin_images` directory with the name `{plugin_id}.png`.
+5. Commit with a message like "Add [PluginName] to community plugins."
+6. Open a pull request with a clear plugin description.
 
 Plugin submissions will be reviewed for integration into the main repository.
 
 ## How Community Plugins are Pulled
 
 1. **Adding Your Plugin**: Submit your plugin by adding it to the `community-plugins.json` list via a pull request.
-2. **Approval**: The Based Hardware team will review your plugin entry for completeness, coherence, and functionality. 
-3. **Marketplace Availability**: Once approved, your plugin will be listed in the FRIEND mobile app’s Plugins marketplace, where users can easily browse and install it.
+2. **Approval**: The Based Hardware team will review your plugin entry for completeness, coherence, and functionality. We will also review the included image for appropriateness and adherence to the specified format and size.
+3. **Marketplace Availability**: Once approved, your plugin will be listed in the FRIEND mobile app's Plugins marketplace, where users can easily browse and install it. The provided image will be displayed alongside your plugin's name and description.
