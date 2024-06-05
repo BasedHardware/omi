@@ -4,6 +4,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -86,6 +87,15 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
+
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      context.pushNamed('speaker_id');
+                    },
+                    child: const Text('Setup Speaker Identification'),
+                  ),
+
                   const SizedBox(height: 12),
                   Center(
                       child: Container(

@@ -1,10 +1,3 @@
-//  {
-//         "start": 78.328,
-//         "end": 79.009,
-//         "text": " That's cool.",
-//         "speaker": "SPEAKER_00",
-//         "is_user": false
-//     },
 class TranscriptSegment {
   String text;
   String speaker;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -76,11 +77,7 @@ Future<dynamic> gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    var bodyData = {
-      'model': model,
-      'messages': messages,
-      'temperature': temperature
-    };
+    var bodyData = {'model': model, 'messages': messages, 'temperature': temperature};
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
     } else if (tools.isNotEmpty) {
@@ -90,11 +87,9 @@ Future<dynamic> gptApiCall({
     body = jsonEncode(bodyData);
   }
 
-  var response =
-      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   return extractContentFromResponse(response,
-      isEmbedding: urlSuffix == 'embeddings',
-      isFunctionCalling: tools.isNotEmpty);
+      isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
 }
 
 Future<String> executeGptPrompt(String? prompt) async {
@@ -127,16 +122,13 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
       : '';
 }
 
-Future<Structured> generateTitleAndSummaryForMemory(
-    String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7)
-    return Structured(actionItems: [], pluginsResponse: []);
+Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
+  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: []);
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
   final pluginsList = SharedPreferencesUtil().pluginsList;
-  final enabledPlugins =
-      pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
 
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
@@ -177,14 +169,12 @@ Future<Structured> generateTitleAndSummaryForMemory(
 
   List<String> responses = await allPluginResponses;
 
-  return Structured.fromJson(
-      jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
+  return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
   if (transcript.isEmpty) return '';
-  if (transcript.split(' ').length < 20)
-    return ''; // not enough to extract something out of it
+  if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it
   // if (transcript.contains('Speaker 0') &&
   //     (!transcript.contains('Speaker 1') && !transcript.contains('Speaker 2') && !transcript.contains('Speaker 3'))) {
   //   return '';
@@ -230,13 +220,8 @@ Future<String> requestSummary(List<MemoryRecord> memories) async {
 }
 
 Future<List<double>> getEmbeddingsFromInput(String input) async {
-  var vector = await gptApiCall(
-      model: 'text-embedding-3-large',
-      urlSuffix: 'embeddings',
-      contentToEmbed: input);
-  return vector
-      .map<double>((item) => double.tryParse(item.toString()) ?? 0.0)
-      .toList();
+  var vector = await gptApiCall(model: 'text-embedding-3-large', urlSuffix: 'embeddings', contentToEmbed: input);
+  return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
 }
 
 // ------
@@ -268,27 +253,24 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
   ]);
   debugPrint('determineRequiresContext response: $response');
   try {
-    return jsonDecode(response.toString().replaceAll('```','').replaceAll('json', '').trim())['query'];
+    return jsonDecode(response.toString().replaceAll('```', '').replaceAll('json', '').trim())['query'];
   } catch (e) {
     return null;
   }
 }
 
-Future<dynamic> pineconeApiCall(
-    {required String urlSuffix, required String body}) async {
+Future<dynamic> pineconeApiCall({required String urlSuffix, required String body}) async {
   var url = '${Env.pineconeIndexUrl}/$urlSuffix';
   final headers = {
     'Api-Key': Env.pineconeApiKey,
     'Content-Type': 'application/json',
   };
-  var response =
-      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   var responseBody = jsonDecode(response?.body ?? '{}');
   return responseBody;
 }
 
-Future<bool> createPineconeVectors(
-    List<String> memoriesId, List<List<double>> vectors) async {
+Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> vectors) async {
   var body = jsonEncode({
     'vectors': memoriesId.mapIndexed((index, id) {
       return {
@@ -303,14 +285,12 @@ Future<bool> createPineconeVectors(
     }).toList(),
     'namespace': Env.pineconeIndexNamespace
   });
-  var responseBody =
-      await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
+  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
   debugPrint('createVectorPinecone response: $responseBody');
   return true;
 }
 
-Future<bool> createPineconeVector(
-    String? memoryId, List<double>? vectorList) async {
+Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
   var body = jsonEncode({
     'vectors': [
       {
@@ -325,8 +305,7 @@ Future<bool> createPineconeVector(
     ],
     'namespace': Env.pineconeIndexNamespace
   });
-  var responseBody =
-      await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
+  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
   debugPrint('createVectorPinecone response: $responseBody');
   return (responseBody['upserted_count'] ?? 0) > 0;
 }
@@ -344,10 +323,7 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList) async {
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
   debugPrint(responseBody.toString());
-  return (responseBody['matches'])
-          ?.map<String>((e) => e['id'].toString())
-          .toList() ??
-      [];
+  return (responseBody['matches'])?.map<String>((e) => e['id'].toString()).toList() ?? [];
 }
 
 Future<bool> deleteVector(String memoryId) async {
@@ -362,8 +338,7 @@ Future<bool> deleteVector(String memoryId) async {
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
-      url:
-          'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
+      url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
       headers: {},
       body: '',
       method: 'GET');
@@ -379,15 +354,13 @@ Future<List<Plugin>> retrievePlugins() async {
 
 // TODO: update vectors when fields updated
 
-Future<List<TranscriptSegment>> transcribeAudioFile(
-    File file, String uid) async {
+Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(
         '${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path,
-      filename: basename(file.path)));
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
   try {
     var streamedResponse = await request.send();
@@ -399,8 +372,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(
       return TranscriptSegment.fromJsonList(data);
     } else {
       debugPrint('Failed to upload file. Status code: ${response.statusCode}');
-      throw Exception(
-          'Failed to upload file. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
     }
   } catch (e) {
     debugPrint('An error occurred transcribeAudioFile: $e');
@@ -419,4 +391,16 @@ Future<bool> userHasSpeakerProfile(String uid) async {
   if (response == null) return false;
   debugPrint('userHasSpeakerProfile: ${response.body}');
   return jsonDecode(response.body)['has_profile'] ?? false;
+}
+
+Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}samples?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getUserSamplesState: ${response.body}');
+  return SpeakerIdSample.fromJsonList(jsonDecode(response.body));
 }
