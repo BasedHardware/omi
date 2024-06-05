@@ -2,6 +2,7 @@ class SpeakerIdSample {
   String id;
   String phrase;
   bool uploaded;
+  bool displayNext = false;
 
   SpeakerIdSample({
     required this.id,
