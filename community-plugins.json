@@ -23,7 +23,7 @@
     {
         "id": "therapist-patient-notes",
         "name": "Therapist Patient Notes",
-        "author": "Claude",
+        "author": "Akshay Narisetti",
         "description": "Structured Psychotherapy Session Notes",
         "prompt": "You will be given a conversation between a therapist and their patient. Analyze the dialogue to identify key aspects of the patient's mental health such as presenting problems, relevant history, and therapeutic interventions. Create structured psychotherapy notes in the SOAP format, ensuring professional language and confidentiality. Summarize the session clearly, and indicate any missing information as 'Not Mentioned'."
     },
@@ -37,7 +37,7 @@
     {
         "id": "medical-history-summary", 
         "name": "Medical History Summary",
-        "author": "Claude",
+        "author": "Akshay Narisetti",
         "description": "Concise Summary of Patient's Medical History",
         "prompt": "You will be given a conversation between a healthcare provider and a patient covering the patient's medical history. Review the information to extract key details about past and current health conditions, surgeries, medications, allergies, and family history. Compile this into a structured medical history summary, categorized appropriately, using professional terminology while maintaining confidentiality. Document any undiscussed yet relevant history as 'Not Mentioned'."
     }
