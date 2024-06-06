@@ -6,7 +6,6 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final dynamic memory;
@@ -242,11 +241,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     });
                     Timer(const Duration(milliseconds: 100), () => focusNode.requestFocus());
                   },
-                  icon: Icon(
-                    Icons.edit,
-                    color: Theme.of(context).primaryColor,
-                    size: 22,
-                  )),
+                  icon: Icon(Icons.edit, color: Colors.grey, size: 22)),
             ],
           ),
         ),

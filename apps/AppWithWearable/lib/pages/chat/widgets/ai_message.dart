@@ -53,8 +53,7 @@ class AIMessage extends StatelessWidget {
                     SelectionArea(
                         child: AutoSizeText(
                       message.text.replaceAll(r'\n', '\n'),
-                      style:
-                          TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500, color: Theme.of(context).primaryColor),
+                      style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500, color: Colors.grey.shade200),
                     )),
                   ],
                 ),

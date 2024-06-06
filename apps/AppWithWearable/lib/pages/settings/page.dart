@@ -3,6 +3,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -125,8 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 24.0),
                   ListTile(
                     onTap: () {
-                      // NAVIGATE ME
-                      // context.pushNamed('speaker_id');
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
                     },
                     title: const Text(
                       'Setup your speech profile  🎤',
@@ -214,7 +214,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (useFriendAPIKeys)
             Container(
               width: double.maxFinite,
-              height: 300,
+              height: 160,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20.0),
                 color: Colors.white.withOpacity(0.1),
@@ -281,13 +281,6 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
-      const SizedBox(height: 12),
-      TextButton(
-          onPressed: () {
-            launchUrl(
-                Uri.parse('https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console'));
-          },
-          child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
     ];
   }
 

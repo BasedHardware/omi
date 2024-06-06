@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
+import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/temp.dart';
 
 class MemoryListItem extends StatefulWidget {
@@ -22,16 +23,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
       onTap: () async {
         debugPrint('Tapped memory: ${widget.memory.id}');
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        // NAVIGATE ME
-        // await context.pushNamed(
-        //   'memoryDetailPage',
-        //   queryParameters: {
-        //     'memory': serializeParam(
-        //       widget.memory,
-        //       ParamType.JSON,
-        //     ),
-        //   }.withoutNulls,
-        // );
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (c) => MemoryDetailPage(
+                  memory: widget.memory.toJson(),
+                )));
         widget.loadMemories();
       },
       child: Container(

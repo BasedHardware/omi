@@ -3,11 +3,11 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class FindDevicesPage extends StatefulWidget {
   const FindDevicesPage({super.key});
@@ -47,16 +47,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     if (_friendDevice == null) return;
     SharedPreferencesUtil().onboardingCompleted = true;
     MixpanelManager().onboardingCompleted();
-
-    // context.pushNamed( // NAVIGATE ME
-    //   'home',
-    //   queryParameters: {
-    //     'btdevice': serializeParam(
-    //       _friendDevice!.toMap(),
-    //       ParamType.JSON,
-    //     ),
-    //   },
-    // );
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: _friendDevice!.toJson())));
   }
 
   @override
@@ -147,26 +138,17 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
                               opacity: _isConnected ? 1.0 : 0.0,
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),
-                                // RESTORE ME
-                                // child: FFButtonWidget(
-                                //   onPressed: _navigateToConnecting,
-                                //   text: 'Continue',
-                                //   options: FFButtonOptions(
-                                //     height: 50,
-                                //     padding: const EdgeInsets.symmetric(horizontal: 30),
-                                //     color: Theme.of(context).secondary,
-                                //     textStyle: Theme.of(context).titleSmall.copyWith(
-                                //           color: Theme.of(context).primaryColor,
-                                //           fontSize: 24,
-                                //           fontWeight: FontWeight.w600,
-                                //         ),
-                                //     borderSide: BorderSide(
-                                //       color: FlutterFlowTheme.of(context).secondary,
-                                //       width: 1,
-                                //     ),
-                                //     borderRadius: BorderRadius.circular(30),
-                                //   ),
-                                // ),
+                                child: MaterialButton(
+                                  onPressed: _navigateToConnecting,
+                                  height: 50,
+                                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                                  color: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  child: const Text(
+                                    'Continue',
+                                    style: TextStyle(fontSize: 20, color: Colors.black),
+                                  ),
+                                ),
                               ),
                             ),
                           ],

@@ -14,7 +14,6 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'info_button.dart';
 
@@ -249,12 +248,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           child: SelectionArea(
             child: Text(
               transcriptItem,
-              style: const TextStyle(
-                // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                letterSpacing: 0.0,
-                // useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                // STYLE ME
-              ),
+              style: const TextStyle(letterSpacing: 0.0, color: Colors.white),
             ),
           ),
         );
