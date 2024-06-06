@@ -268,6 +268,38 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
+Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
+  // Construct the URL for the Pinecone API
+  var url = '${Env.pineconeIndexUrl}/vectors/update';
+
+  // Set up the headers for the request including the authentication token and content type
+  final headers = {
+    'Api-Key': Env.pineconeApiKey,
+    'Content-Type': 'application/json',
+  };
+
+  // Define the body of the request, including the ID and the new metadata for `created_at`
+  var body = jsonEncode({
+    'id': memoryId,
+    'setMetadata': {
+      'created_at': timestamp,
+    },
+    'namespace': Env.pineconeIndexNamespace,
+  });
+
+  // Make the HTTP POST request to update the record in Pinecone
+  var response = await http.post(
+    Uri.parse(url),
+    headers: headers,
+    body: body,
+  );
+
+  // Check the response, and if it's not successful, throw an error
+  if (response.statusCode != 200) {
+    throw Exception('Failed to update memory record in Pinecone: ${response.body}');
+  }
+}
+
 Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> vectors) async {
   var body = jsonEncode({
     'vectors': memoriesId.mapIndexed((index, id) {
