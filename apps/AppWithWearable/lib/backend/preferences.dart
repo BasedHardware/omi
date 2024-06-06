@@ -32,10 +32,6 @@ class SharedPreferencesUtil {
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
 
-  String get deepgramApiKey => getString('deepgramApiKey') ?? '';
-
-  set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
-
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -163,6 +159,3 @@ class SharedPreferencesUtil {
 
 String getOpenAIApiKeyForUsage() =>
     SharedPreferencesUtil().useFriendApiKeys ? (Env.openAIAPIKey ?? '') : SharedPreferencesUtil().openAIApiKey;
-
-String getDeepgramApiKeyForUsage() =>
-    SharedPreferencesUtil().useFriendApiKeys ? (Env.deepgramApiKey ?? '') : SharedPreferencesUtil().deepgramApiKey;
