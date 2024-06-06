@@ -50,6 +50,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   void initState() {
     btDevice = widget.btDevice;
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      await _loadStoredAudioBytes();
       initiateBytesProcessing();
     });
     _initiateConversationAdvisorTimer();
@@ -64,9 +65,32 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     super.dispose();
   }
 
+  Future<void> _loadStoredAudioBytes() async {
+    WavBytesUtil wavBytesUtil = WavBytesUtil();
+    await wavBytesUtil.loadAudioBytes();
+    if (wavBytesUtil.audioBytes.isNotEmpty) {
+      debugPrint('Processing stored audio bytes');
+      audioStorage = wavBytesUtil;
+      // Process the stored audio bytes to create a memory
+      await _createMemoryFromStoredBytes(wavBytesUtil.audioBytes);
+    }
+  }
+
+  Future<void> _createMemoryFromStoredBytes(List<int> storedBytes) async {
+    try {
+      File file = await WavBytesUtil.createWavFile(storedBytes, filename: 'temp_from_stored.wav');
+      List<TranscriptSegment> segments = await transcribeAudioFile(file, SharedPreferencesUtil().uid);
+      processCustomTranscript(segments);
+    } catch (e) {
+      debugPrint('Error creating memory from stored bytes: $e');
+    }
+  }
+
+
+
   Future<void> initiateBytesProcessing() async {
     if (btDevice == null) return;
-    WavBytesUtil wavBytesUtil = WavBytesUtil();
+    WavBytesUtil wavBytesUtil = audioStorage ?? WavBytesUtil();
     WavBytesUtil toProcessBytes = WavBytesUtil();
     // VadUtil vad = VadUtil();
     // await vad.init();
