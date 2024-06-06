@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
-import '/flutter_flow/flutter_flow_util.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const int sampleRate = 8000;
 const int channelCount = 1;
@@ -18,20 +19,24 @@ class WavBytesUtil {
   // Method to add audio bytes (now accepts List<int> instead of Uint8List)
   void addAudioBytes(List<int> bytes) {
     _audioBytes.addAll(bytes);
+    _saveAudioBytes();
   }
 
   void insertAudioBytes(List<int> bytes) {
     _audioBytes.insertAll(0, bytes);
+    _saveAudioBytes();
   }
 
   // Method to clear audio bytes
   void clearAudioBytes() {
     _audioBytes.clear();
     debugPrint('Cleared audio bytes');
+    _saveAudioBytes();
   }
 
   void clearAudioBytesSegment({required int remainingSeconds}) {
     _audioBytes.removeRange(0, (_audioBytes.length) - (remainingSeconds * 8000));
+    _saveAudioBytes();
   }
 
   // Method to create a WAV file from the stored audio bytes
@@ -103,5 +108,22 @@ class WavBytesUtil {
     byteData.setUint32(40, dataLength, Endian.little);
 
     return byteData.buffer.asUint8List();
+  }
+
+  // Save audio bytes to shared preferences
+  Future<void> _saveAudioBytes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('audioBytes', _audioBytes.join(','));
+  }
+
+  // Load audio bytes from shared preferences
+  Future<void> loadAudioBytes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final audioBytesString = prefs.getString('audioBytes');
+    if (audioBytesString != null) {
+      _audioBytes.clear();
+      _audioBytes.addAll(audioBytesString.split(',').map((s) => int.parse(s)).toList());
+      debugPrint('Loaded audio bytes from shared preferences');
+    }
   }
 }
