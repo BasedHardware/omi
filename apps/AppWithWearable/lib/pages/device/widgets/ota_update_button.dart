@@ -45,6 +45,10 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
         forceScanningForNewAddressInLegacyDfu: true,
         connectionTimeout: 60,
       ),
+      androidSpecialParameter: const AndroidSpecialParameter(
+        packetReceiptNotificationsEnabled: true,
+        rebootTime: 1000,
+      ),
       onProgressChanged: (
         deviceAddress,
         percent,
