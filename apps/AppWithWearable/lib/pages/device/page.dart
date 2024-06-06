@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
 import 'widgets/transcript.dart';
+import 'package:friend_private/backend/storage/memories.dart';
+import 'package:intl/intl.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 
 class DevicePage extends StatefulWidget {
   final Function refreshMemories;
@@ -27,21 +29,72 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkMemorySchemaUpdated();
+  }
+
+  Future<void> _checkMemorySchemaUpdated() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isMemorySchemaUpdated = prefs.getBool('isMemorySchemaUpdated') ?? false;
+
+    if (!isMemorySchemaUpdated) {
+      debugPrint("Updating Memory Schema in Pinecone");
+      await updateCreatedAtToEpoch();
+      await prefs.setBool('isMemorySchemaUpdated', true);
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> updateCreatedAtToEpoch() async {
+    List<MemoryRecord> memoryRecords = await MemoryStorage.getAllMemories();
+    DateFormat dateFormat = DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
+
+    for (MemoryRecord memoryRecord in memoryRecords) {
+      DateTime dateTime = dateFormat.parse(memoryRecord.createdAt.toString());
+      int timestamp = dateTime.millisecondsSinceEpoch ~/ 1000;
+      updateCreatedAtInPinecone(memoryRecord.id, timestamp);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         const BlurBotWidget(),
-        ListView(children: [
-          ..._getConnectedDeviceWidgets(),
-          TranscriptWidget(
-            btDevice: widget.device,
-            key: widget.transcriptChildWidgetKey,
-            refreshMemories: widget.refreshMemories,
-          ),
-          const SizedBox(height: 16)
-        ]),
+        _isLoading
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Updating Memory Schema, do not close',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView(children: [
+                ..._getConnectedDeviceWidgets(),
+                TranscriptWidget(
+                  btDevice: widget.device,
+                  key: widget.transcriptChildWidgetKey,
+                  refreshMemories: widget.refreshMemories,
+                ),
+                const SizedBox(height: 16)
+              ]),
       ],
     );
   }
@@ -64,18 +117,16 @@ class _DevicePageState extends State<DevicePage> {
         sizeMultiplier: 0.4,
       )),
       const SizedBox(height: 16),
-      Center(
+      const Center(
           child: Text(
         'Connected Device',
-        style: FlutterFlowTheme.of(context).bodyMedium.override(
-              fontFamily: 'SF Pro Display',
-              color: Colors.white,
-              fontSize: 29.0,
-              letterSpacing: 0.0,
-              fontWeight: FontWeight.w700,
-              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-              lineHeight: 1.2,
-            ),
+        style: TextStyle(
+            fontFamily: 'SF Pro Display',
+            color: Colors.white,
+            fontSize: 29.0,
+            letterSpacing: 0.0,
+            fontWeight: FontWeight.w700,
+            height: 1.2),
         textAlign: TextAlign.center,
       )),
       const SizedBox(height: 8),

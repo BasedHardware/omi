@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/vector_db.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:uuid/uuid.dart';
 import '/backend/api_requests/api_calls.dart';
-import '/flutter_flow/flutter_flow_util.dart';
 
 // Perform actions periodically
 Future<MemoryRecord?> processTranscriptContent(BuildContext context, String content, String? audioFileName) async {

@@ -4,9 +4,9 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
-import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
+import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:uuid/uuid.dart';
 
@@ -70,6 +70,14 @@ class _ChatPageState extends State<ChatPage> {
                   itemBuilder: (context, chatIndex) {
                     final message = _messages[chatIndex];
                     if (message.type == 'ai') return AIMessage(message: message);
+                    // if (message.type == 'ai') {
+                    //   return AIMessage(
+                    //     message: message,
+                    //     onShowMemoriesPressed: () {
+                    //       _showMemoryIds(message.memoryIds);
+                    //     },
+                    //   );
+                    // }
                     if (message.type == 'human') {
                       return HumanMessage(message: message);
                     }
@@ -114,17 +122,17 @@ class _ChatPageState extends State<ChatPage> {
                       suffixIcon: IconButton(
                         icon: loading
                             ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
                             : const Icon(
-                          Icons.send_rounded,
-                          color: Color(0xFFF7F4F4),
-                          size: 30.0,
-                        ),
+                                Icons.send_rounded,
+                                color: Color(0xFFF7F4F4),
+                                size: 30.0,
+                              ),
                         onPressed: loading
                             ? null
                             : () async {
@@ -132,10 +140,12 @@ class _ChatPageState extends State<ChatPage> {
                           if (message.isEmpty) return;
                           changeLoadingState();
                           _prepareStreaming(message);
-                          String ragContext = await _retrieveRAGContext(message);
+                          dynamic ragInfo = await _retrieveRAGContext(message);
+                          String ragContext = ragInfo[0];
+                          List<String> memoryIds = ragInfo[1].cast<String>();
                           debugPrint('RAG Context: $ragContext');
                           MixpanelManager().chatMessageSent(message);
-                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
+                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
                             prefs.chatMessages = _messages;
                           });
                           changeLoadingState();
@@ -155,20 +165,20 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Future<String> _retrieveRAGContext(String message) async {
+  Future<List<dynamic>> _retrieveRAGContext(String message) async {
     String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
-      return '';
+      return ['', []];
     }
     List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
     List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('queryPineconeVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
-      return '';
+      return ['', []];
     }
     List<MemoryRecord> memories = await MemoryStorage.getAllMemoriesByIds(memoriesId);
-    return MemoryRecord.memoriesToString(memories);
+    return [MemoryRecord.memoriesToString(memories), memoriesId];
   }
 
   _prepareStreaming(String text) {
@@ -185,17 +195,24 @@ class _ChatPageState extends State<ChatPage> {
     _messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
   }
 
-  _callbackFunctionChatStreaming() {
+  _callbackFunctionChatStreaming(List<String> memoryIds) {
     return (String content) async {
       debugPrint('Content: $content');
       var messagesCopy = [..._messages];
       messagesCopy.last.text += content;
+      messagesCopy.last.memoryIds = memoryIds;
       debugPrint(messagesCopy.last.text);
       setState(() {
         _messages = messagesCopy;
       });
       _moveListToBottom();
     };
+  }
+
+  _showMemoryIds(List<String>? memoryIds) {
+    if (memoryIds != null && memoryIds.isNotEmpty) {
+      debugPrint('Memory IDs: $memoryIds');
+    }
   }
 
   _moveListToBottom({bool initial = false}) async {

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/message.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class HumanMessage extends StatelessWidget {
   final Message message;
@@ -27,7 +25,7 @@ class HumanMessage extends StatelessWidget {
             }(),
           ),
           decoration: BoxDecoration(
-            color: FlutterFlowTheme.of(context).primaryBackground,
+            color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(12.0),
           ),
           margin: const EdgeInsets.only(bottom: 12, top: 8),
@@ -39,12 +37,10 @@ class HumanMessage extends StatelessWidget {
               children: [
                 Text(
                   message.text,
-                  style: FlutterFlowTheme.of(context).bodyMedium.override(
-                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                        color: FlutterFlowTheme.of(context).primary,
-                        fontWeight: FontWeight.w500,
-                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                      ),
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.w500
+                  ),
                 ),
               ],
             ),
