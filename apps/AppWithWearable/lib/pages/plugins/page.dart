@@ -1,12 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
@@ -59,7 +55,7 @@ class _PluginsPageState extends State<PluginsPage> {
     final filteredPlugins = _filteredPlugins();
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: FlutterFlowTheme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).primaryColor,
         automaticallyImplyLeading: true,
         title: const Text('Plugins'),
         centerTitle: false,
@@ -105,6 +101,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   ],
                   borderRadius: BorderRadius.circular(12.0),
                 ),
+                // TODO: reuse chat textfield
                 child: TextField(
                   onChanged: (value) {
                     setState(() {
@@ -112,16 +109,14 @@ class _PluginsPageState extends State<PluginsPage> {
                     });
                   },
                   obscureText: false,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'Search your plugin',
-                    hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
-                          fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
-                          color: FlutterFlowTheme.of(context).primaryText,
-                          fontSize: 14.0,
-                          fontWeight: FontWeight.w500,
-                          useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
-                        ),
-                    enabledBorder: const UnderlineInputBorder(
+                    hintStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
                         color: Color(0x00000000),
                         width: 1.0,
@@ -131,7 +126,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         topRight: Radius.circular(4.0),
                       ),
                     ),
-                    focusedBorder: const UnderlineInputBorder(
+                    focusedBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
                         color: Color(0x00000000),
                         width: 1.0,
@@ -141,7 +136,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         topRight: Radius.circular(4.0),
                       ),
                     ),
-                    errorBorder: const UnderlineInputBorder(
+                    errorBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
                         color: Color(0x00000000),
                         width: 1.0,
@@ -151,7 +146,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         topRight: Radius.circular(4.0),
                       ),
                     ),
-                    focusedErrorBorder: const UnderlineInputBorder(
+                    focusedErrorBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
                         color: Color(0x00000000),
                         width: 1.0,
@@ -162,12 +157,11 @@ class _PluginsPageState extends State<PluginsPage> {
                       ),
                     ),
                   ),
-                  style: FlutterFlowTheme.of(context).bodyMedium.override(
-                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                        color: FlutterFlowTheme.of(context).primaryText,
-                        fontWeight: FontWeight.w500,
-                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                      ),
+                  style: TextStyle(
+                    // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
               Expanded(

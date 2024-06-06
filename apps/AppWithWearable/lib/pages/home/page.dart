@@ -6,14 +6,14 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -90,7 +90,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     if (widget.btDevice != null) {
       // Only used when onboarding flow
-      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      _device = BTDeviceStruct.fromJson(widget.btDevice);
       SharedPreferencesUtil().deviceId = _device!.id;
       _initiateConnectionListener();
       _initiateBleBatteryListener();
@@ -144,7 +144,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Widget build(BuildContext context) {
     return Scaffold(
       body: GestureDetector(
-        onTap: (){
+        onTap: () {
           FocusScope.of(context).unfocus();
           chatTextFieldFocusNode.unfocus();
         },
@@ -162,14 +162,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 transcriptChildWidgetKey: transcriptChildWidgetKey,
                 batteryLevel: batteryLevel,
               ),
-              ChatPage(textFieldFocusNode: chatTextFieldFocusNode,),
+              ChatPage(
+                textFieldFocusNode: chatTextFieldFocusNode,
+              ),
             ],
           ),
         ),
       ),
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).primaryColor,
         title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
         elevation: 2.0,
         centerTitle: true,
@@ -183,12 +185,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             onPressed: () async {
               MixpanelManager().settingsOpened();
               var language = SharedPreferencesUtil().recordingsLanguage;
-              var deepgram = SharedPreferencesUtil().deepgramApiKey;
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-
-              await context.pushNamed('settings');
+              Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
               if (language != SharedPreferencesUtil().recordingsLanguage ||
-                  deepgram != SharedPreferencesUtil().deepgramApiKey ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
                 transcriptChildWidgetKey.currentState?.resetState();
               }
@@ -203,13 +202,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           ),
           onPressed: () async {
             MixpanelManager().pluginsOpened();
-            await context.pushNamed('plugins');
+            Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+            // await context.pushNamed('plugins');
           },
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(

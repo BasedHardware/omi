@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/structs/index.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
 
 class InfoButton extends StatefulWidget {
   const InfoButton({super.key});
@@ -17,7 +15,7 @@ class _InfoButtonState extends State<InfoButton> {
           showDialog(
               context: context,
               builder: (context) => AlertDialog(
-                    backgroundColor: FlutterFlowTheme.of(context).primary,
+                    backgroundColor: Theme.of(context).primaryColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15.0),
                     ),
