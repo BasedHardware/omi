@@ -3,8 +3,6 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,12 +14,9 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController deepgramApiKeyController = TextEditingController();
   final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController customWebsocketUrlController = TextEditingController();
-  bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
   late bool useFriendAPIKeys;
@@ -30,11 +25,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void initState() {
-    deepgramApiKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-    customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
 
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     useFriendAPIKeys = SharedPreferencesUtil().useFriendApiKeys;
@@ -132,7 +125,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 24.0),
                   ListTile(
                     onTap: () {
-                      context.pushNamed('speaker_id');
+                      // NAVIGATE ME
+                      // context.pushNamed('speaker_id');
                     },
                     title: const Text(
                       'Setup your speech profile  🎤',
@@ -200,8 +194,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 useFriendAPIKeys = v!;
               });
             },
-            fillColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) {
+            fillColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
                 return Colors.deepPurple;
               }
               return Colors.transparent;
@@ -230,36 +224,6 @@ class _SettingsPageState extends State<SettingsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Column(
               children: [
-                const SizedBox(height: 8.0),
-                _getText('Deepgram is used for converting speech to text.', underline: false, canBeDisabled: true),
-                const SizedBox(height: 8.0),
-                TextField(
-                  controller: deepgramApiKeyController,
-                  obscureText: deepgramApiIsVisible ? false : true,
-                  enabled: !useFriendAPIKeys,
-                  decoration: _getTextFieldDecoration('Deepgram API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () {
-                          // setModalState(() {
-                          setState(() {
-                            deepgramApiIsVisible = !deepgramApiIsVisible;
-                          });
-                          // });
-                        },
-                      ),
-                      canBeDisabled: true),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 8.0),
-                TextButton(
-                    onPressed: () {
-                      launchUrl(Uri.parse('https://developers.deepgram.com/docs/create-additional-api-keys'));
-                    },
-                    child: _getText('How to generate a Deepgram API key?', underline: true, canBeDisabled: true)),
                 const SizedBox(height: 16.0),
                 _getText('OpenAI is used for chat.', canBeDisabled: true),
                 const SizedBox(height: 8.0),
@@ -324,16 +288,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 Uri.parse('https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console'));
           },
           child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
-      const SizedBox(height: 16.0),
-      TextField(
-        controller: customWebsocketUrlController,
-        obscureText: false,
-        autocorrect: false,
-        enableSuggestions: false,
-        enabled: true,
-        decoration: _getTextFieldDecoration('Custom Websocket'),
-        style: const TextStyle(color: Colors.white),
-      )
     ];
   }
 
@@ -371,7 +325,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _saveSettings() {
-    if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
+    if ((openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -409,12 +363,7 @@ class _SettingsPageState extends State<SettingsPage> {
       prefs.recordingsLanguage = _selectedLanguage;
       MixpanelManager().recordingLanguageChanged(_selectedLanguage);
     }
-    if (deepgramApiKeyController.text != prefs.deepgramApiKey) {
-      prefs.deepgramApiKey = deepgramApiKeyController.text.trim();
-    }
-    if (customWebsocketUrlController.text != prefs.customWebsocketUrl) {
-      prefs.customWebsocketUrl = customWebsocketUrlController.text.trim();
-    }
+
     if (useFriendAPIKeys != prefs.useFriendApiKeys) {
       prefs.useFriendApiKeys = useFriendAPIKeys;
     }
