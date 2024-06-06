@@ -7,12 +7,21 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
+  // final VoidCallback onShowMemoriesPressed;
 
-  const AIMessage({super.key, required this.message});
+  // const AIMessage({
+  //   Key? key,
+  //   required this.message,
+  //   required this.onShowMemoriesPressed,
+  // }) : super(key: key);
+
+    const AIMessage({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    // return Column(
+    //   crossAxisAlignment: CrossAxisAlignment.start,
+      return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
         Column(
@@ -121,7 +130,12 @@ class AIMessage extends StatelessWidget {
               ),
             ),
           ],
-        ),
+        // ),
+        // if (message.memoryIds != null && message.memoryIds!.isNotEmpty)
+        //   ElevatedButton(
+        //     onPressed: onShowMemoriesPressed,
+        //     child: const Text('Show Memories'),
+          ),
       ],
     );
   }
