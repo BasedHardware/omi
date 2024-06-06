@@ -8,7 +8,6 @@ import 'package:friend_private/widgets/scanning_ui.dart';
 import 'widgets/transcript.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:intl/intl.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 
 class DevicePage extends StatefulWidget {
@@ -39,10 +38,8 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   Future<void> _checkMemorySchemaUpdated() async {
-
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isMemorySchemaUpdated =
-        prefs.getBool('isMemorySchemaUpdated') ?? false;
+    bool isMemorySchemaUpdated = prefs.getBool('isMemorySchemaUpdated') ?? false;
 
     if (!isMemorySchemaUpdated) {
       debugPrint("Updating Memory Schema in Pinecone");
@@ -56,7 +53,6 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   Future<void> updateCreatedAtToEpoch() async {
-    
     List<MemoryRecord> memoryRecords = await MemoryStorage.getAllMemories();
     DateFormat dateFormat = DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
 
@@ -110,8 +106,7 @@ class _DevicePageState extends State<DevicePage> {
         const ScanningAnimation(),
         const ScanningUI(
           string1: 'Looking for Friend wearable',
-          string2:
-              'Locating your Friend device. Keep it near your phone for pairing',
+          string2: 'Locating your Friend device. Keep it near your phone for pairing',
         ),
       ];
     }
@@ -149,9 +144,7 @@ class _DevicePageState extends State<DevicePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          widget.batteryLevel == -1
-              ? const SizedBox.shrink()
-              : const SizedBox(width: 16.0),
+          widget.batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
           widget.batteryLevel == -1
               ? const SizedBox.shrink()
               : Container(
