@@ -1,4 +1,5 @@
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Structured {

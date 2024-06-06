@@ -3,8 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
-import '/backend/schema/structs/index.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 
 // Future<String?> bleReceiveData(BTDeviceStruct btDevice) async {
 //   final device = BluetoothDevice.fromId(btDevice.id);

@@ -6,10 +6,8 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
@@ -144,7 +142,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Widget build(BuildContext context) {
     return Scaffold(
       body: GestureDetector(
-        onTap: (){
+        onTap: () {
           FocusScope.of(context).unfocus();
           chatTextFieldFocusNode.unfocus();
         },
@@ -162,14 +160,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 transcriptChildWidgetKey: transcriptChildWidgetKey,
                 batteryLevel: batteryLevel,
               ),
-              ChatPage(textFieldFocusNode: chatTextFieldFocusNode,),
+              ChatPage(
+                textFieldFocusNode: chatTextFieldFocusNode,
+              ),
             ],
           ),
         ),
       ),
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).primaryColor,
         title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
         elevation: 2.0,
         centerTitle: true,
@@ -185,8 +185,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               var language = SharedPreferencesUtil().recordingsLanguage;
               var deepgram = SharedPreferencesUtil().deepgramApiKey;
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-
-              await context.pushNamed('settings');
+              // NAVIGATE ME
+              // await context.pushNamed('settings');
               if (language != SharedPreferencesUtil().recordingsLanguage ||
                   deepgram != SharedPreferencesUtil().deepgramApiKey ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
@@ -203,13 +203,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           ),
           onPressed: () async {
             MixpanelManager().pluginsOpened();
-            await context.pushNamed('plugins');
+            // NAVIGATE ME
+            // await context.pushNamed('plugins');
           },
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
