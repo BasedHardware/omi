@@ -88,7 +88,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     if (widget.btDevice != null) {
       // Only used when onboarding flow
-      _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      _device = BTDeviceStruct.fromJson(widget.btDevice);
       SharedPreferencesUtil().deviceId = _device!.id;
       _initiateConnectionListener();
       _initiateBleBatteryListener();
@@ -183,12 +183,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             onPressed: () async {
               MixpanelManager().settingsOpened();
               var language = SharedPreferencesUtil().recordingsLanguage;
-              var deepgram = SharedPreferencesUtil().deepgramApiKey;
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
               // NAVIGATE ME
               // await context.pushNamed('settings');
               if (language != SharedPreferencesUtil().recordingsLanguage ||
-                  deepgram != SharedPreferencesUtil().deepgramApiKey ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
                 transcriptChildWidgetKey.currentState?.resetState();
               }
