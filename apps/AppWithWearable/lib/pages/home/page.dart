@@ -35,6 +35,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
+  FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories();
@@ -90,6 +91,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (widget.btDevice != null) {
       // Only used when onboarding flow
       _device = BTDeviceStruct.maybeFromMap(widget.btDevice);
+      SharedPreferencesUtil().deviceId = _device!.id;
       _initiateConnectionListener();
       _initiateBleBatteryListener();
     } else {
@@ -126,6 +128,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateBleBatteryListener();
     transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
+    SharedPreferencesUtil().deviceId = _device!.id;
   }
 
   _initiateBleBatteryListener() async {
@@ -140,22 +143,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            MemoriesPage(
-              memories: memories,
-              refreshMemories: _initiateMemories,
-            ),
-            DevicePage(
-              device: _device,
-              refreshMemories: _initiateMemories,
-              transcriptChildWidgetKey: transcriptChildWidgetKey,
-              batteryLevel: batteryLevel,
-            ),
-            const ChatPage(),
-          ],
+      body: GestureDetector(
+        onTap: (){
+          FocusScope.of(context).unfocus();
+          chatTextFieldFocusNode.unfocus();
+        },
+        child: Center(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              MemoriesPage(
+                memories: memories,
+                refreshMemories: _initiateMemories,
+              ),
+              DevicePage(
+                device: _device,
+                refreshMemories: _initiateMemories,
+                transcriptChildWidgetKey: transcriptChildWidgetKey,
+                batteryLevel: batteryLevel,
+              ),
+              ChatPage(textFieldFocusNode: chatTextFieldFocusNode,),
+            ],
+          ),
         ),
       ),
       appBar: AppBar(
@@ -178,7 +187,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
 
               await context.pushNamed('settings');
-
               if (language != SharedPreferencesUtil().recordingsLanguage ||
                   deepgram != SharedPreferencesUtil().deepgramApiKey ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {

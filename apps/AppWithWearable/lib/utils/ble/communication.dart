@@ -65,10 +65,10 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
 }
 
 Future<StreamSubscription?> getBleAudioBytesListener(
-  BTDeviceStruct btDevice, {
+  String deviceId, {
   required void Function(List<int>) onAudioBytesReceived,
 }) async {
-  final device = BluetoothDevice.fromId(btDevice.id);
+  final device = BluetoothDevice.fromId(deviceId);
   // await device.connect();
   final services = await device.discoverServices();
   final bytesService = services
