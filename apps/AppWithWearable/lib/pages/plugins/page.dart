@@ -111,13 +111,11 @@ class _PluginsPageState extends State<PluginsPage> {
                   obscureText: false,
                   decoration: const InputDecoration(
                     hintText: 'Search your plugin',
-                    // hintStyle: TextStyle(
-                    //   fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
-                    //   color: Theme.of(context).primaryColorText,
-                    //   fontSize: 14.0,
-                    //   fontWeight: FontWeight.w500,
-                    //   useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
-                    // ),
+                    hintStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w500,
+                    ),
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
                         color: Color(0x00000000),

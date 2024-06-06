@@ -48,72 +48,57 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
               color: const Color(0x00F1F4F8),
             ),
           ),
-          child: const Padding(
-            padding: EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
             child: Column(
               mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
+                const Text(
                   'Are you sure you want to delete this memory?',
                   textAlign: TextAlign.center,
-                  // style: Theme.of(context).headlineMedium, // STYLE ME
                 ),
                 Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(24.0, 12.0, 24.0, 0.0),
+                  padding: const EdgeInsetsDirectional.fromSTEB(24.0, 12.0, 24.0, 0.0),
                   child: Row(
                     mainAxisSize: MainAxisSize.max,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
-                        // RESTORE ME
-                        // child: FFButtonWidget(
-                        //   onPressed: () async {
-                        //     Navigator.pop(context);
-                        //   },
-                        //   text: 'Cancel',
-                        //   options: FFButtonOptions(
-                        //     height: 40.0,
-                        //     padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
-                        //     iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                        //     color: Theme.of(context).scaffoldBackgroundColor,
-                        //     textStyle: TextStyle(
-                        //       color: Theme.of(context).primaryColor,
-                        //       fontWeight: FontWeight.bold,
-                        //     ),
-                        //     elevation: 0.0,
-                        //     borderRadius: BorderRadius.circular(40.0),
-                        //   ),
-                        // ),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
+                        child: MaterialButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                          },
+                          height: 40.0,
+                          padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          textColor: Theme.of(context).primaryColor,
+                          elevation: 0.0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                          child: const Text('Cancel'),
+                        ),
                       ),
                       Padding(
-                        padding: EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
-                        // RESTORE ME
-                        // child: FFButtonWidget(
-                        //   onPressed: () async {
-                        //     deleteVector(widget.memory.id);
-                        //     await MemoryStorage.deleteMemory(widget.memory.id);
-                        //     Navigator.pop(context);
-                        //     widget.onDelete?.call();
-                        //     MixpanelManager().memoryDeleted(widget.memory);
-                        //   },
-                        //   text: 'Delete',
-                        //   options: FFButtonOptions(
-                        //     height: 40.0,
-                        //     padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
-                        //     iconPadding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                        //     color: const Color(0xFF780000),
-                        //     textStyle: const TextStyle(
-                        //       color: Colors.white,
-                        //       fontWeight: FontWeight.bold,
-                        //     ),
-                        //     // STYLE ME
-                        //     elevation: 0.0,
-                        //     borderRadius: BorderRadius.circular(40.0),
-                        //   ),
-                        // ),
+                        padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
+                        child: MaterialButton(
+                          onPressed: () async {
+                            deleteVector(widget.memory.id);
+                            await MemoryStorage.deleteMemory(widget.memory.id);
+                            Navigator.pop(context);
+                            widget.onDelete?.call();
+                            MixpanelManager().memoryDeleted(widget.memory);
+                          },
+                          child: const Text('Delete'),
+                          height: 40.0,
+                          padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
+                          color: const Color(0xFF780000),
+                          textColor: Colors.white,
+                          // STYLE ME
+                          elevation: 0.0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                        ),
                       ),
                     ],
                   ),

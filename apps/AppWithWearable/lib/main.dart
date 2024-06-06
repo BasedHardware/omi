@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'backend/preferences.dart';
@@ -27,16 +28,12 @@ void main() async {
 }
 
 _getRunApp() {
-  return runApp(
-      MyApp(entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null));
+  return runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  final Widget? entryPage; // TODO: RESTORE ME
+  const MyApp({super.key});
 
-  const MyApp({super.key, this.entryPage});
-
-  // This widget is the root of your application.
   @override
   State<MyApp> createState() => _MyAppState();
 
@@ -48,7 +45,7 @@ class _MyAppState extends State<MyApp> {
   // TODO: navigate using that, GetMaterialApp, setup theme
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [
@@ -61,10 +58,10 @@ class _MyAppState extends State<MyApp> {
       theme: ThemeData(
         brightness: Brightness.light,
         useMaterial3: false,
+        primaryColor: Colors.black87,
       ),
       themeMode: ThemeMode.system,
-      // RESTORE ME
-      // routerConfig: RouterConfig(routerDelegate: RouterDelegate.),
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
     );
   }
 }

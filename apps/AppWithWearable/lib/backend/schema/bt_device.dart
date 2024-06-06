@@ -14,9 +14,9 @@ class BTDeviceStruct {
   // Factory constructor to create a new Message instance from a map
   factory BTDeviceStruct.fromJson(Map<String, dynamic> json) {
     return BTDeviceStruct(
-      id: json['text'] as String,
-      name: json['type'] as String,
-      rssi: json['id'] as int,
+      id: json['id'] as String,
+      name: json['name'] as String,
+      rssi: json['rssi'] as int?,
     );
   }
 

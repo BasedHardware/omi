@@ -12,6 +12,8 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -184,8 +186,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               MixpanelManager().settingsOpened();
               var language = SharedPreferencesUtil().recordingsLanguage;
               var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-              // NAVIGATE ME
-              // await context.pushNamed('settings');
+              Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
               if (language != SharedPreferencesUtil().recordingsLanguage ||
                   useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
                 transcriptChildWidgetKey.currentState?.resetState();
@@ -201,7 +202,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           ),
           onPressed: () async {
             MixpanelManager().pluginsOpened();
-            // NAVIGATE ME
+            Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
             // await context.pushNamed('plugins');
           },
         ),

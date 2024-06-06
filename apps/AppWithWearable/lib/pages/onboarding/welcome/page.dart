@@ -2,23 +2,22 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tilt/flutter_tilt.dart';
 
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'package:permission_handler/permission_handler.dart';
 
-class WelcomeWidget extends StatefulWidget {
-  const WelcomeWidget({super.key});
+class WelcomePage extends StatefulWidget {
+  const WelcomePage({super.key});
 
   @override
-  State<WelcomeWidget> createState() => _WelcomeWidgetState();
+  State<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProviderStateMixin {
+class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
   late Animation<double> _bounceAnimation;
@@ -197,8 +196,8 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                   },
                                 );
                               } else {
-                                // NAVIGATE ME
-                                // context.pushReplacementNamed('findDevices');
+                                Navigator.of(context)
+                                    .pushReplacement(MaterialPageRoute(builder: (c) => const FindDevicesPage()));
                               }
                             },
                             child: ShaderMask(
@@ -207,7 +206,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                   center: Alignment.center,
                                   radius: 0.45,
                                   colors: [Colors.white, Colors.white.withOpacity(0.0)],
-                                  stops: [0.9, 1.0],
+                                  stops: const [0.9, 1.0],
                                 ).createShader(bounds);
                               },
                               child: Container(
