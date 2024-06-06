@@ -70,6 +70,14 @@ class _ChatPageState extends State<ChatPage> {
                   itemBuilder: (context, chatIndex) {
                     final message = _messages[chatIndex];
                     if (message.type == 'ai') return AIMessage(message: message);
+                    // if (message.type == 'ai') {
+                    //   return AIMessage(
+                    //     message: message,
+                    //     onShowMemoriesPressed: () {
+                    //       _showMemoryIds(message.memoryIds);
+                    //     },
+                    //   );
+                    // }
                     if (message.type == 'human') {
                       return HumanMessage(message: message);
                     }
@@ -134,9 +142,10 @@ class _ChatPageState extends State<ChatPage> {
                           _prepareStreaming(message);
                           dynamic ragInfo = await _retrieveRAGContext(message);
                           String ragContext = ragInfo[0];
+                          List<String> memoryIds = ragInfo[1].cast<String>();
                           debugPrint('RAG Context: $ragContext');
                           MixpanelManager().chatMessageSent(message);
-                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
+                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
                             prefs.chatMessages = _messages;
                           });
                           changeLoadingState();
@@ -156,7 +165,7 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-Future<List<dynamic>> _retrieveRAGContext(String message) async {
+  Future<List<dynamic>> _retrieveRAGContext(String message) async {
     String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
@@ -186,17 +195,24 @@ Future<List<dynamic>> _retrieveRAGContext(String message) async {
     _messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
   }
 
-  _callbackFunctionChatStreaming() {
+  _callbackFunctionChatStreaming(List<String> memoryIds) {
     return (String content) async {
       debugPrint('Content: $content');
       var messagesCopy = [..._messages];
       messagesCopy.last.text += content;
+      messagesCopy.last.memoryIds = memoryIds;
       debugPrint(messagesCopy.last.text);
       setState(() {
         _messages = messagesCopy;
       });
       _moveListToBottom();
     };
+  }
+
+  _showMemoryIds(List<String>? memoryIds) {
+    if (memoryIds != null && memoryIds.isNotEmpty) {
+      debugPrint('Memory IDs: $memoryIds');
+    }
   }
 
   _moveListToBottom({bool initial = false}) async {
