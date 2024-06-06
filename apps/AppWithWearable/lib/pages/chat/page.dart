@@ -132,7 +132,8 @@ class _ChatPageState extends State<ChatPage> {
                           if (message.isEmpty) return;
                           changeLoadingState();
                           _prepareStreaming(message);
-                          String ragContext = await _retrieveRAGContext(message);
+                          dynamic ragInfo = await _retrieveRAGContext(message);
+                          String ragContext = ragInfo[0];
                           debugPrint('RAG Context: $ragContext');
                           MixpanelManager().chatMessageSent(message);
                           await streamApiResponse(ragContext, _callbackFunctionChatStreaming(), _messages, () {
@@ -155,20 +156,20 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Future<String> _retrieveRAGContext(String message) async {
+Future<List<dynamic>> _retrieveRAGContext(String message) async {
     String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
-      return '';
+      return ['', []];
     }
     List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
     List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('queryPineconeVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
-      return '';
+      return ['', []];
     }
     List<MemoryRecord> memories = await MemoryStorage.getAllMemoriesByIds(memoriesId);
-    return MemoryRecord.memoriesToString(memories);
+    return [MemoryRecord.memoriesToString(memories), memoriesId];
   }
 
   _prepareStreaming(String text) {
