@@ -4,12 +4,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'backend/preferences.dart';
 import 'env/env.dart';
-import 'flutter_flow/flutter_flow_util.dart';
-import 'flutter_flow/internationalization.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +19,7 @@ void main() async {
   await MixpanelManager.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
+        // TODO: set new API Key to new account
         token: Env.instabugApiKey!,
         invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
     Instabug.setColorTheme(ColorTheme.dark);
@@ -28,69 +28,40 @@ void main() async {
 }
 
 _getRunApp() {
-  return runApp(
-      MyApp(entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null));
+  return runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.entryPage});
+  const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
-
-  final Widget? entryPage;
 }
 
 class _MyAppState extends State<MyApp> {
-  Locale? _locale;
-  ThemeMode _themeMode = ThemeMode.system;
-
-  late AppStateNotifier _appStateNotifier;
-  late GoRouter _router;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _appStateNotifier = AppStateNotifier.instance;
-    _router = createRouter(_appStateNotifier, widget.entryPage);
-
-    Future.delayed(
-        const Duration(milliseconds: 1000), () => setState(() => _appStateNotifier.stopShowingSplashImage()));
-  }
-
-  void setLocale(String language) {
-    setState(() => _locale = createLocale(language));
-  }
-
-  void setThemeMode(ThemeMode mode) => setState(() {
-        _themeMode = mode;
-      });
-
+  // TODO: setup GetX Paged router + routes in here
+  // TODO: navigate using that, GetMaterialApp, setup theme
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [
-        FFLocalizationsDelegate(),
+        // FFLocalizationsDelegate(),
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      locale: _locale,
-      supportedLocales: const [
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('en')],
       theme: ThemeData(
         brightness: Brightness.light,
         useMaterial3: false,
+        primaryColor: Colors.black87,
       ),
-      themeMode: _themeMode,
-      routerConfig: _router,
+      themeMode: ThemeMode.system,
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
     );
   }
 }

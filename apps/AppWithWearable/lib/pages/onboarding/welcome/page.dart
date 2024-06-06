@@ -2,25 +2,22 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tilt/flutter_tilt.dart';
 
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'package:permission_handler/permission_handler.dart';
 
-class WelcomeWidget extends StatefulWidget {
-  const WelcomeWidget({super.key});
+class WelcomePage extends StatefulWidget {
+  const WelcomePage({super.key});
 
   @override
-  State<WelcomeWidget> createState() => _WelcomeWidgetState();
+  State<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProviderStateMixin {
+class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
   late Animation<double> _bounceAnimation;
@@ -65,7 +62,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       key: scaffoldKey,
-      backgroundColor: FlutterFlowTheme.of(context).primary,
+      backgroundColor: Theme.of(context).primaryColor,
       body: Stack(
         children: [
           const BlurBotWidget(),
@@ -107,18 +104,18 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      const Text(
                         "Friend helps you remember everything",
                         textAlign: TextAlign.start,
-                        style: FlutterFlowTheme.of(context).bodyMedium.override(
-                              fontFamily: 'SF Pro Display',
-                              color: Colors.white,
-                              fontSize: 29.0,
-                              letterSpacing: 0.0,
-                              fontWeight: FontWeight.w900,
-                              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-                              lineHeight: 1.2,
-                            ),
+                        style: TextStyle(
+                          fontFamily: 'SF Pro Display',
+                          color: Colors.white,
+                          fontSize: 29.0,
+                          letterSpacing: 0.0,
+                          fontWeight: FontWeight.w900,
+                          // useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+                          height: 1.2,
+                        ),
                       ),
                       const SizedBox(height: 10.0),
                       const Text(
@@ -199,7 +196,8 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                   },
                                 );
                               } else {
-                                context.pushReplacementNamed('findDevices');
+                                Navigator.of(context)
+                                    .pushReplacement(MaterialPageRoute(builder: (c) => const FindDevicesPage()));
                               }
                             },
                             child: ShaderMask(
@@ -208,7 +206,7 @@ class _WelcomeWidgetState extends State<WelcomeWidget> with SingleTickerProvider
                                   center: Alignment.center,
                                   radius: 0.45,
                                   colors: [Colors.white, Colors.white.withOpacity(0.0)],
-                                  stops: [0.9, 1.0],
+                                  stops: const [0.9, 1.0],
                                 ).createShader(bounds);
                               },
                               child: Container(

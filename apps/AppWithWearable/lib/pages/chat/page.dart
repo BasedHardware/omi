@@ -4,9 +4,9 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
-import 'package:friend_private/flutter_flow/custom_functions.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
+import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:uuid/uuid.dart';
 
@@ -122,17 +122,17 @@ class _ChatPageState extends State<ChatPage> {
                       suffixIcon: IconButton(
                         icon: loading
                             ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
                             : const Icon(
-                          Icons.send_rounded,
-                          color: Color(0xFFF7F4F4),
-                          size: 30.0,
-                        ),
+                                Icons.send_rounded,
+                                color: Color(0xFFF7F4F4),
+                                size: 30.0,
+                              ),
                         onPressed: loading
                             ? null
                             : () async {

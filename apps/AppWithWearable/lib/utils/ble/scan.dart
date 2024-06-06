@@ -1,4 +1,4 @@
-import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/find.dart';
 
