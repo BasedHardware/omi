@@ -8,8 +8,6 @@ import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'backend/preferences.dart';
 import 'env/env.dart';
-import 'flutter_flow/flutter_flow_util.dart';
-import 'flutter_flow/internationalization.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,10 +60,6 @@ class _MyAppState extends State<MyApp> {
         const Duration(milliseconds: 1000), () => setState(() => _appStateNotifier.stopShowingSplashImage()));
   }
 
-  void setLocale(String language) {
-    setState(() => _locale = createLocale(language));
-  }
-
   void setThemeMode(ThemeMode mode) => setState(() {
         _themeMode = mode;
       });
@@ -76,7 +70,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [
-        FFLocalizationsDelegate(),
+        // FFLocalizationsDelegate(),
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

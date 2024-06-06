@@ -47,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).primaryColor,
         automaticallyImplyLeading: true,
         title: const Text('Settings'),
         centerTitle: false,

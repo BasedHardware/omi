@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
 import 'widgets/transcript.dart';
 
 class DevicePage extends StatefulWidget {
@@ -27,7 +25,6 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -64,18 +61,16 @@ class _DevicePageState extends State<DevicePage> {
         sizeMultiplier: 0.4,
       )),
       const SizedBox(height: 16),
-      Center(
+      const Center(
           child: Text(
         'Connected Device',
-        style: FlutterFlowTheme.of(context).bodyMedium.override(
-              fontFamily: 'SF Pro Display',
-              color: Colors.white,
-              fontSize: 29.0,
-              letterSpacing: 0.0,
-              fontWeight: FontWeight.w700,
-              useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-              lineHeight: 1.2,
-            ),
+        style: TextStyle(
+            fontFamily: 'SF Pro Display',
+            color: Colors.white,
+            fontSize: 29.0,
+            letterSpacing: 0.0,
+            fontWeight: FontWeight.w700,
+            height: 1.2),
         textAlign: TextAlign.center,
       )),
       const SizedBox(height: 8),

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
@@ -7,8 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_util.dart';
 import 'package:web_socket_channel/io.dart';
 
 // UUIDs for the specific service and characteristics

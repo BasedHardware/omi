@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 
 class FindDevicesPage extends StatefulWidget {
   const FindDevicesPage({super.key});
@@ -52,15 +48,15 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     SharedPreferencesUtil().onboardingCompleted = true;
     MixpanelManager().onboardingCompleted();
 
-    context.pushNamed(
-      'home',
-      queryParameters: {
-        'btdevice': serializeParam(
-          _friendDevice!.toMap(),
-          ParamType.JSON,
-        ),
-      },
-    );
+    // context.pushNamed( // NAVIGATE ME
+    //   'home',
+    //   queryParameters: {
+    //     'btdevice': serializeParam(
+    //       _friendDevice!.toMap(),
+    //       ParamType.JSON,
+    //     ),
+    //   },
+    // );
   }
 
   @override
@@ -73,19 +69,19 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 16.0),
+                const Padding(
+                  padding: EdgeInsets.only(top: 16.0),
                   child: Text(
                     'Pairing',
-                    style: FlutterFlowTheme.of(context).bodyMedium.override(
-                          fontFamily: 'SF Pro Display',
-                          color: Colors.white,
-                          fontSize: 30.0,
-                          letterSpacing: 0.0,
-                          fontWeight: FontWeight.w700,
-                          useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-                          lineHeight: 1.2,
-                        ),
+                    style: TextStyle(
+                      fontFamily: 'SF Pro Display',
+                      color: Colors.white,
+                      fontSize: 30.0,
+                      letterSpacing: 0.0,
+                      fontWeight: FontWeight.w700,
+                      // useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+                      height: 1.2,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -151,25 +147,26 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
                               opacity: _isConnected ? 1.0 : 0.0,
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),
-                                child: FFButtonWidget(
-                                  onPressed: _navigateToConnecting,
-                                  text: 'Continue',
-                                  options: FFButtonOptions(
-                                    height: 50,
-                                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                                    color: FlutterFlowTheme.of(context).secondary,
-                                    textStyle: FlutterFlowTheme.of(context).titleSmall.copyWith(
-                                          color: FlutterFlowTheme.of(context).primary,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                    borderSide: BorderSide(
-                                      color: FlutterFlowTheme.of(context).secondary,
-                                      width: 1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                ),
+                                // RESTORE ME
+                                // child: FFButtonWidget(
+                                //   onPressed: _navigateToConnecting,
+                                //   text: 'Continue',
+                                //   options: FFButtonOptions(
+                                //     height: 50,
+                                //     padding: const EdgeInsets.symmetric(horizontal: 30),
+                                //     color: Theme.of(context).secondary,
+                                //     textStyle: Theme.of(context).titleSmall.copyWith(
+                                //           color: Theme.of(context).primaryColor,
+                                //           fontSize: 24,
+                                //           fontWeight: FontWeight.w600,
+                                //         ),
+                                //     borderSide: BorderSide(
+                                //       color: FlutterFlowTheme.of(context).secondary,
+                                //       width: 1,
+                                //     ),
+                                //     borderRadius: BorderRadius.circular(30),
+                                //   ),
+                                // ),
                               ),
                             ),
                           ],
