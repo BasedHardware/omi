@@ -24,6 +24,10 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
+  set deviceId(String value) => saveString('deviceId', value);
+
+  String get deviceId => getString('deviceId') ?? '';
+
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);

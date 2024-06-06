@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
@@ -14,13 +13,11 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:friend_private/utils/vad.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
 import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
 import 'info_button.dart';
 import 'ota_update_button.dart';
 
@@ -41,7 +38,7 @@ class TranscriptWidget extends StatefulWidget {
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
-  List<Map<int, String>> whispersDiarized = [{}];
+  List<TranscriptSegment> segments = [];
 
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
@@ -68,44 +65,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     super.dispose();
   }
 
-  updateTranscript(Map<int, Map<String, dynamic>> current) {
-    var previous = Map<int, String>.from(whispersDiarized.last);
-    List<int> currentOrdered = current.keys.toList()
-      ..sort((a, b) => current[a]!['starts'].compareTo(current[b]!['starts']));
-
-    if (previous.length == 1 && current.length == 1 && previous.keys.toList()[0] == current.keys.toList()[0]) {
-      // Last diarized, it's just 1, and here's just one, just add
-      int speakerIdx = current.keys.toList()[0];
-      previous[speakerIdx] = '${previous[speakerIdx]!} ' + current[current.keys.toList()[0]]!['transcript'];
-      whispersDiarized[whispersDiarized.length - 1] = previous;
-      // Same speaker, just add
-    } else if (previous.length == 1 && current.length == 2 && previous.keys.toList()[0] == currentOrdered[0]) {
-      // add that transcript fot the speakers, but append the remaining ones as new speakers
-      // Last diarized it's just 1, and here's 2 but the previous speaker, is one that starts first here
-      previous[currentOrdered[0]] = (previous[currentOrdered[0]] ?? '') + current[currentOrdered[0]]!['transcript'];
-      whispersDiarized[whispersDiarized.length - 1] = previous;
-      var newTranscription = <int, String>{};
-      for (var speaker in currentOrdered) {
-        if (speaker != currentOrdered[0]) newTranscription[speaker] = current[speaker]!['transcript'];
-      }
-      whispersDiarized.add(newTranscription);
-    } else if (previous.isEmpty) {
-      // Different speakers, just add
-      current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
-      });
-    } else {
-      // Different speakers, just add
-      whispersDiarized.add({});
-      current.forEach((speaker, data) {
-        whispersDiarized[whispersDiarized.length - 1][speaker] = data['transcript'];
-      });
-    }
-
-    // iterate speakers by startTime first
-    setState(() {});
-  }
-
   Future<void> initiateBytesProcessing() async {
     if (btDevice == null) return;
     WavBytesUtil wavBytesUtil = WavBytesUtil();
@@ -113,7 +72,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // VadUtil vad = VadUtil();
     // await vad.init();
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!, onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
       // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
@@ -144,39 +103,27 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     audioStorage = wavBytesUtil;
   }
 
-  _manualTranscriptUpdate(int idx, String transcript, double starts, double ends) {
-    updateTranscript({
-      idx: {'transcript': transcript, 'starts': starts, 'ends': ends}
-    });
-  }
-
   void processCustomTranscript(List<TranscriptSegment> data) {
     if (data.isEmpty) return;
-
-    int prevSpeakerId = -2;
-    String currTranscript = '';
-    int sameSpeakerFromIdx = 0;
-
-    for (int i = 0; i < data.length; i++) {
-      var segment = data[i];
-      debugPrint(segment.toString());
-      int currentSpeakerId = segment.isUser ? -1 : int.parse(segment.speaker.split('_')[1]);
-      if (prevSpeakerId == currentSpeakerId) {
-        currTranscript += ' ${segment.text}';
-      } else if (prevSpeakerId != -2) {
-        _manualTranscriptUpdate(prevSpeakerId, currTranscript, data[sameSpeakerFromIdx].start, data[i - 1].end);
-        currTranscript = segment.text;
-        sameSpeakerFromIdx = i;
+    var joinedSimilarSegments = <TranscriptSegment>[];
+    for (var value in data) {
+      if (joinedSimilarSegments.isNotEmpty &&
+          (joinedSimilarSegments.last.speaker == value.speaker ||
+              (joinedSimilarSegments.last.isUser && value.isUser))) {
+        joinedSimilarSegments.last.text += ' ${value.text}';
       } else {
-        currTranscript = segment.text;
-        sameSpeakerFromIdx = i;
+        joinedSimilarSegments.add(value);
       }
-      prevSpeakerId = currentSpeakerId;
     }
 
-    if (currTranscript.isNotEmpty) {
-      _manualTranscriptUpdate(prevSpeakerId, currTranscript, data[sameSpeakerFromIdx].start, data[data.length - 1].end);
+    if (segments.isNotEmpty &&
+        (segments.last.speaker == joinedSimilarSegments[0].speaker ||
+            (segments.last.isUser && joinedSimilarSegments[0].isUser))) {
+      segments.last.text += ' ${joinedSimilarSegments[0].text}';
+      joinedSimilarSegments.removeAt(0);
     }
+    segments.addAll(joinedSimilarSegments);
+    setState(() {});
     _initiateMemoryCreationTimer();
   }
 
@@ -189,34 +136,19 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       if (btDevice != null) this.btDevice = btDevice;
     });
     if (restartBytesProcessing) initiateBytesProcessing();
-    if (restartBytesProcessing &&
-        whispersDiarized.isNotEmpty &&
-        (whispersDiarized.length > 1 || whispersDiarized[0].isNotEmpty)) _initiateMemoryCreationTimer();
+    if (restartBytesProcessing && segments.isNotEmpty && (segments.length > 1 || segments[0].text.isNotEmpty)) {
+      _initiateMemoryCreationTimer();
+    }
   }
 
   String _buildDiarizedTranscriptMessage() {
-    int totalSpeakers = whispersDiarized
-        .map((e) => e.keys.isEmpty ? 0 : ((e.keys).max + 1))
-        .reduce((value, element) => value > element ? value : element);
-
-    debugPrint('Speakers count: $totalSpeakers');
-
     String transcript = '';
-    for (int partIdx = 0; partIdx < whispersDiarized.length; partIdx++) {
-      var part = whispersDiarized[partIdx];
-      if (part.isEmpty) continue;
-      int totalSpeakers = part.keys.map((e) => e).reduce(max) + 1;
-      String transcriptItem = '';
-      for (int speaker = -1; speaker < totalSpeakers; speaker++) {
-        if (part.containsKey(speaker)) {
-          if (speaker == -1) {
-            transcriptItem += 'You said: ${part[speaker]!} ';
-          } else {
-            transcriptItem += 'Speaker $speaker: ${part[speaker]!} ';
-          }
-        }
+    for (var segment in segments) {
+      if (segment.isUser) {
+        transcript += 'You said: ${segment.text} ';
+      } else {
+        transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
       }
-      transcript += '$transcriptItem\n\n';
     }
     return transcript.trim();
   }
@@ -253,7 +185,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       debugPrint('Transcript: \n$transcript');
       File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
-      whispersDiarized = [{}];
+      segments = [];
       await processTranscriptContent(context, transcript, fileName);
       await widget.refreshMemories();
       addEventToContext('Memory Created');
@@ -277,7 +209,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       );
     }
 
-    if (whispersDiarized[0].keys.isEmpty) {
+    if (segments.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 48.0),
         child: Column(
@@ -285,11 +217,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           children: [
             OtaUpdateButton(btDevice: btDevice),
             const InfoButton(),
-            // const Text(
-            //   'Transcriptions will start appearing\nafter 30 seconds',
-            //   style: TextStyle(color: Colors.white, fontSize: 14),
-            //   textAlign: TextAlign.center,
-            // ),
             btDevice == null ? const SizedBox.shrink() : Lottie.asset('assets/lottie_animations/wave.json', width: 80),
           ],
         ),
@@ -303,39 +230,35 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: whispersDiarized.length + 1,
+      itemCount: segments.length + 1,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
-        if (idx == whispersDiarized.length) {
+        if (idx == segments.length) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0),
             child: Lottie.asset('assets/lottie_animations/wave.json',
                 width: 80, height: 60, alignment: Alignment.center, fit: BoxFit.contain),
           );
         }
-        final data = whispersDiarized[idx];
-        var keys = data.keys.map((e) => e);
-        int totalSpeakers = keys.isNotEmpty ? (keys.reduce(max) + 1) : 0;
+        final data = segments[idx];
         String transcriptItem = '';
-        for (int speaker = -1; speaker < totalSpeakers; speaker++) {
-          if (data.containsKey(speaker)) {
-            if (speaker == -1) {
-              transcriptItem += 'You said: ${data[speaker]!} ';
-            } else {
-              transcriptItem += 'Speaker $speaker: ${data[speaker]!} ';
-            }
-          }
+        if (data.isUser) {
+          transcriptItem = 'You said: ${data.text}';
+        } else {
+          transcriptItem = 'Speaker ${data.speakerId}: ${data.text}';
         }
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-          child: Text(
-            transcriptItem,
-            style: FlutterFlowTheme.of(context).bodyMedium.override(
-                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                  letterSpacing: 0.0,
-                  useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                ),
+          child: SelectionArea(
+            child: Text(
+              transcriptItem,
+              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    letterSpacing: 0.0,
+                    useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                  ),
+            ),
           ),
         );
       },

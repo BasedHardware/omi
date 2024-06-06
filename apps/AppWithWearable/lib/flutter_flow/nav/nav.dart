@@ -8,6 +8,7 @@ import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:provider/provider.dart';
 
 import '/backend/schema/structs/index.dart';
@@ -120,9 +121,9 @@ GoRouter createRouter(AppStateNotifier appStateNotifier, [Widget? entryPage]) =>
           builder: (context, params) => PluginsPage(),
         ),
         FFRoute(
-          name: 'chatPage',
-          path: '/chatPage',
-          builder: (context, params) => const ChatPage(),
+          name: 'speaker_id',
+          path: '/speaker_id',
+          builder: (context, params) => SpeakerIdPage(),
         ),
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );

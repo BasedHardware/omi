@@ -51,181 +51,159 @@ class _PluginsPageState extends State<PluginsPage> {
   List<Plugin> _filteredPlugins() {
     return searchQuery.isEmpty
         ? plugins
-        : plugins
-            .where((plugin) =>
-                plugin.name.toLowerCase().contains(searchQuery.toLowerCase()))
-            .toList();
+        : plugins.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredPlugins = _filteredPlugins();
-    final unFocusNode = FocusNode();
-    return GestureDetector(
-      onTap: () => unFocusNode.canRequestFocus
-          ? FocusScope.of(context).requestFocus(unFocusNode)
-          : FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryColor,
-          automaticallyImplyLeading: true,
-          title: const Text('Plugins'),
-          centerTitle: false,
-          elevation: 2.0,
-          actions: [
-            TextButton(
-                onPressed: () {
-                  launchUrl(Uri.parse(
-                      'https://github.com/BasedHardware/Friend/blob/main/plugins-instruction.md'));
-                },
-                child: const Row(
-                  children: [
-                    Text(
-                      'Create Yours',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    SizedBox(
-                      width: 8,
-                    ),
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: FlutterFlowTheme.of(context).primaryColor,
+        automaticallyImplyLeading: true,
+        title: const Text('Plugins'),
+        centerTitle: false,
+        elevation: 2.0,
+        actions: [
+          TextButton(
+              onPressed: () {
+                launchUrl(Uri.parse('https://docs.basedhardware.com/developer/Plugins'));
+              },
+              child: const Row(
+                children: [
+                  Text(
+                    'Create Yours',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  SizedBox(
+                    width: 8,
+                  ),
+                ],
+              ))
+        ],
+      ),
+      body: Stack(
+        children: [
+          const BlurBotWidget(),
+          Column(
+            children: [
+              const SizedBox(
+                height: 32,
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0x1AF7F4F4),
+                  boxShadow: const [
+                    BoxShadow(
+                      blurRadius: 3.0,
+                      color: Color(0x33000000),
+                      offset: Offset(0.0, 1.0),
+                    )
                   ],
-                ))
-          ],
-        ),
-        body: Stack(
-          children: [
-            const BlurBotWidget(),
-            Column(
-              children: [
-                const SizedBox(
-                  height: 32,
+                  borderRadius: BorderRadius.circular(12.0),
                 ),
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AF7F4F4),
-                    boxShadow: const [
-                      BoxShadow(
-                        blurRadius: 3.0,
-                        color: Color(0x33000000),
-                        offset: Offset(0.0, 1.0),
-                      )
-                    ],
-                    borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: TextField(
-                    onChanged: (value) {
-                      setState(() {
-                        searchQuery = value;
-                      });
-                    },
-                    obscureText: false,
-                    decoration: InputDecoration(
-                      hintText: 'Search your plugin',
-                      hintStyle: FlutterFlowTheme.of(context)
-                          .bodySmall
-                          .override(
-                            fontFamily:
-                                FlutterFlowTheme.of(context).bodySmallFamily,
-                            color: FlutterFlowTheme.of(context).primaryText,
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.w500,
-                            useGoogleFonts: GoogleFonts.asMap().containsKey(
-                                FlutterFlowTheme.of(context).bodySmallFamily),
-                          ),
-                      enabledBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Color(0x00000000),
-                          width: 1.0,
+                child: TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      searchQuery = value;
+                    });
+                  },
+                  obscureText: false,
+                  decoration: InputDecoration(
+                    hintText: 'Search your plugin',
+                    hintStyle: FlutterFlowTheme.of(context).bodySmall.override(
+                          fontFamily: FlutterFlowTheme.of(context).bodySmallFamily,
+                          color: FlutterFlowTheme.of(context).primaryText,
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.w500,
+                          useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodySmallFamily),
                         ),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(4.0),
-                          topRight: Radius.circular(4.0),
-                        ),
+                    enabledBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color(0x00000000),
+                        width: 1.0,
                       ),
-                      focusedBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Color(0x00000000),
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(4.0),
-                          topRight: Radius.circular(4.0),
-                        ),
-                      ),
-                      errorBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Color(0x00000000),
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(4.0),
-                          topRight: Radius.circular(4.0),
-                        ),
-                      ),
-                      focusedErrorBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Color(0x00000000),
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(4.0),
-                          topRight: Radius.circular(4.0),
-                        ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(4.0),
+                        topRight: Radius.circular(4.0),
                       ),
                     ),
-                    style: FlutterFlowTheme.of(context).bodyMedium.override(
-                          fontFamily:
-                              FlutterFlowTheme.of(context).bodyMediumFamily,
-                          color: FlutterFlowTheme.of(context).primaryText,
-                          fontWeight: FontWeight.w500,
-                          useGoogleFonts: GoogleFonts.asMap().containsKey(
-                              FlutterFlowTheme.of(context).bodyMediumFamily),
-                        ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color(0x00000000),
+                        width: 1.0,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(4.0),
+                        topRight: Radius.circular(4.0),
+                      ),
+                    ),
+                    errorBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color(0x00000000),
+                        width: 1.0,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(4.0),
+                        topRight: Radius.circular(4.0),
+                      ),
+                    ),
+                    focusedErrorBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color(0x00000000),
+                        width: 1.0,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(4.0),
+                        topRight: Radius.circular(4.0),
+                      ),
+                    ),
                   ),
+                  style: FlutterFlowTheme.of(context).bodyMedium.override(
+                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                        color: FlutterFlowTheme.of(context).primaryText,
+                        fontWeight: FontWeight.w500,
+                        useGoogleFonts: GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
+                      ),
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: filteredPlugins.length,
-                    itemBuilder: (context, index) {
-                      final plugin = filteredPlugins[index];
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(top: 16, left: 10, right: 10),
-                        child: ListTile(
-                          title: Text(
-                            plugin.name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                fontSize: 16),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Text(
-                              plugin.description,
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 14),
-                            ),
-                          ),
-                          trailing: Switch(
-                            value: plugin.isEnabled,
-                            activeColor: Colors.deepPurple,
-                            onChanged: (value) {
-                              _togglePlugin(plugin.id.toString(), value);
-                            },
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filteredPlugins.length,
+                  itemBuilder: (context, index) {
+                    final plugin = filteredPlugins[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
+                      child: ListTile(
+                        title: Text(
+                          plugin.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            plugin.description,
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        trailing: Switch(
+                          value: plugin.isEnabled,
+                          activeColor: Colors.deepPurple,
+                          onChanged: (value) {
+                            _togglePlugin(plugin.id.toString(), value);
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

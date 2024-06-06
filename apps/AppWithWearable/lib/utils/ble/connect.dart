@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
 
-Future<void> bleConnectDevice(BTDeviceStruct btDevice) async {
-  final device = BluetoothDevice.fromId(btDevice.id);
+Future<void> bleConnectDevice(String deviceId) async {
+  final device = BluetoothDevice.fromId(deviceId);
   try {
     // Step 1: Connect with autoConnect
     // await device.connect(autoConnect: false);
