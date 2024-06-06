@@ -181,11 +181,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       debugPrint('Transcript: \n$transcript');
       File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
-      segments = [];
-      await processTranscriptContent(context, transcript, fileName);
+      await processTranscriptContent(context, transcript, fileName, file.path);
       await widget.refreshMemories();
       addEventToContext('Memory Created');
       setState(() {
+        segments = [];
         memoryCreating = false;
       });
       audioStorage?.clearAudioBytes();
