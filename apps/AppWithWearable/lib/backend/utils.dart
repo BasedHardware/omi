@@ -73,3 +73,18 @@ final Map<String, String> availableLanguagesByCode = {
   'uk': 'Ukrainian',
   'vi': 'Vietnamese',
 };
+
+/// Clean prompt by removing multiple spaces and trimming.
+String cleanPrompt(String prompt) {
+  return prompt
+      .replaceAll(RegExp(r'\s{2,}'), '') // remove sequences of multiple spaces
+      .trim();
+}
+
+/// Clean LLM response by removing mentiones of `json`, triple backslashes and trimming.
+String cleanResponse(String prompt) {
+  return prompt
+      .replaceAll('```', '')
+      .replaceAll('json', '')
+      .trim();
+}
