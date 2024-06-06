@@ -84,14 +84,14 @@ class AIMessage extends StatelessWidget {
                         'Response copied to clipboard.',
                         style: FlutterFlowTheme.of(context).bodyMedium.override(
                               fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                              color: const Color(0x00000000),
+                              color: Color.fromARGB(255, 255, 255, 255),
                               fontSize: 12.0,
                               useGoogleFonts:
                                   GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
                             ),
                       ),
                       duration: const Duration(milliseconds: 2000),
-                      backgroundColor: FlutterFlowTheme.of(context).secondary,
+                      backgroundColor: const Color.fromARGB(255, 70, 70, 70),
                     ),
                   );
                 },
