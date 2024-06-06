@@ -12,6 +12,7 @@ import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import '../../utils/string_utils.dart';
+import 'package:intl/intl.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -307,7 +308,7 @@ Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> v
         'id': id,
         'values': vectors[index],
         'metadata': {
-          'created_at': DateTime.now(),
+          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
           'memory_id': id,
           'uid': SharedPreferencesUtil().uid,
         }
@@ -327,7 +328,7 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
         'id': memoryId,
         'values': vectorList,
         'metadata': {
-          'created_at': DateTime.now().toIso8601String(),
+          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
           'memory_id': memoryId,
           'uid': SharedPreferencesUtil().uid,
         }
