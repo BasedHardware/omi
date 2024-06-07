@@ -105,15 +105,15 @@ class _ChatPageState extends State<ChatPage> {
               child: SizedBox(
                 width: 300.0,
                 child: TextField(
-                  onTap: () {
-                    widget.textFieldFocusNode.requestFocus();
-                  },
-                  enabled: true,
+                  // onTap: () {
+                  //   widget.textFieldFocusNode.requestFocus();
+                  // },
+                  // enabled: true,
                   controller: textController,
                   textCapitalization: TextCapitalization.sentences,
                   obscureText: false,
-                  focusNode: widget.textFieldFocusNode,
-                  canRequestFocus: true,
+                  // focusNode: widget.textFieldFocusNode,
+                  // canRequestFocus: true,
                   decoration: InputDecoration(
                       hintText: 'Chat with memories...',
                       hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
