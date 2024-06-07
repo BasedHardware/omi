@@ -8,8 +8,15 @@ import 'widgets/memory_list_item.dart';
 class MemoriesPage extends StatefulWidget {
   final List<MemoryRecord> memories;
   final Function refreshMemories;
+  final bool displayDiscardMemories;
+  final VoidCallback toggleDiscardMemories;
 
-  const MemoriesPage({super.key, required this.memories, required this.refreshMemories});
+  const MemoriesPage(
+      {super.key,
+      required this.memories,
+      required this.refreshMemories,
+      required this.displayDiscardMemories,
+      required this.toggleDiscardMemories});
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
@@ -23,8 +30,28 @@ class _MemoriesPageState extends State<MemoriesPage> {
         const BlurBotWidget(),
         ListView(
           children: [
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                    onPressed: () {
+                      widget.toggleDiscardMemories();
+                    },
+                    icon: Icon(
+                      widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                      color: Colors.white,
+                    )),
+              ],
+            ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: (widget.memories.isEmpty)
                   ? const Center(
                       child: Padding(

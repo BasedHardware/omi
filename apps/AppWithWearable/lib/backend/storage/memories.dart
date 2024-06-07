@@ -120,11 +120,12 @@ class MemoryStorage {
     await prefs.setStringList(_storageKey, allMemories);
   }
 
-  static Future<List<MemoryRecord>> getAllMemories() async {
+  static Future<List<MemoryRecord>> getAllMemories({includeDiscarded = false}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     List<MemoryRecord> memories =
         allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    if (includeDiscarded) return memories.where((memory) => memory.transcript.split(' ').length > 10).toList();
     return memories.where((memory) => !memory.discarded).toList();
   }
 
