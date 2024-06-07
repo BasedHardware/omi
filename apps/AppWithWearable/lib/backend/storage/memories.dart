@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:friend_private/flutter_flow/custom_functions.dart';
+import 'package:friend_private/backend/utils.dart';
 
 class Structured {
   String title;
