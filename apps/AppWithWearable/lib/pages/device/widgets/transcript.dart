@@ -15,6 +15,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:lottie/lottie.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -83,12 +84,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         if (int16Value < 3000) bucket.add(int16Value);
         // TODO: first 2 seconds are highest points bytes sent, weird, handle that so graph doesn't look shitty
       }
-      if (bucket.length > 40000) {
-        setState(() {
-          bucket = bucket.sublist(bucket.length - 40000);
-          // debugPrint(bucket.sublist(bucket.length-160).toString());
-        });
-      }
+      // if (bucket.length > 40000) {
+      //   setState(() {
+      //     bucket = bucket.sublist(bucket.length - 40000);
+      //   });
+      // }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
@@ -220,14 +220,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 16),
-                SizedBox(
-                  height: 60,
-                  width: 160,
-                  child: CustomPaint(
-                    painter: DashedLinePainter(bucket, maxHeight: 1000),
-                    child: Container(),
-                  ),
-                ),
+                //
+                Lottie.asset('assets/lottie_animations/wave.json', height: 80),
                 const SizedBox(height: 32),
                 const Align(
                   alignment: Alignment.center,
@@ -235,8 +229,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                     padding: EdgeInsets.symmetric(horizontal: 32.0),
                     child: Text(
                       textAlign: TextAlign.center,
-                      'Your transcripts will start appearing here after 30 seconds.',
-                      style: TextStyle(color: Colors.white),
+                      'Your transcripts will start appearing\nhere after 30 seconds.',
+                      style: TextStyle(color: Colors.white, height: 1.5),
                     ),
                   ),
                 )
@@ -261,14 +255,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             padding: const EdgeInsets.only(top: 8.0, bottom: 32),
             child: Align(
               alignment: Alignment.center,
-              child: SizedBox(
-                height: 60,
-                width: 160,
-                child: CustomPaint(
-                  painter: DashedLinePainter(bucket, maxHeight: 1000),
-                  child: Container(),
-                ),
-              ),
+              child: Lottie.asset('assets/lottie_animations/wave.json', height: 80),
             ),
           );
         }
