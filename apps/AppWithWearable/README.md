@@ -34,8 +34,6 @@ For your convenience, we have provided an `initialsetup.bash` script that automa
 
 If you prefer to set up the project manually, follow these steps:
 
-!!!TODO refine this after steps in initialsetup.bash are fixed
-
 1. **Upgrade Flutter**:
    Before proceeding, make sure your Flutter SDK is up to date:
     ```
@@ -73,7 +71,9 @@ If you prefer to set up the project manually, follow these steps:
     ```
 
 7. **Run the App**:
-    - Select your target device in Xcode or Android Studio.
-    - Run the app.
+    And select the target device when prompted 
+    ```
+    flutter run
+    ```
 
 This guide should help you get started with running the Friend App on your local machine. Make sure each step is completed to avoid any issues.
