@@ -20,7 +20,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
-  final focusActionItemsField = FocusNode();
 
   late MemoryRecord memory;
 
@@ -29,7 +28,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   TextEditingController actionItemsController = TextEditingController();
   bool editingTitle = false;
   bool editingOverview = false;
-  bool editingActionItems = false;
 
   @override
   void initState() {
@@ -48,174 +46,174 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     actionItemsController.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
-    focusActionItemsField.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: scaffoldKey,
-      backgroundColor: Theme.of(context).primaryColor,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        key: scaffoldKey,
         backgroundColor: Theme.of(context).primaryColor,
-        title: Row(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            IconButton(
-              onPressed: () async {
-                Navigator.pop(context);
-              },
-              icon: const Icon(
-                Icons.arrow_back_rounded,
-                size: 24.0,
-              ),
-            ),
-            const Text('Memory Detail'),
-            Row(
-              children: [
-                geyShareMemoryOperationWidget(memory),
-                const SizedBox(width: 16),
-                getDeleteMemoryOperationWidget(memory, null, setState,
-                    iconSize: 24, onDelete: () => Navigator.pop(context, true)),
-                const SizedBox(width: 8),
-              ],
-            )
-          ],
-        ),
-      ),
-      body: Stack(
-        children: [
-          const BlurBotWidget(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: ListView(
-              children: [
-                const SizedBox(height: 24),
-                Text(
-                  '~ ${dateTimeFormat('MMM d, h:mm a', memory.createdAt)}',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Theme.of(context).primaryColor,
+          title: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                },
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  size: 24.0,
                 ),
-                const SizedBox(height: 12),
-                _getFieldHeader('title', focusTitleField),
-                _getEditTextField(titleController, editingTitle, focusTitleField),
-                _getEditTextFieldButtons(editingTitle, () {
-                  setState(() {
-                    editingTitle = false;
-                    titleController.text = memory.structured.title;
-                  });
-                }, () async {
-                  await MemoryStorage.updateMemory(memory.id, titleController.text, memory.structured.overview,
-                      memory.structured.actionItems, memory.structured.pluginsResponse);
-                  memory.structured.title = titleController.text;
-                  setState(() {
-                    editingTitle = false;
-                  });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'title');
-                }),
-                const SizedBox(height: 32),
-                _getFieldHeader('overview', focusOverviewField),
-                _getEditTextField(overviewController, editingOverview, focusOverviewField),
-                _getEditTextFieldButtons(editingOverview, () {
-                  setState(() {
-                    editingOverview = false;
-                    overviewController.text = memory.structured.overview;
-                  });
-                }, () async {
-                  await MemoryStorage.updateMemory(memory.id, memory.structured.title, overviewController.text,
-                      memory.structured.actionItems, memory.structured.pluginsResponse);
-                  memory.structured.overview = overviewController.text;
-                  setState(() {
-                    editingOverview = false;
-                  });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'overview');
-                }),
-                const SizedBox(height: 32),
-                _getFieldHeader('actionItems', focusActionItemsField),
-                _getEditTextField(actionItemsController, editingActionItems, focusActionItemsField),
-                _getEditTextFieldButtons(editingActionItems, () {
-                  setState(() {
-                    editingActionItems = false;
-                    actionItemsController.text = memory.structured.actionItems.join('\n');
-                  });
-                }, () async {
-                  List<String> updatedActionItems = actionItemsController.text.split('\n');
-                  await MemoryStorage.updateMemory(memory.id, memory.structured.title, memory.structured.overview,
-                      updatedActionItems, memory.structured.pluginsResponse);
-                  memory.structured.actionItems = updatedActionItems;
-                  setState(() {
-                    editingActionItems = false;
-                  });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'actionItems');
-                }),
-                const SizedBox(height: 32),
-                if (memory.structured.pluginsResponse.isNotEmpty) ...[
-                  const SizedBox(height: 32),
+              ),
+              const Text('Memory Detail'),
+              Row(
+                children: [
+                  geyShareMemoryOperationWidget(memory),
+                  const SizedBox(width: 16),
+                  getDeleteMemoryOperationWidget(memory, null, setState,
+                      iconSize: 24, onDelete: () => Navigator.pop(context, true)),
+                  const SizedBox(width: 8),
+                ],
+              )
+            ],
+          ),
+        ),
+        body: Stack(
+          children: [
+            const BlurBotWidget(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: ListView(
+                children: [
+                  SizedBox(height: 24),
+                  Text(
+                    '~ ${dateTimeFormat('MMM d, h:mm a', memory.createdAt)}',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  ),
+                  SizedBox(height: 12),
+                  _getFieldHeader('title', focusTitleField),
+                  _getEditTextField(titleController, editingTitle, focusTitleField),
+                  _getEditTextFieldButtons(editingTitle, () {
+                    setState(() {
+                      editingTitle = false;
+                      titleController.text = memory.structured.title;
+                    });
+                  }, () async {
+                    await MemoryStorage.updateMemory(memory.id, titleController.text, memory.structured.overview);
+                    memory.structured.title = titleController.text;
+                    setState(() {
+                      editingTitle = false;
+                    });
+                    MixpanelManager().memoryEdited(memory, fieldEdited: 'title');
+                  }),
+                  SizedBox(height: !memory.discarded ? 32 : 0),
+                  _getFieldHeader('overview', focusOverviewField),
+                  _getEditTextField(overviewController, editingOverview, focusOverviewField),
+                  _getEditTextFieldButtons(editingOverview, () {
+                    setState(() {
+                      editingOverview = false;
+                      overviewController.text = memory.structured.overview;
+                    });
+                  }, () async {
+                    await MemoryStorage.updateMemory(memory.id, memory.structured.title, overviewController.text);
+                    memory.structured.overview = overviewController.text;
+                    setState(() {
+                      editingOverview = false;
+                    });
+                    MixpanelManager().memoryEdited(memory, fieldEdited: 'overview');
+                  }),
+                  SizedBox(height: !memory.discarded ? 32 : 0),
+                  memory.structured.actionItems.isNotEmpty
+                      ? const Text('Action Items',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))
+                      : const SizedBox.shrink(),
+                  memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
+                  ...memory.structured.actionItems.map<Widget>((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('-', style: TextStyle(color: Colors.grey.shade200)),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(item, style: TextStyle(color: Colors.grey.shade200)))
+                        ],
+                      ),
+                    );
+                  }),
+                  SizedBox(height: memory.discarded ? 32 : 0),
+                  if (memory.structured.pluginsResponse.isNotEmpty && !memory.discarded) ...[
+                    const SizedBox(height: 32),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4.0),
+                      child: Text('Generated by Plugins',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 16),
+                    ...memory.structured.pluginsResponse.map((response) => Container(
+                          padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0x1AF7F4F4),
+                            borderRadius: BorderRadius.circular(24.0),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: SelectionArea(
+                              child: Text(
+                                response,
+                                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                              ),
+                            ),
+                          ),
+                        )),
+                  ],
                   const Padding(
                     padding: EdgeInsets.only(left: 4.0),
-                    child: Text('Generated by Plugins',
+                    child: Text('Raw Transcript:',
                         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: 16),
-                  ...memory.structured.pluginsResponse.map((response) => Container(
-                        padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0x1AF7F4F4),
-                          borderRadius: BorderRadius.circular(24.0),
+                  Container(
+                    padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1AF7F4F4),
+                      borderRadius: BorderRadius.circular(24.0),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SelectionArea(
+                        child: Text(
+                          memory.transcript,
+                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: SelectionArea(
-                            child: Text(
-                              response,
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                            ),
-                          ),
-                        ),
-                      )),
-                ],
-                const Padding(
-                  padding: EdgeInsets.only(left: 4.0),
-                  child: Text('Raw Transcript:',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AF7F4F4),
-                    borderRadius: BorderRadius.circular(24.0),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: SelectionArea(
-                      child: Text(
-                        memory.transcript,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          )
-        ],
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
 
   _getFieldHeader(String field, FocusNode focusNode) {
+    if (memory.discarded) return const SizedBox.shrink();
     String name = '';
     if (field == 'title') {
       name = 'Title';
     } else if (field == 'overview') {
       name = 'Overview';
-    } else if (field == 'actionItems') {
-      name = 'Action Items';
     }
 
     return Row(
@@ -235,13 +233,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         editingTitle = true;
                       } else if (field == 'overview') {
                         editingOverview = true;
-                      } else if (field == 'actionItems') {
-                        editingActionItems = true;
                       }
                     });
                     Timer(const Duration(milliseconds: 100), () => focusNode.requestFocus());
                   },
-                  icon: Icon(Icons.edit, color: Colors.grey, size: 22)),
+                  icon: const Icon(Icons.edit, color: Colors.grey, size: 22)),
             ],
           ),
         ),
@@ -250,6 +246,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   }
 
   _getEditTextField(TextEditingController controller, bool enabled, FocusNode focusNode) {
+    if (memory.discarded) return const SizedBox.shrink();
     return enabled
         ? TextField(
             controller: controller,

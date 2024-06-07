@@ -186,7 +186,6 @@ class _DevicePageState extends State<DevicePage> {
                 )
         ],
       ),
-      const SizedBox(height: 64),
     ];
   }
 }

@@ -35,11 +35,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int _selectedIndex = 1;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
+  bool displayDiscardMemories = false;
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   _initiateMemories() async {
-    memories = await MemoryStorage.getAllMemories();
+    memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     setState(() {});
+  }
+
+  _toggleDiscardMemories() async {
+    setState(() => displayDiscardMemories = !displayDiscardMemories);
+
+    _initiateMemories();
   }
 
   _setupHasSpeakerProfile() async {
@@ -155,6 +162,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               MemoriesPage(
                 memories: memories,
                 refreshMemories: _initiateMemories,
+                displayDiscardMemories: displayDiscardMemories,
+                toggleDiscardMemories: _toggleDiscardMemories,
               ),
               DevicePage(
                 device: _device,

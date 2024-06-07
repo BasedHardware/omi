@@ -52,9 +52,10 @@ class Structured {
 }
 
 class MemoryRecord {
-  String transcript;
   String id;
   DateTime createdAt;
+  String transcript;
+  String? recordingFilePath;
   Structured structured;
   bool discarded;
 
@@ -63,12 +64,14 @@ class MemoryRecord {
     required this.id,
     required this.createdAt,
     required this.structured,
+    this.recordingFilePath,
     this.discarded = false,
   });
 
   factory MemoryRecord.fromJson(Map<String, dynamic> json) => MemoryRecord(
         transcript: json['transcript'],
         id: json['id'],
+        recordingFilePath: json['recording_file_path'],
         createdAt: DateTime.parse(json['created_at']),
         structured: Structured.fromJson(json['structured']),
         discarded: json['discarded'] ?? false,
@@ -79,6 +82,7 @@ class MemoryRecord {
         'id': id,
         'created_at': createdAt.toIso8601String(),
         'structured': structured.toJson(),
+        'recording_audio_path': recordingFilePath,
         'discarded': discarded,
       };
 
@@ -118,11 +122,12 @@ class MemoryStorage {
     await prefs.setStringList(_storageKey, allMemories);
   }
 
-  static Future<List<MemoryRecord>> getAllMemories() async {
+  static Future<List<MemoryRecord>> getAllMemories({includeDiscarded = false}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     List<MemoryRecord> memories =
         allMemories.reversed.map((memory) => MemoryRecord.fromJson(jsonDecode(memory))).toList();
+    if (includeDiscarded) return memories.where((memory) => memory.transcript.split(' ').length > 10).toList();
     return memories.where((memory) => !memory.discarded).toList();
   }
 
@@ -148,7 +153,7 @@ class MemoryStorage {
     return filtered;
   }
 
-  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription, List<String> updatedActionItems, List<String> updatedPluginsResponse) async {
+  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
@@ -158,11 +163,12 @@ class MemoryStorage {
         id: oldMemory.id,
         createdAt: oldMemory.createdAt,
         transcript: oldMemory.transcript,
+        recordingFilePath: oldMemory.recordingFilePath,
         structured: Structured(
           title: updatedTitle,
           overview: updatedDescription,
-          actionItems: updatedActionItems,
-          pluginsResponse: updatedPluginsResponse ?? [], // Use updatedPluginsResponse here
+          actionItems: oldMemory.structured.actionItems,
+          pluginsResponse: oldMemory.structured.pluginsResponse,
         ),
         discarded: oldMemory.discarded,
       );

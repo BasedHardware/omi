@@ -16,7 +16,6 @@ import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:lottie/lottie.dart';
-import 'info_button.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -37,6 +36,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [];
 
+  List<int> bucket = List.filled(40000, 0).toList(growable: true);
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
@@ -54,6 +54,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     });
     _initiateConversationAdvisorTimer();
     _initiateSmartReminderTimer();
+    _processCachedTranscript();
     super.initState();
   }
 
@@ -64,6 +65,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     _smartReminderTimer?.cancel();
     debugPrint('TranscriptWidget disposed');
     super.dispose();
+  }
+
+  _processCachedTranscript() async {
+    debugPrint('_processCachedTranscript');
+    var segments = SharedPreferencesUtil().transcriptSegments;
+    if (segments.isEmpty) return;
+    String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    debugPrint('Transcript: \n$transcript');
+    File file = await WavBytesUtil.createWavFile(SharedPreferencesUtil().temporalAudioBytes);
+    String? fileName = await uploadFile(file);
+    processTranscriptContent(context, transcript, fileName, file.path, retrievedFromCache: true);
+    SharedPreferencesUtil().transcriptSegments = [];
   }
 
   Future<void> initiateBytesProcessing() async {
@@ -84,9 +97,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
+        if (int16Value < 3000) bucket.add(int16Value);
+        // TODO: first 2 seconds are highest points bytes sent, weird, handle that so graph doesn't look shitty
       }
+      // if (bucket.length > 40000) {
+      //   setState(() {
+      //     bucket = bucket.sublist(bucket.length - 40000);
+      //   });
+      // }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
+        SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
@@ -124,6 +145,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       joinedSimilarSegments.removeAt(0);
     }
     segments.addAll(joinedSimilarSegments);
+    SharedPreferencesUtil().transcriptSegments = segments;
     setState(() {});
     _initiateMemoryCreationTimer();
   }
@@ -142,7 +164,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  String _buildDiarizedTranscriptMessage() {
+  String _buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
     String transcript = '';
     for (var segment in segments) {
       if (segment.isUser) {
@@ -150,6 +172,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       } else {
         transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
       }
+      transcript += '\n';
     }
     return transcript.trim();
   }
@@ -163,7 +186,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
     _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
-      var transcript = _buildDiarizedTranscriptMessage();
+      var transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
       var advice = await adviseOnCurrentConversation(transcript);
       if (advice.isNotEmpty) {
@@ -203,22 +226,16 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
-      widget.refreshMemories();
-      setState(() {
-        memoryCreating = true;
-      });
+      setState(() => memoryCreating = true);
       debugPrint('Creating memory from whispers');
-      String transcript = _buildDiarizedTranscriptMessage();
+      String transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('Transcript: \n$transcript');
       File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
-      segments = [];
-      await processTranscriptContent(context, transcript, fileName);
+      await processTranscriptContent(context, transcript, fileName, file.path);
       await widget.refreshMemories();
-      addEventToContext('Memory Created');
-      setState(() {
-        memoryCreating = false;
-      });
+      segments = [];
+      setState(() => memoryCreating = false);
       audioStorage?.clearAudioBytes();
     });
   }
@@ -237,16 +254,28 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (segments.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 48.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const InfoButton(),
-            btDevice == null ? const SizedBox.shrink() : Lottie.asset('assets/lottie_animations/wave.json', width: 80),
-          ],
-        ),
-      );
+      return btDevice != null
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                //
+                Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+                const SizedBox(height: 32),
+                const Align(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      textAlign: TextAlign.center,
+                      'Your transcripts will start appearing\nhere after 30 seconds.',
+                      style: TextStyle(color: Colors.white, height: 1.5),
+                    ),
+                  ),
+                )
+              ],
+            )
+          : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
   }
@@ -260,14 +289,16 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
-        if (idx == segments.length) {
+        if (idx == 0) {
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0),
-            child: Lottie.asset('assets/lottie_animations/wave.json',
-                width: 80, height: 60, alignment: Alignment.center, fit: BoxFit.contain),
+            padding: const EdgeInsets.only(top: 8.0, bottom: 32),
+            child: Align(
+              alignment: Alignment.center,
+              child: Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+            ),
           );
         }
-        final data = segments[idx];
+        final data = segments[idx - 1];
         String transcriptItem = '';
         if (data.isUser) {
           transcriptItem = 'You said: ${data.text}';
