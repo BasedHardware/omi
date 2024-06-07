@@ -402,11 +402,9 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
       debugPrint('Response body: ${response.body}');
       return TranscriptSegment.fromJsonList(data);
     } else {
-      debugPrint('Failed to upload file. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
   } catch (e) {
-    debugPrint('An error occurred transcribeAudioFile: $e');
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
 }

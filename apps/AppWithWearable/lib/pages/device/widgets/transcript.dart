@@ -67,7 +67,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    debugPrint('Transcript: \n$transcript');
     File file = await WavBytesUtil.createWavFile(SharedPreferencesUtil().temporalAudioBytes);
     String? fileName = await uploadFile(file);
     processTranscriptContent(context, transcript, fileName, file.path, retrievedFromCache: true);
@@ -106,10 +105,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
+          // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
             List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
             processCustomTranscript(segments);
           } catch (e) {
+            debugPrint(e.toString());
             toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
           }
         });
@@ -118,6 +119,20 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     audioBytesStream = stream;
     audioStorage = wavBytesUtil;
+  }
+
+  void _cleanTranscript(List<TranscriptSegment> segments) {
+    var hallucinations = ['Thank you.'];
+    for (var i = 0; i < segments.length; i++) {
+      for (var hallucination in hallucinations) {
+        segments[i].text = segments[i]
+            .text
+            .replaceAll('$hallucination $hallucination $hallucination', '')
+            .replaceAll('$hallucination $hallucination', '')
+            .replaceAll('  ', ' ')
+            .trim();
+      }
+    }
   }
 
   void processCustomTranscript(List<TranscriptSegment> data) {
@@ -139,6 +154,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       joinedSimilarSegments.removeAt(0);
     }
+
+    _cleanTranscript(segments);
+    _cleanTranscript(joinedSimilarSegments);
+
     segments.addAll(joinedSimilarSegments);
     SharedPreferencesUtil().transcriptSegments = segments;
     setState(() {});
