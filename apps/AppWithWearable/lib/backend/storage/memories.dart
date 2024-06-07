@@ -7,12 +7,14 @@ class Structured {
   String overview;
   List<String> actionItems;
   List<String> pluginsResponse;
+  String category;
 
   Structured({
     this.title = "",
     this.overview = "",
     required this.actionItems,
     required this.pluginsResponse,
+    required this.category,
   });
 
   factory Structured.fromJson(Map<String, dynamic> json) => Structured(
@@ -20,6 +22,7 @@ class Structured {
         overview: json['overview'],
         actionItems: List<String>.from(json['action_items'] ?? []),
         pluginsResponse: List<String>.from(json['pluginsResponse'] ?? []),
+        category: json['category'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +30,7 @@ class Structured {
         'overview': overview,
         'action_items': List<dynamic>.from(actionItems),
         'pluginsResponse': List<dynamic>.from(pluginsResponse),
+        'category': category,
       };
 
   @override
@@ -46,6 +50,7 @@ class Structured {
     for (var response in pluginsResponse) {
       str += '  - $response\n';
     }
+    str += 'Category: $category\n';
     return str;
   }
 }
@@ -104,6 +109,7 @@ class MemoryRecord {
       ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
       ${e.structured.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
       ${e.structured.pluginsResponse.map((response) => '  - $response').join('\n')}
+      Category: ${e.structured.category}
       '''
           .replaceAll('      ', '')
           .trim())
@@ -167,6 +173,7 @@ class MemoryStorage {
           overview: updatedDescription,
           actionItems: oldMemory.structured.actionItems,
           pluginsResponse: oldMemory.structured.pluginsResponse,
+          category: oldMemory.structured.category,
         ),
         discarded: oldMemory.discarded,
       );
