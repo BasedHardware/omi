@@ -301,26 +301,6 @@ Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
   }
 }
 
-Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> vectors) async {
-  var body = jsonEncode({
-    'vectors': memoriesId.mapIndexed((index, id) {
-      return {
-        'id': id,
-        'values': vectors[index],
-        'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
-          'memory_id': id,
-          'uid': SharedPreferencesUtil().uid,
-        }
-      };
-    }).toList(),
-    'namespace': Env.pineconeIndexNamespace
-  });
-  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
-  debugPrint('createVectorPinecone response: $responseBody');
-  return true;
-}
-
 Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
   var body = jsonEncode({
     'vectors': [
@@ -328,7 +308,8 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
         'id': memoryId,
         'values': vectorList,
         'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
+          'created_at':
+              DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
           'memory_id': memoryId,
           'uid': SharedPreferencesUtil().uid,
         }
@@ -353,11 +334,11 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
   // Add date filtering if startTimestamp or endTimestamp is provided
   if (startTimestamp != null || endTimestamp != null) {
     filter['created_at'] = {};
-  
+
     if (startTimestamp != null) {
       filter['created_at']['\$gte'] = startTimestamp;
     }
-   
+
     if (endTimestamp != null) {
       filter['created_at']['\$lte'] = endTimestamp;
     }
