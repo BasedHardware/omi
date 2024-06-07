@@ -6,7 +6,7 @@ flutter upgrade
 
 # Get Flutter dependencies
 echo "Getting Flutter dependencies..."
-cd apps/AppStandalone  # TODO check if it correct folder for building AppWithWearable?
+cd apps/AppWithWearable
 flutter pub get
 
 # Install iOS pods
