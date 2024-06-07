@@ -79,11 +79,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
+        // if (int16Value < 3000) bucket.add(int16Value);
         if (int16Value < 3000) bucket.add(int16Value);
+        // TODO: first 2 seconds are highest points bytes sent, weird, handle that so graph doesn't look shitty
       }
       if (bucket.length > 40000) {
         setState(() {
           bucket = bucket.sublist(bucket.length - 40000);
+          // debugPrint(bucket.sublist(bucket.length-160).toString());
         });
       }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
@@ -216,6 +219,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const SizedBox(height: 16),
                 SizedBox(
                   height: 60,
                   width: 160,
@@ -253,13 +257,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
         if (idx == 0) {
-          return Align(
-            alignment: Alignment.center,
-            child: SizedBox(
-              height: 60,
-              width: 160,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+          return Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 32),
+            child: Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                height: 60,
+                width: 160,
                 child: CustomPaint(
                   painter: DashedLinePainter(bucket, maxHeight: 1000),
                   child: Container(),

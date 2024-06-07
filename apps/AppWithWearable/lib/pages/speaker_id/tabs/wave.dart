@@ -28,7 +28,10 @@ class DashedLinePainter extends CustomPainter {
       if (i % (dashWidth + dashSpace) < dashWidth) {
         // Normalize the value to fit within 0 to 1000
         double rawValue = smoothedBucket[i];
-        double scaledValue = (rawValue < 50) ? 0 : ((rawValue / 32768.0) * maxHeight).clamp(0, 1000);
+        double scaledValue = (rawValue < 200) ? 0 : ((rawValue / 32768.0) * maxHeight).clamp(0, 1000);
+        // Ensure minimum value for the line height
+        double minHeight = 1.0;
+        scaledValue = scaledValue < minHeight ? minHeight : scaledValue;
         double y = centerY - scaledValue / 2;
         double yPositive = centerY + scaledValue / 2;
         y = y.clamp(0, size.height); // Ensure y is within the container bounds
