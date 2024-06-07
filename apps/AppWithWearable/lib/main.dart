@@ -58,7 +58,14 @@ class _MyAppState extends State<MyApp> {
       theme: ThemeData(
         brightness: Brightness.light,
         useMaterial3: false,
-        primaryColor: Colors.black87,
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.black54,
+        textTheme: TextTheme(
+          titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+          titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+          bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+          labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+        ),
       ),
       themeMode: ThemeMode.system,
       home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),

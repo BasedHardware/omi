@@ -150,39 +150,77 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: GestureDetector(
         onTap: () {
           FocusScope.of(context).unfocus();
           chatTextFieldFocusNode.unfocus();
         },
-        child: Center(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: [
-              MemoriesPage(
-                memories: memories,
-                refreshMemories: _initiateMemories,
-                displayDiscardMemories: displayDiscardMemories,
-                toggleDiscardMemories: _toggleDiscardMemories,
+        child: Stack(
+          children: [
+            Center(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  MemoriesPage(
+                    memories: memories,
+                    refreshMemories: _initiateMemories,
+                    displayDiscardMemories: displayDiscardMemories,
+                    toggleDiscardMemories: _toggleDiscardMemories,
+                  ),
+                  DevicePage(
+                    device: _device,
+                    refreshMemories: _initiateMemories,
+                    transcriptChildWidgetKey: transcriptChildWidgetKey,
+                    batteryLevel: batteryLevel,
+                  ),
+                  ChatPage(
+                    textFieldFocusNode: chatTextFieldFocusNode,
+                  ),
+                ],
               ),
-              DevicePage(
-                device: _device,
-                refreshMemories: _initiateMemories,
-                transcriptChildWidgetKey: transcriptChildWidgetKey,
-                batteryLevel: batteryLevel,
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                  border: Border.all(color: Colors.grey.shade800, width: 1.0),
+                  shape: BoxShape.rectangle,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    MaterialButton(
+                      onPressed: () => setState(() => _selectedIndex = 0),
+                      child: Text('Memories',
+                          style: TextStyle(color: _selectedIndex == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                    ),
+                    MaterialButton(
+                      onPressed: () => setState(() => _selectedIndex = 1),
+                      child: Text('Capture',
+                          style: TextStyle(color: _selectedIndex == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                    ),
+                    MaterialButton(
+                      onPressed: () => setState(() => _selectedIndex = 2),
+                      child: Text('Chat',
+                          style: TextStyle(color: _selectedIndex == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                    ),
+                  ],
+                ),
               ),
-              ChatPage(
-                textFieldFocusNode: chatTextFieldFocusNode,
-              ),
-            ],
-          ),
+            )
+          ],
         ),
       ),
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
-        elevation: 2.0,
+        elevation: 0,
         centerTitle: true,
         actions: [
           IconButton(
@@ -215,29 +253,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             // await context.pushNamed('plugins');
           },
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Theme.of(context).primaryColor,
-        elevation: 0,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'Memories',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bluetooth_connected),
-            label: 'Device',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Chat',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.grey.shade700,
-        onTap: _onItemTapped,
       ),
     );
   }
