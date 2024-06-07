@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -122,7 +123,7 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: []);
+  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: [], category: '');
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -155,20 +156,61 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim();
-  // debugPrint(prompt);
-  List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
+
+  String categoryPrompt = 
+    '''You are given a conversation to analyze. After reviewing the conversation, classify it into one of the following categories:
+      [
+        "Personal",
+        "Work",
+        "Educational",
+        "Health",
+        "Financial",
+        "Legal",
+        "Philosophical",
+        "Psychological",
+        "Spiritual",
+        "Scientific",
+        "Entrepreneurial",
+        "Parenting",
+        "Romantic",
+        "Travel",
+        "Inspirational",
+        "Technological",
+        "Business",
+        "Social"
+      ]
+
+      Here is the conversation: ${transcript.trim()}
+
+      Please provide your response in JSON format. For example: { "category": "Parenting" }''';
+
+
+List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
         '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
     return response;
-  }).toList();
+}).toList();
 
-  Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
+// Start categoryResponse concurrently
+Future<String> categoryResponseFuture = executeGptPrompt(categoryPrompt).then((result) => extractJson(result));
 
-  var structuredResponse = extractJson(await executeGptPrompt(prompt));
+// Add the future of categoryResponse to the list of pluginPrompts so it gets awaited with the rest
+List<Future<dynamic>> allResponses = List.from(pluginPrompts)..add(categoryResponseFuture);
 
-  List<String> responses = await allPluginResponses;
+// Wait for all futures to complete
+List<dynamic> responsesWithCategory = await Future.wait(allResponses);
 
-  return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
+// Extract structuredResponse from the prompt
+var structuredResponse = extractJson(await executeGptPrompt(prompt));
+
+// Split the last element (which is the categoryResponse) from the responses
+String categoryResponse = responsesWithCategory.removeLast();
+List<String> responses = responsesWithCategory.cast<String>();
+
+    
+return Structured.fromJson(jsonDecode(structuredResponse)
+  ..['pluginsResponse'] = responses
+  ..['category'] = jsonDecode(categoryResponse)['category']);
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
