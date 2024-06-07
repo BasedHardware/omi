@@ -11,7 +11,6 @@ import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
 
 class SpeakerIdPage extends StatefulWidget {
   const SpeakerIdPage({super.key});
@@ -101,82 +100,75 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
             },
           ),
         ),
-        body: Stack(
-          children: [
-            const BlurBotWidget(),
-            _controller == null
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
+        body: _controller == null
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                ),
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: TabBarView(
+                      controller: _controller,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        const InstructionsTab(),
+                        ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
+                              sample: sample,
+                              btDevice: _device,
+                              sampleIdx: index,
+                              totalSamples: samples.length,
+                              onRecordCompleted: () {
+                                setState(() {
+                                  sample.displayNext = true;
+                                });
+                              },
+                            )),
+                        const CompletionTab(),
+                      ],
                     ),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: TabBarView(
-                          controller: _controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            const InstructionsTab(),
-                            ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
-                                  sample: sample,
-                                  btDevice: _device,
-                                  sampleIdx: index,
-                                  totalSamples: samples.length,
-                                  onRecordCompleted: () {
-                                    setState(() {
-                                      sample.displayNext = true;
-                                    });
-                                  },
-                                )),
-                            const CompletionTab(),
-                          ],
-                        ),
-                      ),
-                      _currentIdx == 0 ||
-                              _currentIdx == _controller!.length - 1 ||
-                              (samples[_currentIdx - 1].displayNext)
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16.0),
-                              child: ElevatedButton(
-                                onPressed: _controller == null
-                                    ? null
-                                    : () async {
-                                        debugPrint('Current Index: $_currentIdx');
-                                        if (_currentIdx == _controller!.length - 1) {
-                                          Navigator.pop(context);
-                                          return;
-                                        }
-                                        _currentIdx += 1;
-                                        _controller?.animateTo(_currentIdx);
-                                        setState(() {});
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepPurple,
-                                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8), // Rounded corners
-                                  ),
-                                  textStyle: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                child: Text(
-                                  _currentIdx == 0
-                                      ? 'START'
-                                      : _currentIdx == _controller!.length - 1
-                                          ? 'Great  :)'
-                                          : 'NEXT',
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                      const SizedBox(height: 48),
-                    ],
                   ),
-          ],
-        ),
+                  _currentIdx == 0 || _currentIdx == _controller!.length - 1 || (samples[_currentIdx - 1].displayNext)
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16.0),
+                          child: ElevatedButton(
+                            onPressed: _controller == null
+                                ? null
+                                : () async {
+                                    debugPrint('Current Index: $_currentIdx');
+                                    if (_currentIdx == _controller!.length - 1) {
+                                      Navigator.pop(context);
+                                      return;
+                                    }
+                                    _currentIdx += 1;
+                                    _controller?.animateTo(_currentIdx);
+                                    setState(() {});
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8), // Rounded corners
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            child: Text(
+                              _currentIdx == 0
+                                  ? 'START'
+                                  : _currentIdx == _controller!.length - 1
+                                      ? 'Great  :)'
+                                      : 'NEXT',
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                  const SizedBox(height: 48),
+                ],
+              ),
       ),
     );
   }

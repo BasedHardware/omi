@@ -25,7 +25,8 @@ class HumanMessage extends StatelessWidget {
             }(),
           ),
           decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
+            // color: Theme.of(context).scaffoldBackgroundColor,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12.0),
           ),
           margin: const EdgeInsets.only(bottom: 12, top: 8),

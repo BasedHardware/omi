@@ -65,38 +65,33 @@ class _DevicePageState extends State<DevicePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const BlurBotWidget(),
-        _isLoading
-            ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(
-                      'Updating Memory Schema, do not close',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+    return _isLoading
+        ? const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Updating Memory Schema, do not close',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              )
-            : ListView(children: [
-                ..._getConnectedDeviceWidgets(),
-                TranscriptWidget(
-                  btDevice: widget.device,
-                  key: widget.transcriptChildWidgetKey,
-                  refreshMemories: widget.refreshMemories,
-                ),
-                const SizedBox(height: 16)
-              ]),
-      ],
-    );
+              ],
+            ),
+          )
+        : ListView(children: [
+            ..._getConnectedDeviceWidgets(),
+            TranscriptWidget(
+              btDevice: widget.device,
+              key: widget.transcriptChildWidgetKey,
+              refreshMemories: widget.refreshMemories,
+            ),
+            const SizedBox(height: 16)
+          ]);
   }
 
   _getConnectedDeviceWidgets() {
