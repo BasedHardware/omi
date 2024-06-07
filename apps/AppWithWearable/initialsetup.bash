@@ -6,15 +6,19 @@ flutter upgrade
 
 # Get Flutter dependencies
 echo "Getting Flutter dependencies..."
-cd apps/AppStandalone
+cd apps/AppStandalone  # TODO check if it correct folder for building AppWithWearable?
 flutter pub get
 
 # Install iOS pods
 echo "Installing iOS pods..."
+sudo gem install cocoapods
 cd ios
 pod install
 pod repo update
 cd ..
+
+# TODO Install Android dependencies?
+# ...
 
 # Create .env file from template
 echo "Creating .env file..."
