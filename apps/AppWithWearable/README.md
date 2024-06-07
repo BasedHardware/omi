@@ -43,7 +43,7 @@ If you prefer to set up the project manually, follow these steps:
     ```
 
 2. **Get Flutter Dependencies**:
-   From within `apps/AppStandalone`, install flutter packages:
+   From within `apps/AppWithWearable`, install flutter packages:
     ```
     flutter pub get
     ```
