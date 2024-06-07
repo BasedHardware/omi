@@ -167,6 +167,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       } else {
         transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
       }
+      transcript += '\n';
     }
     return transcript.trim();
   }
