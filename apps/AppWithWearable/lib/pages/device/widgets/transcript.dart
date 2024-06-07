@@ -8,14 +8,13 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/pages/speaker_id/tabs/wave.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:lottie/lottie.dart';
-import 'info_button.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -36,6 +35,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [];
 
+  List<int> bucket = List.filled(40000, 0).toList(growable: true);
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
@@ -79,6 +79,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
+        if (int16Value < 3000) bucket.add(int16Value);
+      }
+      if (bucket.length > 40000) {
+        setState(() {
+          bucket = bucket.sublist(bucket.length - 40000);
+        });
       }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
@@ -206,16 +212,33 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (segments.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 48.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const InfoButton(),
-            btDevice == null ? const SizedBox.shrink() : Lottie.asset('assets/lottie_animations/wave.json', width: 80),
-          ],
-        ),
-      );
+      return btDevice != null
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 60,
+                  width: 160,
+                  child: CustomPaint(
+                    painter: DashedLinePainter(bucket, maxHeight: 1000),
+                    child: Container(),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Align(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      textAlign: TextAlign.center,
+                      'Your transcripts will start appearing here after 30 seconds.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                )
+              ],
+            )
+          : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
   }
@@ -229,14 +252,23 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
-        if (idx == segments.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0),
-            child: Lottie.asset('assets/lottie_animations/wave.json',
-                width: 80, height: 60, alignment: Alignment.center, fit: BoxFit.contain),
+        if (idx == 0) {
+          return Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              height: 60,
+              width: 160,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: CustomPaint(
+                  painter: DashedLinePainter(bucket, maxHeight: 1000),
+                  child: Container(),
+                ),
+              ),
+            ),
           );
         }
-        final data = segments[idx];
+        final data = segments[idx - 1];
         String transcriptItem = '';
         if (data.isUser) {
           transcriptItem = 'You said: ${data.text}';
