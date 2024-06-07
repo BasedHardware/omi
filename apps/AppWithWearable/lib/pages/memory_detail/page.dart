@@ -20,7 +20,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
-  final focusActionItemsField = FocusNode();
 
   late MemoryRecord memory;
 
@@ -29,7 +28,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   TextEditingController actionItemsController = TextEditingController();
   bool editingTitle = false;
   bool editingOverview = false;
-  bool editingActionItems = false;
 
   @override
   void initState() {
@@ -48,7 +46,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     actionItemsController.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
-    focusActionItemsField.dispose();
     super.dispose();
   }
 
@@ -108,13 +105,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     titleController.text = memory.structured.title;
                   });
                 }, () async {
-                  await MemoryStorage.updateMemory(memory.id, titleController.text, memory.structured.overview,
-                      memory.structured.actionItems, memory.structured.pluginsResponse);
+                  await MemoryStorage.updateMemory(memory.id, titleController.text, memory.structured.overview);
                   memory.structured.title = titleController.text;
                   setState(() {
                     editingTitle = false;
                   });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'title');
+                  MixpanelManager().memoryEdited(memory, fieldEdited: 'title');
                 }),
                 const SizedBox(height: 32),
                 _getFieldHeader('overview', focusOverviewField),
@@ -125,31 +121,31 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     overviewController.text = memory.structured.overview;
                   });
                 }, () async {
-                  await MemoryStorage.updateMemory(memory.id, memory.structured.title, overviewController.text,
-                      memory.structured.actionItems, memory.structured.pluginsResponse);
+                  await MemoryStorage.updateMemory(memory.id, memory.structured.title, overviewController.text);
                   memory.structured.overview = overviewController.text;
                   setState(() {
                     editingOverview = false;
                   });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'overview');
+                  MixpanelManager().memoryEdited(memory, fieldEdited: 'overview');
                 }),
                 const SizedBox(height: 32),
-                _getFieldHeader('actionItems', focusActionItemsField),
-                _getEditTextField(actionItemsController, editingActionItems, focusActionItemsField),
-                _getEditTextFieldButtons(editingActionItems, () {
-                  setState(() {
-                    editingActionItems = false;
-                    actionItemsController.text = memory.structured.actionItems.join('\n');
-                  });
-                }, () async {
-                  List<String> updatedActionItems = actionItemsController.text.split('\n');
-                  await MemoryStorage.updateMemory(memory.id, memory.structured.title, memory.structured.overview,
-                      updatedActionItems, memory.structured.pluginsResponse);
-                  memory.structured.actionItems = updatedActionItems;
-                  setState(() {
-                    editingActionItems = false;
-                  });
-                  MixpanelManager().memoryEdited(widget.memory, fieldEdited: 'actionItems');
+                memory.structured.actionItems.isNotEmpty
+                    ? const Text('Action Items',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))
+                    : const SizedBox.shrink(),
+                memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
+                ...memory.structured.actionItems.map<Widget>((item) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('-', style: TextStyle(color: Colors.grey.shade200)),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(item, style: TextStyle(color: Colors.grey.shade200)))
+                      ],
+                    ),
+                  );
                 }),
                 const SizedBox(height: 32),
                 if (memory.structured.pluginsResponse.isNotEmpty) ...[
@@ -214,8 +210,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
       name = 'Title';
     } else if (field == 'overview') {
       name = 'Overview';
-    } else if (field == 'actionItems') {
-      name = 'Action Items';
     }
 
     return Row(
@@ -235,13 +229,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         editingTitle = true;
                       } else if (field == 'overview') {
                         editingOverview = true;
-                      } else if (field == 'actionItems') {
-                        editingActionItems = true;
                       }
                     });
                     Timer(const Duration(milliseconds: 100), () => focusNode.requestFocus());
                   },
-                  icon: Icon(Icons.edit, color: Colors.grey, size: 22)),
+                  icon: const Icon(Icons.edit, color: Colors.grey, size: 22)),
             ],
           ),
         ),
