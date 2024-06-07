@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -106,6 +107,26 @@ class SharedPreferencesUtil {
     final List<String> plugins = pluginsEnabled;
     plugins.remove(value);
     pluginsEnabled = plugins;
+  }
+
+  List<int> get temporalAudioBytes {
+    final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
+    return bytes.map((e) => int.parse(e)).toList();
+  }
+
+  set temporalAudioBytes(List<int> value) {
+    final List<String> bytes = value.map((e) => e.toString()).toList();
+    saveStringList('temporalAudioBytes', bytes);
+  }
+
+  List<TranscriptSegment> get transcriptSegments {
+    final List<String> segments = getStringList('transcriptSegments') ?? [];
+    return segments.map((e) => TranscriptSegment.fromJson(jsonDecode(e))).toList();
+  }
+
+  set transcriptSegments(List<TranscriptSegment> value) {
+    final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('transcriptSegments', segments);
   }
 
   Future<bool> saveString(String key, String value) async {

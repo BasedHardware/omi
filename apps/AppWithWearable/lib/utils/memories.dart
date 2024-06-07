@@ -6,44 +6,64 @@ import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
 Future<MemoryRecord?> processTranscriptContent(
-    BuildContext context, String content, String? audioFileName, String? recordingFilePath) async {
-  if (content.isNotEmpty) return await memoryCreationBlock(context, content, recordingFilePath);
+    BuildContext context, String content, String? audioFileName, String? recordingFilePath,
+    {bool retrievedFromCache = false}) async {
+  if (content.isNotEmpty) {
+    return await memoryCreationBlock(
+      context,
+      content,
+      recordingFilePath,
+      retrievedFromCache,
+    );
+  }
   return null;
 }
 
 // Process the creation of memory records
-Future<MemoryRecord?> memoryCreationBlock(BuildContext context, String transcript, String? recordingFilePath) async {
+Future<MemoryRecord?> memoryCreationBlock(
+  BuildContext context,
+  String transcript,
+  String? recordingFilePath,
+  bool retrievedFromCache,
+) async {
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
   Structured structuredMemory;
   try {
     structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
   } catch (e) {
     debugPrint('Error: $e');
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('There was an error creating your memory, please check your open AI API keys.')));
+    if (!retrievedFromCache) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('There was an error creating your memory, please check your open AI API keys.')));
+    }
     return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
 
   if (structuredMemory.title.isEmpty) {
     await saveFailureMemory(transcript, structuredMemory);
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text(
-        'Recent Memory Discarded! Nothing useful. 😄',
-        style: TextStyle(color: Colors.white),
-      ),
-      duration: Duration(seconds: 4),
-    ));
+    if (!retrievedFromCache) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Recent Memory Discarded! Nothing useful. 😄',
+          style: TextStyle(color: Colors.white),
+        ),
+        duration: Duration(seconds: 4),
+      ));
+    }
   } else {
     MemoryRecord memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
     MixpanelManager().memoryCreated(memory);
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
-      duration: Duration(seconds: 4),
-    ));
+    debugPrint('Memory Created: ${memory.id}');
+    if (!retrievedFromCache) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
+        duration: Duration(seconds: 4),
+      ));
+    }
     return memory;
   }
   return null;

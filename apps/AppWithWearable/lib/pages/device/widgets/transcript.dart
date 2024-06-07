@@ -8,7 +8,6 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
-import 'package:friend_private/pages/speaker_id/tabs/wave.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
@@ -51,6 +50,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       initiateBytesProcessing();
     });
     _initiateConversationAdvisorTimer();
+    _processCachedTranscript();
     super.initState();
   }
 
@@ -60,6 +60,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     _memoryCreationTimer?.cancel();
     debugPrint('TranscriptWidget disposed');
     super.dispose();
+  }
+
+  _processCachedTranscript() async {
+    debugPrint('_processCachedTranscript');
+    var segments = SharedPreferencesUtil().transcriptSegments;
+    if (segments.isEmpty) return;
+    String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    debugPrint('Transcript: \n$transcript');
+    File file = await WavBytesUtil.createWavFile(SharedPreferencesUtil().temporalAudioBytes);
+    String? fileName = await uploadFile(file);
+    processTranscriptContent(context, transcript, fileName, file.path, retrievedFromCache: true);
+    SharedPreferencesUtil().transcriptSegments = [];
   }
 
   Future<void> initiateBytesProcessing() async {
@@ -80,7 +92,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
-        // if (int16Value < 3000) bucket.add(int16Value);
         if (int16Value < 3000) bucket.add(int16Value);
         // TODO: first 2 seconds are highest points bytes sent, weird, handle that so graph doesn't look shitty
       }
@@ -91,6 +102,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       // }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
+        SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
@@ -128,6 +140,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       joinedSimilarSegments.removeAt(0);
     }
     segments.addAll(joinedSimilarSegments);
+    SharedPreferencesUtil().transcriptSegments = segments;
     setState(() {});
     _initiateMemoryCreationTimer();
   }
@@ -146,7 +159,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  String _buildDiarizedTranscriptMessage() {
+  String _buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
     String transcript = '';
     for (var segment in segments) {
       if (segment.isUser) {
@@ -167,7 +180,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
     _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
-      var transcript = _buildDiarizedTranscriptMessage();
+      var transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
       var advice = await adviseOnCurrentConversation(transcript);
       if (advice.isNotEmpty) {
@@ -181,22 +194,16 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
     _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
-      widget.refreshMemories();
-      setState(() {
-        memoryCreating = true;
-      });
+      setState(() => memoryCreating = true);
       debugPrint('Creating memory from whispers');
-      String transcript = _buildDiarizedTranscriptMessage();
+      String transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('Transcript: \n$transcript');
       File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
       String? fileName = await uploadFile(file);
       await processTranscriptContent(context, transcript, fileName, file.path);
       await widget.refreshMemories();
-      addEventToContext('Memory Created');
-      setState(() {
-        segments = [];
-        memoryCreating = false;
-      });
+      segments = [];
+      setState(() => memoryCreating = false);
       audioStorage?.clearAudioBytes();
     });
   }
