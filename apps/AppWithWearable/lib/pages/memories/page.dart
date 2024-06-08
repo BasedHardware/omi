@@ -37,25 +37,25 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
           ),
         ),
         const SizedBox(height: 16),
-        // Row(
-        //   crossAxisAlignment: CrossAxisAlignment.center,
-        //   mainAxisAlignment: MainAxisAlignment.end,
-        //   children: [
-        //     Text(
-        //       widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-        //       style: TextStyle(color: Colors.white, fontSize: 16),
-        //     ),
-        //     const SizedBox(width: 8),
-        //     IconButton(
-        //         onPressed: () {
-        //           widget.toggleDiscardMemories();
-        //         },
-        //         icon: Icon(
-        //           widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-        //           color: Colors.white,
-        //         )),
-        //   ],
-        // ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(
+              widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+                onPressed: () { 
+                  widget.toggleDiscardMemories();
+                },
+                icon: Icon(
+                  widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                  color: Colors.white,
+                )),
+          ],
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: (widget.memories.isEmpty)
