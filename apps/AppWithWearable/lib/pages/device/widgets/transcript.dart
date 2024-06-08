@@ -138,6 +138,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             .trim();
       }
     }
+    // remove empty segments
+    segments.removeWhere((element) => element.text.isEmpty);
   }
 
   void processCustomTranscript(List<TranscriptSegment> data) {
@@ -191,7 +193,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       } else {
         transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
       }
-      transcript += '\n';
+      transcript += '\n\n';
     }
     return transcript.trim();
   }

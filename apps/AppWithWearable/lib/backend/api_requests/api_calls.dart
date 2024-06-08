@@ -130,7 +130,8 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: [], category: '');
+  if (transcript.isEmpty || transcript.split(' ').length < 7)
+    return Structured(actionItems: [], pluginsResponse: [], category: '');
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -147,102 +148,22 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, use a list of actionable steps or bullet points for the conversation.
-    For the category, classify the conversation into one of the following categories:
-      [
-        "Personal",
-        "Work",
-        "Educational",
-        "Health",
-        "Financial",
-        "Legal",
-        "Philosophical",
-        "Psychological",
-        "Spiritual",
-        "Scientific",
-        "Entrepreneurial",
-        "Parenting",
-        "Romantic",
-        "Travel",
-        "Inspirational",
-        "Technological",
-        "Business",
-        "Social"
-      ]
+    For the category, classify the conversation into one of the available categories.
         
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
     
     The output should be formatted as a JSON instance that conforms to the JSON schema below.
-
+    
     As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
     the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
     
     Here is the output schema:
     ```
-    {
-  "properties": {
-    "title": {
-      "title": "Title",
-      "description": "A title/name for this conversation",
-      "default": "",
-      "type": "string"
-    },
-    "overview": {
-      "title": "Overview",
-      "description": "A brief overview of the conversation",
-      "default": "",
-      "type": "string"
-    },
-    "action_items": {
-      "title": "Action Items",
-      "description": "A list of action items from the conversation",
-      "default": [
-        
-      ],
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-    },
-      "category": {
-        "title": "category",
-        "description": "classification of the conversation into one of the following categories:\n      [\n        \"Personal\",\n        \"Work\",\n        \"Educational\",\n        \"Health\",\n        \"Financial\",\n        \"Legal\",\n        \"Philosophical\",\n        \"Psychological\",\n        \"Spiritual\",\n        \"Scientific\",\n        \"Entrepreneurial\",\n        \"Parenting\",\n        \"Romantic\",\n        \"Travel\",\n        \"Inspirational\",\n        \"Technological\",\n        \"Business\",\n        \"Social\"\n      ]",
-        "default": "",
-        "type": "string"
-      }
-  }
-}
-    ```''';
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    ```
+    ''';
   prompt = cleanPrompt(prompt);
-
-  String categoryPrompt = 
-    '''You are given a conversation to analyze. After reviewing the conversation, classify it into one of the following categories:
-      [
-        "Personal",
-        "Work",
-        "Educational",
-        "Health",
-        "Financial",
-        "Legal",
-        "Philosophical",
-        "Psychological",
-        "Spiritual",
-        "Scientific",
-        "Entrepreneurial",
-        "Parenting",
-        "Romantic",
-        "Travel",
-        "Inspirational",
-        "Technological",
-        "Business",
-        "Social"
-      ]
-
-      Here is the conversation: ${transcript.trim()}
-
-      Please provide your response in JSON format. For example: { "category": "Parenting" }''';
-
-
 
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
@@ -251,9 +172,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   }).toList();
 
   Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
-
   var structuredResponse = extractJson(await executeGptPrompt(prompt));
-
   List<String> responses = await allPluginResponses;
 
   return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
