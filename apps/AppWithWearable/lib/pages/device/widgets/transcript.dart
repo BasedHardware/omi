@@ -220,7 +220,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // TODO: add absolute time reminding like, "I will have this 3pm meeting, will try to show up"
     _smartReminderTimer = Timer.periodic(const Duration(seconds: 60 * 2), (timer) async {
       addEventToContext('Smart Reminder Timer Triggered');
-      var transcript = _buildDiarizedTranscriptMessage();
+      var transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('_initiateSmartReminderTimer: $transcript');
       var reminder = await smartReminder(transcript);
 

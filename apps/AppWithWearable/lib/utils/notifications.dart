@@ -41,7 +41,7 @@ void createNotification({String title = '', String body = '', int notificationId
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
-  var scheduleInterval = delayMinutes != null ? NotificationInterval(interval: delayMinutes) : null;
+  var scheduleInterval = delayMinutes != null ? NotificationInterval(interval: delayMinutes * 60) : null;
   AwesomeNotifications().createNotification(
     content: NotificationContent(
       id: notificationId,
