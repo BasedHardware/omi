@@ -39,41 +39,39 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // TODO: setup GetX Paged router + routes in here
-  // TODO: navigate using that, GetMaterialApp, setup theme
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [
-        // FFLocalizationsDelegate(),
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en')],
       theme: ThemeData(
-        // brightness: Brightness.light,
-        useMaterial3: false,
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.black,
-          secondary: Colors.deepPurple,
-          surface: Colors.black38,
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-        ),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: Colors.grey.shade900,
-          contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-        ),
-        textTheme: TextTheme(
-          titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-          titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-          bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-          labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-        ),
-      ),
+          useMaterial3: false,
+          colorScheme: const ColorScheme.dark(
+            primary: Colors.black,
+            secondary: Colors.deepPurple,
+            surface: Colors.black38,
+          ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: Colors.grey.shade900,
+            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+          ),
+          textTheme: TextTheme(
+            titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+            titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+            bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+            labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+          ),
+          textSelectionTheme: const TextSelectionThemeData(
+            cursorColor: Colors.white,
+            selectionColor: Colors.deepPurple,
+
+          )),
       themeMode: ThemeMode.dark,
       home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
     );

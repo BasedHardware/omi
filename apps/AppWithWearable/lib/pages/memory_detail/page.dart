@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:expandable_text/expandable_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
@@ -186,15 +184,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       color: Colors.grey.shade900,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: SelectionArea(
-                      child: ExpandableText(
-                        response.trim(),
-                        expandText: 'show more',
-                        collapseText: 'show less',
-                        maxLines: 6,
-                        linkColor: Colors.grey.shade300,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                      ),
+                    child: ExpandableTextWidget(
+                      text: response.trim(),
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                      maxLines: 6,
+                      // Change this to 6 if you want the initial max lines to be 6
+                      expandText: 'show more',
+                      collapseText: 'show less',
+                      linkColor: Colors.white,
                     ),
                   )),
             ],
@@ -204,8 +201,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
             ),
             const SizedBox(height: 8),
-            ExpandableText(
-              widget.memory.transcript,
+            ExpandableTextWidget(
+              text: widget.memory.transcript,
               expandText: 'show more',
               collapseText: 'show less',
               maxLines: 3,
@@ -308,4 +305,75 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 //         )
 //       : const SizedBox.shrink();
 // }
+}
+
+class ExpandableTextWidget extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final int maxLines;
+  final String expandText;
+  final String collapseText;
+  final Color linkColor;
+
+  ExpandableTextWidget({
+    required this.text,
+    required this.style,
+    this.maxLines = 3,
+    this.expandText = 'show more',
+    this.collapseText = 'show less',
+    this.linkColor = Colors.blue,
+  });
+
+  @override
+  _ExpandableTextWidgetState createState() => _ExpandableTextWidgetState();
+}
+
+class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
+  bool _isExpanded = false;
+
+  void _toggleExpand() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final span = TextSpan(text: widget.text, style: widget.style);
+    final tp = TextPainter(
+      text: span,
+      maxLines: widget.maxLines,
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout(maxWidth: MediaQuery.of(context).size.width);
+    final isOverflowing = tp.didExceedMaxLines;
+
+    return SelectionArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.text,
+            style: widget.style,
+            maxLines: _isExpanded ? 100 : widget.maxLines,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (isOverflowing)
+            InkWell(
+              onTap: _toggleExpand,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  _isExpanded ? widget.collapseText : widget.expandText,
+                  style: TextStyle(
+                    color: widget.linkColor,
+                    fontSize: widget.style.fontSize,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

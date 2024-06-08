@@ -5,7 +5,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 
@@ -47,120 +46,117 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     if (_friendDevice == null) return;
     SharedPreferencesUtil().onboardingCompleted = true;
     MixpanelManager().onboardingCompleted();
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: _friendDevice!.toJson())));
+    Navigator.of(context)
+        .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: _friendDevice!.toJson())));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          const BlurBotWidget(),
-          SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 16.0),
-                  child: Text(
-                    'Pairing',
-                    style: TextStyle(
-                      fontFamily: 'SF Pro Display',
-                      color: Colors.white,
-                      fontSize: 30.0,
-                      letterSpacing: 0.0,
-                      fontWeight: FontWeight.w700,
-                      // useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-                      height: 1.2,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      body: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 16.0),
+              child: Text(
+                'Pairing',
+                style: TextStyle(
+                  fontFamily: 'SF Pro Display',
+                  color: Colors.white,
+                  fontSize: 30.0,
+                  letterSpacing: 0.0,
+                  fontWeight: FontWeight.w700,
+                  // useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+                  height: 1.2,
                 ),
-                const SizedBox(height: 16.0),
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 500),
-                  opacity: _isConnected ? 1.0 : 0.0,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: Colors.white,
-                          width: 2,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16.0),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 500),
+              opacity: _isConnected ? 1.0 : 0.0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Color.fromARGB(255, 0, 255, 8),
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: const BoxDecoration(
-                              color: Color.fromARGB(255, 0, 255, 8),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8.0),
-                          const Text(
-                            'Friend Connected',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16.0),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const ScanningAnimation(),
-                      const SizedBox(height: 16.0),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 30.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            ScanningUI(
-                              string1: _stringStatus1,
-                              string2: _stringStatus2,
-                            ),
-                            AnimatedOpacity(
-                              duration: const Duration(milliseconds: 500),
-                              opacity: _isConnected ? 1.0 : 0.0,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: MaterialButton(
-                                  onPressed: _navigateToConnecting,
-                                  height: 50,
-                                  padding: const EdgeInsets.symmetric(horizontal: 30),
-                                  color: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                  child: const Text(
-                                    'Continue',
-                                    style: TextStyle(fontSize: 20, color: Colors.black),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                      const SizedBox(width: 8.0),
+                      const Text(
+                        'Friend Connected',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16.0),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const ScanningAnimation(),
+                  const SizedBox(height: 16.0),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ScanningUI(
+                          string1: _stringStatus1,
+                          string2: _stringStatus2,
+                        ),
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 500),
+                          opacity: _isConnected ? 1.0 : 0.0,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: MaterialButton(
+                              onPressed: _navigateToConnecting,
+                              height: 50,
+                              padding: const EdgeInsets.symmetric(horizontal: 30),
+                              color: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              child: const Text(
+                                'Continue',
+                                style: TextStyle(fontSize: 20, color: Colors.black),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
