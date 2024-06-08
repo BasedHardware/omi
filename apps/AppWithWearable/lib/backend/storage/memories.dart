@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +8,8 @@ class Structured {
   String overview;
   List<String> actionItems;
   List<String> pluginsResponse;
+  String category = '';
+  String emoji = ['🚀', '🤔', '📚', '🏃‍♂️', '📞'][Random().nextInt(5)];
 
   Structured({
     this.title = "",

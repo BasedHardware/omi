@@ -63,6 +63,10 @@ class _MyAppState extends State<MyApp> {
           onPrimary: Colors.white,
           onSecondary: Colors.white,
         ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: Colors.grey.shade900,
+          contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+        ),
         textTheme: TextTheme(
           titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
           titleMedium: const TextStyle(fontSize: 16, color: Colors.white),

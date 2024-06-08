@@ -54,6 +54,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   @override
   void dispose() {
     _connectionStateListener?.cancel();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -62,12 +63,13 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     return PopScope(
       canPop: false,
       child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).primaryColor,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           automaticallyImplyLeading: true,
           title: const Text('Speech Profile'),
           centerTitle: false,
-          elevation: 2.0,
+          elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new),
             onPressed: () {
