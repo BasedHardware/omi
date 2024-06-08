@@ -22,7 +22,7 @@ class Structured {
         overview: json['overview'],
         actionItems: List<String>.from(json['action_items'] ?? []),
         pluginsResponse: List<String>.from(json['pluginsResponse'] ?? []),
-        category: json['category'],
+        category: json['category'] ?? '',
       );
 
   Map<String, dynamic> toJson() => {
