@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -73,7 +74,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   size: 24.0,
                 ),
               ),
-              const Text('Memory Detail'),
+              Text(" ${['🚀', '🤔', '📚', '🏃‍♂️', '📞'][Random().nextInt(5)]} ${memory.structured.title}"),
               Row(
                 children: [
                   geyShareMemoryOperationWidget(memory),
@@ -90,108 +91,126 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: ListView(
             children: [
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
+              Text(['🚀', '🤔', '📚', '🏃‍♂️', '📞'][Random().nextInt(5)],
+                  style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
               Text(
-                '~ ${dateTimeFormat('MMM d, h:mm a', memory.createdAt)}',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                memory.structured.title,
+                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
               ),
-              SizedBox(height: 12),
-              _getFieldHeader('title', focusTitleField),
-              _getEditTextField(titleController, editingTitle, focusTitleField),
-              _getEditTextFieldButtons(editingTitle, () {
-                setState(() {
-                  editingTitle = false;
-                  titleController.text = memory.structured.title;
-                });
-              }, () async {
-                await MemoryStorage.updateMemory(memory.id, titleController.text, memory.structured.overview);
-                memory.structured.title = titleController.text;
-                setState(() {
-                  editingTitle = false;
-                });
-                MixpanelManager().memoryEdited(memory, fieldEdited: 'title');
-              }),
-              SizedBox(height: !memory.discarded ? 32 : 0),
-              _getFieldHeader('overview', focusOverviewField),
+              const SizedBox(height: 16),
+              Table(
+                border: TableBorder.all(color: Colors.black),
+                columnWidths: const {
+                  0: FlexColumnWidth(1),
+                  1: FlexColumnWidth(2),
+                },
+                children: [
+                  TableRow(
+                    children: [
+                      Text(
+                        'Date Created',
+                        style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
+                      ),
+                      Text(
+                        dateTimeFormat('MMM d,  yyyy', memory.createdAt),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ],
+                  ),
+                  const TableRow(children: [SizedBox(height: 12), SizedBox(height: 12)]),
+                  TableRow(children: [
+                    Text(
+                      'Time Created',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
+                    ),
+                    Text(
+                      dateTimeFormat('h:mm a', memory.createdAt),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ]),
+                  const TableRow(children: [SizedBox(height: 12), SizedBox(height: 12)]),
+                  TableRow(children: [
+                    Text(
+                      'Category',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
+                    ),
+                    Text(
+                      'Work',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ]),
+                ],
+              ),
+              const SizedBox(height: 40),
+              Text(
+                'Overview',
+                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+              ),
+              const SizedBox(height: 8),
               _getEditTextField(overviewController, editingOverview, focusOverviewField),
-              _getEditTextFieldButtons(editingOverview, () {
-                setState(() {
-                  editingOverview = false;
-                  overviewController.text = memory.structured.overview;
-                });
-              }, () async {
-                await MemoryStorage.updateMemory(memory.id, memory.structured.title, overviewController.text);
-                memory.structured.overview = overviewController.text;
-                setState(() {
-                  editingOverview = false;
-                });
-                MixpanelManager().memoryEdited(memory, fieldEdited: 'overview');
-              }),
-              SizedBox(height: !memory.discarded ? 32 : 0),
+              const SizedBox(height: 40),
               memory.structured.actionItems.isNotEmpty
-                  ? const Text('Action Items',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))
+                  ? Text(
+                      'Action Items',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                    )
                   : const SizedBox.shrink(),
               memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
               ...memory.structured.actionItems.map<Widget>((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('-', style: TextStyle(color: Colors.grey.shade200)),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(item, style: TextStyle(color: Colors.grey.shade200)))
-                    ],
-                  ),
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Checkbox(
+                        value: false,
+                        onChanged: (v) {},
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0))),
+                    Expanded(
+                      child: Text(item, style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+                    ),
+                  ],
                 );
               }),
               SizedBox(height: memory.discarded ? 32 : 0),
-              if (memory.structured.pluginsResponse.isNotEmpty && !memory.discarded) ...[
-                const SizedBox(height: 32),
-                const Padding(
-                  padding: EdgeInsets.only(left: 4.0),
-                  child: Text('Generated by Plugins',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 16),
-                ...memory.structured.pluginsResponse.map((response) => Container(
-                      padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0x1AF7F4F4),
-                        borderRadius: BorderRadius.circular(24.0),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: SelectionArea(
-                          child: Text(
-                            response,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                          ),
-                        ),
-                      ),
-                    )),
-              ],
+              // if (memory.structured.pluginsResponse.isNotEmpty && !memory.discarded) ...[
+              //   const SizedBox(height: 32),
+              //   const Padding(
+              //     padding: EdgeInsets.only(left: 4.0),
+              //     child: Text('Generated by Plugins',
+              //         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+              //   ),
+              //   const SizedBox(height: 16),
+              //   ...memory.structured.pluginsResponse.map((response) => Container(
+              //         padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
+              //         margin: const EdgeInsets.only(bottom: 16),
+              //         decoration: BoxDecoration(
+              //           color: const Color(0x1AF7F4F4),
+              //           borderRadius: BorderRadius.circular(24.0),
+              //         ),
+              //         child: Padding(
+              //           padding: const EdgeInsets.only(top: 8.0),
+              //           child: SelectionArea(
+              //             child: Text(
+              //               response,
+              //               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+              //             ),
+              //           ),
+              //         ),
+              //       )),
+              // ],
               const Padding(
                 padding: EdgeInsets.only(left: 4.0),
                 child: Text('Raw Transcript:',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
               ),
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0x1AF7F4F4),
-                  borderRadius: BorderRadius.circular(24.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: SelectionArea(
-                    child: Text(
-                      memory.transcript,
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: SelectionArea(
+                  child: Text(
+                    memory.transcript,
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                   ),
                 ),
               ),
