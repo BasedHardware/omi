@@ -24,11 +24,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
-        debugPrint('Tapped memory: ${widget.memory.id}');
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         await Navigator.of(context).push(MaterialPageRoute(
             builder: (c) => MemoryDetailPage(
-                  memory: widget.memory.toJson(),
+                  memory: widget.memory,
                 )));
         widget.loadMemories();
       },
@@ -118,19 +117,23 @@ class _MemoryListItemState extends State<MemoryListItem> {
               child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(['🚀', '🤔', '📚', '🏃‍♂️', '📞'][Random().nextInt(5)],
+              Text(widget.memory.structured.emoji,
                   style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-              const SizedBox(
-                width: 12,
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade800,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Text('Work', style: Theme.of(context).textTheme.bodyMedium),
-              )
+              widget.memory.structured.category.isNotEmpty
+                  ? const SizedBox(
+                      width: 12,
+                    )
+                  : const SizedBox.shrink(),
+              widget.memory.structured.category.isNotEmpty
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(widget.memory.structured.category, style: Theme.of(context).textTheme.bodyMedium),
+                    )
+                  : const SizedBox.shrink(),
             ],
           )),
           const SizedBox(

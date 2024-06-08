@@ -20,7 +20,10 @@ class MemoriesPage extends StatefulWidget {
   State<MemoriesPage> createState() => _MemoriesPageState();
 }
 
-class _MemoriesPageState extends State<MemoriesPage> {
+class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -29,7 +32,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18.0),
           child: Text(
-            'Welcome back, Joan.',
+            'Welcome back.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey, fontSize: 20),
           ),
         ),

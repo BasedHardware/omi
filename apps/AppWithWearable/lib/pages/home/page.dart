@@ -79,7 +79,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   @override
   void initState() {
-    _controller = TabController(length: 3, vsync: this);
+    _controller = TabController(length: 3, vsync: this, initialIndex: 1);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
@@ -142,6 +142,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
   }
 
+  _tabChange(int index) {
+    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _controller!.index = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -191,17 +199,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     MaterialButton(
-                      onPressed: () => setState(() => _controller!.index = 0),
+                      onPressed: () => _tabChange(0),
                       child: Text('Memories',
                           style: TextStyle(color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
                     MaterialButton(
-                      onPressed: () => setState(() => _controller!.index = 1),
+                      onPressed: () => _tabChange(1),
                       child: Text('Capture',
                           style: TextStyle(color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
                     MaterialButton(
-                      onPressed: () => setState(() => _controller!.index = 2),
+                      onPressed: () => _tabChange(2),
                       child: Text('Chat',
                           style: TextStyle(color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
@@ -287,6 +295,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
+    _controller?.dispose();
     super.dispose();
   }
 }
