@@ -16,3 +16,9 @@ Future<BTDeviceStruct?> scanAndConnectDevice() async {
     await Future.delayed(const Duration(seconds: 2));
   }
 }
+
+
+Future<List<BTDeviceStruct?>> scanDevices() async {
+    List<BTDeviceStruct> foundDevices = await bleFindDevices();
+    return foundDevices;
+}
