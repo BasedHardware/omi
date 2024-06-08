@@ -133,6 +133,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             .trim();
       }
     }
+    // remove empty segments
+    segments.removeWhere((element) => element.text.isEmpty);
   }
 
   void processCustomTranscript(List<TranscriptSegment> data) {

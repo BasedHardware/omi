@@ -40,12 +40,13 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         automaticallyImplyLeading: true,
         title: const Text('Settings'),
         centerTitle: false,
-        elevation: 2.0,
+        elevation: 0,
         actions: [
           MaterialButton(
             onPressed: _saveSettings,

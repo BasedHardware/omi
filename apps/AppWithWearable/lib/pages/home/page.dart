@@ -30,9 +30,10 @@ class HomePageWrapper extends StatefulWidget {
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
-class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver {
+class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
   GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
   int _selectedIndex = 1;
+  TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
   List<MemoryRecord> memories = [];
   bool displayDiscardMemories = false;
@@ -85,6 +86,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   @override
   void initState() {
+    _controller = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
@@ -150,7 +152,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: GestureDetector(
         onTap: () {
           FocusScope.of(context).unfocus();
@@ -159,8 +161,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         child: Stack(
           children: [
             Center(
-              child: IndexedStack(
-                index: _selectedIndex,
+              child: TabBarView(
+                controller: _controller,
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
                   MemoriesPage(
                     memories: memories,
@@ -186,28 +189,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
+                  color: Colors.black,
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
-                  border: Border.all(color: Colors.grey.shade800, width: 1.0),
+                  border: Border.all(color: Colors.grey, width: 1.0),
                   shape: BoxShape.rectangle,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     MaterialButton(
-                      onPressed: () => setState(() => _selectedIndex = 0),
+                      onPressed: () => setState(() => _controller!.index = 0),
                       child: Text('Memories',
-                          style: TextStyle(color: _selectedIndex == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                          style: TextStyle(color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
                     MaterialButton(
-                      onPressed: () => setState(() => _selectedIndex = 1),
+                      onPressed: () => setState(() => _controller!.index = 1),
                       child: Text('Capture',
-                          style: TextStyle(color: _selectedIndex == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                          style: TextStyle(color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
                     MaterialButton(
-                      onPressed: () => setState(() => _selectedIndex = 2),
+                      onPressed: () => setState(() => _controller!.index = 2),
                       child: Text('Chat',
-                          style: TextStyle(color: _selectedIndex == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                          style: TextStyle(color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
                     ),
                   ],
                 ),
@@ -218,7 +221,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       ),
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
         elevation: 0,
         centerTitle: true,
