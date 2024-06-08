@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +8,7 @@ class Structured {
   String overview;
   List<String> actionItems;
   List<String> pluginsResponse;
+  String emoji = ['🚀', '🤔', '📚', '🏃‍♂️', '📞'][Random().nextInt(5)];
   String category;
 
   Structured({
@@ -14,7 +16,7 @@ class Structured {
     this.overview = "",
     required this.actionItems,
     required this.pluginsResponse,
-    required this.category,
+    this.category = '',
   });
 
   factory Structured.fromJson(Map<String, dynamic> json) => Structured(

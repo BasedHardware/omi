@@ -62,6 +62,7 @@ dependencies:
     git:
       url: https://github.com/Telosnex/fonnx.git
       ref: main
+  expandable_text: ^2.3.0
 
 dependency_overrides:
   http: ^1.2.1

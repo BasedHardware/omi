@@ -5,6 +5,7 @@ import 'package:friend_private/backend/storage/message.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
+
   // final VoidCallback onShowMemoriesPressed;
 
   // const AIMessage({
@@ -13,13 +14,13 @@ class AIMessage extends StatelessWidget {
   //   required this.onShowMemoriesPressed,
   // }) : super(key: key);
 
-    const AIMessage({super.key, required this.message});
+  const AIMessage({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
     // return Column(
     //   crossAxisAlignment: CrossAxisAlignment.start,
-      return Row(
+    return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
         Column(
@@ -78,16 +79,15 @@ class AIMessage extends StatelessWidget {
                 onTap: () async {
                   await Clipboard.setData(ClipboardData(text: message.text));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text(
+                    const SnackBar(
+                      content: Text(
                         'Response copied to clipboard.',
                         style: TextStyle(
-                              color: Color.fromARGB(255, 255, 255, 255),
-                              fontSize: 12.0,
-                            ),
+                          color: Color.fromARGB(255, 255, 255, 255),
+                          fontSize: 12.0,
+                        ),
                       ),
-                      duration: const Duration(milliseconds: 2000),
-                      backgroundColor: const Color.fromARGB(255, 70, 70, 70),
+                      duration: Duration(milliseconds: 2000),
                     ),
                   );
                 },
@@ -111,12 +111,12 @@ class AIMessage extends StatelessWidget {
               ),
             ),
           ],
-        // ),
-        // if (message.memoryIds != null && message.memoryIds!.isNotEmpty)
-        //   ElevatedButton(
-        //     onPressed: onShowMemoriesPressed,
-        //     child: const Text('Show Memories'),
-          ),
+          // ),
+          // if (message.memoryIds != null && message.memoryIds!.isNotEmpty)
+          //   ElevatedButton(
+          //     onPressed: onShowMemoriesPressed,
+          //     child: const Text('Show Memories'),
+        ),
       ],
     );
   }
