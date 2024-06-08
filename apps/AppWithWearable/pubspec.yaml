@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.2+6
+version: 1.0.3+1
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -28,23 +28,18 @@ dependencies:
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
-  flutter_animate: 4.1.1+1
   flutter_blue_plus: ^1.32.7
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
-  go_router: 7.1.1
-  google_fonts: 6.1.0
   http: ^1.2.1
   intl: ^0.19.0
-  json_path: 0.6.2
   mime_type: 1.0.0
   page_transition: 2.1.0
   permission_handler: ^11.3.1
-  share_plus: 7.2.1
+  share_plus: ^9.0.0
   shared_preferences: ^2.2.3
   smooth_page_indicator: 1.1.0
-  timeago: 3.2.2
-  url_launcher: ^6.2.6
+  url_launcher: ^6.3.0
   url_launcher_platform_interface: 2.3.2
   wav: ^1.3.0
   lottie: ^3.1.2
@@ -53,39 +48,38 @@ dependencies:
   uuid: ^4.4.0
   tuple: ^2.0.2
   googleapis_auth: ^1.6.0
-  ml_linalg: ^13.12.2
   envied: ^0.5.4+1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   mime: ^1.0.5
   instabug_flutter: ^13.0.0
-  provider: ^6.1.2
-#  flutter_foreground_task: ^6.2.0
+  #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-#  flutter_silero_vad:
-#    git:
-#      url: https://github.com/char5742/flutter_silero_vad.git\
+  #  flutter_silero_vad:
+  #    git:
+  #      url: https://github.com/char5742/flutter_silero_vad.git\
   fonnx:
     git:
       url: https://github.com/Telosnex/fonnx.git
       ref: main
+  expandable_text: ^2.3.0
   nordic_dfu: ^6.1.4+hotfix
 
 dependency_overrides:
-  http: 1.2.0
-  uuid: ^4.0.0
+  http: ^1.2.1
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
-  flutter_lints: 3.0.0
-  image: 4.0.17
+  flutter_lints: ^4.0.0
+  image: ^4.2.0
   integration_test:
     sdk: flutter
-  lints: 3.0.0
+  lints: ^4.0.0
   flutter_test:
     sdk: flutter
   envied_generator: ^0.5.4+1
-  build_runner: ^2.4.9
+  build_runner: ^2.4.11
 
 
 flutter_launcher_icons:

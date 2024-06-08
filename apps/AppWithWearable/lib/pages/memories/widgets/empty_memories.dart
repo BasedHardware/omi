@@ -1,6 +1,4 @@
-import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class EmptyMemoriesWidget extends StatefulWidget {
   const EmptyMemoriesWidget({super.key});
@@ -74,21 +72,21 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
                           children: [
                             Icon(
                               Icons.blur_on,
-                              color: FlutterFlowTheme.of(context).secondary,
+                              color: Theme.of(context).secondaryHeaderColor,
                               size: 24.0,
                             ),
                             const SizedBox(
                               width: 8,
                             ),
-                            Text(
+                            const Text(
                               'Friend',
-                              style: FlutterFlowTheme.of(context).labelMedium.override(
-                                    fontFamily: FlutterFlowTheme.of(context).labelMediumFamily,
-                                    color: FlutterFlowTheme.of(context).secondary,
-                                    fontWeight: FontWeight.w500,
-                                    useGoogleFonts:
-                                        GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).labelMediumFamily),
-                                  ),
+                              style: TextStyle(
+                                // color: FlutterFlowTheme.of(context).secondary,
+                                fontWeight: FontWeight.w500,
+                                // STYLE ME
+                                // useGoogleFonts:
+                                //     GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).labelMediumFamily),
+                              ),
                             ),
                             const SizedBox(width: 4),
                           ],
@@ -97,19 +95,19 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(4.0, 4.0, 0.0, 8.0),
+                const Padding(
+                  padding: EdgeInsetsDirectional.fromSTEB(4.0, 4.0, 0.0, 8.0),
                   child: Text(
                     'Your most important memories will be stored here. Try Recording or Adding your first Memory!',
                     textAlign: TextAlign.center,
-                    style: FlutterFlowTheme.of(context).labelMedium.override(
-                          fontFamily: FlutterFlowTheme.of(context).labelMediumFamily,
-                          color: FlutterFlowTheme.of(context).secondary,
-                          fontWeight: FontWeight.bold,
-                          useGoogleFonts:
-                              GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).labelMediumFamily),
-                          lineHeight: 1.5,
-                        ),
+                    style: TextStyle(
+                      // fontFamily: FlutterFlowTheme.of(context).labelMediumFamily,
+                      // color: FlutterFlowTheme.of(context).secondary,
+                      fontWeight: FontWeight.bold,
+                      // useGoogleFonts:
+                      //     GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).labelMediumFamily),
+                      height: 1.5, // STYLE ME
+                    ),
                   ),
                 ),
               ],

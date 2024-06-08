@@ -1,25 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'backend/preferences.dart';
 import 'env/env.dart';
-import 'flutter_flow/flutter_flow_util.dart';
-import 'flutter_flow/internationalization.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  usePathUrlStrategy();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
+        // TODO: set new API Key to new account
         token: Env.instabugApiKey!,
         invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
     Instabug.setColorTheme(ColorTheme.dark);
@@ -28,69 +26,54 @@ void main() async {
 }
 
 _getRunApp() {
-  return runApp(
-      MyApp(entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : null));
+  return runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.entryPage});
+  const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
-
-  final Widget? entryPage;
 }
 
 class _MyAppState extends State<MyApp> {
-  Locale? _locale;
-  ThemeMode _themeMode = ThemeMode.system;
-
-  late AppStateNotifier _appStateNotifier;
-  late GoRouter _router;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _appStateNotifier = AppStateNotifier.instance;
-    _router = createRouter(_appStateNotifier, widget.entryPage);
-
-    Future.delayed(
-        const Duration(milliseconds: 1000), () => setState(() => _appStateNotifier.stopShowingSplashImage()));
-  }
-
-  void setLocale(String language) {
-    setState(() => _locale = createLocale(language));
-  }
-
-  void setThemeMode(ThemeMode mode) => setState(() {
-        _themeMode = mode;
-      });
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [
-        FFLocalizationsDelegate(),
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      locale: _locale,
-      supportedLocales: const [
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('en')],
       theme: ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: false,
-      ),
-      themeMode: _themeMode,
-      routerConfig: _router,
+          useMaterial3: false,
+          colorScheme: const ColorScheme.dark(
+            primary: Colors.black,
+            secondary: Colors.deepPurple,
+            surface: Colors.black38,
+          ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: Colors.grey.shade900,
+            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+          ),
+          textTheme: TextTheme(
+            titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+            titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+            bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+            labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+          ),
+          textSelectionTheme: const TextSelectionThemeData(
+            cursorColor: Colors.white,
+            selectionColor: Colors.deepPurple,
+
+          )),
+      themeMode: ThemeMode.dark,
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
     );
   }
 }

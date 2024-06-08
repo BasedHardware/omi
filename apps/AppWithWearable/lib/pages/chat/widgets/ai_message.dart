@@ -2,16 +2,24 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/storage/message.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
+
+  // final VoidCallback onShowMemoriesPressed;
+
+  // const AIMessage({
+  //   Key? key,
+  //   required this.message,
+  //   required this.onShowMemoriesPressed,
+  // }) : super(key: key);
 
   const AIMessage({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
+    // return Column(
+    //   crossAxisAlignment: CrossAxisAlignment.start,
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
@@ -42,7 +50,7 @@ class AIMessage extends StatelessWidget {
                 ],
                 borderRadius: BorderRadius.circular(12.0),
                 border: Border.all(
-                  color: FlutterFlowTheme.of(context).primary,
+                  color: Theme.of(context).primaryColor,
                   width: 1.0,
                 ),
               ),
@@ -55,15 +63,7 @@ class AIMessage extends StatelessWidget {
                     SelectionArea(
                         child: AutoSizeText(
                       message.text.replaceAll(r'\n', '\n'),
-                      style: FlutterFlowTheme.of(context).titleMedium.override(
-                            fontFamily: FlutterFlowTheme.of(context).titleMediumFamily,
-                            color: FlutterFlowTheme.of(context).secondary,
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.w500,
-                            useGoogleFonts:
-                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).titleMediumFamily),
-                            lineHeight: 1.5,
-                          ),
+                      style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500, color: Colors.grey.shade200),
                     )),
                   ],
                 ),
@@ -79,19 +79,15 @@ class AIMessage extends StatelessWidget {
                 onTap: () async {
                   await Clipboard.setData(ClipboardData(text: message.text));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
+                    const SnackBar(
                       content: Text(
                         'Response copied to clipboard.',
-                        style: FlutterFlowTheme.of(context).bodyMedium.override(
-                              fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                              color: Color.fromARGB(255, 255, 255, 255),
-                              fontSize: 12.0,
-                              useGoogleFonts:
-                                  GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                            ),
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 255, 255),
+                          fontSize: 12.0,
+                        ),
                       ),
-                      duration: const Duration(milliseconds: 2000),
-                      backgroundColor: const Color.fromARGB(255, 70, 70, 70),
+                      duration: Duration(milliseconds: 2000),
                     ),
                   );
                 },
@@ -102,25 +98,24 @@ class AIMessage extends StatelessWidget {
                       padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
                       child: Icon(
                         Icons.content_copy,
-                        color: FlutterFlowTheme.of(context).primary,
+                        color: Theme.of(context).primaryColor,
                         size: 10.0,
                       ),
                     ),
                     Text(
                       'Copy response',
-                      style: FlutterFlowTheme.of(context).bodyMedium.override(
-                            fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                            color: FlutterFlowTheme.of(context).primary,
-                            fontSize: 10.0,
-                            useGoogleFonts:
-                                GoogleFonts.asMap().containsKey(FlutterFlowTheme.of(context).bodyMediumFamily),
-                          ),
+                      style: TextStyle(color: Theme.of(context).primaryColor, fontSize: 10.0),
                     ),
                   ],
                 ),
               ),
             ),
           ],
+          // ),
+          // if (message.memoryIds != null && message.memoryIds!.isNotEmpty)
+          //   ElevatedButton(
+          //     onPressed: onShowMemoriesPressed,
+          //     child: const Text('Show Memories'),
         ),
       ],
     );
