@@ -26,26 +26,33 @@ class _MemoriesPageState extends State<MemoriesPage> {
     return ListView(
       children: [
         const SizedBox(height: 16),
-        Text('Welcome back, Nash.'),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text(
-              widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-                onPressed: () {
-                  widget.toggleDiscardMemories();
-                },
-                icon: Icon(
-                  widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                  color: Colors.white,
-                )),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18.0),
+          child: Text(
+            'Welcome back, Joan.',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey, fontSize: 20),
+          ),
         ),
+        const SizedBox(height: 16),
+        // Row(
+        //   crossAxisAlignment: CrossAxisAlignment.center,
+        //   mainAxisAlignment: MainAxisAlignment.end,
+        //   children: [
+        //     Text(
+        //       widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+        //       style: TextStyle(color: Colors.white, fontSize: 16),
+        //     ),
+        //     const SizedBox(width: 8),
+        //     IconButton(
+        //         onPressed: () {
+        //           widget.toggleDiscardMemories();
+        //         },
+        //         icon: Icon(
+        //           widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+        //           color: Colors.white,
+        //         )),
+        //   ],
+        // ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: (widget.memories.isEmpty)

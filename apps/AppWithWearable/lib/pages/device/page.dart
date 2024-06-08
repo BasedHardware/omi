@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'widgets/transcript.dart';
@@ -13,7 +12,8 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 class DevicePage extends StatefulWidget {
   final Function refreshMemories;
   final BTDeviceStruct? device;
-  final int batteryLevel;
+
+  // final int batteryLevel;
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
   const DevicePage({
@@ -21,7 +21,6 @@ class DevicePage extends StatefulWidget {
     required this.device,
     required this.refreshMemories,
     required this.transcriptChildWidgetKey,
-    required this.batteryLevel,
   });
 
   @override
@@ -139,46 +138,6 @@ class _DevicePageState extends State<DevicePage> {
             ),
             textAlign: TextAlign.center,
           ),
-          widget.batteryLevel == -1 ? const SizedBox.shrink() : const SizedBox(width: 16.0),
-          widget.batteryLevel == -1
-              ? const SizedBox.shrink()
-              : Container(
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 1,
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${widget.batteryLevel.toString()}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8.0),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: widget.batteryLevel > 75
-                              ? const Color.fromARGB(255, 0, 255, 8)
-                              : widget.batteryLevel > 20
-                                  ? Colors.yellow.shade700
-                                  : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
         ],
       ),
     ];
