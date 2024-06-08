@@ -23,7 +23,7 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
               .expand((element) => element)
               .firstWhereOrNull((characteristic) => characteristic.uuid.str == '00002a26-0000-1000-8000-00805f9b34fb')
               ?.read()
-              .then((value) => value[0]
+              .then((value) => value.toList()
           )),
         ));
       }

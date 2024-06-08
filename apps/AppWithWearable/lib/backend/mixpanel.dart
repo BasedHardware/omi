@@ -119,6 +119,8 @@ class MixpanelManager {
         properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
   }
 
+  void firmwareUpdateButtonClick() => track('Furmware Update Clicked');
+  
 // TBI
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
