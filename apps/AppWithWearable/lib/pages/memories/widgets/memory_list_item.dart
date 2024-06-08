@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:fonnx/onnx/ort_ffi_bindings.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
@@ -21,45 +24,40 @@ class _MemoryListItemState extends State<MemoryListItem> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
-        debugPrint('Tapped memory: ${widget.memory.id}');
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         await Navigator.of(context).push(MaterialPageRoute(
             builder: (c) => MemoryDetailPage(
-                  memory: widget.memory.toJson(),
+                  memory: widget.memory,
                 )));
         widget.loadMemories();
       },
       child: Container(
-        margin: const EdgeInsets.only(top: 12),
+        margin: EdgeInsets.only(top: 12),
         width: double.maxFinite,
         decoration: BoxDecoration(
-          color: const Color(0x1AF7F4F4),
-          borderRadius: BorderRadius.circular(24.0),
+          color: Colors.grey.shade900,
+          borderRadius: BorderRadius.circular(16.0),
         ),
         child: Padding(
-          padding: const EdgeInsetsDirectional.all(8),
+          padding: const EdgeInsetsDirectional.all(16),
           child: !widget.memory.discarded
               ? Column(
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _getMemoryHeader(),
-                    const SizedBox(height: 12),
-                    Text(widget.memory.structured.overview,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
-                    if (widget.memory.structured.actionItems.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      const Text('Action Items:',
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      ..._getActionItems(),
-                    ],
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
-                      ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      widget.memory.structured.title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      maxLines: 1,
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
+                    Text(
+                      widget.memory.structured.overview,
+                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                      maxLines: 2,
+                    ),
                   ],
                 )
               : Column(mainAxisSize: MainAxisSize.max, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -111,17 +109,40 @@ class _MemoryListItemState extends State<MemoryListItem> {
 
   _getMemoryHeader() {
     return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12, top: 4),
+      padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-              child: Text(widget.memory.structured.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
+              child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(widget.memory.structured.emoji,
+                  style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+              widget.memory.structured.category.isNotEmpty
+                  ? const SizedBox(
+                      width: 12,
+                    )
+                  : const SizedBox.shrink(),
+              widget.memory.structured.category.isNotEmpty
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(widget.memory.structured.category, style: Theme.of(context).textTheme.bodyMedium),
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          )),
           const SizedBox(
             width: 8,
           ),
-          getMemoryOperations(widget.memory, setState),
+          Text(
+            ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          )
         ],
       ),
     );
