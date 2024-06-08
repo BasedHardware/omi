@@ -21,8 +21,7 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
           final device = BluetoothDevice.fromId(widget.btDevice!.id);
           await device.disconnect();
           await Future.delayed(const Duration(seconds: 2));
-          await startDfu(widget.btDevice!.id, 'assets/friend-1.0.4.zip',
-              fileInAssets: true);
+          await startDfu(widget.btDevice!.id, '');
         },
         child: const Text(
           'Update Firmware',

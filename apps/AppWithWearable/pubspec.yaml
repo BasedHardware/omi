@@ -118,7 +118,6 @@ flutter:
     - assets/rive_animations/
     - assets/pdfs/
     - assets/silero_vad.onnx
-    - assets/friend-1.0.4.zip
   fonts:
     - family: 'SF Pro Display'
       fonts:
