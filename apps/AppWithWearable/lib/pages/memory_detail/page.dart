@@ -134,7 +134,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                           style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
                         ),
                         Text(
-                          'Work',
+                          widget.memory.structured.category,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ])
