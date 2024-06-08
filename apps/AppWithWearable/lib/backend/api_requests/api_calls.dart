@@ -123,7 +123,8 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: [], category: '');
+  if (transcript.isEmpty || transcript.split(' ').length < 7)
+    return Structured(actionItems: [], pluginsResponse: [], category: '');
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -210,34 +211,6 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
           .replaceAll('    ', '')
           .trim();
 
-  String categoryPrompt = 
-    '''You are given a conversation to analyze. After reviewing the conversation, classify it into one of the following categories:
-      [
-        "Personal",
-        "Work",
-        "Educational",
-        "Health",
-        "Financial",
-        "Legal",
-        "Philosophical",
-        "Psychological",
-        "Spiritual",
-        "Scientific",
-        "Entrepreneurial",
-        "Parenting",
-        "Romantic",
-        "Travel",
-        "Inspirational",
-        "Technological",
-        "Business",
-        "Social"
-      ]
-
-      Here is the conversation: ${transcript.trim()}
-
-      Please provide your response in JSON format. For example: { "category": "Parenting" }''';
-
-
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
         '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
@@ -245,9 +218,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   }).toList();
 
   Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
-
   var structuredResponse = extractJson(await executeGptPrompt(prompt));
-
   List<String> responses = await allPluginResponses;
 
   return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
