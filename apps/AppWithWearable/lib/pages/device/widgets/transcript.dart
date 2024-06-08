@@ -122,7 +122,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _cleanTranscript(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.'];
+    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m'];
     for (var i = 0; i < segments.length; i++) {
       for (var hallucination in hallucinations) {
         segments[i].text = segments[i]
