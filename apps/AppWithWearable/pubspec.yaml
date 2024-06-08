@@ -63,6 +63,7 @@ dependencies:
       url: https://github.com/Telosnex/fonnx.git
       ref: main
   expandable_text: ^2.3.0
+  flutter_native_splash: ^2.4.0
 
 dependency_overrides:
   http: ^1.2.1
@@ -103,6 +104,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
     - assets/videos/
