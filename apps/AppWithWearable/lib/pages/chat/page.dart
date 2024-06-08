@@ -94,11 +94,12 @@ class _ChatPageState extends State<ChatPage> {
               // onTap: () {
               //   widget.textFieldFocusNode.requestFocus();
               // },
-              // enabled: true,
+              enabled: true,
+              autofocus: false,
               controller: textController,
               textCapitalization: TextCapitalization.sentences,
               obscureText: false,
-              // focusNode: widget.textFieldFocusNode,
+              focusNode: widget.textFieldFocusNode,
               // canRequestFocus: true,
               decoration: InputDecoration(
                   hintText: 'Chat with memories...',

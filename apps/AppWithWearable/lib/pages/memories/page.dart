@@ -26,6 +26,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
     return ListView(
       children: [
         const SizedBox(height: 16),
+        Text('Welcome back, Nash.'),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.end,
