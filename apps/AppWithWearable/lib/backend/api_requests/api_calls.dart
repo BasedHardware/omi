@@ -140,6 +140,27 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, use a list of actionable steps or bullet points for the conversation.
+    For the category, classify the conversation into one of the following categories:
+      [
+        "Personal",
+        "Work",
+        "Educational",
+        "Health",
+        "Financial",
+        "Legal",
+        "Philosophical",
+        "Psychological",
+        "Spiritual",
+        "Scientific",
+        "Entrepreneurial",
+        "Parenting",
+        "Romantic",
+        "Travel",
+        "Inspirational",
+        "Technological",
+        "Business",
+        "Social"
+      ]
         
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
@@ -151,7 +172,39 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}}}
+    {
+  "properties": {
+    "title": {
+      "title": "Title",
+      "description": "A title/name for this conversation",
+      "default": "",
+      "type": "string"
+    },
+    "overview": {
+      "title": "Overview",
+      "description": "A brief overview of the conversation",
+      "default": "",
+      "type": "string"
+    },
+    "action_items": {
+      "title": "Action Items",
+      "description": "A list of action items from the conversation",
+      "default": [
+        
+      ],
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+    },
+      "category": {
+        "title": "category",
+        "description": "classification of the conversation into one of the following categories:\n      [\n        \"Personal\",\n        \"Work\",\n        \"Educational\",\n        \"Health\",\n        \"Financial\",\n        \"Legal\",\n        \"Philosophical\",\n        \"Psychological\",\n        \"Spiritual\",\n        \"Scientific\",\n        \"Entrepreneurial\",\n        \"Parenting\",\n        \"Romantic\",\n        \"Travel\",\n        \"Inspirational\",\n        \"Technological\",\n        \"Business\",\n        \"Social\"\n      ]",
+        "default": "",
+        "type": "string"
+      }
+  }
+}
     ```'''
           .replaceAll('     ', '')
           .replaceAll('    ', '')
@@ -185,32 +238,19 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
       Please provide your response in JSON format. For example: { "category": "Parenting" }''';
 
 
-List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
+  List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
         '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
     return response;
-}).toList();
+  }).toList();
 
-// Start categoryResponse concurrently
-Future<String> categoryResponseFuture = executeGptPrompt(categoryPrompt).then((result) => extractJson(result));
+  Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
 
-// Add the future of categoryResponse to the list of pluginPrompts so it gets awaited with the rest
-List<Future<dynamic>> allResponses = List.from(pluginPrompts)..add(categoryResponseFuture);
+  var structuredResponse = extractJson(await executeGptPrompt(prompt));
 
-// Wait for all futures to complete
-List<dynamic> responsesWithCategory = await Future.wait(allResponses);
+  List<String> responses = await allPluginResponses;
 
-// Extract structuredResponse from the prompt
-var structuredResponse = extractJson(await executeGptPrompt(prompt));
-
-// Split the last element (which is the categoryResponse) from the responses
-String categoryResponse = responsesWithCategory.removeLast();
-List<String> responses = responsesWithCategory.cast<String>();
-
-    
-return Structured.fromJson(jsonDecode(structuredResponse)
-  ..['pluginsResponse'] = responses
-  ..['category'] = jsonDecode(categoryResponse)['category']);
+  return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
