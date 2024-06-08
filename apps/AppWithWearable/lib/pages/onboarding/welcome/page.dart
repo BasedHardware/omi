@@ -137,7 +137,7 @@ class _WelcomePageState extends State<WelcomePage>
                           },
                         );
                       } else {
-                        Navigator.of(context).pushReplacement(MaterialPageRoute(
+                        Navigator.of(context).push(MaterialPageRoute(
                             builder: (c) => const FindDevicesPage()));
                       }
                     },
@@ -155,7 +155,7 @@ class _WelcomePageState extends State<WelcomePage>
                         child: Text(
                           'Connect Your Wearable',
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w600,
                               fontSize: screenSize.width * 0.041,
                               color: Colors.black),
                         ),
