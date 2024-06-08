@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../flutter_flow/lat_lng.dart';
 import '../../flutter_flow/place.dart';
 import '../../flutter_flow/uploaded_file.dart';
-import '/backend/schema/enums/enums.dart';
-import '/backend/schema/structs/index.dart';
+import 'package:friend_private/backend/schema/enums/enums.dart';
+import 'package:friend_private/backend/schema/structs/index.dart';
 
 /// SERIALIZATION HELPERS
 

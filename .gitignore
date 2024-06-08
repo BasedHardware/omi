@@ -23,6 +23,9 @@ build/
 # Android specific
 **/android/**/build/
 **/android/.gradle
+**/android/gradlew
+**/android/gradlew.bat
+**/android/**/gradle-wrapper.jar
 **/android/**/local.properties
 
 # iOS specific

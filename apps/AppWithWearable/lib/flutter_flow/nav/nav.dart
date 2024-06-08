@@ -11,8 +11,8 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:provider/provider.dart';
 
-import '/backend/schema/structs/index.dart';
-import '/flutter_flow/flutter_flow_util.dart';
+import 'package:friend_private/backend/schema/structs/index.dart';
+import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
 
 export 'package:go_router/go_router.dart';
 export 'serialization_util.dart';
