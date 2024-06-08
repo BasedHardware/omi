@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -122,7 +123,8 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: []);
+  if (transcript.isEmpty || transcript.split(' ').length < 7)
+    return Structured(actionItems: [], pluginsResponse: [], category: '');
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -139,23 +141,25 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, use a list of actionable steps or bullet points for the conversation.
+    For the category, classify the conversation into one of the available categories.
         
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
     
     The output should be formatted as a JSON instance that conforms to the JSON schema below.
-
+    
     As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
     the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}}}
-    ```'''
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    ```
+    '''
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim();
-  // debugPrint(prompt);
+
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
         '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
@@ -163,9 +167,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   }).toList();
 
   Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
-
   var structuredResponse = extractJson(await executeGptPrompt(prompt));
-
   List<String> responses = await allPluginResponses;
 
   return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
@@ -301,26 +303,6 @@ Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
   }
 }
 
-Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> vectors) async {
-  var body = jsonEncode({
-    'vectors': memoriesId.mapIndexed((index, id) {
-      return {
-        'id': id,
-        'values': vectors[index],
-        'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
-          'memory_id': id,
-          'uid': SharedPreferencesUtil().uid,
-        }
-      };
-    }).toList(),
-    'namespace': Env.pineconeIndexNamespace
-  });
-  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
-  debugPrint('createVectorPinecone response: $responseBody');
-  return true;
-}
-
 Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
   var body = jsonEncode({
     'vectors': [
@@ -328,7 +310,8 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
         'id': memoryId,
         'values': vectorList,
         'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
+          'created_at':
+              DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
           'memory_id': memoryId,
           'uid': SharedPreferencesUtil().uid,
         }
@@ -353,11 +336,11 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
   // Add date filtering if startTimestamp or endTimestamp is provided
   if (startTimestamp != null || endTimestamp != null) {
     filter['created_at'] = {};
-  
+
     if (startTimestamp != null) {
       filter['created_at']['\$gte'] = startTimestamp;
     }
-   
+
     if (endTimestamp != null) {
       filter['created_at']['\$lte'] = endTimestamp;
     }
@@ -421,11 +404,9 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
       debugPrint('Response body: ${response.body}');
       return TranscriptSegment.fromJsonList(data);
     } else {
-      debugPrint('Failed to upload file. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
   } catch (e) {
-    debugPrint('An error occurred transcribeAudioFile: $e');
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
 }

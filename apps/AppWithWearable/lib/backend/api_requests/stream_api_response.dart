@@ -1,6 +1,6 @@
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/message.dart';
-import '/flutter_flow/custom_functions.dart';
+import 'package:friend_private/utils/temp.dart';
 import 'package:flutter/material.dart';
 import './streaming_models.dart';
 import 'dart:convert';
@@ -88,6 +88,14 @@ bool isValidJson(String jsonString) {
   } catch (e) {
     return false;
   }
+}
+
+String? jsonEncodeString(String? regularString) {
+  if (regularString == null) return null;
+  if (regularString.isEmpty | (regularString.length == 1)) return regularString;
+
+  String encodedString = jsonEncode(regularString);
+  return encodedString.substring(1, encodedString.length - 1);
 }
 
 void handlePartialResponseContent(String data, Future<dynamic> Function(String) callback) {

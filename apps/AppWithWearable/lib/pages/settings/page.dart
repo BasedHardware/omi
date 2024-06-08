@@ -3,8 +3,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_util.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,12 +15,9 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController deepgramApiKeyController = TextEditingController();
   final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController customWebsocketUrlController = TextEditingController();
-  bool deepgramApiIsVisible = false;
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
   late bool useFriendAPIKeys;
@@ -30,11 +26,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void initState() {
-    deepgramApiKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-    customWebsocketUrlController.text = SharedPreferencesUtil().customWebsocketUrl;
 
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     useFriendAPIKeys = SharedPreferencesUtil().useFriendApiKeys;
@@ -46,12 +40,13 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: FlutterFlowTheme.of(context).primary,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         automaticallyImplyLeading: true,
         title: const Text('Settings'),
         centerTitle: false,
-        elevation: 2.0,
+        elevation: 0,
         actions: [
           MaterialButton(
             onPressed: _saveSettings,
@@ -67,114 +62,109 @@ class _SettingsPageState extends State<SettingsPage> {
           )
         ],
       ),
-      body: Stack(
-        children: [
-          const BlurBotWidget(),
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: ListView(
-                children: [
-                  const SizedBox(height: 32.0),
-                  // _getText('Recordings Language:', underline: false),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text(
-                      'Recordings Language:',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-                  Center(
-                      child: Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    child: DropdownButton<String>(
-                      menuMaxHeight: 350,
-                      value: _selectedLanguage,
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedLanguage = newValue!;
-                        });
-                      },
-                      dropdownColor: Colors.black,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      underline: Container(
-                        height: 0,
-                        color: Colors.white,
-                      ),
-                      isExpanded: true,
-                      itemHeight: 48,
-                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
-                        return DropdownMenuItem<String>(
-                          value: availableLanguages[key],
-                          child: Text(
-                            '$key (${availableLanguages[key]})',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight:
-                                    _selectedLanguage == availableLanguages[key] ? FontWeight.w600 : FontWeight.w500,
-                                fontSize: 16),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  )),
-                  const SizedBox(height: 24.0),
-                  ListTile(
-                    onTap: () {
-                      context.pushNamed('speaker_id');
-                    },
-                    title: const Text(
-                      'Setup your speech profile  🎤',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12.0),
-                  SwitchListTile(
-                    value: optInAnalytics,
-                    activeColor: Colors.deepPurple,
-                    onChanged: (v) {
-                      setState(() {
-                        optInAnalytics = v;
-                      });
-                    },
-                    title: const Text(
-                      'Opt In Analytics',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 8.0),
-                  SwitchListTile(
-                    value: devModeEnabled,
-                    activeColor: Colors.deepPurple,
-                    onChanged: (v) {
-                      setState(() {
-                        devModeEnabled = v;
-                      });
-                    },
-                    title: const Text(
-                      'Developer Mode',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  ..._getDeveloperOnlyFields(),
-                ],
+      body: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: ListView(
+            children: [
+              const SizedBox(height: 32.0),
+              // _getText('Recordings Language:', underline: false),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Recordings Language:',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
-            ),
-          )
-        ],
+
+              const SizedBox(height: 12),
+              Center(
+                  child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                child: DropdownButton<String>(
+                  menuMaxHeight: 350,
+                  value: _selectedLanguage,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _selectedLanguage = newValue!;
+                    });
+                  },
+                  dropdownColor: Colors.black,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  underline: Container(
+                    height: 0,
+                    color: Colors.white,
+                  ),
+                  isExpanded: true,
+                  itemHeight: 48,
+                  items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+                    return DropdownMenuItem<String>(
+                      value: availableLanguages[key],
+                      child: Text(
+                        '$key (${availableLanguages[key]})',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight:
+                                _selectedLanguage == availableLanguages[key] ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              )),
+              const SizedBox(height: 24.0),
+              ListTile(
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                },
+                title: const Text(
+                  'Setup your speech profile  🎤',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              SwitchListTile(
+                value: optInAnalytics,
+                activeColor: Colors.deepPurple,
+                onChanged: (v) {
+                  setState(() {
+                    optInAnalytics = v;
+                  });
+                },
+                title: const Text(
+                  'Opt In Analytics',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 8.0),
+              SwitchListTile(
+                value: devModeEnabled,
+                activeColor: Colors.deepPurple,
+                onChanged: (v) {
+                  setState(() {
+                    devModeEnabled = v;
+                  });
+                },
+                title: const Text(
+                  'Developer Mode',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+              ..._getDeveloperOnlyFields(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -200,8 +190,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 useFriendAPIKeys = v!;
               });
             },
-            fillColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) {
+            fillColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
                 return Colors.deepPurple;
               }
               return Colors.transparent;
@@ -220,7 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (useFriendAPIKeys)
             Container(
               width: double.maxFinite,
-              height: 300,
+              height: 160,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20.0),
                 color: Colors.white.withOpacity(0.1),
@@ -230,36 +220,6 @@ class _SettingsPageState extends State<SettingsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Column(
               children: [
-                const SizedBox(height: 8.0),
-                _getText('Deepgram is used for converting speech to text.', underline: false, canBeDisabled: true),
-                const SizedBox(height: 8.0),
-                TextField(
-                  controller: deepgramApiKeyController,
-                  obscureText: deepgramApiIsVisible ? false : true,
-                  enabled: !useFriendAPIKeys,
-                  decoration: _getTextFieldDecoration('Deepgram API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          deepgramApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () {
-                          // setModalState(() {
-                          setState(() {
-                            deepgramApiIsVisible = !deepgramApiIsVisible;
-                          });
-                          // });
-                        },
-                      ),
-                      canBeDisabled: true),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 8.0),
-                TextButton(
-                    onPressed: () {
-                      launchUrl(Uri.parse('https://developers.deepgram.com/docs/create-additional-api-keys'));
-                    },
-                    child: _getText('How to generate a Deepgram API key?', underline: true, canBeDisabled: true)),
                 const SizedBox(height: 16.0),
                 _getText('OpenAI is used for chat.', canBeDisabled: true),
                 const SizedBox(height: 8.0),
@@ -317,23 +277,6 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
-      const SizedBox(height: 12),
-      TextButton(
-          onPressed: () {
-            launchUrl(
-                Uri.parse('https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-console'));
-          },
-          child: _getText('How to create a Google Cloud Storage Bucket', underline: true)),
-      const SizedBox(height: 16.0),
-      TextField(
-        controller: customWebsocketUrlController,
-        obscureText: false,
-        autocorrect: false,
-        enableSuggestions: false,
-        enabled: true,
-        decoration: _getTextFieldDecoration('Custom Websocket'),
-        style: const TextStyle(color: Colors.white),
-      )
     ];
   }
 
@@ -371,7 +314,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _saveSettings() {
-    if ((deepgramApiKeyController.text.isEmpty || openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
+    if ((openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -409,12 +352,7 @@ class _SettingsPageState extends State<SettingsPage> {
       prefs.recordingsLanguage = _selectedLanguage;
       MixpanelManager().recordingLanguageChanged(_selectedLanguage);
     }
-    if (deepgramApiKeyController.text != prefs.deepgramApiKey) {
-      prefs.deepgramApiKey = deepgramApiKeyController.text.trim();
-    }
-    if (customWebsocketUrlController.text != prefs.customWebsocketUrl) {
-      prefs.customWebsocketUrl = customWebsocketUrlController.text.trim();
-    }
+
     if (useFriendAPIKeys != prefs.useFriendApiKeys) {
       prefs.useFriendApiKeys = useFriendAPIKeys;
     }

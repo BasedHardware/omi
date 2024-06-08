@@ -2,8 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import '/flutter_flow/flutter_flow_theme.dart';
-
 class BlurWidget extends StatefulWidget {
   const BlurWidget({super.key});
 
@@ -30,7 +28,7 @@ class _BlurWidgetState extends State<BlurWidget> {
               width: double.infinity,
               height: double.infinity,
               decoration: BoxDecoration(
-                color: FlutterFlowTheme.of(context).primary,
+                color: Theme.of(context).primaryColor,
               ),
               child: Container(
                 width: double.infinity,

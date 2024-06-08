@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/structs/b_t_device_struct.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/pages/speaker_id/tabs/wave.dart';
 import 'package:friend_private/utils/ble/communication.dart';
