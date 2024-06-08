@@ -38,29 +38,60 @@ class _MemoryListItemState extends State<MemoryListItem> {
         ),
         child: Padding(
           padding: const EdgeInsetsDirectional.all(8),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _getMemoryHeader(),
-              const SizedBox(height: 12),
-              Text(widget.memory.structured.overview,
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
-              if (widget.memory.structured.actionItems.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                const Text('Action Items:',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                ..._getActionItems(),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
+          child: !widget.memory.discarded
+              ? Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _getMemoryHeader(),
+                    const SizedBox(height: 12),
+                    Text(widget.memory.structured.overview,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
+                    if (widget.memory.structured.actionItems.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      const Text('Action Items:',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      ..._getActionItems(),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                )
+              : Column(mainAxisSize: MainAxisSize.max, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4.0, right: 12, top: 4),
+                    child: Text(
+                        widget.memory.transcript.length > 150
+                            ? '${widget.memory.transcript.substring(0, 150)}...'
+                            : widget.memory.transcript,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '~',
+                        style: TextStyle(color: Colors.grey.shade400),
+                      ),
+                      const SizedBox(width: 8),
+                      widget.memory.discarded
+                          ? Icon(Icons.mood_bad_outlined, color: Colors.grey.shade400, size: 18)
+                          // ? const Text('Transcript')
+                          : const SizedBox.shrink()
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ]),
         ),
       ),
     );
@@ -87,6 +118,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
           Expanded(
               child: Text(widget.memory.structured.title,
                   style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
+          const SizedBox(
+            width: 8,
+          ),
           getMemoryOperations(widget.memory, setState),
         ],
       ),

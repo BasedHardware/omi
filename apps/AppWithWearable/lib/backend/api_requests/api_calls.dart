@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -129,7 +130,7 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: []);
+  if (transcript.isEmpty || transcript.split(' ').length < 7) return Structured(actionItems: [], pluginsResponse: [], category: '');
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -146,6 +147,27 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, use a list of actionable steps or bullet points for the conversation.
+    For the category, classify the conversation into one of the following categories:
+      [
+        "Personal",
+        "Work",
+        "Educational",
+        "Health",
+        "Financial",
+        "Legal",
+        "Philosophical",
+        "Psychological",
+        "Spiritual",
+        "Scientific",
+        "Entrepreneurial",
+        "Parenting",
+        "Romantic",
+        "Travel",
+        "Inspirational",
+        "Technological",
+        "Business",
+        "Social"
+      ]
         
     Here is the transcript ```${transcript.trim()}```.
     ${_getPrevMemoriesStr(previousMemories)}
@@ -157,10 +179,70 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}}}
+    {
+  "properties": {
+    "title": {
+      "title": "Title",
+      "description": "A title/name for this conversation",
+      "default": "",
+      "type": "string"
+    },
+    "overview": {
+      "title": "Overview",
+      "description": "A brief overview of the conversation",
+      "default": "",
+      "type": "string"
+    },
+    "action_items": {
+      "title": "Action Items",
+      "description": "A list of action items from the conversation",
+      "default": [
+        
+      ],
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+    },
+      "category": {
+        "title": "category",
+        "description": "classification of the conversation into one of the following categories:\n      [\n        \"Personal\",\n        \"Work\",\n        \"Educational\",\n        \"Health\",\n        \"Financial\",\n        \"Legal\",\n        \"Philosophical\",\n        \"Psychological\",\n        \"Spiritual\",\n        \"Scientific\",\n        \"Entrepreneurial\",\n        \"Parenting\",\n        \"Romantic\",\n        \"Travel\",\n        \"Inspirational\",\n        \"Technological\",\n        \"Business\",\n        \"Social\"\n      ]",
+        "default": "",
+        "type": "string"
+      }
+  }
+}
     ```''';
   prompt = cleanPrompt(prompt);
-  // debugPrint(prompt);
+
+  String categoryPrompt = 
+    '''You are given a conversation to analyze. After reviewing the conversation, classify it into one of the following categories:
+      [
+        "Personal",
+        "Work",
+        "Educational",
+        "Health",
+        "Financial",
+        "Legal",
+        "Philosophical",
+        "Psychological",
+        "Spiritual",
+        "Scientific",
+        "Entrepreneurial",
+        "Parenting",
+        "Romantic",
+        "Travel",
+        "Inspirational",
+        "Technological",
+        "Business",
+        "Social"
+      ]
+
+      Here is the conversation: ${transcript.trim()}
+
+      Please provide your response in JSON format. For example: { "category": "Parenting" }''';
+
+
 
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
@@ -345,26 +427,6 @@ Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
   }
 }
 
-Future<bool> createPineconeVectors(List<String> memoriesId, List<List<double>> vectors) async {
-  var body = jsonEncode({
-    'vectors': memoriesId.mapIndexed((index, id) {
-      return {
-        'id': id,
-        'values': vectors[index],
-        'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
-          'memory_id': id,
-          'uid': SharedPreferencesUtil().uid,
-        }
-      };
-    }).toList(),
-    'namespace': Env.pineconeIndexNamespace
-  });
-  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
-  debugPrint('createVectorPinecone response: $responseBody');
-  return true;
-}
-
 Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
   var body = jsonEncode({
     'vectors': [
@@ -372,7 +434,8 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
         'id': memoryId,
         'values': vectorList,
         'metadata': {
-          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
+          'created_at':
+              DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
           'memory_id': memoryId,
           'uid': SharedPreferencesUtil().uid,
         }
@@ -397,11 +460,11 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
   // Add date filtering if startTimestamp or endTimestamp is provided
   if (startTimestamp != null || endTimestamp != null) {
     filter['created_at'] = {};
-  
+
     if (startTimestamp != null) {
       filter['created_at']['\$gte'] = startTimestamp;
     }
-   
+
     if (endTimestamp != null) {
       filter['created_at']['\$lte'] = endTimestamp;
     }
@@ -465,11 +528,9 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
       debugPrint('Response body: ${response.body}');
       return TranscriptSegment.fromJsonList(data);
     } else {
-      debugPrint('Failed to upload file. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
   } catch (e) {
-    debugPrint('An error occurred transcribeAudioFile: $e');
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
 }
