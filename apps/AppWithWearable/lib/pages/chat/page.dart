@@ -91,9 +91,6 @@ class _ChatPageState extends State<ChatPage> {
           child: SizedBox(
             width: 300.0,
             child: TextField(
-              // onTap: () {
-              //   widget.textFieldFocusNode.requestFocus();
-              // },
               enabled: true,
               autofocus: false,
               controller: textController,

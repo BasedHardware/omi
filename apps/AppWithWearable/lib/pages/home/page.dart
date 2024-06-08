@@ -12,7 +12,6 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
-import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
@@ -31,13 +30,20 @@ class HomePageWrapper extends StatefulWidget {
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
-  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
-  int _selectedIndex = 1;
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
+
   List<MemoryRecord> memories = [];
   bool displayDiscardMemories = false;
+
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
+
+  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
+  StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
+  StreamSubscription<List<int>>? _bleBatteryLevelListener;
+
+  int batteryLevel = -1;
+  BTDeviceStruct? _device;
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
@@ -59,19 +65,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     SharedPreferencesUtil().pluginsList = plugins;
   }
 
-  void _onItemTapped(int index) {
-    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
-  StreamSubscription<List<int>>? _bleBatteryLevelListener;
-  int batteryLevel = -1;
-  BTDeviceStruct? _device;
-
-  // ForegroundUtil foreground = ForegroundUtil();
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -175,7 +168,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     device: _device,
                     refreshMemories: _initiateMemories,
                     transcriptChildWidgetKey: transcriptChildWidgetKey,
-                    batteryLevel: batteryLevel,
+                    // batteryLevel: batteryLevel,
                   ),
                   ChatPage(
                     textFieldFocusNode: chatTextFieldFocusNode,
@@ -222,40 +215,69 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.grey,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: batteryLevel > 75
+                          ? const Color.fromARGB(255, 0, 255, 8)
+                          : batteryLevel > 20
+                              ? Colors.yellow.shade700
+                              : Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8.0),
+                  Text(
+                    '${batteryLevel.toString()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+            IconButton(
+              icon: const Icon(
+                Icons.settings,
+                color: Colors.white,
+                size: 30,
+              ),
+              onPressed: () async {
+                MixpanelManager().settingsOpened();
+                var language = SharedPreferencesUtil().recordingsLanguage;
+                var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
+                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                if (language != SharedPreferencesUtil().recordingsLanguage ||
+                    useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
+                  transcriptChildWidgetKey.currentState?.resetState();
+                }
+              },
+            )
+          ],
+        ),
         elevation: 0,
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.settings,
-              color: Colors.white,
-              size: 30,
-            ),
-            onPressed: () async {
-              MixpanelManager().settingsOpened();
-              var language = SharedPreferencesUtil().recordingsLanguage;
-              var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-              Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-              if (language != SharedPreferencesUtil().recordingsLanguage ||
-                  useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                transcriptChildWidgetKey.currentState?.resetState();
-              }
-            },
-          )
-        ],
-        leading: IconButton(
-          icon: const Icon(
-            Icons.extension,
-            color: Colors.white,
-            size: 30,
-          ),
-          onPressed: () async {
-            MixpanelManager().pluginsOpened();
-            Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
-            // await context.pushNamed('plugins');
-          },
-        ),
       ),
     );
   }
