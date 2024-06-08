@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '/backend/backend.dart';
-import '/backend/schema/structs/index.dart';
+import 'backend/backend.dart';
+import 'backend/schema/structs/index.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'backend/storage/memories.dart';
 import 'flutter_flow/flutter_flow_util.dart';

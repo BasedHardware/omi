@@ -21,7 +21,8 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
           final device = BluetoothDevice.fromId(widget.btDevice!.id);
           await device.disconnect();
           await Future.delayed(const Duration(seconds: 2));
-          await startDfu(widget.btDevice!.id, '');
+          await startDfu(widget.btDevice!.id, 'assets/friend-1.0.4.zip',
+              fileInAssets: true);
         },
         child: const Text(
           'Update Firmware',
@@ -32,7 +33,8 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
         ));
   }
 
-  Future<void> startDfu(String deviceId, String firmwareFile, {bool fileInAssets = false}) async {
+  Future<void> startDfu(String deviceId, String firmwareFile,
+      {bool fileInAssets = false}) async {
     NordicDfu dfu = NordicDfu();
     await dfu.startDfu(
       deviceId,
@@ -63,13 +65,20 @@ class _OtaUpdateButtonState extends State<OtaUpdateButton> {
         debugPrint(
             'deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
       },
-      onDeviceConnecting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnecting'),
-      onDeviceConnected: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnected'),
-      onDfuProcessStarting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarting'),
-      onDfuProcessStarted: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarted'),
-      onEnablingDfuMode: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onEnablingDfuMode'),
-      onFirmwareValidating: (deviceAddress) => debugPrint('address: $deviceAddress, onFirmwareValidating'),
-      onDfuCompleted: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuCompleted'),
+      onDeviceConnecting: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onDeviceConnecting'),
+      onDeviceConnected: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onDeviceConnected'),
+      onDfuProcessStarting: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarting'),
+      onDfuProcessStarted: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarted'),
+      onEnablingDfuMode: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onEnablingDfuMode'),
+      onFirmwareValidating: (deviceAddress) =>
+          debugPrint('address: $deviceAddress, onFirmwareValidating'),
+      onDfuCompleted: (deviceAddress) =>
+          debugPrint('deviceAddress: $deviceAddress, onDfuCompleted'),
     );
   }
 }

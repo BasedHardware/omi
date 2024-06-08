@@ -26,9 +26,6 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
-static ssize_t dfu_version_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
-
-static uint8_t dfu_version_value[] = {0x01, 0x00};
 
 //
 // Service and Characteristic
@@ -56,16 +53,13 @@ static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr
 // Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
 // exposes following characteristics:
 // - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
-// - DFU version (UUID 00001534-1212-EFDE-1523-785FEABCD123) to return to the client the bootloader version (read)
 static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
 static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-static struct bt_uuid_128 dfu_version_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001534, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
 
 static struct bt_gatt_attr dfu_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
     BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
     BT_GATT_CCC(dfu_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(&dfu_version_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, dfu_version_read, NULL, dfu_version_value),
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
@@ -157,12 +151,6 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
         NVIC_SystemReset();
     }
     return len;
-}
-
-static ssize_t dfu_version_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
-{
-    const uint8_t *value = attr->user_data;
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(dfu_version_value));
 }
 
 //
