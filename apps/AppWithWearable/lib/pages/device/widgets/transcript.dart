@@ -278,7 +278,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: segments.length + 1,
+      itemCount: segments.length + 2,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
@@ -294,20 +294,38 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             ),
           );
         }
+        if (idx == segments.length + 1) return const SizedBox(height: 64);
         final data = segments[idx - 1];
-        String transcriptItem = '';
-        if (data.isUser) {
-          transcriptItem = 'You said: ${data.text}';
-        } else {
-          transcriptItem = 'Speaker ${data.speakerId}: ${data.text}';
-        }
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-          child: SelectionArea(
-            child: Text(
-              transcriptItem,
-              style: const TextStyle(letterSpacing: 0.0, color: Colors.white),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      width: 26, height: 26),
+                  const SizedBox(width: 12),
+                  Text(
+                    data.isUser ? 'You' : 'Speaker ${data.speakerId}',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  )
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelectionArea(
+                  child: Text(
+                    data.text,
+                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
