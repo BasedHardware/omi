@@ -222,6 +222,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       String? fileName = await uploadFile(file);
       await processTranscriptContent(context, transcript, fileName, file.path);
       await widget.refreshMemories();
+      SharedPreferencesUtil().temporalAudioBytes = [];
+      SharedPreferencesUtil().transcriptSegments = [];
       segments = [];
       setState(() => memoryCreating = false);
       audioStorage?.clearAudioBytes();
