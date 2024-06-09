@@ -14,7 +14,6 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:lottie/lottie.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -223,7 +222,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 10), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
       setState(() => memoryCreating = true);
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage(segments);

@@ -2,12 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 
 migrateMemoriesCategoriesAndEmojis() async {
-  // TODO: do not run script if already executed
-  var filteredMemories = await MemoryStorage.getAllMemories();
-  // var filteredMemories = memories.where((m) => m.structured.category.isEmpty || m.structured.emoji.isEmpty).toList();
+  if (!SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted) return;
+  debugPrint('migrateMemoriesCategoriesAndEmojis');
+  var memories = await MemoryStorage.getAllMemories();
+  // var filteredMemories = await MemoryStorage.getAllMemories();
+  var filteredMemories = memories.where((m) => m.structured.category.isEmpty || m.structured.emoji.isEmpty).toList();
   var str = jsonEncode(
       filteredMemories.map((m) => '${m.createdAt}\n${m.structured.title}\n${m.structured.overview}').toList());
   var prompt = '''
@@ -30,12 +33,12 @@ migrateMemoriesCategoriesAndEmojis() async {
   String response = await executeGptPrompt(prompt);
   var structured = jsonDecode(response.replaceAll('```', '').replaceAll('json', '').trim())['parsed'];
   for (int i = 0; i < filteredMemories.length; i++) {
-    // String emoji = utf8.decode(structured[i]['emoji'].toString().codeUnits);
     String category = structured[i]['category'];
-    // debugPrint('Emoji: $emoji $category');
     MemoryRecord memory = filteredMemories[i];
     memory.structured.category = category;
     memory.structured.emoji = structured[i]['emoji'];
     MemoryStorage.updateWholeMemory(memory);
   }
+  debugPrint('migrateMemoriesCategoriesAndEmojis completed');
+  SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted = true;
 }
