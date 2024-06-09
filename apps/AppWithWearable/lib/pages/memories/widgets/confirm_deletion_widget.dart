@@ -73,7 +73,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                           },
                           height: 40.0,
                           padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
-                          color: Theme.of(context).scaffoldBackgroundColor,
+                          color: Theme.of(context).colorScheme.surface,
                           textColor: Theme.of(context).primaryColor,
                           elevation: 0.0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
