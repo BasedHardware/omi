@@ -70,7 +70,6 @@ class _MyAppState extends State<MyApp> {
           textSelectionTheme: const TextSelectionThemeData(
             cursorColor: Colors.white,
             selectionColor: Colors.deepPurple,
-
           )),
       themeMode: ThemeMode.dark,
       home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
