@@ -13,6 +13,7 @@ import 'package:friend_private/pages/device/page.dart';
 import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -53,7 +54,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _toggleDiscardMemories() async {
     setState(() => displayDiscardMemories = !displayDiscardMemories);
-
     _initiateMemories();
   }
 
@@ -78,6 +78,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     }
   }
 
+  _migrationScripts() async {
+    await migrateMemoriesCategoriesAndEmojis();
+    _initiateMemories();
+  }
+
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
@@ -88,8 +93,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     _initiateMemories();
     _initiatePlugins();
-    authenticateGCP();
     _setupHasSpeakerProfile();
+    _migrationScripts();
+    authenticateGCP();
 
     if (widget.btDevice != null) {
       // Only used when onboarding flow

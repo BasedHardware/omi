@@ -32,15 +32,7 @@ class TranscriptWidget extends StatefulWidget {
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
-  List<TranscriptSegment> segments = [
-    TranscriptSegment(
-        text: '''Speaker 0: What happened? 
-        Speaker 2: They said they will conduct the post They might not give me refund Why? Because their cancellation policy is like... Non-refundableshow less''',
-        speaker: 'SPEAKER_99',
-        isUser: false,
-        start: 0,
-        end: 1)
-  ];
+  List<TranscriptSegment> segments = [];
 
   List<int> bucket = List.filled(40000, 0).toList(growable: true);
   StreamSubscription? audioBytesStream;
