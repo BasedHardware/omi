@@ -73,7 +73,7 @@ class _MyAppState extends State<MyApp> {
 
           )),
       themeMode: ThemeMode.dark,
-      home: !SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
     );
   }
 }
