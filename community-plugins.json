@@ -48,11 +48,20 @@
         "image": "/assets/plugin_images/medical-history-summary.png"
     },
     {
-    "id": "latent-information-analyzer",
-    "name": "Latent Information Analyzer",
-    "author": "Q8.org AiQ",
-    "description": "Identifies hidden or latent information in conversations and provides insights for further exploration.",
-    "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying any hidden or latent information implied in the conversation. Consider the weight of information as indicated by Perplexity and utilize inversion techniques to infer potential gaps in the available information. Provide insights into the latent information and suggest areas for further exploration or clarification. Structure the output into clear sections, such as 'Latent Information,' 'Potential Implications,' and 'Recommended Areas for Exploration.' Maintain a curious and analytical tone throughout.",
-    "image": "/assets/plugin_images/latent-information-analyzer.png"
-}
+        "id": "dictionary",
+        "name": "Automatic Dictionary",
+        "author": "Dennis Muensterer",
+        "description": "Get definitions for complicated words",
+        "prompt": "You will be given a conversation transcript. Identify words that exceed advanced complexity or require domain-specific knowledge and provide definitions for these words. Ensure definitions are concise and contextually appropriate. Avoid redundant descriptions and focus on the main topics of the conversation. Only output the list of terms and their corresponding explanation.",
+        "image": "/assets/plugin_images/dictionary.png"
+    }
+    ,
+    {
+      "id": "latent-information-analyzer",
+      "name": "Latent Information Analyzer",
+      "author": "AiQ8.org",
+      "description": "Identifies hidden or latent information in conversations and provides insights for further exploration.",
+      "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying any hidden or latent information implied in the conversation. Consider the weight of information as indicated by Perplexity and utilize inversion techniques to infer potential gaps in the available information. Provide insights into the latent information and suggest areas for further exploration or clarification. Structure the output into clear sections, such as 'Latent Information,' 'Potential Implications,' and 'Recommended Areas for Exploration.' Maintain a curious and analytical tone throughout.",
+      "image": "/assets/plugin_images/latent-information-analyzer.png"
+    }
 ]
