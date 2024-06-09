@@ -97,6 +97,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? Expanded(
                   // Create a scrollable list of devices
                   child: ListView.builder(
+                    shrinkWrap: true,
                     itemCount: widget.deviceList.length,
                     itemBuilder: (context, index) {
                       final device = widget.deviceList[index];
@@ -162,10 +163,10 @@ class _FoundDevicesState extends State<FoundDevices> {
                         ? Colors.red
                         : batteryPercentage > 25 && batteryPercentage <= 50
                             ? Colors.orange
-                            : Colors
-                                .green,
+                            : Colors.green,
                   ),
-                ))
+                )
+                )
         ],
       ),
     );
