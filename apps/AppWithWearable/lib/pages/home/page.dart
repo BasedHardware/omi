@@ -8,9 +8,9 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/pages/capture/page.dart';
+import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/device/page.dart';
-import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
@@ -179,7 +179,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     displayDiscardMemories: displayDiscardMemories,
                     toggleDiscardMemories: _toggleDiscardMemories,
                   ),
-                  DevicePage(
+                  CapturePage(
                     device: _device,
                     refreshMemories: _initiateMemories,
                     transcriptChildWidgetKey: transcriptChildWidgetKey,
