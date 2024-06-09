@@ -40,71 +40,40 @@ class _MemoryListItemState extends State<MemoryListItem> {
         ),
         child: Padding(
           padding: const EdgeInsetsDirectional.all(16),
-          child: !widget.memory.discarded
-              ? Column(
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _getMemoryHeader(),
-                    const SizedBox(height: 16),
-                    Text(
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _getMemoryHeader(),
+              const SizedBox(height: 16),
+              widget.memory.discarded
+                  ? const SizedBox.shrink()
+                  : Text(
                       widget.memory.structured.title,
                       style: Theme.of(context).textTheme.titleLarge,
                       maxLines: 1,
                     ),
-                    SizedBox(height: 8),
-                    Text(
+              widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+              widget.memory.discarded
+                  ? const SizedBox.shrink()
+                  : Text(
                       widget.memory.structured.overview,
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                       maxLines: 2,
                     ),
-                  ],
-                )
-              : Column(mainAxisSize: MainAxisSize.max, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4.0, right: 12, top: 4),
-                    child: Text(
-                        widget.memory.transcript.length > 150
-                            ? '${widget.memory.transcript.substring(0, 150)}...'
-                            : widget.memory.transcript,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.2)),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text(
-                        ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '~',
-                        style: TextStyle(color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(width: 8),
-                      widget.memory.discarded
-                          ? Icon(Icons.mood_bad_outlined, color: Colors.grey.shade400, size: 18)
-                          // ? const Text('Transcript')
-                          : const SizedBox.shrink()
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ]),
+              widget.memory.discarded
+                  ? Text(
+                      widget.memory.transcript.length > 100
+                          ? '${widget.memory.transcript.substring(0, 100)}...'
+                          : widget.memory.transcript,
+                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                    )
+                  : const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  List<Widget> _getActionItems() {
-    return widget.memory.structured.actionItems.map((actionItem) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8.0),
-        child: Text(
-          '- $actionItem',
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.2),
-        ),
-      );
-    }).toList();
   }
 
   _getMemoryHeader() {
@@ -117,9 +86,11 @@ class _MemoryListItemState extends State<MemoryListItem> {
               child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(widget.memory.structured.emoji,
-                  style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-              widget.memory.structured.category.isNotEmpty
+              widget.memory.discarded
+                  ? const SizedBox.shrink()
+                  : Text(widget.memory.structured.emoji,
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+              widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
                   ? const SizedBox(
                       width: 12,
                     )
@@ -131,7 +102,8 @@ class _MemoryListItemState extends State<MemoryListItem> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(widget.memory.structured.category, style: Theme.of(context).textTheme.bodyMedium),
+                      child: Text(widget.memory.discarded ? 'Discarded' : widget.memory.structured.category,
+                          style: Theme.of(context).textTheme.bodyMedium),
                     )
                   : const SizedBox.shrink(),
             ],

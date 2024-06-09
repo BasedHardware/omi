@@ -20,6 +20,7 @@ import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -181,43 +182,57 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   ),
                   ChatPage(
                     textFieldFocusNode: chatTextFieldFocusNode,
+                    memories: memories,
                   ),
                 ],
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: const BorderRadius.all(Radius.circular(16)),
-                  border: Border.all(color: Colors.grey, width: 1.0),
-                  shape: BoxShape.rectangle,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    MaterialButton(
-                      onPressed: () => _tabChange(0),
-                      child: Text('Memories',
-                          style: TextStyle(color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+            chatTextFieldFocusNode.hasFocus
+                ? const SizedBox.shrink()
+                : Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                        border: GradientBoxBorder(
+                          gradient: LinearGradient(colors: [
+                            Color.fromARGB(127, 208, 208, 208),
+                            Color.fromARGB(127, 188, 99, 121),
+                            Color.fromARGB(127, 86, 101, 182),
+                            Color.fromARGB(127, 126, 190, 236)
+                          ]),
+                          width: 2,
+                        ),
+                        shape: BoxShape.rectangle,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          MaterialButton(
+                            onPressed: () => _tabChange(0),
+                            child: Text('Memories',
+                                style: TextStyle(
+                                    color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                          ),
+                          MaterialButton(
+                            onPressed: () => _tabChange(1),
+                            child: Text('Capture',
+                                style: TextStyle(
+                                    color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                          ),
+                          MaterialButton(
+                            onPressed: () => _tabChange(2),
+                            child: Text('Chat',
+                                style: TextStyle(
+                                    color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                          ),
+                        ],
+                      ),
                     ),
-                    MaterialButton(
-                      onPressed: () => _tabChange(1),
-                      child: Text('Capture',
-                          style: TextStyle(color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
-                    ),
-                    MaterialButton(
-                      onPressed: () => _tabChange(2),
-                      child: Text('Chat',
-                          style: TextStyle(color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
-                    ),
-                  ],
-                ),
-              ),
-            )
+                  )
           ],
         ),
       ),

@@ -122,7 +122,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _cleanTranscript(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.'];
+    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m'];
     for (var i = 0; i < segments.length; i++) {
       for (var hallucination in hallucinations) {
         segments[i].text = segments[i]
@@ -250,7 +250,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
               children: [
                 const SizedBox(height: 16),
                 //
-                Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+                Image.asset(
+                  'assets/images/wave.gif',
+                  height: 200,
+                ),
+
                 const SizedBox(height: 32),
                 const Align(
                   alignment: Alignment.center,
@@ -284,7 +288,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             padding: const EdgeInsets.only(top: 8.0, bottom: 32),
             child: Align(
               alignment: Alignment.center,
-              child: Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+              child:                 Image.asset(
+                  'assets/images/wave.gif',
+                  width: 200,
+                ),
             ),
           );
         }
