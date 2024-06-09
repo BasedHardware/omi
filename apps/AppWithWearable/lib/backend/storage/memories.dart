@@ -47,21 +47,13 @@ class Structured {
   @override
   String toString() {
     var str = '';
-    str += 'Title: $title\n';
-    str += 'Summary: $overview\n';
+    str += '${getEmoji()} $title ($category)\n\nSummary: $overview\n\n';
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
+      for (var item in actionItems) {
+        str += '- $item\n';
+      }
     }
-    for (var item in actionItems) {
-      str += '  - $item\n';
-    }
-    if (pluginsResponse.isNotEmpty) {
-      str += 'Plugins Response:\n';
-    }
-    for (var response in pluginsResponse) {
-      str += '  - $response\n';
-    }
-    str += 'Category: $category\n';
     return str;
   }
 }
