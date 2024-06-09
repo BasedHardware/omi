@@ -4,7 +4,7 @@ title: Introduction
 nav_order: 1
 ---
 
-<img src="/images/mainbanner.jpeg" alt="Friend Banner" width="100%">
+<img src="/images/friend_banner.png" alt="Friend Banner" width="100%">
 
 # Introduction
 
