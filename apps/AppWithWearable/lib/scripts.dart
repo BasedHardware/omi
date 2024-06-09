@@ -6,7 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 
 migrateMemoriesCategoriesAndEmojis() async {
-  if (!SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted) return;
+  if (SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted) return;
   debugPrint('migrateMemoriesCategoriesAndEmojis');
   var memories = await MemoryStorage.getAllMemories();
   // var filteredMemories = await MemoryStorage.getAllMemories();
