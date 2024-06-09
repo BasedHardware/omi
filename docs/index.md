@@ -13,11 +13,11 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 ## Features
 
 - Open-Source: Fully open-source, empowering you to customize and enhance your experience.
-- Long Battery Life: 24+ hour battery ensures you stay connected all day.
+- Long Battery Life: Battery that lasts for days ensures you stay connected through the week.
 - Live Transcription: Capture live voice and audio with human-level accuracy using OpenAI Whisper and Deepgram.
 - Conversation Memory: Remembers conversations, providing you with reliable records.
 - Efficient Summarization: Get instant insights and summaries powered by ChatGPT in just 5 seconds.
-- Connectivity: Bluetooth enabled with WiFi, LED, accelerometer, and USB-C charging.
+- Connectivity: Bluetooth enabled, LED, accelerometer, and USB-C charging.
 - App Marketplace: Expand functionality with our app marketplace.
 - Conversation Coach: Friend helps you communicate better, gives you tips and advises during conversations.
 
