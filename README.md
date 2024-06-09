@@ -71,16 +71,12 @@ linkStyle 5 stroke:#B10DC9, stroke-width:2px;
 
 ## Get the software
 
-<div align="center">
-
 [<img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Get it on Google Play' width="230px">](https://play.google.com/store/apps/details?id=com.friend.ios)
-[<img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on App Store" margin-bottom="15px" style="width: 180px; margin-bottom: 15px;">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+[<img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on App Store" style="width: 180px; margin-bottom: 15px;">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
 
 iOS app beta on [TestFlight](https://testflight.apple.com/join/Ie8VQ847)
 
 Latest firmware: [v1.0.2](https://github.com/BasedHardware/Friend/releases/download/v1.0.2-Firmware/friend-firmware.uf2)
-
-</div>
 
 Or you can build your own app from the sources in `apps/AppWithWearable` and firmware from `firmware` folders.
 
