@@ -47,7 +47,7 @@ Future<MemoryRecord?> memoryCreationBlock(
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
-          'Recent Memory Discarded! Nothing useful. 😄',
+          'Memory stored as discarded! Nothing useful. 😄',
           style: TextStyle(color: Colors.white),
         ),
         duration: Duration(seconds: 4),
@@ -56,11 +56,11 @@ Future<MemoryRecord?> memoryCreationBlock(
   } else {
     MemoryRecord memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
     MixpanelManager().memoryCreated(memory);
-    debugPrint('Memory Created: ${memory.id}');
+    debugPrint('Memory created: ${memory.id}');
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
+        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
         duration: Duration(seconds: 4),
       ));
     }
@@ -79,6 +79,7 @@ Future<MemoryRecord> saveFailureMemory(String transcript, Structured structuredM
       discarded: true);
   MemoryStorage.addMemory(memory);
   MixpanelManager().memoryCreated(memory);
+  debugPrint(memory.toJson().toString());
   return memory;
 }
 
