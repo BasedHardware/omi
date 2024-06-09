@@ -49,8 +49,12 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   @override
   void initState() {
     super.initState();
-    _messages = [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] + prefs.chatMessages;
-    SchedulerBinding.instance.addPostFrameCallback((_) => _moveListToBottom(initial: true));
+    var msg = prefs.chatMessages;
+    _messages =
+        msg.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : prefs.chatMessages;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _moveListToBottom(initial: true);
+    });
   }
 
   @override
@@ -71,6 +75,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
               Expanded(
                   child: ListView.builder(
                 scrollDirection: Axis.vertical,
+                controller: listViewController,
                 itemCount: _messages.length,
                 itemBuilder: (context, chatIndex) {
                   final message = _messages[chatIndex];
@@ -101,7 +106,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                     child: HumanMessage(message: message),
                   );
                 },
-                controller: listViewController,
               )),
               // const SizedBox(height: 160),
             ],
@@ -235,10 +239,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _moveListToBottom({bool initial = false}) async {
-    await listViewController.animateTo(
-      listViewController.position.maxScrollExtent + (initial ? 100 : 0),
-      duration: const Duration(milliseconds: 100),
-      curve: Curves.ease,
-    );
+    listViewController.jumpTo(listViewController.position.maxScrollExtent + (initial ? 240 : 0));
   }
 }

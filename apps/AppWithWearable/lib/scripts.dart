@@ -11,6 +11,10 @@ migrateMemoriesCategoriesAndEmojis() async {
   var memories = await MemoryStorage.getAllMemories();
   // var filteredMemories = await MemoryStorage.getAllMemories();
   var filteredMemories = memories.where((m) => m.structured.category.isEmpty || m.structured.emoji.isEmpty).toList();
+  if (filteredMemories.isEmpty) {
+    SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted = true;
+    return;
+  }
   var str = jsonEncode(
       filteredMemories.map((m) => '${m.createdAt}\n${m.structured.title}\n${m.structured.overview}').toList());
   var prompt = '''

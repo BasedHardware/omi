@@ -9,14 +9,14 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:intl/intl.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 
-class DevicePage extends StatefulWidget {
+class CapturePage extends StatefulWidget {
   final Function refreshMemories;
   final BTDeviceStruct? device;
 
   // final int batteryLevel;
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
-  const DevicePage({
+  const CapturePage({
     super.key,
     required this.device,
     required this.refreshMemories,
@@ -24,10 +24,10 @@ class DevicePage extends StatefulWidget {
   });
 
   @override
-  State<DevicePage> createState() => _DevicePageState();
+  State<CapturePage> createState() => _CapturePageState();
 }
 
-class _DevicePageState extends State<DevicePage> with AutomaticKeepAliveClientMixin {
+class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
 
   @override
