@@ -33,7 +33,15 @@ class TranscriptWidget extends StatefulWidget {
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
-  List<TranscriptSegment> segments = [];
+  List<TranscriptSegment> segments = [
+    TranscriptSegment(
+        text: '''Speaker 0: What happened? 
+        Speaker 2: They said they will conduct the post They might not give me refund Why? Because their cancellation policy is like... Non-refundableshow less''',
+        speaker: 'SPEAKER_99',
+        isUser: false,
+        start: 0,
+        end: 1)
+  ];
 
   List<int> bucket = List.filled(40000, 0).toList(growable: true);
   StreamSubscription? audioBytesStream;
@@ -215,7 +223,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
+    _memoryCreationTimer = Timer(const Duration(seconds: 10), () async {
       setState(() => memoryCreating = true);
       debugPrint('Creating memory from whispers');
       String transcript = _buildDiarizedTranscriptMessage(segments);
@@ -288,10 +296,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             padding: const EdgeInsets.only(top: 8.0, bottom: 32),
             child: Align(
               alignment: Alignment.center,
-              child:                 Image.asset(
-                  'assets/images/wave.gif',
-                  width: 200,
-                ),
+              child: Image.asset(
+                'assets/images/wave.gif',
+                width: 200,
+              ),
             ),
           );
         }
