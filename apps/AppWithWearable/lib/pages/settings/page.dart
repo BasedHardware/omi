@@ -3,6 +3,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -128,6 +129,17 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
                 title: const Text(
                   'Setup your speech profile  🎤',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              ListTile(
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                },
+                title: const Text(
+                  'Plugins   🧩',
                   style: TextStyle(
                     color: Colors.white,
                   ),
