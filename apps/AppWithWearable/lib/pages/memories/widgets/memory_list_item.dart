@@ -76,18 +76,6 @@ class _MemoryListItemState extends State<MemoryListItem> {
     );
   }
 
-  List<Widget> _getActionItems() {
-    return widget.memory.structured.actionItems.map((actionItem) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8.0),
-        child: Text(
-          '- $actionItem',
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.2),
-        ),
-      );
-    }).toList();
-  }
-
   _getMemoryHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),

@@ -15,8 +15,13 @@ import 'package:flutter/scheduler.dart';
 
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
+  final List<MemoryRecord> memories;
 
-  const ChatPage({super.key, required this.textFieldFocusNode});
+  const ChatPage({
+    super.key,
+    required this.textFieldFocusNode,
+    required this.memories,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -70,6 +75,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                 itemBuilder: (context, chatIndex) {
                   final message = _messages[chatIndex];
                   if (message.type == 'ai') {
+                    var messageMemoriesId = Set<String>.from(message.memoryIds ?? []);
                     return Padding(
                       padding: EdgeInsets.only(
                           bottom: chatIndex == _messages.length - 1
@@ -81,6 +87,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: _messages.length <= 1,
+                        memories: widget.memories.where((m) => messageMemoriesId.contains(m.id)).toList(),
                       ),
                     );
                   }
@@ -178,6 +185,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     debugPrint('RAG Context: $ragContext');
     MixpanelManager().chatMessageSent(message);
     await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
+      _messages.last.memoryIds = memoryIds;
       prefs.chatMessages = _messages;
     });
     changeLoadingState();
@@ -218,19 +226,12 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       debugPrint('Content: $content');
       var messagesCopy = [..._messages];
       messagesCopy.last.text += content;
-      messagesCopy.last.memoryIds = memoryIds;
       debugPrint(messagesCopy.last.text);
       setState(() {
         _messages = messagesCopy;
       });
       _moveListToBottom();
     };
-  }
-
-  _showMemoryIds(List<String>? memoryIds) {
-    if (memoryIds != null && memoryIds.isNotEmpty) {
-      debugPrint('Memory IDs: $memoryIds');
-    }
   }
 
   _moveListToBottom({bool initial = false}) async {
