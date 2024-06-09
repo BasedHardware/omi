@@ -97,6 +97,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? Expanded(
                   // Create a scrollable list of devices
                   child: ListView.builder(
+                    shrinkWrap: true,
                     itemCount: widget.deviceList.length,
                     itemBuilder: (context, index) {
                       final device = widget.deviceList[index];
@@ -153,15 +154,19 @@ class _FoundDevicesState extends State<FoundDevices> {
             Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Text(
-                  // TODO: Replace battery asset
                   '🔋 ${batteryPercentage.toString()}%',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 18,
-                    color: Color(0xCCFFFFFF),
+                    color: batteryPercentage <= 25
+                        ? Colors.red
+                        : batteryPercentage > 25 && batteryPercentage <= 50
+                            ? Colors.orange
+                            : Colors.green,
                   ),
-                ))
+                )
+                )
         ],
       ),
     );
