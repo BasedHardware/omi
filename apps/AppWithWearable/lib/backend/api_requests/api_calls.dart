@@ -123,8 +123,10 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
 }
 
 Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
-  if (transcript.isEmpty || transcript.split(' ').length < 7)
+  if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return Structured(actionItems: [], pluginsResponse: [], category: '');
+  }
+
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
@@ -169,8 +171,8 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
   var structuredResponse = extractJson(await executeGptPrompt(prompt));
   List<String> responses = await allPluginResponses;
-
-  return Structured.fromJson(jsonDecode(structuredResponse)..['pluginsResponse'] = responses);
+  var json = jsonDecode(structuredResponse);
+  return Structured.fromJson(json..['pluginsResponse'] = responses);
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {

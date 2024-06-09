@@ -69,6 +69,7 @@ class _FindDevicesPageState extends State<FindDevicesPage>
 
   @override
   Widget build(BuildContext context) {
+    var screenSize = MediaQuery.of(context).size;
     var size = MediaQuery.of(context).size; // obtain MediaQuery data
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -76,17 +77,59 @@ class _FindDevicesPageState extends State<FindDevicesPage>
         child: Container(
           height: size.height, // Make the container take up the full height
           padding:
-              const EdgeInsets.symmetric(horizontal: 32), // Responsive padding
+              const EdgeInsets.symmetric(horizontal: 32, vertical: 0), // Responsive padding
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              HeaderSection(
-                onBack: () => Navigator.of(context).pop(),
-                onHelp: _launchURL,
-              ),
               deviceList.isEmpty
                   ? SearchingSection(enableInstructions: enableInstructions)
                   : FoundDevices(deviceList: deviceList),
+                deviceList.isEmpty ? enableInstructions ?                 Padding(
+                  padding: EdgeInsets.only(
+                    bottom: 20, // Padding from the bottom for the button
+                    left:
+                        screenSize.width * 0.0, // Horizontal padding for button
+                    right: screenSize.width * 0.0,
+                  ),
+                  child:                 Padding(
+                  padding: EdgeInsets.only(
+                    bottom: 10, // Padding from the bottom for the button
+                    left:
+                        screenSize.width * 0.0, // Horizontal padding for button
+                    right: screenSize.width * 0.0,
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Color.fromARGB(255, 55, 55, 55), width : 2.0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _launchURL();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: const Color.fromARGB(255, 17, 17, 17),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Container(
+                        width: double
+                            .infinity, // Button takes full width of the padding
+                        height: 45, // Fixed height for the button
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Contact Support',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: screenSize.width * 0.045,
+                              color: const Color.fromARGB(255, 55, 55, 55)),
+                        ),
+                      ),
+                    ),
+                  ), )
+                ) : SizedBox.shrink() :  SizedBox.shrink()
             ],
           ),
         ),
@@ -95,49 +138,6 @@ class _FindDevicesPageState extends State<FindDevicesPage>
   }
 }
 
-class HeaderSection extends StatelessWidget {
-  final VoidCallback onBack;
-  final VoidCallback onHelp;
-
-  const HeaderSection({Key? key, required this.onBack, required this.onHelp})
-      : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 15, 0, 47),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          InkWell(
-            onTap: onBack,
-            child: SvgPicture.asset(
-              'assets/images/backbutton.svg',
-              width: 24,
-              height: 24,
-            ),
-          ),
-          Opacity(
-            opacity: 0.8,
-            child: InkWell(
-              onTap: onHelp,
-              child: Container(
-                padding: const EdgeInsets.all(8), // Consistent paddings
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFE4E4E2)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'HELP',
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class SearchingSection extends StatelessWidget {
   final bool enableInstructions;
@@ -149,12 +149,13 @@ class SearchingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var screenSize = MediaQuery.of(context).size;
     return Expanded(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
+           Padding(
+            padding: EdgeInsets.only(bottom: 12, top: screenSize.height * 0.08),
             child: Text(
               'SEARCHING FOR DEVICE...',
               style: TextStyle(

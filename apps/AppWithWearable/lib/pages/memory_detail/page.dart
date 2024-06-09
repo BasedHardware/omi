@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
+import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final MemoryRecord memory;
@@ -65,19 +68,78 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             ),
             Expanded(
               child: Text(
-                  " ${widget.memory.structured.emoji} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
+                  " ${widget.memory.structured.getEmoji()} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
             ),
             const SizedBox(width: 8),
-            Row(
-              // TODO: replace this with new logic here
-              children: [
-                geyShareMemoryOperationWidget(widget.memory),
-                const SizedBox(width: 16),
-                getDeleteMemoryOperationWidget(widget.memory, null, setState,
-                    iconSize: 24, onDelete: () => Navigator.pop(context, true)),
-                const SizedBox(width: 8),
-              ],
-            )
+            IconButton(
+              onPressed: () {
+                showModalBottomSheet(
+                    context: context,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    builder: (context) => Container(
+                          height: 216,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                title: const Text('Share memory'),
+                                leading: const Icon(Icons.send),
+                                onTap: () {
+                                  // share loading
+                                  MixpanelManager().memoryShareButtonClick(widget.memory);
+                                  Share.share(widget.memory.getStructuredString());
+                                  HapticFeedback.lightImpact();
+                                },
+                              ),
+                              // ListTile(
+                              //   title: const Text('Edit'),
+                              //   leading: const Icon(Icons.edit),
+                              //   onTap: () {},
+                              // ),
+                              ListTile(
+                                title: const Text('Delete'),
+                                leading: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (dialogContext) {
+                                      return Dialog(
+                                        elevation: 0,
+                                        insetPadding: EdgeInsets.zero,
+                                        backgroundColor: Colors.transparent,
+                                        alignment:
+                                            const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                        child: ConfirmDeletionWidget(
+                                            memory: widget.memory, onDelete: (){
+                                          Navigator.pop(context, true);
+                                          Navigator.pop(context, true);
+                                        }),
+                                      );
+                                    },
+                                  ).then((value) => setState(() {}));
+                                },
+                              )
+                            ],
+                          ),
+                        ));
+              },
+              icon: const Icon(Icons.more_horiz),
+            ),
           ],
         ),
       ),
@@ -86,7 +148,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         child: ListView(
           children: [
             const SizedBox(height: 24),
-            Text(widget.memory.structured.emoji,
+            Text(widget.memory.structured.getEmoji(),
                 style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             Text(
@@ -149,15 +211,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     'Overview',
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                   ),
-            widget.memory.discarded
-                ? const SizedBox.shrink()
-                : const SizedBox(height: 8),
+            widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
             widget.memory.discarded
                 ? const SizedBox.shrink()
                 : _getEditTextField(overviewController, editingOverview, focusOverviewField),
-            widget.memory.discarded
-                ? const SizedBox.shrink()
-                : const SizedBox(height: 40),
+            widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
             widget.memory.structured.actionItems.isNotEmpty
                 ? Text(
                     'Action Items',
@@ -198,8 +256,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                       maxLines: 6,
                       // Change this to 6 if you want the initial max lines to be 6
-                      expandText: 'show more',
-                      collapseText: 'show less',
                       linkColor: Colors.white,
                     ),
                   )),
@@ -212,9 +268,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             const SizedBox(height: 16),
             ExpandableTextWidget(
               text: widget.memory.transcript,
-              expandText: 'show more',
-              collapseText: 'show less',
-              maxLines: 3,
+              maxLines: 6,
               linkColor: Colors.grey.shade300,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
             ),
@@ -224,44 +278,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
       ),
     );
   }
-
-  // _getFieldHeader(String field, FocusNode focusNode) {
-  //   if (widget.memory.discarded) return const SizedBox.shrink();
-  //   String name = '';
-  //   if (field == 'title') {
-  //     name = 'Title';
-  //   } else if (field == 'overview') {
-  //     name = 'Overview';
-  //   }
-  //
-  //   return Row(
-  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  //     children: [
-  //       Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-  //       Container(
-  //         padding: const EdgeInsetsDirectional.symmetric(horizontal: 12),
-  //         child: Row(
-  //           mainAxisSize: MainAxisSize.min,
-  //           mainAxisAlignment: MainAxisAlignment.center,
-  //           children: [
-  //             IconButton(
-  //                 onPressed: () {
-  //                   setState(() {
-  //                     if (field == 'title') {
-  //                       editingTitle = true;
-  //                     } else if (field == 'overview') {
-  //                       editingOverview = true;
-  //                     }
-  //                   });
-  //                   Timer(const Duration(milliseconds: 100), () => focusNode.requestFocus());
-  //                 },
-  //                 icon: const Icon(Icons.edit, color: Colors.grey, size: 22)),
-  //           ],
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
 
   _getEditTextField(TextEditingController controller, bool enabled, FocusNode focusNode) {
     if (widget.memory.discarded) return const SizedBox.shrink();
@@ -284,36 +300,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
           ));
   }
-
-// _getEditTextFieldButtons(bool display, VoidCallback onCanceled, VoidCallback onSaved) {
-//   return display
-//       ? Row(
-//           mainAxisAlignment: MainAxisAlignment.end,
-//           crossAxisAlignment: CrossAxisAlignment.center,
-//           children: [
-//             TextButton(
-//               onPressed: () {
-//                 onCanceled();
-//               },
-//               child: const Text(
-//                 'Cancel',
-//                 style: TextStyle(color: Colors.white),
-//               ),
-//             ),
-//             const SizedBox(width: 8),
-//             TextButton(
-//                 onPressed: () {
-//                   onSaved();
-//                 },
-//                 style: TextButton.styleFrom(
-//                   textStyle: const TextStyle(color: Colors.white),
-//                   backgroundColor: Colors.deepPurple,
-//                 ),
-//                 child: const Text('Save', style: TextStyle(color: Colors.white))),
-//           ],
-//         )
-//       : const SizedBox.shrink();
-// }
 }
 
 class ExpandableTextWidget extends StatefulWidget {
@@ -324,13 +310,14 @@ class ExpandableTextWidget extends StatefulWidget {
   final String collapseText;
   final Color linkColor;
 
-  ExpandableTextWidget({
+  const ExpandableTextWidget({
+    super.key,
     required this.text,
     required this.style,
     this.maxLines = 3,
-    this.expandText = 'show more',
-    this.collapseText = 'show less',
-    this.linkColor = Colors.blue,
+    this.expandText = 'show more ↓',
+    this.collapseText = 'show less ↑',
+    this.linkColor = Colors.deepPurple,
   });
 
   @override
@@ -375,7 +362,8 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 child: Text(
                   _isExpanded ? widget.collapseText : widget.expandText,
                   style: TextStyle(
-                    color: widget.linkColor,
+                    color: Colors.deepPurple,
+                    fontWeight: FontWeight.w500,
                     fontSize: widget.style.fontSize,
                   ),
                 ),
