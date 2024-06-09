@@ -43,7 +43,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   @override
   void initState() {
     super.initState();
-    _messages = prefs.chatMessages;
+    _messages = [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] + prefs.chatMessages;
     SchedulerBinding.instance.addPostFrameCallback((_) => _moveListToBottom(initial: true));
   }
 
@@ -68,7 +68,13 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
               itemCount: _messages.length,
               itemBuilder: (context, chatIndex) {
                 final message = _messages[chatIndex];
-                if (message.type == 'ai') return AIMessage(message: message);
+                if (message.type == 'ai') {
+                  return AIMessage(
+                    message: message,
+                    sendMessage: _sendMessageUtil,
+                    displayOptions: _messages.length <= 1,
+                  );
+                }
                 if (message.type == 'human') return HumanMessage(message: message);
                 return const SizedBox.shrink();
               },
@@ -125,18 +131,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                         : () async {
                             String message = textController.text;
                             if (message.isEmpty) return;
-                            changeLoadingState();
-                            _prepareStreaming(message);
-                            dynamic ragInfo = await _retrieveRAGContext(message);
-                            String ragContext = ragInfo[0];
-                            List<String> memoryIds = ragInfo[1].cast<String>();
-                            debugPrint('RAG Context: $ragContext');
-                            MixpanelManager().chatMessageSent(message);
-                            await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages,
-                                () {
-                              prefs.chatMessages = _messages;
-                            });
-                            changeLoadingState();
+                            _sendMessageUtil(message);
                           },
                   )),
               maxLines: 8,
@@ -149,6 +144,20 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
         const SizedBox(height: 120),
       ],
     );
+  }
+
+  _sendMessageUtil(String message) async {
+    changeLoadingState();
+    _prepareStreaming(message);
+    dynamic ragInfo = await _retrieveRAGContext(message);
+    String ragContext = ragInfo[0];
+    List<String> memoryIds = ragInfo[1].cast<String>();
+    debugPrint('RAG Context: $ragContext');
+    MixpanelManager().chatMessageSent(message);
+    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
+      prefs.chatMessages = _messages;
+    });
+    changeLoadingState();
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
