@@ -65,7 +65,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             ),
             Expanded(
               child: Text(
-                  " ${widget.memory.structured.emoji} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
+                  " ${widget.memory.structured.getEmoji()} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
             ),
             const SizedBox(width: 8),
             Row(
@@ -86,7 +86,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         child: ListView(
           children: [
             const SizedBox(height: 24),
-            Text(widget.memory.structured.emoji,
+            Text(widget.memory.structured.getEmoji(),
                 style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             Text(
