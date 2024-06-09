@@ -181,6 +181,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   ),
                   ChatPage(
                     textFieldFocusNode: chatTextFieldFocusNode,
+                    memories: memories,
                   ),
                 ],
               ),
