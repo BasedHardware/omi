@@ -64,7 +64,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ),
             ),
             Expanded(
-              child: Text(" ${widget.memory.structured.emoji} ${widget.memory.structured.title}"),
+              child: Text(
+                  " ${widget.memory.structured.emoji} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
             ),
             const SizedBox(width: 8),
             Row(
@@ -89,7 +90,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             Text(
-              widget.memory.structured.title,
+              widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
@@ -142,13 +143,21 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ],
             ),
             const SizedBox(height: 40),
-            Text(
-              'Overview',
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-            ),
-            const SizedBox(height: 8),
-            _getEditTextField(overviewController, editingOverview, focusOverviewField),
-            const SizedBox(height: 40),
+            widget.memory.discarded
+                ? const SizedBox.shrink()
+                : Text(
+                    'Overview',
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                  ),
+            widget.memory.discarded
+                ? const SizedBox.shrink()
+                : const SizedBox(height: 8),
+            widget.memory.discarded
+                ? const SizedBox.shrink()
+                : _getEditTextField(overviewController, editingOverview, focusOverviewField),
+            widget.memory.discarded
+                ? const SizedBox.shrink()
+                : const SizedBox(height: 40),
             widget.memory.structured.actionItems.isNotEmpty
                 ? Text(
                     'Action Items',
@@ -200,7 +209,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               'Raw Transcript  💬',
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             ExpandableTextWidget(
               text: widget.memory.transcript,
               expandText: 'show more',
