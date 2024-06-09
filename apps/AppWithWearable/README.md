@@ -22,7 +22,7 @@ For your convenience, we have provided an `initialsetup.bash` script that automa
 1. **Run the setup script**:
    In the terminal, navigate to the root directory of the project and run the `initialsetup.bash` script:
     ```
-    ./initialsetup.bash
+    bash ./apps/AppWithWearable/initialsetup.bash
     ```
    The script will guide you through the setup process, including upgrading Flutter, getting dependencies, installing iOS pods, creating the `.env` file, and running the Build Runner.
 
@@ -41,7 +41,7 @@ If you prefer to set up the project manually, follow these steps:
     ```
 
 2. **Get Flutter Dependencies**:
-   From within `apps/AppStandalone`, install flutter packages:
+   From within `apps/AppWithWearable`, install flutter packages:
     ```
     flutter pub get
     ```
@@ -71,7 +71,9 @@ If you prefer to set up the project manually, follow these steps:
     ```
 
 7. **Run the App**:
-    - Select your target device in Xcode or Android Studio.
-    - Run the app.
+    And select the target device when prompted 
+    ```
+    flutter run
+    ```
 
 This guide should help you get started with running the Friend App on your local machine. Make sure each step is completed to avoid any issues.
