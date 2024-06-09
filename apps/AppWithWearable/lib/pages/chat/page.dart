@@ -7,22 +7,27 @@ import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/utils/temp.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:uuid/uuid.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
+  final List<MemoryRecord> memories;
 
-  const ChatPage({super.key, required this.textFieldFocusNode});
+  const ChatPage({
+    super.key,
+    required this.textFieldFocusNode,
+    required this.memories,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   ScrollController listViewController = ScrollController();
 
@@ -39,9 +44,12 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _messages = prefs.chatMessages;
+    _messages = [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] + prefs.chatMessages;
     SchedulerBinding.instance.addPostFrameCallback((_) => _moveListToBottom(initial: true));
   }
 
@@ -56,113 +64,131 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const BlurBotWidget(),
-        Column(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: ListView.builder(
-                  scrollDirection: Axis.vertical,
-                  itemCount: _messages.length,
-                  itemBuilder: (context, chatIndex) {
-                    final message = _messages[chatIndex];
-                    if (message.type == 'ai') return AIMessage(message: message);
-                    // if (message.type == 'ai') {
-                    //   return AIMessage(
-                    //     message: message,
-                    //     onShowMemoriesPressed: () {
-                    //       _showMemoryIds(message.memoryIds);
-                    //     },
-                    //   );
-                    // }
-                    if (message.type == 'human') {
-                      return HumanMessage(message: message);
-                    }
-                    return const SizedBox.shrink();
-                  },
-                  controller: listViewController,
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
+            children: [
+              Expanded(
+                  child: ListView.builder(
+                scrollDirection: Axis.vertical,
+                itemCount: _messages.length,
+                itemBuilder: (context, chatIndex) {
+                  final message = _messages[chatIndex];
+                  if (message.type == 'ai') {
+                    var messageMemoriesId = Set<String>.from(message.memoryIds ?? []);
+                    return Padding(
+                      padding: EdgeInsets.only(
+                          bottom: chatIndex == _messages.length - 1
+                              ? widget.textFieldFocusNode.hasFocus
+                                  ? 120
+                                  : 160
+                              : 0),
+                      child: AIMessage(
+                        message: message,
+                        sendMessage: _sendMessageUtil,
+                        displayOptions: _messages.length <= 1,
+                        memories: widget.memories.where((m) => messageMemoriesId.contains(m.id)).toList(),
+                      ),
+                    );
+                  }
+                  return Padding(
+                    padding: EdgeInsets.only(
+                        bottom: chatIndex == _messages.length - 1
+                            ? widget.textFieldFocusNode.hasFocus
+                                ? 120
+                                : 160
+                            : 0),
+                    child: HumanMessage(message: message),
+                  );
+                },
+                controller: listViewController,
+              )),
+              // const SizedBox(height: 160),
+            ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
+            child: Container(
+              width: double.maxFinite,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              margin: const EdgeInsets.fromLTRB(32, 0, 32, 0),
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                border: GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 1,
                 ),
+                shape: BoxShape.rectangle,
               ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsetsDirectional.fromSTEB(20.0, 12, 10.0, 8),
-              margin: const EdgeInsetsDirectional.fromSTEB(12.0, 16.0, 12.0, 12.0),
-              decoration: BoxDecoration(
-                color: const Color(0x1AF7F4F4),
-                boxShadow: const [
-                  BoxShadow(
-                    blurRadius: 3.0,
-                    color: Color(0x33000000),
-                    offset: Offset(0.0, 1.0),
-                  )
-                ],
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              child: SizedBox(
-                width: 300.0,
-                child: TextField(
-                  // onTap: () {
-                  //   widget.textFieldFocusNode.requestFocus();
-                  // },
-                  // enabled: true,
-                  controller: textController,
-                  textCapitalization: TextCapitalization.sentences,
-                  obscureText: false,
-                  // focusNode: widget.textFieldFocusNode,
-                  // canRequestFocus: true,
-                  decoration: InputDecoration(
-                      hintText: 'Chat with memories...',
-                      hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      suffixIcon: IconButton(
-                        icon: loading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.send_rounded,
-                                color: Color(0xFFF7F4F4),
-                                size: 30.0,
+              child: TextField(
+                enabled: true,
+                autofocus: false,
+                controller: textController,
+                textCapitalization: TextCapitalization.sentences,
+                obscureText: false,
+                focusNode: widget.textFieldFocusNode,
+                // canRequestFocus: true,
+                decoration: InputDecoration(
+                    hintText: 'Ask your Friend anything',
+                    hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: loading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
-                        onPressed: loading
-                            ? null
-                            : () async {
-                          String message = textController.text;
-                          if (message.isEmpty) return;
-                          changeLoadingState();
-                          _prepareStreaming(message);
-                          dynamic ragInfo = await _retrieveRAGContext(message);
-                          String ragContext = ragInfo[0];
-                          List<String> memoryIds = ragInfo[1].cast<String>();
-                          debugPrint('RAG Context: $ragContext');
-                          MixpanelManager().chatMessageSent(message);
-                          await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
-                            prefs.chatMessages = _messages;
-                          });
-                          changeLoadingState();
-                        },
-                      )),
-                  maxLines: 8,
-                  minLines: 1,
-                  keyboardType: TextInputType.multiline,
-                  style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                ),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Color(0xFFF7F4F4),
+                              size: 30.0,
+                            ),
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              String message = textController.text;
+                              if (message.isEmpty) return;
+                              _sendMessageUtil(message);
+                            },
+                    )),
+                maxLines: 8,
+                minLines: 1,
+                keyboardType: TextInputType.multiline,
+                style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ],
     );
+  }
+
+  _sendMessageUtil(String message) async {
+    changeLoadingState();
+    _prepareStreaming(message);
+    dynamic ragInfo = await _retrieveRAGContext(message);
+    String ragContext = ragInfo[0];
+    List<String> memoryIds = ragInfo[1].cast<String>();
+    debugPrint('RAG Context: $ragContext');
+    MixpanelManager().chatMessageSent(message);
+    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
+      _messages.last.memoryIds = memoryIds;
+      prefs.chatMessages = _messages;
+    });
+    changeLoadingState();
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
@@ -200,19 +226,12 @@ class _ChatPageState extends State<ChatPage> {
       debugPrint('Content: $content');
       var messagesCopy = [..._messages];
       messagesCopy.last.text += content;
-      messagesCopy.last.memoryIds = memoryIds;
       debugPrint(messagesCopy.last.text);
       setState(() {
         _messages = messagesCopy;
       });
       _moveListToBottom();
     };
-  }
-
-  _showMemoryIds(List<String>? memoryIds) {
-    if (memoryIds != null && memoryIds.isNotEmpty) {
-      debugPrint('Memory IDs: $memoryIds');
-    }
   }
 
   _moveListToBottom({bool initial = false}) async {

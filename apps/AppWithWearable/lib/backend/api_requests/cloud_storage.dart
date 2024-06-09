@@ -48,7 +48,7 @@ Future<String?> uploadFile(File file) async {
       debugPrint('Upload successful');
       return fileName;
     } else {
-      debugPrint('Failed to upload');
+      debugPrint('Failed to upload: ${response.body}');
     }
   } catch (e) {
     debugPrint('Error uploading file: $e');

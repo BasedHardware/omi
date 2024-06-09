@@ -23,7 +23,12 @@ build/
 # Android specific
 **/android/**/build/
 **/android/.gradle
+**/android/gradlew
+**/android/gradlew.bat
+**/android/**/gradle-wrapper.jar
 **/android/**/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/app/google-services.json
 
 # iOS specific
 **/ios/**/Pods/
@@ -31,8 +36,12 @@ build/
 **/ios/**/Flutter/Flutter.framework
 **/ios/**/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
 **/ios/.generated/
 **/ios/Runner.xcworkspace
+**/ios/**/GeneratedPluginRegistrant.*
+**/ios/**/xcuserdata
+**/ios/Runner/GoogleService-Info.plist
 
 # macOS specific
 **/macos/**/Pods/
@@ -40,18 +49,22 @@ build/
 **/macos/**/Flutter/Flutter.framework
 **/macos/**/Flutter/Flutter.podspec
 **/macos/Flutter/Generated.xcconfig
+**/macos/Flutter/flutter_export_environment.sh
+**/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+**/macos/Flutter/ephemeral/flutter_export_environment.sh
 **/macos/.generated/
 **/macos/Runner.xcworkspace
+**/macos/**/GeneratedPluginRegistrant.*
 
 # Linux specific
 **/linux/.dart_tool/
 **/linux/flutter/
-**/linux/GeneratedPluginRegistrant.*
+**/linux/**/GeneratedPluginRegistrant.*
 
 # Windows specific
-**/windows/flutter/
 **/windows/.dart_tool/
-**/windows/GeneratedPluginRegistrant.*
+**/windows/flutter/
+**/windows/**/GeneratedPluginRegistrant.*
 
 # Web specific
 **/web/**/build/
@@ -69,35 +82,15 @@ build/
 *.tmp
 hs_err_pid*
 
-#Servers
+# Servers
 backend/app-server/dist
 src/recordings
 
-#Apps
-apps/AppWithWearable/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
-apps/AppWithWearable/ios/Flutter/flutter_export_environment.sh
-apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.h
-apps/AppWithWearable/ios/Runner/GeneratedPluginRegistrant.m
-apps/AppWithWearable/macos/Flutter/ephemeral/flutter_export_environment.sh
-apps/AppWithWearable/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
-apps/AppStandalone/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata
-apps/AppStandalone/ios/Runner.xcodeproj/xcuserdata
-
+# Apps
 apps/AppStandalone/lib/firebase_options.dart
 apps/AppStandalone/firebase.json
-apps/AppStandalone/android/app/google-services.json
-apps/AppStandalone/ios/Runner/GoogleService-Info.plist
-apps/AppStandalone/lib/env/env.g.dart
-apps/AppStandalone/ios/Flutter/flutter_export_environment.sh
-apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.h
-apps/AppStandalone/ios/Runner/GeneratedPluginRegistrant.m
-apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
-*/*xcschememanagement.plist
-*/android/app/google-services.json
-*/ios/Runner/GoogleService-Info.plist
-
-#Solidworks models
+# Solidworks models
 *.SLDPRT
 *.SLDASM
 **/classic_triangle/old outdated history (but gold)/
@@ -112,7 +105,9 @@ apps/AppStandalone/android/app/src/main/java/io/flutter/plugins/GeneratedPluginR
 test/recordings
 
 #Flutter
-
 env.g.dart
 */upload-keystore.jks
 */key.properties
+
+# Jekyll
+docs/_site/
