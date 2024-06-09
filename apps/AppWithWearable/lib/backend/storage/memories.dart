@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Structured {
@@ -7,44 +7,52 @@ class Structured {
   String overview;
   List<String> actionItems;
   List<String> pluginsResponse;
+  String emoji;
+  String category;
 
   Structured({
     this.title = "",
     this.overview = "",
     required this.actionItems,
     required this.pluginsResponse,
+    this.emoji = '',
+    this.category = '',
   });
 
   factory Structured.fromJson(Map<String, dynamic> json) => Structured(
-        title: json['title'],
-        overview: json['overview'],
-        actionItems: List<String>.from(json['action_items'] ?? []),
-        pluginsResponse: List<String>.from(json['pluginsResponse'] ?? []),
-      );
+      title: json['title'] ?? '',
+      overview: json['overview'] ?? '',
+      actionItems: List<String>.from(json['action_items'] ?? []),
+      pluginsResponse: List<String>.from(json['pluginsResponse'] ?? []),
+      category: json['category'] ?? '',
+      emoji: json['emoji'] ?? '');
 
   Map<String, dynamic> toJson() => {
         'title': title,
         'overview': overview,
         'action_items': List<dynamic>.from(actionItems),
         'pluginsResponse': List<dynamic>.from(pluginsResponse),
+        'emoji': emoji,
+        'category': category,
       };
+
+  getEmoji() {
+    try {
+      return utf8.decode(emoji.toString().codeUnits);
+    } catch (e) {
+      return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
+    }
+  }
 
   @override
   String toString() {
     var str = '';
-    str += 'Title: $title\n';
-    str += 'Summary: $overview\n';
+    str += '${getEmoji()} $title ($category)\n\nSummary: $overview\n\n';
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
-    }
-    for (var item in actionItems) {
-      str += '  - $item\n';
-    }
-    if (pluginsResponse.isNotEmpty) {
-      str += 'Plugins Response:\n';
-    }
-    for (var response in pluginsResponse) {
-      str += '  - $response\n';
+      for (var item in actionItems) {
+        str += '- $item\n';
+      }
     }
     return str;
   }
@@ -104,6 +112,7 @@ class MemoryRecord {
       ${e.structured.actionItems.map((item) => '  - $item').join('\n')}
       ${e.structured.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
       ${e.structured.pluginsResponse.map((response) => '  - $response').join('\n')}
+      Category: ${e.structured.category}
       '''
           .replaceAll('      ', '')
           .trim())
@@ -151,6 +160,16 @@ class MemoryStorage {
     return filtered;
   }
 
+  static Future<void> updateWholeMemory(MemoryRecord newMemory) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
+    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == newMemory.id);
+    if (index >= 0 && index < allMemories.length) {
+      allMemories[index] = jsonEncode(newMemory.toJson());
+      await prefs.setStringList(_storageKey, allMemories);
+    }
+  }
+
   static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
@@ -167,6 +186,7 @@ class MemoryStorage {
           overview: updatedDescription,
           actionItems: oldMemory.structured.actionItems,
           pluginsResponse: oldMemory.structured.pluginsResponse,
+          category: oldMemory.structured.category,
         ),
         discarded: oldMemory.discarded,
       );

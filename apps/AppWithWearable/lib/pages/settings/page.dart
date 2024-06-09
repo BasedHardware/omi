@@ -40,12 +40,13 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         automaticallyImplyLeading: true,
         title: const Text('Settings'),
         centerTitle: false,
-        elevation: 2.0,
+        elevation: 0,
         actions: [
           MaterialButton(
             onPressed: _saveSettings,
@@ -61,114 +62,109 @@ class _SettingsPageState extends State<SettingsPage> {
           )
         ],
       ),
-      body: Stack(
-        children: [
-          const BlurBotWidget(),
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: ListView(
-                children: [
-                  const SizedBox(height: 32.0),
-                  // _getText('Recordings Language:', underline: false),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text(
-                      'Recordings Language:',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-                  Center(
-                      child: Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    child: DropdownButton<String>(
-                      menuMaxHeight: 350,
-                      value: _selectedLanguage,
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedLanguage = newValue!;
-                        });
-                      },
-                      dropdownColor: Colors.black,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      underline: Container(
-                        height: 0,
-                        color: Colors.white,
-                      ),
-                      isExpanded: true,
-                      itemHeight: 48,
-                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
-                        return DropdownMenuItem<String>(
-                          value: availableLanguages[key],
-                          child: Text(
-                            '$key (${availableLanguages[key]})',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight:
-                                    _selectedLanguage == availableLanguages[key] ? FontWeight.w600 : FontWeight.w500,
-                                fontSize: 16),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  )),
-                  const SizedBox(height: 24.0),
-                  ListTile(
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                    },
-                    title: const Text(
-                      'Setup your speech profile  🎤',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12.0),
-                  SwitchListTile(
-                    value: optInAnalytics,
-                    activeColor: Colors.deepPurple,
-                    onChanged: (v) {
-                      setState(() {
-                        optInAnalytics = v;
-                      });
-                    },
-                    title: const Text(
-                      'Opt In Analytics',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 8.0),
-                  SwitchListTile(
-                    value: devModeEnabled,
-                    activeColor: Colors.deepPurple,
-                    onChanged: (v) {
-                      setState(() {
-                        devModeEnabled = v;
-                      });
-                    },
-                    title: const Text(
-                      'Developer Mode',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  ..._getDeveloperOnlyFields(),
-                ],
+      body: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: ListView(
+            children: [
+              const SizedBox(height: 32.0),
+              // _getText('Recordings Language:', underline: false),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Recordings Language:',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
-            ),
-          )
-        ],
+
+              const SizedBox(height: 12),
+              Center(
+                  child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                child: DropdownButton<String>(
+                  menuMaxHeight: 350,
+                  value: _selectedLanguage,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _selectedLanguage = newValue!;
+                    });
+                  },
+                  dropdownColor: Colors.black,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  underline: Container(
+                    height: 0,
+                    color: Colors.white,
+                  ),
+                  isExpanded: true,
+                  itemHeight: 48,
+                  items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+                    return DropdownMenuItem<String>(
+                      value: availableLanguages[key],
+                      child: Text(
+                        '$key (${availableLanguages[key]})',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight:
+                                _selectedLanguage == availableLanguages[key] ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              )),
+              const SizedBox(height: 24.0),
+              ListTile(
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                },
+                title: const Text(
+                  'Setup your speech profile  🎤',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              SwitchListTile(
+                value: optInAnalytics,
+                activeColor: Colors.deepPurple,
+                onChanged: (v) {
+                  setState(() {
+                    optInAnalytics = v;
+                  });
+                },
+                title: const Text(
+                  'Opt In Analytics',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 8.0),
+              SwitchListTile(
+                value: devModeEnabled,
+                activeColor: Colors.deepPurple,
+                onChanged: (v) {
+                  setState(() {
+                    devModeEnabled = v;
+                  });
+                },
+                title: const Text(
+                  'Developer Mode',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+              ..._getDeveloperOnlyFields(),
+            ],
+          ),
+        ),
       ),
     );
   }

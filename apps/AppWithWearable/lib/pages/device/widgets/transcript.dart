@@ -14,7 +14,6 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:lottie/lottie.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -67,7 +66,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    debugPrint('Transcript: \n$transcript');
     File file = await WavBytesUtil.createWavFile(SharedPreferencesUtil().temporalAudioBytes);
     String? fileName = await uploadFile(file);
     processTranscriptContent(context, transcript, fileName, file.path, retrievedFromCache: true);
@@ -106,10 +104,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
         WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
+          // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
             List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
             processCustomTranscript(segments);
           } catch (e) {
+            debugPrint(e.toString());
             toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
           }
         });
@@ -118,6 +118,22 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     audioBytesStream = stream;
     audioStorage = wavBytesUtil;
+  }
+
+  void _cleanTranscript(List<TranscriptSegment> segments) {
+    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m'];
+    for (var i = 0; i < segments.length; i++) {
+      for (var hallucination in hallucinations) {
+        segments[i].text = segments[i]
+            .text
+            .replaceAll('$hallucination $hallucination $hallucination', '')
+            .replaceAll('$hallucination $hallucination', '')
+            .replaceAll('  ', ' ')
+            .trim();
+      }
+    }
+    // remove empty segments
+    segments.removeWhere((element) => element.text.isEmpty);
   }
 
   void processCustomTranscript(List<TranscriptSegment> data) {
@@ -139,6 +155,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       joinedSimilarSegments.removeAt(0);
     }
+
+    _cleanTranscript(segments);
+    _cleanTranscript(joinedSimilarSegments);
+
     segments.addAll(joinedSimilarSegments);
     SharedPreferencesUtil().transcriptSegments = segments;
     setState(() {});
@@ -167,7 +187,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       } else {
         transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
       }
-      transcript += '\n';
+      transcript += '\n\n';
     }
     return transcript.trim();
   }
@@ -229,7 +249,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
               children: [
                 const SizedBox(height: 16),
                 //
-                Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+                Image.asset(
+                  'assets/images/wave.gif',
+                  height: 200,
+                ),
+
                 const SizedBox(height: 32),
                 const Align(
                   alignment: Alignment.center,
@@ -254,7 +278,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       scrollDirection: Axis.vertical,
-      itemCount: segments.length + 1,
+      itemCount: segments.length + 2,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
@@ -263,24 +287,45 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             padding: const EdgeInsets.only(top: 8.0, bottom: 32),
             child: Align(
               alignment: Alignment.center,
-              child: Lottie.asset('assets/lottie_animations/wave.json', height: 80),
+              child: Image.asset(
+                'assets/images/wave.gif',
+                width: 200,
+              ),
             ),
           );
         }
+        if (idx == segments.length + 1) return const SizedBox(height: 64);
         final data = segments[idx - 1];
-        String transcriptItem = '';
-        if (data.isUser) {
-          transcriptItem = 'You said: ${data.text}';
-        } else {
-          transcriptItem = 'Speaker ${data.speakerId}: ${data.text}';
-        }
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-          child: SelectionArea(
-            child: Text(
-              transcriptItem,
-              style: const TextStyle(letterSpacing: 0.0, color: Colors.white),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      width: 26, height: 26),
+                  const SizedBox(width: 12),
+                  Text(
+                    data.isUser ? 'You' : 'Speaker ${data.speakerId}',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  )
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelectionArea(
+                  child: Text(
+                    data.text,
+                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
