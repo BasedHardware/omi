@@ -59,7 +59,7 @@ class _PluginsPageState extends State<PluginsPage> {
         automaticallyImplyLeading: true,
         title: const Text('Plugins'),
         centerTitle: false,
-        elevation: 2.0,
+        elevation: 0,
         actions: [
           TextButton(
               onPressed: () {
@@ -78,124 +78,119 @@ class _PluginsPageState extends State<PluginsPage> {
               ))
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          const BlurBotWidget(),
-          Column(
-            children: [
-              const SizedBox(
-                height: 32,
-              ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0x1AF7F4F4),
-                  boxShadow: const [
-                    BoxShadow(
-                      blurRadius: 3.0,
-                      color: Color(0x33000000),
-                      offset: Offset(0.0, 1.0),
-                    )
-                  ],
-                  borderRadius: BorderRadius.circular(12.0),
+          const SizedBox(
+            height: 32,
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0x1AF7F4F4),
+              boxShadow: const [
+                BoxShadow(
+                  blurRadius: 3.0,
+                  color: Color(0x33000000),
+                  offset: Offset(0.0, 1.0),
+                )
+              ],
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            // TODO: reuse chat textfield
+            child: TextField(
+              onChanged: (value) {
+                setState(() {
+                  searchQuery = value;
+                });
+              },
+              obscureText: false,
+              decoration: const InputDecoration(
+                hintText: 'Search your plugin',
+                hintStyle: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w500,
                 ),
-                // TODO: reuse chat textfield
-                child: TextField(
-                  onChanged: (value) {
-                    setState(() {
-                      searchQuery = value;
-                    });
-                  },
-                  obscureText: false,
-                  decoration: const InputDecoration(
-                    hintText: 'Search your plugin',
-                    hintStyle: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14.0,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color(0x00000000),
-                        width: 1.0,
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(4.0),
-                        topRight: Radius.circular(4.0),
-                      ),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color(0x00000000),
-                        width: 1.0,
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(4.0),
-                        topRight: Radius.circular(4.0),
-                      ),
-                    ),
-                    errorBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color(0x00000000),
-                        width: 1.0,
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(4.0),
-                        topRight: Radius.circular(4.0),
-                      ),
-                    ),
-                    focusedErrorBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color(0x00000000),
-                        width: 1.0,
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(4.0),
-                        topRight: Radius.circular(4.0),
-                      ),
-                    ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Color(0x00000000),
+                    width: 1.0,
                   ),
-                  style: TextStyle(
-                    // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                    color: Theme.of(context).primaryColor,
-                    fontWeight: FontWeight.w500,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(4.0),
+                  ),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Color(0x00000000),
+                    width: 1.0,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(4.0),
+                  ),
+                ),
+                errorBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Color(0x00000000),
+                    width: 1.0,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(4.0),
+                  ),
+                ),
+                focusedErrorBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Color(0x00000000),
+                    width: 1.0,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(4.0),
                   ),
                 ),
               ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: filteredPlugins.length,
-                  itemBuilder: (context, index) {
-                    final plugin = filteredPlugins[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
-                      child: ListTile(
-                        title: Text(
-                          plugin.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            plugin.description,
-                            style: const TextStyle(color: Colors.grey, fontSize: 14),
-                          ),
-                        ),
-                        trailing: Switch(
-                          value: plugin.isEnabled,
-                          activeColor: Colors.deepPurple,
-                          onChanged: (value) {
-                            _togglePlugin(plugin.id.toString(), value);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              style: TextStyle(
+                // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                color: Theme.of(context).primaryColor,
+                fontWeight: FontWeight.w500,
               ),
-            ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: filteredPlugins.length,
+              itemBuilder: (context, index) {
+                final plugin = filteredPlugins[index];
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
+                  child: ListTile(
+                    title: Text(
+                      plugin.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        plugin.description,
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: plugin.isEnabled,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (value) {
+                        _togglePlugin(plugin.id.toString(), value);
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

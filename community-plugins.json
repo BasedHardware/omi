@@ -47,12 +47,20 @@
         "prompt": "You will be given a conversation between a healthcare provider and a patient covering the patient's medical history. Review the information to extract key details about past and current health conditions, surgeries, medications, allergies, and family history. Compile this into a structured medical history summary, categorized appropriately, using professional terminology while maintaining confidentiality. Document any undiscussed yet relevant history as 'Not Mentioned'.",
         "image": "/assets/plugin_images/medical-history-summary.png"
     },
+        "id": "dictionary",
+        "name": "Automatic Dictionary",
+        "author": "Dennis Muensterer",
+        "description": "Get definitions for complicated words",
+        "prompt": "You will be given a conversation transcript. Identify words that exceed advanced complexity or require domain-specific knowledge and provide definitions for these words. Ensure definitions are concise and contextually appropriate. Avoid redundant descriptions and focus on the main topics of the conversation. Only output the list of terms and their corresponding explanation.",
+        "image": "/assets/plugin_images/dictionary.png"
+    }
+    ,
     {
-    "id": "cognitive-bias-detector",
-    "name": "Cognitive Bias Detector",
-    "author": "Q8.org AiQ",
-    "description": "Identifies cognitive biases and provides recommendations for more objective and rational thinking.",
-    "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying cognitive biases that may be influencing the thoughts, opinions, or decisions expressed in the conversation. Utilize adversarial learning techniques to detect these biases and provide recommendations for more objective and rational thinking. Structure the output into clear sections, such as 'Identified Biases,' 'Potential Impact,' and 'Recommendations for Objective Thinking.' If any information is missing, use inversion techniques to infer potential biases that may be present. Maintain a neutral and informative tone throughout.",
-    "image": "/assets/plugin_images/cognitive-bias-detector.png"
-}
+        "id": "cognitive-bias-detector",
+        "name": "Cognitive Bias Detector",
+        "author": "AiQ8.org",
+        "description": "Identifies cognitive biases and provides recommendations for more objective and rational thinking.",
+        "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying cognitive biases that may be influencing the thoughts, opinions, or decisions expressed in the conversation. Utilize adversarial learning techniques to detect these biases and provide recommendations for more objective and rational thinking. Structure the output into clear sections, such as 'Identified Biases,' 'Potential Impact,' and 'Recommendations for Objective Thinking.' If any information is missing, use inversion techniques to infer potential biases that may be present. Maintain a neutral and informative tone throughout.",
+        "image": "/assets/plugin_images/cognitive-bias-detector.png"
+    }
 ]
