@@ -89,7 +89,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
     });
     widget.onRecordCompleted();
 
-    await Future.delayed(const Duration(milliseconds: 500)); // wait for bytes streaming to stream all
+    await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
     audioBytesStream?.cancel();
     File file = await WavBytesUtil.createWavFile(bytes, filename: '${widget.sample.id}.wav');
     await uploadSample(file, SharedPreferencesUtil().uid); // optimistic request
@@ -112,6 +112,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   void dispose() {
     audioBytesStream?.cancel();
     audioStorage?.clearAudioBytes();
+    _controller.dispose();
     super.dispose();
   }
 
