@@ -16,11 +16,13 @@ import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
+  final Function(bool) setHasTranscripts;
 
   const TranscriptWidget({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
+    required this.setHasTranscripts,
   });
 
   final BTDeviceStruct? btDevice;
@@ -169,6 +171,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     segments.addAll(joinedSimilarSegments);
     SharedPreferencesUtil().transcriptSegments = segments;
+    widget.setHasTranscripts(true);
     setState(() {});
     _initiateMemoryCreationTimer();
   }
@@ -243,6 +246,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       segments = [];
       setState(() => memoryCreating = false);
       audioStorage?.clearAudioBytes();
+      widget.setHasTranscripts(false);
     });
   }
 
@@ -261,25 +265,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (segments.isEmpty) {
       return btDevice != null
-          ? Column(
+          ? const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 16),
-                //
-                Image.asset(
-                  'assets/images/wave.gif',
-                  height: 200,
-                ),
-
-                const SizedBox(height: 32),
-                const Align(
+                SizedBox(height: 80),
+                Align(
                   alignment: Alignment.center,
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32.0),
                     child: Text(
                       textAlign: TextAlign.center,
                       'Your transcripts will start appearing\nhere after 30 seconds.',
-                      style: TextStyle(color: Colors.white, height: 1.5),
+                      style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
                     ),
                   ),
                 )
@@ -299,18 +296,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 16.0),
       itemBuilder: (context, idx) {
-        if (idx == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 8.0, bottom: 32),
-            child: Align(
-              alignment: Alignment.center,
-              child: Image.asset(
-                'assets/images/wave.gif',
-                width: 200,
-              ),
-            ),
-          );
-        }
+        if (idx == 0) return const SizedBox(height: 32);
         if (idx == segments.length + 1) return const SizedBox(height: 64);
         final data = segments[idx - 1];
         return Padding(
