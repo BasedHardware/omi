@@ -31,7 +31,8 @@ class HomePageWrapper extends StatefulWidget {
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
-class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
+class _HomePageWrapperState extends State<HomePageWrapper>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
@@ -48,7 +49,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   BTDeviceStruct? _device;
 
   _initiateMemories() async {
-    memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
+    memories = await MemoryStorage.getAllMemories(
+        includeDiscarded: displayDiscardMemories);
     setState(() {});
   }
 
@@ -58,7 +60,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    SharedPreferencesUtil().hasSpeakerProfile =
+        await userHasSpeakerProfile(SharedPreferencesUtil().uid);
   }
 
   Future<void> _initiatePlugins() async {
@@ -113,19 +116,25 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: false);
+          transcriptChildWidgetKey.currentState
+              ?.resetState(restartBytesProcessing: false);
           setState(() {
             _device = null;
           });
           InstabugLog.logWarn('Friend Device Disconnected');
-          createNotification(
-              title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+          if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
+            createNotification(
+                title: 'Friend Device Disconnected',
+                body: 'Please reconnect to continue using your Friend.');
+          }
           MixpanelManager().deviceDisconnected();
         },
-        onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
+        onConnected: ((d) =>
+            _onConnected(d, initiateConnectionListener: false)));
   }
 
-  _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+  _onConnected(BTDeviceStruct? connectedDevice,
+      {bool initiateConnectionListener = true}) {
     if (connectedDevice == null) return;
     clearNotification(1);
     setState(() {
@@ -133,14 +142,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    transcriptChildWidgetKey.currentState
+        ?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
   }
 
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
+    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!,
+        onBatteryLevelChange: (int value) {
       setState(() {
         batteryLevel = value;
       });
@@ -148,7 +159,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _tabChange(int index) {
-    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
+    MixpanelManager()
+        .bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     FocusScope.of(context).unfocus();
     setState(() {
       _controller!.index = index;
@@ -195,7 +207,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 : Align(
                     alignment: Alignment.bottomCenter,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
                       margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
                       decoration: const BoxDecoration(
                         color: Colors.black,
@@ -218,19 +231,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             onPressed: () => _tabChange(0),
                             child: Text('Memories',
                                 style: TextStyle(
-                                    color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                                    color: _controller!.index == 0
+                                        ? Colors.white
+                                        : Colors.grey,
+                                    fontSize: 16)),
                           ),
                           MaterialButton(
                             onPressed: () => _tabChange(1),
                             child: Text('Capture',
                                 style: TextStyle(
-                                    color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                                    color: _controller!.index == 1
+                                        ? Colors.white
+                                        : Colors.grey,
+                                    fontSize: 16)),
                           ),
                           MaterialButton(
                             onPressed: () => _tabChange(2),
                             child: Text('Chat',
                                 style: TextStyle(
-                                    color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                                    color: _controller!.index == 2
+                                        ? Colors.white
+                                        : Colors.grey,
+                                    fontSize: 16)),
                           ),
                         ],
                       ),
@@ -294,9 +316,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 MixpanelManager().settingsOpened();
                 var language = SharedPreferencesUtil().recordingsLanguage;
                 var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (c) => const SettingsPage()));
                 if (language != SharedPreferencesUtil().recordingsLanguage ||
-                    useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
+                    useFriendApiKeys !=
+                        SharedPreferencesUtil().useFriendApiKeys) {
                   transcriptChildWidgetKey.currentState?.resetState();
                 }
               },

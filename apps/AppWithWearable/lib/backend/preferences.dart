@@ -69,6 +69,14 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
+  bool get coachIsChecked => getBool('coachIsChecked') ?? false;
+
+  set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
+
+  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? false;
+
+  set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
+
   List<Message> get chatMessages {
     final List<String> messages = getStringList('messages') ?? [];
     return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
