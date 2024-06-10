@@ -22,11 +22,13 @@ class FoundDevices extends StatefulWidget {
 }
 
 class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+  bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
   late AnimationController _controller;
   late Animation<double> _animation;
+  String? _connectingToDeviceId;
 
   @override
   void initState() {
@@ -50,6 +52,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       setState(() {
         batteryPercentage = battery;
         _isConnected = true;
+        _isClicked = false; // Allow clicks again after finishing the operation
+        _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().onboardingCompleted = true;
@@ -59,7 +63,23 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
           .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: btDevice.toJson())));
     } catch (e) {
       print("Error fetching battery level: $e");
+      setState(() {
+        _isClicked = false; // Allow clicks again if an error occurs
+        _connectingToDeviceId = null; // Reset the connecting device
+      });
     }
+  }
+
+  // Method to handle taps on devices
+  Future<void> handleTap(BTDeviceStruct device) async {
+    if (_isClicked) return; // if any item is clicked, don't do anything
+    setState(() {
+      _isClicked = true; // Prevent further clicks
+      _connectingToDeviceId = device.id; // Mark this device as being connected to
+    });
+    await bleConnectDevice(device.id);
+    deviceName = device.id;
+    setBatteryPercentage(device);
   }
 
   @override
@@ -125,11 +145,13 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: widget.deviceList.length,
-                    itemBuilder: (context, index) {
-                      final device = widget.deviceList[index];
-                      if (device == null) return Container(); // If device is null, return an empty container
+itemBuilder: (context, index) {
+    final device = widget.deviceList[index];
+    if (device == null) return Container(); // If device is null, return an empty container
 
-                      return Container(
+    bool isConnecting = _connectingToDeviceId == device.id; // Check if it's the device being connected to
+
+    return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
                         decoration: BoxDecoration(
@@ -145,24 +167,31 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                           borderRadius: BorderRadius.circular(12),
                           color: const Color.fromARGB(0, 0, 0, 0),
                         ),
-                        child: ListTile(
-                          title: Text(
-                            device.id.split('-').last.substring(0, 6),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 18,
-                              color: Color(0xCCFFFFFF),
-                            ),
-                          ),
-                          onTap: () async {
-                            await bleConnectDevice(device.id);
-                            deviceName = device.id;
-                            setBatteryPercentage(device);
-                          },
-                        ),
-                      );
-                    },
+      child: ListTile(
+        title: Text(
+          device.id.split('-').last.substring(0, 6),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 18,
+            color: Color(0xCCFFFFFF),
+          ),
+        ),
+        trailing: isConnecting 
+          ? Container(
+              padding: EdgeInsets.all(8.0),
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 3.0,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          : null, // Show loading indicator if connecting
+        onTap: !_isClicked ? () => handleTap(device) : null,
+      ),
+    );
+},
                   ),
                 )
               : Text(
