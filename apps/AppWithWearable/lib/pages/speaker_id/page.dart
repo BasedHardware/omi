@@ -68,7 +68,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           automaticallyImplyLeading: true,
           title: const Text(
             'Speech Profile',
@@ -170,7 +170,12 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
   _goNext() async {
     if (_currentIdx == _controller!.length - 1) {
-      Navigator.pop(context);
+      if (widget.onbording) {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+      } else {
+        Navigator.pop(context);
+      }
+
       return;
     }
     _currentIdx += 1;

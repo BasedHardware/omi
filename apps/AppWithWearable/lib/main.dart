@@ -71,7 +71,7 @@ class _MyAppState extends State<MyApp> {
             selectionColor: Colors.deepPurple,
           )),
       themeMode: ThemeMode.dark,
-      home: !SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper() : const WelcomePage(),
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper() : const WelcomePage(),
     );
   }
 }
