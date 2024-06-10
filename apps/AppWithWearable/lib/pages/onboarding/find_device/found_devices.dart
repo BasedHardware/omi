@@ -21,16 +21,27 @@ class FoundDevices extends StatefulWidget {
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> {
+class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1, end: 1.3).animate(_controller);
+    super.initState();
+  }
 
   Future<void> getBatteryPercentage(BTDeviceStruct deviceId) async {
     StreamSubscription<List<int>>? batteryLevelListener;
     try {
-      batteryLevelListener = await getBleBatteryLevelListener(deviceId,
-          onBatteryLevelChange: (int value) {
+      batteryLevelListener = await getBleBatteryLevelListener(deviceId, onBatteryLevelChange: (int value) {
         debugPrint("Battery Level: $value%");
         setState(() {
           deviceName = deviceId.id;
@@ -43,8 +54,8 @@ class _FoundDevicesState extends State<FoundDevices> {
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().onboardingCompleted = true;
       MixpanelManager().onboardingCompleted();
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (c) => HomePageWrapper(btDevice: deviceId.toJson())));
+      Navigator.of(context)
+          .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: deviceId.toJson())));
     } catch (e) {
       print("Error fetching battery level: $e");
       batteryLevelListener?.cancel();
@@ -58,23 +69,38 @@ class _FoundDevicesState extends State<FoundDevices> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset(
-                  "assets/images/stars.png",
-                ),
-                Image.asset("assets/images/blob.png"),
-                Image.asset("assets/images/herologo.png")
-              ],
+          Container(
+            height: 400,
+            child: Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Image.asset(
+                    "assets/images/stars.png",
+                  ),
+                  AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      return Image.asset(
+                        "assets/images/blob.png",
+                        height: 300 * _animation.value,
+                        width: 300 * _animation.value,
+                      );
+                    },
+                  ),
+                  // Image.asset("assets/images/blob.png"),
+                  Image.asset("assets/images/herologo.png")
+                ],
+              ),
             ),
           ),
           !_isConnected
               ? Container(
                   margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
                   child: Text(
-                    '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    widget.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
@@ -101,14 +127,11 @@ class _FoundDevicesState extends State<FoundDevices> {
                     itemCount: widget.deviceList.length,
                     itemBuilder: (context, index) {
                       final device = widget.deviceList[index];
-                      if (device == null)
-                        return Container(); // If device is null, return an empty container
+                      if (device == null) return Container(); // If device is null, return an empty container
 
                       return Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        padding: EdgeInsets.symmetric(
-                            horizontal: screenSize.width * 0, vertical: 0),
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
                         decoration: BoxDecoration(
                           border: const GradientBoxBorder(
                             gradient: LinearGradient(colors: [
@@ -165,8 +188,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                             ? Colors.orange
                             : Colors.green,
                   ),
-                )
-                )
+                ))
         ],
       ),
     );

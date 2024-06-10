@@ -77,9 +77,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              deviceList.isEmpty
-                  ? SearchingSection(enableInstructions: enableInstructions)
-                  : FoundDevices(deviceList: deviceList),
+              FoundDevices(deviceList: deviceList),
               deviceList.isEmpty
                   ? enableInstructions
                       ? Padding(
