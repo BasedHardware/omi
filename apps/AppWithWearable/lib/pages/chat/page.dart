@@ -116,71 +116,63 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
           alignment: Alignment.bottomCenter,
           child: Padding(
             padding: EdgeInsets.only(bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
-            child: GestureDetector(
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                Timer(const Duration(milliseconds: 1), () {
-                  FocusScope.of(context).requestFocus(widget.textFieldFocusNode);
-                });
-              },
-              child: Container(
-                width: double.maxFinite,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                margin: const EdgeInsets.fromLTRB(32, 0, 32, 0),
-                decoration: const BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.all(Radius.circular(16)),
-                  border: GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
-                    width: 1,
-                  ),
-                  shape: BoxShape.rectangle,
+            child: Container(
+              width: double.maxFinite,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              margin: const EdgeInsets.fromLTRB(32, 0, 32, 0),
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                border: GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 1,
                 ),
-                child: TextField(
-                  enabled: true,
-                  autofocus: false,
-                  controller: textController,
-                  textCapitalization: TextCapitalization.sentences,
-                  obscureText: false,
-                  focusNode: widget.textFieldFocusNode,
-                  // canRequestFocus: true,
-                  decoration: InputDecoration(
-                      hintText: 'Ask your Friend anything',
-                      hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      suffixIcon: IconButton(
-                        icon: loading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.send_rounded,
-                                color: Color(0xFFF7F4F4),
-                                size: 30.0,
+                shape: BoxShape.rectangle,
+              ),
+              child: TextField(
+                enabled: true,
+                autofocus: false,
+                controller: textController,
+                textCapitalization: TextCapitalization.sentences,
+                obscureText: false,
+                focusNode: widget.textFieldFocusNode,
+                // canRequestFocus: true,
+                decoration: InputDecoration(
+                    hintText: 'Ask your Friend anything',
+                    hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: loading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
-                        onPressed: loading
-                            ? null
-                            : () async {
-                                String message = textController.text;
-                                if (message.isEmpty) return;
-                                _sendMessageUtil(message);
-                              },
-                      )),
-                  maxLines: 8,
-                  minLines: 1,
-                  keyboardType: TextInputType.multiline,
-                  style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                ),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Color(0xFFF7F4F4),
+                              size: 30.0,
+                            ),
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              String message = textController.text;
+                              if (message.isEmpty) return;
+                              _sendMessageUtil(message);
+                            },
+                    )),
+                maxLines: 8,
+                minLines: 1,
+                keyboardType: TextInputType.multiline,
+                style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
               ),
             ),
           ),

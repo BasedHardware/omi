@@ -47,6 +47,17 @@ class _CompletionTabState extends State<CompletionTab> {
             ),
           ),
         ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Center(
+            child: Text(
+              'You can always do it again and improve your speaker profile!',
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
         const SizedBox(height: 32),
         Row(
           children: [

@@ -96,15 +96,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
+    // TODO: avoid connecting again and showing progress after onboarding ~ later
 
-    if (widget.btDevice != null) {
-      // Only used when onboarding flow
-      _device = BTDeviceStruct.fromJson(widget.btDevice);
-      scanAndConnectDevice().then(_onConnected);
-    } else {
-      // default flow
-      scanAndConnectDevice().then(_onConnected);
-    }
+    scanAndConnectDevice().then(_onConnected);
     super.initState();
   }
 
@@ -121,6 +115,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           createNotification(
               title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
           MixpanelManager().deviceDisconnected();
+          // TODO: force memory creation when disconnects
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
   }
