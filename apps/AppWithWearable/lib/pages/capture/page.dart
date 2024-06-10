@@ -155,9 +155,9 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
     if (_hasTranscripts) return [];
     if (widget.device == null) {
       return [
-        const SizedBox(height: 64),
-        // const ScanningAnimation(),
-        const DeviceAnimationWidget(),
+        const DeviceAnimationWidget(
+          sizeMultiplier: 0.7,
+        ),
         const ScanningUI(
           string1: 'Looking for Friend wearable',
           string2: 'Locating your Friend device. Keep it near your phone for pairing',
@@ -166,10 +166,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
     }
     // return [const DeviceAnimationWidget()];
     return [
-      const Center(
-          child: DeviceAnimationWidget(
-        sizeMultiplier: 0.7,
-      )),
+      const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
       Center(
           child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,

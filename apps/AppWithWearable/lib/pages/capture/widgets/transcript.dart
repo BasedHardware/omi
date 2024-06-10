@@ -172,13 +172,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
 
+
+    if (!restartBytesProcessing && segments.isNotEmpty) {
+      _createMemory();
+    }
+
     setState(() {
       if (btDevice != null) this.btDevice = btDevice;
     });
     if (restartBytesProcessing) initiateBytesProcessing();
-    if (restartBytesProcessing && segments.isNotEmpty && (segments.length > 1 || segments[0].text.isNotEmpty)) {
-      _initiateMemoryCreationTimer();
-    }
+    // if (restartBytesProcessing && segments.isNotEmpty && (segments.length > 1 || segments[0].text.isNotEmpty)) {
+    //   _initiateMemoryCreationTimer();
+    // }
   }
 
   String _buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
@@ -216,22 +221,24 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () async {
-      setState(() => memoryCreating = true);
-      debugPrint('Creating memory from whispers');
-      String transcript = _buildDiarizedTranscriptMessage(segments);
-      debugPrint('Transcript: \n$transcript');
-      File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-      String? fileName = await uploadFile(file);
-      await processTranscriptContent(context, transcript, fileName, file.path);
-      await widget.refreshMemories();
-      SharedPreferencesUtil().temporalAudioBytes = [];
-      SharedPreferencesUtil().transcriptSegments = [];
-      segments = [];
-      setState(() => memoryCreating = false);
-      audioStorage?.clearAudioBytes();
-      widget.setHasTranscripts(false);
-    });
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+  }
+
+  _createMemory() async {
+    setState(() => memoryCreating = true);
+    debugPrint('Creating memory from whispers');
+    String transcript = _buildDiarizedTranscriptMessage(segments);
+    debugPrint('Transcript: \n$transcript');
+    File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
+    String? fileName = await uploadFile(file);
+    await processTranscriptContent(context, transcript, fileName, file.path);
+    await widget.refreshMemories();
+    SharedPreferencesUtil().temporalAudioBytes = [];
+    SharedPreferencesUtil().transcriptSegments = [];
+    segments = [];
+    setState(() => memoryCreating = false);
+    audioStorage?.clearAudioBytes();
+    widget.setHasTranscripts(false);
   }
 
   @override
