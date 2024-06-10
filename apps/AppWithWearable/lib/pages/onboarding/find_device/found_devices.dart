@@ -57,10 +57,12 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (c) => const SpeakerIdPage(
-                onbording: true,
-              )));
+      // Navigator.of(context).pushReplacement(MaterialPageRoute(
+      //     builder: (c) => const SpeakerIdPage(
+      //           onbording: true,
+      //         )));
+
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {
       debugPrint("Error fetching battery level: $e");
     }
