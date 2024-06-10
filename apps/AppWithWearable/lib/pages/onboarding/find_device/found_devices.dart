@@ -38,6 +38,12 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
     super.initState();
   }
 
+  @override
+  void dispose() {
+  _controller.dispose(); // Dispose of the AnimationController
+  super.dispose(); // Call the super dispose method after disposing the controller.
+  }
+
   Future<void> getBatteryPercentage(BTDeviceStruct deviceId) async {
     StreamSubscription<List<int>>? batteryLevelListener;
     try {
