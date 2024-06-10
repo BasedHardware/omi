@@ -2,9 +2,9 @@
 
 # **Friend**
 
-Open Source AI Wearable device that records everything you say, gives you proactive feedback and advice. 6+ days on single charge.
+Meet Friend, the world’s leading open-source AI wearable that revolutionizes how you capture and manage conversations. Simply connect Friend to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.
 
-![Friend Image](https://github.com/BasedHardware/Friend/assets/43514161/1d504d29-1988-4482-8254-665b0bf8a264)
+![Friend Image](/docs/images/friend_banner.png)
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/ZutWMTJnwA) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
@@ -12,7 +12,7 @@ Open Source AI Wearable device that records everything you say, gives you proact
 
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://basedhardware.github.io/Friend/) | [Buy Assembled Device](https://www.kickstarter.com/projects/kodjima333/friend-open-source-ai-wearable-recording-device?ref=7wc2iz)
+[Homepage](https://basedhardware.com/) | [Documentation](https://docs.basedhardware.com/) | [Buy Assembled Device](https://www.kickstarter.com/projects/kodjima333/friend-open-source-ai-wearable-recording-device?ref=7wc2iz)
 
 </h3>
 
@@ -27,11 +27,11 @@ Open Source AI Wearable device that records everything you say, gives you proact
 
 ## Get Started with our Documentation:
 
-- [Introduction](https://basedhardware.github.io/Friend/)
-- [App setup](https://basedhardware.github.io/Friend/get_started/Setup/)
-- [Buying Guide](https://basedhardware.github.io/Friend/assembly/Buying_Guide/)
-- [Build the device](https://basedhardware.github.io/Friend/assembly/Build_the_device/)
-- [Install firmware](https://basedhardware.github.io/Friend/assembly/Install_firmware/)
+- [Introduction](https://docs.basedhardware.com/)
+- [App setup](https://docs.basedhardware.com/get_started/Setup/)
+- [Buying Guide](https://docs.basedhardware.com/assembly/Buying_Guide/)
+- [Build the device](https://docs.basedhardware.com/assembly/Build_the_device/)
+- [Install firmware](https://docs.basedhardware.com/assembly/Install_firmware/)
 
 ## Contribution:
 
@@ -56,10 +56,10 @@ classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
 
 classDef lightModeLinks stroke:#333333;
 classDef darkModeLinks stroke:#FFFFFF;
-    
+
 class A,B,C,D,E,G lightMode;
 class A,B,C,D,E,G darkMode;
-    
+
 linkStyle 0 stroke:#FF4136, stroke-width:2px;
 linkStyle 1 stroke:#1ABC9C, stroke-width:2px;
 linkStyle 2 stroke:#0074D9, stroke-width:2px;
@@ -67,19 +67,21 @@ linkStyle 3 stroke:#FFCC00, stroke-width:2px;
 linkStyle 4 stroke:#2ECC40, stroke-width:2px;
 linkStyle 5 stroke:#B10DC9, stroke-width:2px;
 
-``` 
+```
 
-## Structure
+## Get the software
 
-There are 3 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
+Get the Android app on [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios)
 
-Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it.
+Download the iOS app in [App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
 
-Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
+iOS app beta on [TestFlight](https://testflight.apple.com/join/Ie8VQ847)
 
-Folder "AppWithWearableReactNative": Wearable-connected version of the app that is built in React native
+Latest firmware: [v1.0.2](https://github.com/BasedHardware/Friend/releases/download/v1.0.2-Firmware/friend-firmware.uf2)
 
-[Next Step: Read Getting Started →](https://basedhardware.github.io/Friend/get_started/Setup/)
+Or you can build your own app from the sources in `apps/AppWithWearable` and firmware from `firmware` folders.
+
+[Next Step: Read Getting Started →](https://docs.basedhardware.com/get_started/Setup/)
 
 # Getting Started
 
@@ -104,7 +106,7 @@ Before starting, make sure you have the following installed:
     ```
 
 2. **Get Flutter Dependencies**:
-   From within `apps/AppStandalone`, install flutter packages:
+   From within `apps/AppWithWearable`, install flutter packages:
     ```
     flutter pub get
     ```
@@ -137,13 +139,13 @@ Before starting, make sure you have the following installed:
     - Select your target device in Xcode or Android Studio.
     - Run the app.
 
-[Next Step: Buying Guide →](https://basedhardware.github.io/Friend/assembly/Buying_Guide/)
+[Next Step: Buying Guide →](https://docs.basedhardware.com/assembly/Buying_Guide/)
 
 ## More links:
 
-- [Contributing](https://basedhardware.github.io/Friend/info/Contribution/)
+- [Contributing](https://docs.basedhardware.com/info/Contribution/)
 - [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
-- [Support](https://basedhardware.github.io/Friend/info/Support/)
+- [Support](https://docs.basedhardware.com/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
 - [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
