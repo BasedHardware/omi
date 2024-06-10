@@ -100,8 +100,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (widget.btDevice != null) {
       // Only used when onboarding flow
       _device = BTDeviceStruct.fromJson(widget.btDevice);
-      _initiateConnectionListener();
-      _initiateBleBatteryListener();
+      scanAndConnectDevice().then(_onConnected);
     } else {
       // default flow
       scanAndConnectDevice().then(_onConnected);
