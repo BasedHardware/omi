@@ -4,54 +4,36 @@ title: Introduction
 nav_order: 1
 ---
 
+<img src="/images/friend_banner.png" alt="Friend Banner" width="100%">
+
 # Introduction
 
-Friend is an AI wearable device that records everything you say, giving you proactive feedback and advice. Use these docs to unlock the full potential of Friend and build using the power of recall.
-
-<img src="https://basedhardware.github.io/Friend/images/mainbanner.jpeg" alt="Friend Banner" width="100%">
+Meet Friend, the world’s leading open-source AI wearable that revolutionizes how you capture and manage conversations. Simply connect Friend to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## Features
 
-- Real-Time AI Audio Processing: Leverage powerful on-device AI capabilities for real-time audio analysis.
+- Open-Source: Fully open-source, empowering you to customize and enhance your experience.
+- Long Battery Life: Battery that lasts for days ensures you stay connected through the week.
+- Live Transcription: Capture live voice and audio with human-level accuracy using OpenAI Whisper and Deepgram.
+- Conversation Memory: Remembers conversations, providing you with reliable records.
+- Efficient Summarization: Get instant insights and summaries powered by ChatGPT in just 5 seconds.
+- Connectivity: Bluetooth enabled, LED, accelerometer, and USB-C charging.
+- App Marketplace: Expand functionality with our app marketplace.
+- Conversation Coach: Friend helps you communicate better, gives you tips and advises during conversations.
 
-- Low-powered Bluetooth: Capture audio for 24h+ on a small button battery
+## Software
 
-- Open-Source Software: Access and contribute to the pin’s software stack, designed with openness and community collaboration in mind. -Wearable Design: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear
+[<img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Get it on Google Play' width="230px">](https://play.google.com/store/apps/details?id=com.friend.ios)
+[<img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on App Store" style="width: 180px; margin-bottom: 15px;">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
 
-## How it works
+iOS app beta on [TestFlight](https://testflight.apple.com/join/Ie8VQ847)
 
-```mermaid
-graph TD;
-   A[Device] -- Streams Audio --> B[Phone App];
-   B -- Transmits --> C[Deepgram];
-   C -- Returns Transcript --> D[Phone App];
-   D -- Saves Transcript --> E[Phone Storage];
+Latest firmware: [v1.0.2](https://github.com/BasedHardware/Friend/releases/download/v1.0.2-Firmware/friend-firmware.uf2)
 
-classDef lightMode fill:#FFFFFF, stroke:#333333, color:#333333;
-classDef darkMode fill:#333333, stroke:#FFFFFF, color:#FFFFFF;
+There are also alternative apps and firmware compatible with Friend:
 
-classDef lightModeLinks stroke:#333333;
-classDef darkModeLinks stroke:#FFFFFF;
+[Glassium](https://glassium.org/) - a mobile and web app for AI wearables and Agents.
 
-class A,B,C,D,E lightMode
-class A,B,C,D,E darkMode
+[Bubble Firmware](https://github.com/ex3ndr/bubble-firmware) - a universal firmware for open-source AI pendants.
 
-linkStyle 0 stroke:#FF4136, stroke-width:2px
-linkStyle 1 stroke:#1ABC9C, stroke-width:2px
-linkStyle 2 stroke:#FFCC00, stroke-width:2px
-linkStyle 3 stroke:#2ECC40, stroke-width:2px
-```
-
-## Structure
-
-There are 3 different apps in these repositories located in different branches and folders. Our goal is to merge them into one big project.
-
-Folder "AppStandalone": Standalone version of the app that doesn't require any hardware to use it.
-
-Folder "AppWithWearable": Wearable-connected version of the app that requires the "Friend necklace" to use it.
-
-Folder "AppWithWearableReactNative": Wearable-connected version of the app that is built in React native
-
-
-
-[Next Step: Getting Started →](https://basedhardware.github.io/Friend/get_started/Setup/){: .btn .btn-purple }
+[Next Step: Getting Started →](/get_started/Setup/){: .btn .btn-purple }
