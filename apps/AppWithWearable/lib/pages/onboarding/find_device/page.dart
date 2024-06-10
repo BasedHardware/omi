@@ -15,8 +15,7 @@ class FindDevicesPage extends StatefulWidget {
   _FindDevicesPageState createState() => _FindDevicesPageState();
 }
 
-class _FindDevicesPageState extends State<FindDevicesPage>
-    with SingleTickerProviderStateMixin {
+class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProviderStateMixin {
   List<BTDeviceStruct?> deviceList = [];
   bool enableInstructions = false;
 
@@ -30,8 +29,7 @@ class _FindDevicesPageState extends State<FindDevicesPage>
 
   Future<void> _scanDevices() async {
     // TODO: validate bluetooth turned on
-    bool didMakeIt =
-        false; // a flag to indicate if devices are found within 10 seconds
+    bool didMakeIt = false; // a flag to indicate if devices are found within 10 seconds
     bool cancelTimer = false;
     bool timerIsActive = true;
     Timer didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
@@ -62,8 +60,7 @@ class _FindDevicesPageState extends State<FindDevicesPage>
   }
 
   void _launchURL() async {
-    const url =
-        'https://discord.com/servers/based-hardware-1192313062041067520';
+    const url = 'https://discord.com/servers/based-hardware-1192313062041067520';
     if (!await launch(url)) throw 'Could not launch $url';
   }
 
@@ -76,60 +73,60 @@ class _FindDevicesPageState extends State<FindDevicesPage>
       body: SafeArea(
         child: Container(
           height: size.height, // Make the container take up the full height
-          padding:
-              const EdgeInsets.symmetric(horizontal: 32, vertical: 0), // Responsive padding
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 0), // Responsive padding
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               deviceList.isEmpty
                   ? SearchingSection(enableInstructions: enableInstructions)
                   : FoundDevices(deviceList: deviceList),
-                deviceList.isEmpty ? enableInstructions ?                 Padding(
-                  padding: EdgeInsets.only(
-                    bottom: 20, // Padding from the bottom for the button
-                    left:
-                        screenSize.width * 0.0, // Horizontal padding for button
-                    right: screenSize.width * 0.0,
-                  ),
-                  child:                 Padding(
-                  padding: EdgeInsets.only(
-                    bottom: 10, // Padding from the bottom for the button
-                    left:
-                        screenSize.width * 0.0, // Horizontal padding for button
-                    right: screenSize.width * 0.0,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Color.fromARGB(255, 55, 55, 55), width : 2.0),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _launchURL();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: const Color.fromARGB(255, 17, 17, 17),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Container(
-                        width: double
-                            .infinity, // Button takes full width of the padding
-                        height: 45, // Fixed height for the button
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Contact Support',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w400,
-                              fontSize: screenSize.width * 0.045,
-                              color: const Color.fromARGB(255, 55, 55, 55)),
-                        ),
-                      ),
-                    ),
-                  ), )
-                ) : SizedBox.shrink() :  SizedBox.shrink()
+              deviceList.isEmpty
+                  ? enableInstructions
+                      ? Padding(
+                          padding: EdgeInsets.only(
+                            bottom: 20, // Padding from the bottom for the button
+                            left: screenSize.width * 0.0, // Horizontal padding for button
+                            right: screenSize.width * 0.0,
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              bottom: 10, // Padding from the bottom for the button
+                              left: screenSize.width * 0.0, // Horizontal padding for button
+                              right: screenSize.width * 0.0,
+                            ),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Color.fromARGB(255, 55, 55, 55), width: 2.0),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  _launchURL();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: const Color.fromARGB(255, 17, 17, 17),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Container(
+                                  width: double.infinity, // Button takes full width of the padding
+                                  height: 45, // Fixed height for the button
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    'Contact Support',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w400,
+                                        fontSize: screenSize.width * 0.045,
+                                        color: const Color.fromARGB(255, 55, 55, 55)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ))
+                      : SizedBox.shrink()
+                  : SizedBox.shrink()
             ],
           ),
         ),
@@ -137,7 +134,6 @@ class _FindDevicesPageState extends State<FindDevicesPage>
     );
   }
 }
-
 
 class SearchingSection extends StatelessWidget {
   final bool enableInstructions;
@@ -154,7 +150,7 @@ class SearchingSection extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-           Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 12, top: screenSize.height * 0.08),
             child: Text(
               'SEARCHING FOR DEVICE...',
