@@ -14,8 +14,7 @@ class WelcomePage extends StatefulWidget {
   State<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomePageState extends State<WelcomePage>
-    with SingleTickerProviderStateMixin {
+class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -28,8 +27,7 @@ class _WelcomePageState extends State<WelcomePage>
   @override
   void dispose() {
     // Show the status bar again when the widget is disposed
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -57,7 +55,7 @@ class _WelcomePageState extends State<WelcomePage>
                 bottom: 100,
               ),
               child: Center(
-                               // Tradeoff: SVG Export doesn't support drop shadows, and png isn't very sharp
+                // Tradeoff: SVG Export doesn't support drop shadows, and png isn't very sharp
                 child: Image.asset("assets/images/herologo.png"),
               ),
             ),
@@ -67,8 +65,7 @@ class _WelcomePageState extends State<WelcomePage>
                 Padding(
                   padding: EdgeInsets.only(
                     bottom: 10, // Padding from the bottom for the button
-                    left:
-                        screenSize.width * 0.1, // Horizontal padding for button
+                    left: screenSize.width * 0.1, // Horizontal padding for button
                     right: screenSize.width * 0.1,
                   ),
                   child: Container(
@@ -88,24 +85,19 @@ class _WelcomePageState extends State<WelcomePage>
                       onPressed: () async {
                         bool permissionsAccepted = false;
                         if (Platform.isIOS) {
-                          PermissionStatus bleStatus =
-                              await Permission.bluetooth.request();
+                          PermissionStatus bleStatus = await Permission.bluetooth.request();
                           debugPrint('bleStatus: $bleStatus');
                           permissionsAccepted = bleStatus.isGranted;
                           // TODO: apparently only needed for ios?
                         } else {
-                          PermissionStatus bleScanStatus =
-                              await Permission.bluetoothScan.request();
-                          PermissionStatus bleConnectStatus =
-                              await Permission.bluetoothConnect.request();
+                          PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
+                          PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
                           // PermissionStatus locationStatus = await Permission.location.request();
 
-                          permissionsAccepted = bleConnectStatus.isGranted &&
-                              bleScanStatus
-                                  .isGranted; // && locationStatus.isGranted;
+                          permissionsAccepted =
+                              bleConnectStatus.isGranted && bleScanStatus.isGranted; // && locationStatus.isGranted;
 
-                          debugPrint(
-                              'bleScanStatus: $bleScanStatus ~ bleConnectStatus: $bleConnectStatus');
+                          debugPrint('bleScanStatus: $bleScanStatus ~ bleConnectStatus: $bleConnectStatus');
                         }
                         if (!permissionsAccepted) {
                           showDialog(
@@ -148,8 +140,8 @@ class _WelcomePageState extends State<WelcomePage>
                             },
                           );
                         } else {
-                          Navigator.of(context).push(MaterialPageRoute(
-                              builder: (c) => const FindDevicesPage()));
+                          Navigator.of(context)
+                              .pushReplacement(MaterialPageRoute(builder: (c) => const FindDevicesPage()));
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -160,8 +152,7 @@ class _WelcomePageState extends State<WelcomePage>
                         ),
                       ),
                       child: Container(
-                        width: double
-                            .infinity, // Button takes full width of the padding
+                        width: double.infinity, // Button takes full width of the padding
                         height: 45, // Fixed height for the button
                         alignment: Alignment.center,
                         child: Text(
@@ -180,19 +171,17 @@ class _WelcomePageState extends State<WelcomePage>
                   text: TextSpan(
                     style: TextStyle(
                       color: Colors.white, // Text color
-                      fontSize:
-                          screenSize.width * 0.025, // Responsive font size
+                      fontSize: screenSize.width * 0.025, // Responsive font size
                     ),
                     children: [
-                      const TextSpan(
-                          text: 'By tapping on "Connect", you agree to our\n'),
+                      const TextSpan(text: 'By tapping on "Connect", you agree to our\n'),
                       TextSpan(
                         text: 'Terms of service',
                         style: const TextStyle(
                           decoration: TextDecoration.underline,
                         ),
-                                                //To be changed later with basedhardware.com/Termsofservice
-recognizer: TapGestureRecognizer()
+                        //To be changed later with basedhardware.com/Termsofservice
+                        recognizer: TapGestureRecognizer()
                           ..onTap = () {
                             _launchUrl(
                                 'https://samaprivacypolicy.notion.site/samaprivacypolicy/Sama-AI-Privacy-Policy-bfbbee90f18d4b8b9a0111d2d62cca54');
@@ -204,7 +193,7 @@ recognizer: TapGestureRecognizer()
                         style: const TextStyle(
                           decoration: TextDecoration.underline,
                         ),
-                                                //To be changed later with basedhardware.com/PrivacyPolicy
+                        //To be changed later with basedhardware.com/PrivacyPolicy
                         recognizer: TapGestureRecognizer()
                           ..onTap = () {
                             _launchUrl(
@@ -214,9 +203,7 @@ recognizer: TapGestureRecognizer()
                     ],
                   ),
                 ),
-                SizedBox(
-                    height: bottomPadding *
-                        0.5), // Padding from bottom for the text
+                SizedBox(height: bottomPadding * 0.5), // Padding from bottom for the text
               ],
             ),
           ],
