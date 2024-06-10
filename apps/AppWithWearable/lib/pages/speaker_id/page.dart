@@ -115,7 +115,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        const InstructionsTab(),
+                         InstructionsTab(goNext: _goNext),
                         ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
                               sample: sample,
                               btDevice: _device,
@@ -131,47 +131,46 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                       ],
                     ),
                   ),
-                  _currentIdx == 0 || _currentIdx == _controller!.length - 1 || (samples[_currentIdx - 1].displayNext)
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16.0),
-                          child: ElevatedButton(
-                            onPressed: _controller == null
-                                ? null
-                                : () async {
-                                    debugPrint('Current Index: $_currentIdx');
-                                    if (_currentIdx == _controller!.length - 1) {
-                                      Navigator.pop(context);
-                                      return;
-                                    }
-                                    _currentIdx += 1;
-                                    _controller?.animateTo(_currentIdx);
-                                    setState(() {});
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple,
-                              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8), // Rounded corners
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            child: Text(
-                              _currentIdx == 0
-                                  ? 'START'
-                                  : _currentIdx == _controller!.length - 1
-                                      ? 'Great  :)'
-                                      : 'NEXT',
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                  // _currentIdx == 0 || _currentIdx == _controller!.length - 1 || (samples[_currentIdx - 1].displayNext)
+                  //     ? Padding(
+                  //         padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  //         child: ElevatedButton(
+                  //           onPressed: _controller == null ? null : _goNext,
+                  //           style: ElevatedButton.styleFrom(
+                  //             backgroundColor: Colors.deepPurple,
+                  //             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  //             shape: RoundedRectangleBorder(
+                  //               borderRadius: BorderRadius.circular(8), // Rounded corners
+                  //             ),
+                  //             textStyle: const TextStyle(
+                  //               fontSize: 16,
+                  //               fontWeight: FontWeight.bold,
+                  //             ),
+                  //           ),
+                  //           child: Text(
+                  //             _currentIdx == 0
+                  //                 ? 'START'
+                  //                 : _currentIdx == _controller!.length - 1
+                  //                     ? 'Great  :)'
+                  //                     : 'NEXT',
+                  //           ),
+                  //         ),
+                  //       )
+                  //     : const SizedBox.shrink(),
                   const SizedBox(height: 48),
                 ],
               ),
       ),
     );
+  }
+
+  _goNext() async {
+    if (_currentIdx == _controller!.length - 1) {
+      Navigator.pop(context);
+      return;
+    }
+    _currentIdx += 1;
+    _controller?.animateTo(_currentIdx);
+    setState(() {});
   }
 }
