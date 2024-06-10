@@ -19,8 +19,8 @@ import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -50,6 +50,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     setState(() {});
+    // FocusScope.of(context).unfocus();
+    // chatTextFieldFocusNode.unfocus();
   }
 
   _toggleDiscardMemories() async {
