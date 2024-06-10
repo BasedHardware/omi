@@ -130,10 +130,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
                         child: Container(
                           width: 12,
                           height: 12,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                         ),
                       ),
                     ],
