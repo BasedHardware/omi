@@ -124,13 +124,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                           elevation: 0,
                                           insetPadding: EdgeInsets.zero,
                                           backgroundColor: Colors.transparent,
-                                          alignment: 
-                                          const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                          alignment:
+                                              const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                                           child: ConfirmDeletionWidget(
-                                            memory: widget.memory, onDelete: (){
-                                              Navigator.pop(context, true);
-                                              Navigator.pop(context, true);
-                                            }),
+                                              memory: widget.memory,
+                                              onDelete: () {
+                                                Navigator.pop(context, true);
+                                                Navigator.pop(context, true);
+                                              }),
                                         );
                                       },
                                     ).then((value) => setState(() {}));

@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -7,12 +11,8 @@ import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/utils/temp.dart';
-import 'package:uuid/uuid.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'dart:async';
+import 'package:uuid/uuid.dart';
 
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;

@@ -5,7 +5,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -17,8 +16,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController openaiApiKeyController = TextEditingController();
-  final TextEditingController gcpCredentialsController =
-      TextEditingController();
+  final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
@@ -39,8 +37,7 @@ class _SettingsPageState extends State<SettingsPage> {
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     coachIsChecked = SharedPreferencesUtil().coachIsChecked;
-    reconnectNotificationIsChecked =
-        SharedPreferencesUtil().reconnectNotificationIsChecked;
+    reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     super.initState();
   }
 
@@ -63,7 +60,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   size: 24.0,
                 ),
               ),
-              Spacer(), 
+              Spacer(),
               const Text('Settings'),
               Spacer(),
             ]),
@@ -78,10 +75,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   padding: EdgeInsets.symmetric(horizontal: 4.0),
                   child: Text(
                     'Save',
-                    style: TextStyle(
-                        color: Colors.deepPurple,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16),
+                    style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 16),
                   ),
                 ),
               )
@@ -103,10 +97,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'RECORDING SETTINGS',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600),
+                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),
@@ -119,8 +110,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     margin: const EdgeInsets.symmetric(horizontal: 12),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                     child: DropdownButton<String>(
                       menuMaxHeight: 350,
                       value: _selectedLanguage,
@@ -137,16 +127,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       isExpanded: true,
                       itemHeight: 48,
-                      items: availableLanguages.keys
-                          .map<DropdownMenuItem<String>>((String key) {
+                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
                         return DropdownMenuItem<String>(
                           value: availableLanguages[key],
                           child: Text(
                             '$key (${availableLanguages[key]})',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                           ),
                         );
                       }).toList(),
@@ -190,8 +176,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: coachIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -200,14 +185,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                coachIsChecked // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: coachIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -218,12 +202,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         if (reconnectNotificationIsChecked) {
                           reconnectNotificationIsChecked = false;
-                          SharedPreferencesUtil()
-                              .reconnectNotificationIsChecked = false;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = false;
                         } else {
                           reconnectNotificationIsChecked = true;
-                          SharedPreferencesUtil()
-                              .reconnectNotificationIsChecked = true;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = true;
                         }
                       });
                     },
@@ -242,8 +224,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: reconnectNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -252,14 +233,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                reconnectNotificationIsChecked // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: reconnectNotificationIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -303,8 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: optInAnalytics
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -313,14 +292,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                optInAnalytics // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: optInAnalytics // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -353,8 +331,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: devModeEnabled
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -363,14 +340,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                devModeEnabled // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: devModeEnabled // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -389,17 +365,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   InkWell(
                     onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (c) => const PluginsPage()));
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
                     },
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29,
-                              29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(
-                              10.0), // Apply rounded corners
+                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                          borderRadius: BorderRadius.circular(10.0), // Apply rounded corners
                         ),
                         child: const Padding(
                           padding: EdgeInsets.fromLTRB(8.0, 10.0, 8.0, 10.0),
@@ -412,9 +385,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   color: Color.fromARGB(255, 150, 150, 150),
                                 ),
                               ),
-                              Icon(Icons.arrow_forward_ios,
-                                  color: Color.fromARGB(255, 255, 255, 255),
-                                  size: 16),
+                              Icon(Icons.arrow_forward_ios, color: Color.fromARGB(255, 255, 255, 255), size: 16),
                             ],
                           ),
                         ),
@@ -423,17 +394,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   InkWell(
                     onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (c) => const SpeakerIdPage()));
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
                     },
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29,
-                              29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(
-                              10.0), // Adjust for desired rounded corners
+                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                          borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
                         ),
                         child: const Padding(
                           padding: EdgeInsets.fromLTRB(8.0, 10.0, 8.0, 10.0),
@@ -446,8 +414,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   color: Color.fromARGB(255, 150, 150, 150),
                                 ),
                               ),
-                              Icon(Icons.arrow_forward_ios,
-                                  color: Colors.white, size: 16),
+                              Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                             ],
                           ),
                         ),
@@ -526,12 +493,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   decoration: _getTextFieldDecoration('OpenAI API Key',
                       suffixIcon: IconButton(
                         icon: Icon(
-                          openaiApiIsVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: useFriendAPIKeys
-                              ? Colors.white.withOpacity(0.2)
-                              : Theme.of(context).primaryColor,
+                          openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
+                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
                         ),
                         onPressed: () {
                           setState(() {
@@ -545,19 +508,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 8.0),
                 TextButton(
                     onPressed: () {
-                      launchUrl(
-                          Uri.parse('https://platform.openai.com/api-keys'));
+                      launchUrl(Uri.parse('https://platform.openai.com/api-keys'));
                     },
-                    child: _getText('How to generate an OpenAI API key?',
-                        underline: true, canBeDisabled: true)),
+                    child: _getText('How to generate an OpenAI API key?', underline: true, canBeDisabled: true)),
               ],
             ),
           ),
         ],
       ),
       const SizedBox(height: 16.0),
-      _getText('[Optional] Store your recordings in Google Cloud',
-          underline: false),
+      _getText('[Optional] Store your recordings in Google Cloud', underline: false),
       const SizedBox(height: 16.0),
       TextField(
         controller: gcpCredentialsController,
@@ -581,35 +541,22 @@ class _SettingsPageState extends State<SettingsPage> {
     ];
   }
 
-  _getTextFieldDecoration(String label,
-      {IconButton? suffixIcon, bool canBeDisabled = false}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false}) {
     return InputDecoration(
       labelText: label,
       enabled: useFriendAPIKeys && canBeDisabled,
-      labelStyle: TextStyle(
-          color: useFriendAPIKeys && canBeDisabled
-              ? Colors.white.withOpacity(0.2)
-              : Colors.white),
+      labelStyle: TextStyle(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       border: const OutlineInputBorder(),
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(
-            color: useFriendAPIKeys && canBeDisabled
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white),
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       disabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(
-            color: useFriendAPIKeys && canBeDisabled
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white),
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(
-            color: useFriendAPIKeys && canBeDisabled
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white),
+        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       ),
       suffixIcon: suffixIcon,
     );
@@ -620,11 +567,8 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Text(
         text,
         style: TextStyle(
-          color: useFriendAPIKeys && canBeDisabled
-              ? Colors.white.withOpacity(0.2)
-              : Colors.white,
-          decoration:
-              underline ? TextDecoration.underline : TextDecoration.none,
+          color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
+          decoration: underline ? TextDecoration.underline : TextDecoration.none,
         ),
       ),
     );
@@ -665,9 +609,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.coachIsChecked = coachIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
 
-    optInAnalytics
-        ? MixpanelManager().optInTracking()
-        : MixpanelManager().optOutTracking();
+    optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
@@ -678,8 +620,7 @@ class _SettingsPageState extends State<SettingsPage> {
       prefs.useFriendApiKeys = useFriendAPIKeys;
     }
 
-    if (gcpCredentialsController.text.isNotEmpty &&
-        gcpBucketNameController.text.isNotEmpty) {
+    if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
     }
 
