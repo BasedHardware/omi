@@ -18,6 +18,7 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    _preferences!.clear();
     if (!_preferences!.containsKey('uid')) {
       _preferences!.setString('uid', const Uuid().v4());
     }

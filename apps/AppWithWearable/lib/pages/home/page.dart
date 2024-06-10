@@ -96,8 +96,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    // TODO: avoid connecting again and showing progress after onboarding ~ later
-
     scanAndConnectDevice().then(_onConnected);
     super.initState();
   }
