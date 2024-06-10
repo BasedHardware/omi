@@ -42,11 +42,35 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
         enableInstructions = true;
       });
     });
+      // Update foundDevicesMap with new devices and remove the ones not found anymore
+  Map<String, BTDeviceStruct?> foundDevicesMap = {};
+
     _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       List<BTDeviceStruct?> foundDevices = await scanDevices();
-      if (foundDevices.isNotEmpty) {
+
+      // Update foundDevicesMap with new devices and remove the ones not found anymore
+      Map<String, BTDeviceStruct?> updatedDevicesMap = {};
+      for (final device in foundDevices) {
+        if (device != null) {
+          // If it's a new device, add it to the map. If it already exists, this will just update the entry.
+          updatedDevicesMap[device.id] = device;
+        }
+      }
+      // Remove devices that are no longer found
+      foundDevicesMap.keys
+          .where((id) => !updatedDevicesMap.containsKey(id))
+          .toList()
+          .forEach(foundDevicesMap.remove);
+
+      // Merge the new devices into the current map to maintain order
+      foundDevicesMap.addAll(updatedDevicesMap);
+   
+         // Convert the values of the map back to a list
+      List<BTDeviceStruct?> orderedDevices = foundDevicesMap.values.toList();
+
+      if (orderedDevices.isNotEmpty) {
         setState(() {
-          deviceList = foundDevices;
+          deviceList = orderedDevices;
         });
         _didNotMakeItTimer.cancel();
       }
