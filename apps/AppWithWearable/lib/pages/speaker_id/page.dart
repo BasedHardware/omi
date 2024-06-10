@@ -67,8 +67,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.surface,
           automaticallyImplyLeading: true,
-          title: const Text('Speech Profile'),
-          centerTitle: false,
+          title: const Text('Speech Profile', style: TextStyle(color:Colors.white, fontSize: 20),),
+          centerTitle: true,
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new),
@@ -115,12 +115,13 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                         InstructionsTab(goNext: _goNext),
+                        InstructionsTab(goNext: _goNext),
                         ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
                               sample: sample,
                               btDevice: _device,
                               sampleIdx: index,
                               totalSamples: samples.length,
+                              goNext: _goNext,
                               onRecordCompleted: () {
                                 setState(() {
                                   sample.displayNext = true;
