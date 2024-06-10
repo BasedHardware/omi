@@ -63,13 +63,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
         int byte2 = value[i + 1];
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
-        // if (int16Value < 3000) bucket.add(int16Value);
       }
-      // if (bucket.length > 40000) {
-      //   setState(() {
-      //     bucket = bucket.sublist(bucket.length - 40000);
-      //   });
-      // }
     });
 
     audioBytesStream = stream;

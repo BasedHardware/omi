@@ -100,7 +100,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     if (widget.btDevice != null) {
       // Only used when onboarding flow
       _device = BTDeviceStruct.fromJson(widget.btDevice);
-      SharedPreferencesUtil().deviceId = _device!.id;
       _initiateConnectionListener();
       _initiateBleBatteryListener();
     } else {
