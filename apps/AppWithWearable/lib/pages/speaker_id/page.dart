@@ -11,6 +11,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
+import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 
@@ -26,18 +27,15 @@ class SpeakerIdPage extends StatefulWidget {
 class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin {
   TabController? _controller;
   int _currentIdx = 0;
-  List<SpeakerIdSample> samples = [];
+  List<SpeakerIdSample> _samples = [];
 
   BTDeviceStruct? _device;
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
 
   _init() async {
-    // await scanAndConnectDevice();
-    samples = await getUserSamplesState(SharedPreferencesUtil().uid);
-    _controller = TabController(length: 2 + samples.length, vsync: this);
-    debugPrint('_init _controller.length: ${_controller?.length}');
-    var btDevice = BluetoothDevice.fromId(SharedPreferencesUtil().deviceId);
-    _device = BTDeviceStruct(id: btDevice.remoteId.str, name: btDevice.platformName);
+    _device = await scanAndConnectDevice();
+    _samples = await getUserSamplesState(SharedPreferencesUtil().uid);
+    _controller = TabController(length: 2 + _samples.length, vsync: this);
     _initiateConnectionListener();
     setState(() {});
   }
@@ -145,11 +143,11 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
                         InstructionsTab(goNext: _goNext),
-                        ...samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
+                        ..._samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
                               sample: sample,
                               btDevice: _device,
                               sampleIdx: index,
-                              totalSamples: samples.length,
+                              totalSamples: _samples.length,
                               goNext: _goNext,
                               onRecordCompleted: () {
                                 setState(() {

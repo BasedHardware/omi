@@ -61,12 +61,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
-      // Navigator.of(context).pushReplacement(MaterialPageRoute(
-      //     builder: (c) => const SpeakerIdPage(
-      //           onbording: true,
-      //         )));
-
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
+      // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {
       print("Error fetching battery level: $e");
       setState(() {
@@ -151,13 +147,14 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: widget.deviceList.length,
-itemBuilder: (context, index) {
-    final device = widget.deviceList[index];
-    if (device == null) return Container(); // If device is null, return an empty container
+                    itemBuilder: (context, index) {
+                      final device = widget.deviceList[index];
+                      if (device == null) return Container(); // If device is null, return an empty container
 
-    bool isConnecting = _connectingToDeviceId == device.id; // Check if it's the device being connected to
+                      bool isConnecting =
+                          _connectingToDeviceId == device.id; // Check if it's the device being connected to
 
-    return Container(
+                      return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
                         decoration: BoxDecoration(
@@ -173,31 +170,31 @@ itemBuilder: (context, index) {
                           borderRadius: BorderRadius.circular(12),
                           color: const Color.fromARGB(0, 0, 0, 0),
                         ),
-      child: ListTile(
-        title: Text(
-          device.id.split('-').last.substring(0, 6),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 18,
-            color: Color(0xCCFFFFFF),
-          ),
-        ),
-        trailing: isConnecting
-          ? Container(
-              padding: EdgeInsets.all(8.0),
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 3.0,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : null, // Show loading indicator if connecting
-        onTap: !_isClicked ? () => handleTap(device) : null,
-      ),
-    );
-},
+                        child: ListTile(
+                          title: Text(
+                            device.id.split('-').last.substring(0, 6),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 18,
+                              color: Color(0xCCFFFFFF),
+                            ),
+                          ),
+                          trailing: isConnecting
+                              ? Container(
+                                  padding: EdgeInsets.all(8.0),
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3.0,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : null, // Show loading indicator if connecting
+                          onTap: !_isClicked ? () => handleTap(device) : null,
+                        ),
+                      );
+                    },
                   ),
                 )
               : Text(
