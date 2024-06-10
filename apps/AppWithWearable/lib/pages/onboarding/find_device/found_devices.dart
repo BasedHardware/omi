@@ -8,6 +8,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -27,25 +28,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
-  late AnimationController _controller;
-  late Animation<double> _animation;
   String? _connectingToDeviceId;
-
-  @override
-  void initState() {
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
-    super.initState();
-  }
-
-  @override
-  dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
@@ -61,12 +44,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
-      // Navigator.of(context).pushReplacement(MaterialPageRoute(
-      //     builder: (c) => const SpeakerIdPage(
-      //           onbording: true,
-      //         )));
-
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
+      // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {
       print("Error fetching battery level: $e");
       setState(() {
@@ -95,31 +74,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            height: 400,
-            child: Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Image.asset(
-                    "assets/images/stars.png",
-                  ),
-                  AnimatedBuilder(
-                    animation: _animation,
-                    builder: (context, child) {
-                      return Image.asset(
-                        "assets/images/blob.png",
-                        height: 390 * _animation.value,
-                        width: 390 * _animation.value,
-                      );
-                    },
-                  ),
-                  // Image.asset("assets/images/blob.png"),
-                  Image.asset("assets/images/herologo.png")
-                ],
-              ),
-            ),
-          ),
+          const DeviceAnimationWidget(),
           !_isConnected
               ? Container(
                   margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
@@ -151,13 +106,14 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: widget.deviceList.length,
-itemBuilder: (context, index) {
-    final device = widget.deviceList[index];
-    if (device == null) return Container(); // If device is null, return an empty container
+                    itemBuilder: (context, index) {
+                      final device = widget.deviceList[index];
+                      if (device == null) return Container(); // If device is null, return an empty container
 
-    bool isConnecting = _connectingToDeviceId == device.id; // Check if it's the device being connected to
+                      bool isConnecting =
+                          _connectingToDeviceId == device.id; // Check if it's the device being connected to
 
-    return Container(
+                      return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
                         decoration: BoxDecoration(
@@ -173,31 +129,31 @@ itemBuilder: (context, index) {
                           borderRadius: BorderRadius.circular(12),
                           color: const Color.fromARGB(0, 0, 0, 0),
                         ),
-      child: ListTile(
-        title: Text(
-          device.id.split('-').last.substring(0, 6),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 18,
-            color: Color(0xCCFFFFFF),
-          ),
-        ),
-        trailing: isConnecting
-          ? Container(
-              padding: EdgeInsets.all(8.0),
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 3.0,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : null, // Show loading indicator if connecting
-        onTap: !_isClicked ? () => handleTap(device) : null,
-      ),
-    );
-},
+                        child: ListTile(
+                          title: Text(
+                            device.id.split('-').last.substring(0, 6),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 18,
+                              color: Color(0xCCFFFFFF),
+                            ),
+                          ),
+                          trailing: isConnecting
+                              ? Container(
+                                  padding: EdgeInsets.all(8.0),
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3.0,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : null, // Show loading indicator if connecting
+                          onTap: !_isClicked ? () => handleTap(device) : null,
+                        ),
+                      );
+                    },
                   ),
                 )
               : Text(
