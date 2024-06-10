@@ -139,7 +139,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
                 },
                 title: const Text(
-                  'Plugins   🧩',
+                  'Plugins  🧩',
                   style: TextStyle(
                     color: Colors.white,
                   ),
