@@ -95,12 +95,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 12),
                   Center(
                       child: Container(
-                    height: 38,
+                    height: 60,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
                     child: DropdownButton<String>(
                       menuMaxHeight: 350,
                       value: _selectedLanguage,
