@@ -17,7 +17,6 @@ void main() async {
   await MixpanelManager.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
-        // TODO: set new API Key to new account
         token: Env.instabugApiKey!,
         invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
     Instabug.setColorTheme(ColorTheme.dark);
@@ -70,10 +69,9 @@ class _MyAppState extends State<MyApp> {
           textSelectionTheme: const TextSelectionThemeData(
             cursorColor: Colors.white,
             selectionColor: Colors.deepPurple,
-
           )),
       themeMode: ThemeMode.dark,
-      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
+      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper() : const WelcomePage(),
     );
   }
 }

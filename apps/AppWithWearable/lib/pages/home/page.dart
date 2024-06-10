@@ -8,19 +8,20 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/pages/capture/page.dart';
+import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/device/page.dart';
-import 'package:friend_private/pages/device/widgets/transcript.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/dfu.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -50,11 +51,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     setState(() {});
+    // FocusScope.of(context).unfocus();
+    // chatTextFieldFocusNode.unfocus();
   }
 
   _toggleDiscardMemories() async {
     setState(() => displayDiscardMemories = !displayDiscardMemories);
-
     _initiateMemories();
   }
 
@@ -79,6 +81,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     }
   }
 
+  _migrationScripts() async {
+    await migrateMemoriesCategoriesAndEmojis();
+    _initiateMemories();
+  }
+
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
@@ -89,19 +96,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     _initiateMemories();
     _initiatePlugins();
-    authenticateGCP();
     _setupHasSpeakerProfile();
-
-    if (widget.btDevice != null) {
-      // Only used when onboarding flow
-      _device = BTDeviceStruct.fromJson(widget.btDevice);
-      SharedPreferencesUtil().deviceId = _device!.id;
-      _initiateConnectionListener();
-      _initiateBleBatteryListener();
-    } else {
-      // default flow
-      scanAndConnectDevice().then(_onConnected);
-    }
+    _migrationScripts();
+    authenticateGCP();
+    scanAndConnectDevice().then(_onConnected);
     super.initState();
   }
 
@@ -115,8 +113,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             _device = null;
           });
           InstabugLog.logWarn('Friend Device Disconnected');
-          createNotification(
-              title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+          if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
+            createNotification(
+                title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+          }
           MixpanelManager().deviceDisconnected();
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
@@ -174,7 +174,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     displayDiscardMemories: displayDiscardMemories,
                     toggleDiscardMemories: _toggleDiscardMemories,
                   ),
-                  DevicePage(
+                  CapturePage(
                     device: _device,
                     refreshMemories: _initiateMemories,
                     transcriptChildWidgetKey: transcriptChildWidgetKey,
@@ -187,52 +187,76 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ],
               ),
             ),
-            chatTextFieldFocusNode.hasFocus
-                ? const SizedBox.shrink()
-                : Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                        border: GradientBoxBorder(
-                          gradient: LinearGradient(colors: [
-                            Color.fromARGB(127, 208, 208, 208),
-                            Color.fromARGB(127, 188, 99, 121),
-                            Color.fromARGB(127, 86, 101, 182),
-                            Color.fromARGB(127, 126, 190, 236)
-                          ]),
-                          width: 2,
-                        ),
-                        shape: BoxShape.rectangle,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          MaterialButton(
-                            onPressed: () => _tabChange(0),
+            if (chatTextFieldFocusNode.hasFocus)
+              const SizedBox.shrink()
+            else
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.all(Radius.circular(16)),
+                    border: GradientBoxBorder(
+                      gradient: LinearGradient(colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236)
+                      ]),
+                      width: 2,
+                    ),
+                    shape: BoxShape.rectangle,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: MaterialButton(
+                          onPressed: () => _tabChange(0),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 20, bottom: 20),
                             child: Text('Memories',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
                           ),
-                          MaterialButton(
-                            onPressed: () => _tabChange(1),
+                        ),
+                      ),
+                      Expanded(
+                        child: MaterialButton(
+                          onPressed: () => _tabChange(1),
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                              top: 20,
+                              bottom: 20,
+                            ),
                             child: Text('Capture',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
                           ),
-                          MaterialButton(
-                            onPressed: () => _tabChange(2),
+                        ),
+                      ),
+                      Expanded(
+                        child: MaterialButton(
+                          onPressed: () => _tabChange(2),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 20, bottom: 20),
                             child: Text('Chat',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  )
+                    ],
+                  ),
+                ),
+              )
           ],
         ),
       ),

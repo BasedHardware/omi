@@ -47,12 +47,45 @@
         "prompt": "You will be given a conversation between a healthcare provider and a patient covering the patient's medical history. Review the information to extract key details about past and current health conditions, surgeries, medications, allergies, and family history. Compile this into a structured medical history summary, categorized appropriately, using professional terminology while maintaining confidentiality. Document any undiscussed yet relevant history as 'Not Mentioned'.",
         "image": "/assets/plugin_images/medical-history-summary.png"
     },
-    {
+    {  
         "id": "dictionary",
         "name": "Automatic Dictionary",
         "author": "Dennis Muensterer",
         "description": "Get definitions for complicated words",
         "prompt": "You will be given a conversation transcript. Identify words that exceed advanced complexity or require domain-specific knowledge and provide definitions for these words. Ensure definitions are concise and contextually appropriate. Avoid redundant descriptions and focus on the main topics of the conversation. Only output the list of terms and their corresponding explanation.",
         "image": "/assets/plugin_images/dictionary.png"
+    },
+    {
+        "id": "game-theory-strategist",
+        "name": "Game Theory Strategist",
+        "author": "AiQ8.org",
+        "description": "Analyzes conversations and provides game-theoretic insights and strategic recommendations.",
+        "prompt": "You will be given a conversation related to any domain involving strategic decision-making, such as business negotiations, political campaigns, legal disputes, or even personal interactions. Analyze the content using a chain of thought and reasoning, applying game theory principles to identify the key players, their objectives, and potential strategies. Consider the weight of information as indicated by Perplexity and utilize inversion techniques to infer potential gaps in the available information. Identify any hidden or latent information implied in the conversation and utilize adversarial learning techniques to detect cognitive biases that may be influencing the decision-making process. Provide game-theoretic insights and strategic recommendations, structured into clear sections, such as 'Key Players,' 'Objectives,' 'Potential Strategies,' 'Latent Information,' 'Cognitive Biases,' and 'Strategic Recommendations.' Maintain a strategic and analytical tone throughout.",
+        "image": "/assets/plugin_images/game-theory-strategist.png"
+    }
+    ,
+    {
+      "id": "latent-information-analyzer",
+      "name": "Latent Information Analyzer",
+      "author": "AiQ8.org",
+      "description": "Identifies hidden or latent information in conversations and provides insights for further exploration",
+      "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying any hidden or latent information implied in the conversation. Consider the weight of information as indicated by Perplexity and utilize inversion techniques to infer potential gaps in the available information. Provide insights into the latent information and suggest areas for further exploration or clarification. Structure the output into clear sections, such as 'Latent Information,' 'Potential Implications,' and 'Recommended Areas for Exploration.' Maintain a curious and analytical tone throughout.",
+      "image": "/assets/plugin_images/latent-information-analyzer.png"
+    },
+    {
+    "id": "insight-extractor",
+    "name": "Insight Extractor",
+    "author": "Q8.org AiQ",
+    "description": "Extracts valuable insights and actionable recommendations from conversations across various domains",
+    "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, considering the weight of information as indicated by Perplexity. Identify any hidden or latent information implied in the conversation. Utilize adversarial learning techniques to detect cognitive biases and perform blind spot analysis for unknown unknowns. Provide actionable insights and recommendations structured into clear sections, such as 'Key Insights,' 'Latent Information,' 'Potential Biases,' 'Blind Spots,' and 'Recommendations.' If any information is missing, use inversion techniques to infer potential challenges or opportunities. Maintain an objective and supportive tone throughout.",
+    "image": "/assets/plugin_images/insight-extractor.png"
+    },
+    {        
+     "id": "cognitive-bias-detector",
+     "name": "Cognitive Bias Detector",
+     "author": "AiQ8.org",
+     "description": "Identifies cognitive biases and provides recommendations for more objective and rational thinking",
+     "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying cognitive biases that may be influencing the thoughts, opinions, or decisions expressed in the conversation. Utilize adversarial learning techniques to detect these biases and provide recommendations for more objective and rational thinking. Structure the output into clear sections, such as 'Identified Biases,' 'Potential Impact,' and 'Recommendations for Objective Thinking.' If any information is missing, use inversion techniques to infer potential biases that may be present. Maintain a neutral and informative tone throughout.",
+     "image": "/assets/plugin_images/cognitive-bias-detector.png"
     }
 ]
