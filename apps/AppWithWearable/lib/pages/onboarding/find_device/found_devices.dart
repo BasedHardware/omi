@@ -124,7 +124,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                         ),
                         child: ListTile(
                           title: Text(
-                            device.id.substring(device.id.length - 6),
+                            device.id.split('-').last.substring(0, 6),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
@@ -142,7 +142,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                   ),
                 )
               : Text(
-                  deviceName.substring(deviceName.length - 6),
+                  deviceName.split('-').last.substring(0, 6),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,

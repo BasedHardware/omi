@@ -24,5 +24,6 @@ Future<BTDeviceStruct?> scanAndConnectDevice() async {
 
 Future<List<BTDeviceStruct?>> scanDevices() async {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
-    return foundDevices;
+    var filteredDevices = foundDevices.where((device) => device.name == "Friend").toList();
+    return filteredDevices;
 }
