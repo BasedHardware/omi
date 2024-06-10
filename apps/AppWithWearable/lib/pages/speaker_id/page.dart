@@ -67,7 +67,10 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.surface,
           automaticallyImplyLeading: true,
-          title: const Text('Speech Profile', style: TextStyle(color:Colors.white, fontSize: 20),),
+          title: const Text(
+            'Speech Profile',
+            style: TextStyle(color: Colors.white, fontSize: 20),
+          ),
           centerTitle: true,
           elevation: 0,
           leading: IconButton(
@@ -84,14 +87,20 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                         onPressed: () {
                           Navigator.pop(context);
                         },
-                        child: const Text('Cancel'),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                       TextButton(
                         onPressed: () {
                           Navigator.pop(context);
                           Navigator.pop(context);
                         },
-                        child: const Text('Yes'),
+                        child: const Text(
+                          'Yes',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ],
                   ),
@@ -128,37 +137,13 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                 });
                               },
                             )),
-                        const CompletionTab(),
+                        CompletionTab(
+                          goNext: _goNext,
+                        ),
                       ],
                     ),
                   ),
-                  // _currentIdx == 0 || _currentIdx == _controller!.length - 1 || (samples[_currentIdx - 1].displayNext)
-                  //     ? Padding(
-                  //         padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  //         child: ElevatedButton(
-                  //           onPressed: _controller == null ? null : _goNext,
-                  //           style: ElevatedButton.styleFrom(
-                  //             backgroundColor: Colors.deepPurple,
-                  //             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                  //             shape: RoundedRectangleBorder(
-                  //               borderRadius: BorderRadius.circular(8), // Rounded corners
-                  //             ),
-                  //             textStyle: const TextStyle(
-                  //               fontSize: 16,
-                  //               fontWeight: FontWeight.bold,
-                  //             ),
-                  //           ),
-                  //           child: Text(
-                  //             _currentIdx == 0
-                  //                 ? 'START'
-                  //                 : _currentIdx == _controller!.length - 1
-                  //                     ? 'Great  :)'
-                  //                     : 'NEXT',
-                  //           ),
-                  //         ),
-                  //       )
-                  //     : const SizedBox.shrink(),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 24),
                 ],
               ),
       ),

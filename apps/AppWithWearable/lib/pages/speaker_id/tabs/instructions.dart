@@ -91,18 +91,18 @@ class _InstructionsTabState extends State<InstructionsTab> {
                   onPressed: () {
                     widget.goNext();
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.white, width: 1),
+                  ),
+                  color: Theme.of(context).colorScheme.primary,
+                  child: const Padding(
+                    padding: EdgeInsets.all(16.0),
                     child: Text(
                       'Start',
                       style: TextStyle(color: Colors.white, fontSize: 20),
                     ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.white, width: 1),
-                  ),
-                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             )
