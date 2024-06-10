@@ -7,13 +7,17 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/sample.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/ble/connected.dart';
+import 'package:friend_private/utils/ble/scan.dart';
 
 class SpeakerIdPage extends StatefulWidget {
-  const SpeakerIdPage({super.key});
+  final bool onbording;
+
+  const SpeakerIdPage({super.key, this.onbording = false});
 
   @override
   State<SpeakerIdPage> createState() => _SpeakerIdPageState();
@@ -28,6 +32,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
 
   _init() async {
+    await scanAndConnectDevice();
     samples = await getUserSamplesState(SharedPreferencesUtil().uid);
     _controller = TabController(length: 2 + samples.length, vsync: this);
     debugPrint('_init _controller.length: ${_controller?.length}');
@@ -71,45 +76,60 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
             'Speech Profile',
             style: TextStyle(color: Colors.white, fontSize: 20),
           ),
+          actions: [
+            !widget.onbording
+                ? const SizedBox()
+                : TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+                    },
+                    child: const Text(
+                      'Skip',
+                      style: TextStyle(color: Colors.white, decoration: TextDecoration.underline),
+                    ),
+                  ),
+          ],
           centerTitle: true,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new),
-            onPressed: () {
-              if (_currentIdx > 0 && _currentIdx < (_controller?.length ?? 0) - 1) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Are you sure?'),
-                    content: const Text('You will lose all the samples you have recorded so far.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.white),
+          leading: widget.onbording
+              ? const SizedBox()
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new),
+                  onPressed: () {
+                    if (_currentIdx > 0 && _currentIdx < (_controller?.length ?? 0) - 1) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Are you sure?'),
+                          content: const Text('You will lose all the samples you have recorded so far.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.pop(context);
+                              },
+                              child: const Text(
+                                'Yes',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pop(context);
-                        },
-                        child: const Text(
-                          'Yes',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-                return;
-              }
-              Navigator.pop(context);
-            },
-          ),
+                      );
+                      return;
+                    }
+                    Navigator.pop(context);
+                  },
+                ),
         ),
         body: _controller == null
             ? const Center(

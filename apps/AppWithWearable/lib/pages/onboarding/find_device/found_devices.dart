@@ -5,6 +5,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -53,12 +54,15 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
-      Navigator.of(context)
-          .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: btDevice.toJson())));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (c) => const SpeakerIdPage(
+                onbording: true,
+              )));
     } catch (e) {
-      print("Error fetching battery level: $e");
+      debugPrint("Error fetching battery level: $e");
     }
   }
 
