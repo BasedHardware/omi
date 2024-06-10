@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -17,6 +16,8 @@ class FindDevicesPage extends StatefulWidget {
 
 class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProviderStateMixin {
   List<BTDeviceStruct?> deviceList = [];
+  late Timer _didNotMakeItTimer;
+  late Timer _findDevicesTimer;
   bool enableInstructions = false;
 
   @override
@@ -27,36 +28,29 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     });
   }
 
+  @override
+  void dispose() {
+    _findDevicesTimer.cancel();
+    _didNotMakeItTimer.cancel();
+    super.dispose();
+  }
+
   Future<void> _scanDevices() async {
     // TODO: validate bluetooth turned on
-    bool didMakeIt = false; // a flag to indicate if devices are found within 10 seconds
-    bool cancelTimer = false;
-    bool timerIsActive = true;
-    Timer didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
-      if (!didMakeIt) {
-        cancelTimer = true;
-        setState(() {
-          enableInstructions = true;
-        });
-      }
+    _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
+      setState(() {
+        enableInstructions = true;
+      });
     });
-    while (true) {
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       List<BTDeviceStruct?> foundDevices = await scanDevices();
       if (foundDevices.isNotEmpty) {
-        didMakeIt = true;
         setState(() {
           deviceList = foundDevices;
         });
+        _didNotMakeItTimer.cancel();
       }
-
-      // Cancel the instructions timer after first trigger
-      if (cancelTimer && timerIsActive) {
-        timerIsActive = false;
-        didNotMakeItTimer.cancel();
-      }
-
-      await Future.delayed(const Duration(seconds: 2));
-    }
+    });
   }
 
   void _launchURL() async {
@@ -94,7 +88,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
                             ),
                             child: Container(
                               decoration: BoxDecoration(
-                                border: Border.all(color: Color.fromARGB(255, 55, 55, 55), width: 2.0),
+                                border: Border.all(color: const Color.fromARGB(255, 55, 55, 55), width: 2.0),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: ElevatedButton(
@@ -123,8 +117,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
                               ),
                             ),
                           ))
-                      : SizedBox.shrink()
-                  : SizedBox.shrink()
+                      : const SizedBox.shrink()
+                  : const SizedBox.shrink()
             ],
           ),
         ),
@@ -150,8 +144,8 @@ class SearchingSection extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.only(bottom: 12, top: screenSize.height * 0.08),
-            child: Text(
-              'SEARCHING FOR DEVICE...',
+            child: const Text(
+              'SEARCHING FOR FRIEND...',
               style: TextStyle(
                 color: Color.fromARGB(255, 255, 255, 255),
                 fontSize: 17,

@@ -34,31 +34,31 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 1, end: 1.3).animate(_controller);
+    _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
     super.initState();
   }
 
-  Future<void> getBatteryPercentage(BTDeviceStruct deviceId) async {
-    StreamSubscription<List<int>>? batteryLevelListener;
+  @override
+  dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
-      batteryLevelListener = await getBleBatteryLevelListener(deviceId, onBatteryLevelChange: (int value) {
-        debugPrint("Battery Level: $value%");
-        setState(() {
-          deviceName = deviceId.id;
-          _isConnected = true;
-          batteryPercentage = value;
-        });
-        // We cancel the listener, as we only needed the value once.
-        batteryLevelListener?.cancel();
+      var battery = await retrieveBatteryLevel(btDevice);
+      setState(() {
+        batteryPercentage = battery;
+        _isConnected = true;
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().onboardingCompleted = true;
       MixpanelManager().onboardingCompleted();
+      debugPrint("Onboarding completed");
       Navigator.of(context)
-          .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: deviceId.toJson())));
+          .pushReplacement(MaterialPageRoute(builder: (c) => HomePageWrapper(btDevice: btDevice.toJson())));
     } catch (e) {
       print("Error fetching battery level: $e");
-      batteryLevelListener?.cancel();
     }
   }
 
@@ -69,7 +69,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
+          SizedBox(
             height: 400,
             child: Center(
               child: Stack(
@@ -83,8 +83,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                     builder: (context, child) {
                       return Image.asset(
                         "assets/images/blob.png",
-                        height: 300 * _animation.value,
-                        width: 300 * _animation.value,
+                        height: 390 * _animation.value,
+                        width: 390 * _animation.value,
                       );
                     },
                   ),
@@ -157,7 +157,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                           ),
                           onTap: () async {
                             await bleConnectDevice(device.id);
-                            await getBatteryPercentage(device);
+                            deviceName = device.id;
+                            setBatteryPercentage(device);
                           },
                         ),
                       );
