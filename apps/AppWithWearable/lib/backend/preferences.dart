@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/segment.dart';
@@ -50,9 +51,9 @@ class SharedPreferencesUtil {
 
   set useFriendApiKeys(bool value) => saveBool('useFriendApiKeys', value);
 
-  bool get onboardingCompleted => getBool('onboardingCompleted2') ?? false;
+  bool get onboardingCompleted => getBool('onboardingCompleted') ?? false;
 
-  set onboardingCompleted(bool value) => saveBool('onboardingCompleted2', value);
+  set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
   String get customWebsocketUrl => getString('customWebsocketUrl') ?? '';
 
