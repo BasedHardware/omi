@@ -6,6 +6,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+
 import 'backend/preferences.dart';
 import 'env/env.dart';
 
@@ -17,7 +18,6 @@ void main() async {
   await MixpanelManager.init();
   if (Env.instabugApiKey != null) {
     await Instabug.init(
-        // TODO: set new API Key to new account
         token: Env.instabugApiKey!,
         invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
     Instabug.setColorTheme(ColorTheme.dark);
@@ -72,7 +72,9 @@ class _MyAppState extends State<MyApp> {
             selectionColor: Colors.deepPurple,
           )),
       themeMode: ThemeMode.dark,
-      home: SharedPreferencesUtil().onboardingCompleted ? const HomePageWrapper(btDevice: null) : const WelcomePage(),
+      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
+          ? const HomePageWrapper()
+          : const WelcomePage(),
     );
   }
 }

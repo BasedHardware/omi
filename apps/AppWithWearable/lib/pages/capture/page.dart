@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/widgets/device_widget.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:friend_private/widgets/scanning_animation.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'widgets/transcript.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -29,6 +31,7 @@ class CapturePage extends StatefulWidget {
 
 class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
+  bool _hasTranscripts = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -86,62 +89,133 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
             ),
           )
         : ListView(children: [
+            SharedPreferencesUtil().hasSpeakerProfile
+                ? const SizedBox(height: 16)
+                : Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900,
+                            borderRadius: const BorderRadius.all(Radius.circular(12)),
+                          ),
+                          margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                          padding: const EdgeInsets.all(16),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.multitrack_audio),
+                                    SizedBox(width: 16),
+                                    Text(
+                                      'Set up speech profile',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_forward_ios)
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 12,
+                        right: 24,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        ),
+                      ),
+                    ],
+                  ),
             ..._getConnectedDeviceWidgets(),
             TranscriptWidget(
-              btDevice: widget.device,
-              key: widget.transcriptChildWidgetKey,
-              refreshMemories: widget.refreshMemories,
-            ),
+                btDevice: widget.device,
+                key: widget.transcriptChildWidgetKey,
+                refreshMemories: widget.refreshMemories,
+                setHasTranscripts: (hasTranscripts) {
+                  if (_hasTranscripts == hasTranscripts) return;
+                  setState(() {
+                    _hasTranscripts = hasTranscripts;
+                  });
+                }),
             const SizedBox(height: 16)
           ]);
   }
 
   _getConnectedDeviceWidgets() {
+    debugPrint(_hasTranscripts.toString());
+    if (_hasTranscripts) return [];
     if (widget.device == null) {
       return [
-        const SizedBox(height: 64),
-        const ScanningAnimation(),
+        const DeviceAnimationWidget(
+          sizeMultiplier: 0.7,
+        ),
         const ScanningUI(
           string1: 'Looking for Friend wearable',
           string2: 'Locating your Friend device. Keep it near your phone for pairing',
         ),
       ];
     }
+    // return [const DeviceAnimationWidget()];
     return [
-      const SizedBox(height: 64),
-      const Center(
-          child: ScanningAnimation(
-        sizeMultiplier: 0.4,
-      )),
-      const SizedBox(height: 16),
-      const Center(
-          child: Text(
-        'Connected Device',
-        style: TextStyle(
-            fontFamily: 'SF Pro Display',
-            color: Colors.white,
-            fontSize: 29.0,
-            letterSpacing: 0.0,
-            fontWeight: FontWeight.w700,
-            height: 1.2),
-        textAlign: TextAlign.center,
-      )),
-      const SizedBox(height: 8),
-      Row(
+      const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
+      Center(
+          child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            '${widget.device?.name ?? 'Friend'} ~ ${widget.device?.id.split('-').last.substring(0, 6)}',
-            style: const TextStyle(
-              color: Color.fromARGB(255, 255, 255, 255),
-              fontSize: 16.0,
-              fontWeight: FontWeight.w500,
-              height: 1.5,
+          const SizedBox(width: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              const Text(
+                'Listening',
+                style: TextStyle(
+                    fontFamily: 'SF Pro Display',
+                    color: Colors.white,
+                    fontSize: 29.0,
+                    letterSpacing: 0.0,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2),
+                textAlign: TextAlign.center,
+              ),
+              Text(
+                'DEVICE-${widget.device?.id.split('-').last.substring(0, 6)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w500,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              )
+            ],
+          ),
+          const SizedBox(width: 24),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 0, 255, 8),
+              shape: BoxShape.circle,
             ),
-            textAlign: TextAlign.center,
           ),
         ],
+      )),
+      const SizedBox(height: 8),
+      const Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [],
       ),
     ];
   }

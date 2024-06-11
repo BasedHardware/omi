@@ -34,6 +34,22 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 //   }
 // }
 
+Future<int> retrieveBatteryLevel(BTDeviceStruct btDevice) async {
+  final device = BluetoothDevice.fromId(btDevice.id);
+  final services = await device.discoverServices();
+  final batteryService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
+  if (batteryService != null) {
+    var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
+    var currValue = await canRead?.read();
+    if (currValue != null && currValue.isNotEmpty) {
+      debugPrint('Battery level: ${currValue[0]}');
+      return currValue[0];
+    }
+  }
+  return -1;
+}
+
 Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
   BTDeviceStruct btDevice, {
   void Function(int)? onBatteryLevelChange,
@@ -46,6 +62,7 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
     var currValue = await canRead?.read();
     if (currValue != null && currValue.isNotEmpty) {
+      debugPrint('Battery level: ${currValue[0]}');
       onBatteryLevelChange!(currValue[0]);
     }
     var canNotify =
