@@ -2,6 +2,7 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:flutter/material.dart';
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
+import 'widgets/add_memory_widget.dart';
 
 class MemoriesPage extends StatefulWidget {
   final List<MemoryRecord> memories;
@@ -10,11 +11,11 @@ class MemoriesPage extends StatefulWidget {
   final VoidCallback toggleDiscardMemories;
 
   const MemoriesPage(
-      {super.key,
-      required this.memories,
-      required this.refreshMemories,
-      required this.displayDiscardMemories,
-      required this.toggleDiscardMemories});
+    {super.key,
+    required this.memories,
+    required this.refreshMemories,
+    required this.displayDiscardMemories,
+    required this.toggleDiscardMemories});
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
@@ -24,8 +25,18 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
+  void _onAddButtonPressed() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return const AddMemoryDialog();
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return ListView(
       children: [
         const SizedBox(height: 16),
@@ -39,21 +50,34 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         const SizedBox(height: 16),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+            TextButton.icon(
+              onPressed: _onAddButtonPressed,
+              icon: const Icon(Icons.add_box_rounded, color: Colors.white),
+              label: const Text("Add", style: TextStyle(color: Colors.white)),
+              style: TextButton.styleFrom(backgroundColor: Theme.of(context).primaryColor),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-                onPressed: () { 
-                  widget.toggleDiscardMemories();
-                },
-                icon: Icon(
-                  widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                  color: Colors.white,
-                )),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    widget.toggleDiscardMemories();
+                  },
+                  icon: Icon(
+                    widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         Padding(
