@@ -50,9 +50,9 @@ class SharedPreferencesUtil {
 
   set useFriendApiKeys(bool value) => saveBool('useFriendApiKeys', value);
 
-  bool get onboardingCompleted => getBool('onboardingCompleted') ?? false;
+  bool get onboardingCompleted => getBool('onboardingCompleted2') ?? false;
 
-  set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
+  set onboardingCompleted(bool value) => saveBool('onboardingCompleted2', value);
 
   String get customWebsocketUrl => getString('customWebsocketUrl') ?? '';
 
