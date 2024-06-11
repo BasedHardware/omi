@@ -70,6 +70,9 @@ Attaching the lid may take a few tries; make sure to use the ridges as a guide t
 
 <img src="/images/latest_assembly/10.png" alt="seams" width="300">
 
+Charging:
+Friend can only be charged when it’s powered on. It will not be charged when powered off
+
 
 ### Congratulations! you now have a fully working and assembled device!
 
