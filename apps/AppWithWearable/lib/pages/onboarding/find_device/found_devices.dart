@@ -5,8 +5,10 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -21,34 +23,48 @@ class FoundDevices extends StatefulWidget {
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> {
+class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+  bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
+  String? _connectingToDeviceId;
 
-  Future<void> getBatteryPercentage(BTDeviceStruct deviceId) async {
-    StreamSubscription<List<int>>? batteryLevelListener;
+  Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
-      batteryLevelListener = await getBleBatteryLevelListener(deviceId,
-          onBatteryLevelChange: (int value) {
-        debugPrint("Battery Level: $value%");
-        setState(() {
-          deviceName = deviceId.id;
-          _isConnected = true;
-          batteryPercentage = value;
-        });
-        // We cancel the listener, as we only needed the value once.
-        batteryLevelListener?.cancel();
+      var battery = await retrieveBatteryLevel(btDevice);
+      setState(() {
+        batteryPercentage = battery;
+        _isConnected = true;
+        _isClicked = false; // Allow clicks again after finishing the operation
+        _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (c) => HomePageWrapper(btDevice: deviceId.toJson())));
+      debugPrint("Onboarding completed");
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
+      // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {
       print("Error fetching battery level: $e");
-      batteryLevelListener?.cancel();
+      setState(() {
+        _isClicked = false; // Allow clicks again if an error occurs
+        _connectingToDeviceId = null; // Reset the connecting device
+      });
     }
+  }
+
+  // Method to handle taps on devices
+  Future<void> handleTap(BTDeviceStruct device) async {
+    if (_isClicked) return; // if any item is clicked, don't do anything
+    setState(() {
+      _isClicked = true; // Prevent further clicks
+      _connectingToDeviceId = device.id; // Mark this device as being connected to
+    });
+    await bleConnectDevice(device.id);
+    deviceName = device.id;
+    setBatteryPercentage(device);
   }
 
   @override
@@ -58,23 +74,14 @@ class _FoundDevicesState extends State<FoundDevices> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset(
-                  "assets/images/stars.png",
-                ),
-                Image.asset("assets/images/blob.png"),
-                Image.asset("assets/images/herologo.png")
-              ],
-            ),
-          ),
+          const DeviceAnimationWidget(),
           !_isConnected
               ? Container(
                   margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
                   child: Text(
-                    '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    widget.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
@@ -101,14 +108,14 @@ class _FoundDevicesState extends State<FoundDevices> {
                     itemCount: widget.deviceList.length,
                     itemBuilder: (context, index) {
                       final device = widget.deviceList[index];
-                      if (device == null)
-                        return Container(); // If device is null, return an empty container
+                      if (device == null) return Container(); // If device is null, return an empty container
+
+                      bool isConnecting =
+                          _connectingToDeviceId == device.id; // Check if it's the device being connected to
 
                       return Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        padding: EdgeInsets.symmetric(
-                            horizontal: screenSize.width * 0, vertical: 0),
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
                         decoration: BoxDecoration(
                           border: const GradientBoxBorder(
                             gradient: LinearGradient(colors: [
@@ -124,7 +131,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                         ),
                         child: ListTile(
                           title: Text(
-                            device.id.substring(device.id.length - 6),
+                            device.id.split('-').last.substring(0, 6),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
@@ -132,17 +139,25 @@ class _FoundDevicesState extends State<FoundDevices> {
                               color: Color(0xCCFFFFFF),
                             ),
                           ),
-                          onTap: () async {
-                            await bleConnectDevice(device.id);
-                            await getBatteryPercentage(device);
-                          },
+                          trailing: isConnecting
+                              ? Container(
+                                  padding: EdgeInsets.all(8.0),
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3.0,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : null, // Show loading indicator if connecting
+                          onTap: !_isClicked ? () => handleTap(device) : null,
                         ),
                       );
                     },
                   ),
                 )
               : Text(
-                  deviceName.substring(deviceName.length - 6),
+                  deviceName.split('-').last.substring(0, 6),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
@@ -165,8 +180,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                             ? Colors.orange
                             : Colors.green,
                   ),
-                )
-                )
+                ))
         ],
       ),
     );
