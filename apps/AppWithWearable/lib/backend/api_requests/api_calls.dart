@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -14,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import '../../utils/string_utils.dart';
 import 'package:intl/intl.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
