@@ -130,6 +130,9 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
+  void chatMessageMemoryClicked(MemoryRecord memory) =>
+      track('Chat Message Memory Clicked', properties: _getMemoryEventProperties(memory));
+
 // TBI
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
