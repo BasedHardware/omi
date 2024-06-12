@@ -71,11 +71,11 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get coachIsChecked => getBool('coachIsChecked') ?? false;
+  bool get coachIsChecked => getBool('coachIsChecked') ?? true;
 
   set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
 
-  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? false;
+  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 

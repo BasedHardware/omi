@@ -151,7 +151,6 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
   }
 
   _getConnectedDeviceWidgets() {
-    debugPrint(_hasTranscripts.toString());
     if (_hasTranscripts) return [];
     if (widget.device == null) {
       return [
