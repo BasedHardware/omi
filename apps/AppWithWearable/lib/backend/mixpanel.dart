@@ -41,13 +41,15 @@ class MixpanelManager {
 
   void startTimingEvent(String eventName) => _mixpanel?.timeEvent(eventName);
 
+  void onboardingDeviceConnected() => track('Onboarding Device Connected');
+
   void onboardingCompleted() => track('Onboarding Completed');
 
   void settingsOpened() => track('Settings Opened');
 
   void settingsSaved() => track('Settings Saved');
 
-  void pluginsOpened() => track('Settings Saved');
+  void pluginsOpened() => track('Plugins Opened');
 
   void devModeEnabled() => track('Dev Mode Enabled');
 
@@ -114,10 +116,19 @@ class MixpanelManager {
     track('Memory Edited', properties: properties);
   }
 
-  void chatMessageSent(String message) {
-    track('Chat Message Sent',
-        properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
-  }
+  void chatMessageSent(String message) => track('Chat Message Sent',
+      properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
+
+  void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
+
+  void speechProfileStarted() => track('Speech Profile Started');
+
+  void speechProfileStartedOnboarding() => track('Speech Profile Started Onboarding');
+
+  void speechProfileCompleted() => track('Speech Profile Completed');
+
+  void showDiscardedMemoriesToggled(bool showDiscarded) =>
+      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
 // TBI
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
