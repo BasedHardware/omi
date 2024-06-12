@@ -67,7 +67,10 @@ dependencies:
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
+  package_info_plus: ^8.0.0
 
+  path_provider: any
+  ml_linalg: any
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0

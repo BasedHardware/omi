@@ -5,6 +5,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -24,6 +25,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   late bool coachIsChecked;
   late bool reconnectNotificationIsChecked;
+  String? version;
+  String? buildVersion;
 
   @override
   void initState() {
@@ -37,6 +40,12 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     coachIsChecked = SharedPreferencesUtil().coachIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
+      print(packageInfo.toString());
+      version = packageInfo.version;
+      buildVersion = packageInfo.buildNumber.toString();
+      setState(() {});
+    });
     super.initState();
   }
 
@@ -76,7 +85,6 @@ class _SettingsPageState extends State<SettingsPage> {
           body: Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 8, right: 8),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
                 children: [
@@ -398,7 +406,26 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8.0),
+                  const SizedBox(height: 32),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      SharedPreferencesUtil().uid,
+                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Version: $version+$buildVersion',
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      ),
+                    ),
+                  ),
                   ..._getDeveloperOnlyFields(),
                 ],
               ),
@@ -408,9 +435,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _getDeveloperOnlyFields() {
-    if (!devModeEnabled) {
-      return [const SizedBox.shrink()];
-    }
+    if (!devModeEnabled) return [const SizedBox.shrink()];
     return [
       const SizedBox(height: 24.0),
       Container(

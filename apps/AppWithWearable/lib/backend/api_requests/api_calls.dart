@@ -13,7 +13,6 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import '../../utils/string_utils.dart';
 import 'package:intl/intl.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,

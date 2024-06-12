@@ -30,7 +30,7 @@ class _BlurWidgetState extends State<BlurWidget> {
               decoration: BoxDecoration(
                 color: Theme.of(context).primaryColor,
               ),
-              child: Container(
+              child: SizedBox(
                 width: double.infinity,
                 height: double.infinity,
                 child: Stack(
