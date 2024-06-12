@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -271,6 +272,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _getDeepgramTranscriptUI() {
+    var needsUtf8 = SharedPreferencesUtil().recordingsLanguage != 'en';
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
@@ -305,7 +307,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    data.text,
+                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
