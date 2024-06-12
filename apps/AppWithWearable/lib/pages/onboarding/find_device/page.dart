@@ -8,7 +8,7 @@ import 'package:friend_private/utils/ble/scan.dart';
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
-  const FindDevicesPage({Key? key}) : super(key: key);
+  const FindDevicesPage({super.key});
 
   @override
   _FindDevicesPageState createState() => _FindDevicesPageState();
@@ -155,9 +155,9 @@ class SearchingSection extends StatelessWidget {
   final bool enableInstructions;
 
   const SearchingSection({
-    Key? key,
+    super.key,
     required this.enableInstructions,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

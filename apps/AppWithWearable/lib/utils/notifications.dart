@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
@@ -40,7 +39,7 @@ Future<void> requestNotificationPermissions() async {
 void createNotification({String title = '', String body = '', int notificationId = 1}) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
-  debugPrint('createNotification ~ Creating notification: ${title}');
+  debugPrint('createNotification ~ Creating notification: $title');
   AwesomeNotifications().createNotification(
       content: NotificationContent(
     id: notificationId,

@@ -28,7 +28,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
         widget.loadMemories();
       },
       child: Container(
-        margin: EdgeInsets.only(top: 12),
+        margin: const EdgeInsets.only(top: 12),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,

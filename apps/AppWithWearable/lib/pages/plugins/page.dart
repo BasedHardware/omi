@@ -5,7 +5,7 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
-  const PluginsPage({Key? key}) : super(key: key);
+  const PluginsPage({super.key});
 
   @override
   _PluginsPageState createState() => _PluginsPageState();

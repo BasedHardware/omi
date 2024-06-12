@@ -35,7 +35,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [];
 
-  List<int> bucket = List.filled(40000, 0).toList(growable: true);
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
@@ -97,14 +96,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
         toProcessBytes.addAudioBytes([int16Value]);
-        if (int16Value < 3000) bucket.add(int16Value);
-        // TODO: first 2 seconds are highest points bytes sent, weird, handle that so graph doesn't look shitty
       }
-      // if (bucket.length > 40000) {
-      //   setState(() {
-      //     bucket = bucket.sublist(bucket.length - 40000);
-      //   });
-      // }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;

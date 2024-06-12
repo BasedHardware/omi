@@ -6,7 +6,7 @@ class Document {
   Document({String? id, required this.text, required this.embedding, Map<String, String>? metadata})
       : id = id ?? _generateUuid(),
         magnitude = _calculateMagnitude(embedding),
-        metadata = metadata ?? Map<String, String>();
+        metadata = metadata ?? <String, String>{};
 
   final String id;
   final String text;
@@ -15,7 +15,7 @@ class Document {
   final Map<String, String> metadata;
 
   static String _generateUuid() {
-    return Uuid().v1();
+    return const Uuid().v1();
   }
 
   static double _calculateMagnitude(Float64List embedding) {

@@ -5,7 +5,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -25,6 +25,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   late bool coachIsChecked;
   late bool reconnectNotificationIsChecked;
+  String? version;
+  String? buildVersion;
 
   @override
   void initState() {
@@ -38,6 +40,12 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     coachIsChecked = SharedPreferencesUtil().coachIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
+      print(packageInfo.toString());
+      version = packageInfo.version;
+      buildVersion = packageInfo.buildNumber.toString();
+      setState(() {});
+    });
     super.initState();
   }
 
@@ -77,18 +85,17 @@ class _SettingsPageState extends State<SettingsPage> {
           body: Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 8, right: 8),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
                 children: [
                   const SizedBox(height: 32.0),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 0),
+                    padding: EdgeInsets.symmetric(horizontal: 4),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'RECORDING SETTINGS',
-                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                     ),
                   ),
@@ -128,14 +135,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       }).toList(),
                     ),
                   )),
-                  const SizedBox(height: 24.0),
+                  const SizedBox(height: 32.0),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'NOTIFICATIONS',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 16),
                       textAlign: TextAlign.start,
                     ),
                   ),
@@ -152,15 +157,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       });
                     },
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 8.0, 8.0, 0),
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
                             'Conversation coach',
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 150, 150, 150),
-                            ),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -206,9 +209,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Reminder to reconnect',
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 150, 150, 150),
-                            ),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150)),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -235,14 +236,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24.0),
+                  const SizedBox(height: 32),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'PREFERENCES',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 16),
                       textAlign: TextAlign.start,
                     ),
                   ),
@@ -265,9 +264,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Opt In Analytics',
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 150, 150, 150),
-                            ),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -307,15 +304,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       });
                     },
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
                             'Developer Mode',
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 150, 150, 150),
-                            ),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -342,7 +337,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24.0),
+                  const SizedBox(height: 36.0),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -358,22 +353,20 @@ class _SettingsPageState extends State<SettingsPage> {
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
                     },
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(10.0), // Apply rounded corners
+                          color: const Color.fromARGB(255, 29, 29, 29),
+                          borderRadius: BorderRadius.circular(10.0),
                         ),
                         child: const Padding(
-                          padding: EdgeInsets.fromLTRB(8.0, 10.0, 8.0, 10.0),
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 'Plugins',
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 150, 150, 150),
-                                ),
+                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                               ),
                               Icon(
                                 Icons.arrow_forward_ios,
@@ -398,15 +391,13 @@ class _SettingsPageState extends State<SettingsPage> {
                           borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
                         ),
                         child: const Padding(
-                          padding: EdgeInsets.fromLTRB(8.0, 10.0, 8.0, 10.0),
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 'Speech Profile Set Up',
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 150, 150, 150),
-                                ),
+                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                               ),
                               Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                             ],
@@ -415,7 +406,26 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8.0),
+                  const SizedBox(height: 32),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      SharedPreferencesUtil().uid,
+                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Version: $version+$buildVersion',
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      ),
+                    ),
+                  ),
                   ..._getDeveloperOnlyFields(),
                 ],
               ),
@@ -425,9 +435,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _getDeveloperOnlyFields() {
-    if (!devModeEnabled) {
-      return [const SizedBox.shrink()];
-    }
+    if (!devModeEnabled) return [const SizedBox.shrink()];
     return [
       const SizedBox(height: 24.0),
       Container(
@@ -435,82 +443,7 @@ class _SettingsPageState extends State<SettingsPage> {
         color: Colors.grey[400],
         width: double.infinity,
       ),
-      const SizedBox(height: 16.0),
-      Row(
-        children: [
-          Checkbox(
-            value: useFriendAPIKeys,
-            onChanged: (v) {
-              setState(() {
-                useFriendAPIKeys = v!;
-              });
-            },
-            fillColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
-                return Colors.deepPurple;
-              }
-              return Colors.transparent;
-            }),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(2.0),
-            ),
-            side: const BorderSide(width: 1.0, color: Colors.white),
-          ),
-          _getText('Use Friend\'s API keys'),
-        ],
-      ),
-      const SizedBox(height: 16.0),
-      Stack(
-        children: [
-          if (useFriendAPIKeys)
-            Container(
-              width: double.maxFinite,
-              height: 160,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20.0),
-                color: Colors.white.withOpacity(0.1),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 16.0),
-                _getText('OpenAI is used for chat.', canBeDisabled: true),
-                const SizedBox(height: 8.0),
-                TextField(
-                  controller: openaiApiKeyController,
-                  obscureText: openaiApiIsVisible ? false : true,
-                  enabled: !useFriendAPIKeys,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: _getTextFieldDecoration('OpenAI API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          openaiApiIsVisible ? Icons.visibility : Icons.visibility_off,
-                          color: useFriendAPIKeys ? Colors.white.withOpacity(0.2) : Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            openaiApiIsVisible = !openaiApiIsVisible;
-                          });
-                        },
-                      ),
-                      canBeDisabled: true),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 8.0),
-                TextButton(
-                    onPressed: () {
-                      launchUrl(Uri.parse('https://platform.openai.com/api-keys'));
-                    },
-                    child: _getText('How to generate an OpenAI API key?', underline: true, canBeDisabled: true)),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16.0),
+      const SizedBox(height: 40),
       _getText('[Optional] Store your recordings in Google Cloud', underline: false),
       const SizedBox(height: 16.0),
       TextField(
@@ -532,6 +465,7 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
+      const SizedBox(height: 64),
     ];
   }
 
@@ -563,7 +497,9 @@ class _SettingsPageState extends State<SettingsPage> {
         style: TextStyle(
           color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
           decoration: underline ? TextDecoration.underline : TextDecoration.none,
+          fontSize: 16,
         ),
+        textAlign: TextAlign.center,
       ),
     );
   }
