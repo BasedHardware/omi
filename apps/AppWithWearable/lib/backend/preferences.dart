@@ -75,6 +75,10 @@ class SharedPreferencesUtil {
 
   set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
 
+  bool get smartReminderIsChecked => getBool('smartReminderIsChecked') ?? true;
+
+  set smartReminderIsChecked(bool value) => saveBool('smartReminderIsChecked', value);
+
   bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);

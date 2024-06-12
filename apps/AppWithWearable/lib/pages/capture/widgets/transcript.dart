@@ -55,7 +55,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       _initiateConversationAdvisorTimer();
     }
     _processCachedTranscript();
-    _initiateSmartReminderTimer();
+    if (SharedPreferencesUtil().smartReminderIsChecked) {
+      _initiateSmartReminderTimer();
+    }
     super.initState();
   }
 

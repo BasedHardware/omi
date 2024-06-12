@@ -24,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool optInAnalytics;
   late bool devModeEnabled;
   late bool coachIsChecked;
+  late bool smartReminderIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
@@ -39,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     coachIsChecked = SharedPreferencesUtil().coachIsChecked;
+    smartReminderIsChecked = SharedPreferencesUtil().smartReminderIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       print(packageInfo.toString());
@@ -179,6 +181,52 @@ class _SettingsPageState extends State<SettingsPage> {
                             width: 22,
                             height: 22,
                             child: coachIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (smartReminderIsChecked) {
+                          smartReminderIsChecked = false;
+                          SharedPreferencesUtil().smartReminderIsChecked = false;
+                        } else {
+                          smartReminderIsChecked = true;
+                          SharedPreferencesUtil().smartReminderIsChecked = true;
+                        }
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Smart Reminder',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: smartReminderIsChecked
+                                  ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent, // Fill color when checked
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: smartReminderIsChecked // Show the icon only when checked
                                 ? const Icon(
                                     Icons.check,
                                     color: Colors.white, // Tick color
@@ -538,6 +586,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.optInAnalytics = optInAnalytics;
     prefs.devModeEnabled = devModeEnabled;
     prefs.coachIsChecked = coachIsChecked;
+    prefs.smartReminderIsChecked = smartReminderIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
