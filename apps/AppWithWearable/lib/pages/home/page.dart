@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -17,6 +19,7 @@ import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/foreground.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -32,6 +35,7 @@ class HomePageWrapper extends StatefulWidget {
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
+  ForegroundUtil foregroundUtil = ForegroundUtil();
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
@@ -92,6 +96,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
+      foregroundUtil.requestPermissionForAndroid();
     });
 
     _initiateMemories();
@@ -118,8 +123,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
           }
           MixpanelManager().deviceDisconnected();
+          foregroundUtil.stopForegroundTask();
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
+  }
+
+  _startForeground() async {
+    if (!Platform.isAndroid) return;
+    await foregroundUtil.initForegroundTask();
+    var result = await foregroundUtil.startForegroundTask();
+    debugPrint('_startForeground: $result');
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
@@ -133,6 +146,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
+    _startForeground();
   }
 
   _initiateBleBatteryListener() async {
@@ -154,7 +168,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WithForegroundTask(
+        child: Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: GestureDetector(
         onTap: () {
@@ -327,7 +342,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         elevation: 0,
         centerTitle: true,
       ),
-    );
+    ));
   }
 
   @override

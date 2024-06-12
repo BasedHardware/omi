@@ -73,6 +73,7 @@ dependencies:
   ml_linalg: any
   objectbox: ^4.0.1
   objectbox_flutter_libs: any
+  flutter_foreground_task: ^6.5.0
 
 dependency_overrides:
   http: ^1.2.1

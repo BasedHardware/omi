@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:uuid/uuid.dart';
+
 import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
@@ -32,6 +34,7 @@ Future<MemoryRecord?> memoryCreationBlock(
     structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
   } catch (e) {
     debugPrint('Error: $e');
+    InstabugLog.logError(e.toString());
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
