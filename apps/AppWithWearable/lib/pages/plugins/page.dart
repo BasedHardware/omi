@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
-
-import 'package:friend_private/widgets/blur_bot_widget.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
-  const PluginsPage({Key? key}) : super(key: key);
+  const PluginsPage({super.key});
 
   @override
   _PluginsPageState createState() => _PluginsPageState();
@@ -54,11 +53,12 @@ class _PluginsPageState extends State<PluginsPage> {
   Widget build(BuildContext context) {
     final filteredPlugins = _filteredPlugins();
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         automaticallyImplyLeading: true,
         title: const Text('Plugins'),
-        centerTitle: false,
+        centerTitle: true,
         elevation: 0,
         actions: [
           TextButton(
@@ -78,121 +78,150 @@ class _PluginsPageState extends State<PluginsPage> {
               ))
         ],
       ),
-      body: Column(
-        children: [
-          const SizedBox(
-            height: 32,
-          ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0x1AF7F4F4),
-              boxShadow: const [
-                BoxShadow(
-                  blurRadius: 3.0,
-                  color: Color(0x33000000),
-                  offset: Offset(0.0, 1.0),
-                )
-              ],
-              borderRadius: BorderRadius.circular(12.0),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Column(
+          children: [
+            const SizedBox(
+              height: 32,
             ),
-            // TODO: reuse chat textfield
-            child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  searchQuery = value;
-                });
-              },
-              obscureText: false,
-              decoration: const InputDecoration(
-                hintText: 'Search your plugin',
-                hintStyle: TextStyle(
+            Container(
+              width: double.maxFinite,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                border: GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 1,
+                ),
+                shape: BoxShape.rectangle,
+              ),
+              // TODO: reuse chat textfield
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {
+                    searchQuery = value;
+                  });
+                },
+                obscureText: false,
+                decoration: const InputDecoration(
+                  hintText: 'Find your plugin',
+                  hintStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14.0,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Color(0x00000000),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(4.0),
+                    ),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Color(0x00000000),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(4.0),
+                    ),
+                  ),
+                  errorBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Color(0x00000000),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(4.0),
+                    ),
+                  ),
+                  focusedErrorBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Color(0x00000000),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(4.0),
+                    ),
+                  ),
+                ),
+                style: const TextStyle(
+                  // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
                   color: Colors.white,
-                  fontSize: 14.0,
                   fontWeight: FontWeight.w500,
                 ),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Color(0x00000000),
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(4.0),
-                  ),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Color(0x00000000),
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(4.0),
-                  ),
-                ),
-                errorBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Color(0x00000000),
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(4.0),
-                  ),
-                ),
-                focusedErrorBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Color(0x00000000),
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(4.0),
-                  ),
-                ),
-              ),
-              style: TextStyle(
-                // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                color: Theme.of(context).primaryColor,
-                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredPlugins.length,
-              itemBuilder: (context, index) {
-                final plugin = filteredPlugins[index];
-                return Padding(
-                  padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
-                  child: ListTile(
-                    title: Text(
-                      plugin.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredPlugins.length,
+                itemBuilder: (context, index) {
+                  final plugin = filteredPlugins[index];
+                  return Container(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.rectangle,
+                      borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+                      color: Colors.grey.shade900,
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        plugin.description,
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.white,
+                        maxRadius: 28,
+                        backgroundImage:
+                            NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
                       ),
+                      title: Text(
+                        plugin.name,
+                        maxLines: 1,
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          plugin.description,
+                          maxLines: 2,
+                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
+                      ),
+                      trailing: IconButton(
+                        icon: Icon(
+                          plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
+                          color: plugin.isEnabled ? Colors.white : Colors.grey,
+                        ),
+                        onPressed: () {
+                          _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
+                        },
+                      ),
+                      // trailing: Switch(
+                      //   value: plugin.isEnabled,
+                      //   activeColor: Colors.deepPurple,
+                      //   onChanged: (value) {
+                      //     _togglePlugin(plugin.id.toString(), value);
+                      //   },
+                      // ),
                     ),
-                    trailing: Switch(
-                      value: plugin.isEnabled,
-                      activeColor: Colors.deepPurple,
-                      onChanged: (value) {
-                        _togglePlugin(plugin.id.toString(), value);
-                      },
-                    ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

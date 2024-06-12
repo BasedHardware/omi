@@ -6,7 +6,6 @@ import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/sample.dart';
-import 'package:friend_private/pages/speaker_id/tabs/wave.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 
@@ -16,6 +15,7 @@ class RecordSampleTab extends StatefulWidget {
   final int sampleIdx;
   final int totalSamples;
   final VoidCallback onRecordCompleted;
+  final VoidCallback goNext;
 
   const RecordSampleTab({
     super.key,
@@ -24,20 +24,30 @@ class RecordSampleTab extends StatefulWidget {
     required this.sampleIdx,
     required this.totalSamples,
     required this.onRecordCompleted,
+    required this.goNext,
   });
 
   @override
   State<RecordSampleTab> createState() => _RecordSampleTabState();
 }
 
-class _RecordSampleTabState extends State<RecordSampleTab> {
+class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderStateMixin {
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
   bool recording = false;
   bool speechRecorded = false;
+  late AnimationController _controller;
+  late Animation<double> _animation;
 
-  // List<int> bucket = List.filled(40000, 0).toList(growable: true);
-  List<int> bucket = List.filled(40000, 0).toList(growable: true);
+  @override
+  void initState() {
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.1, end: 1.5).animate(_controller);
+    super.initState();
+  }
 
   Future<void> startRecording() async {
     audioBytesStream?.cancel();
@@ -53,12 +63,6 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
         int byte2 = value[i + 1];
         int int16Value = (byte2 << 8) | byte1;
         wavBytesUtil.addAudioBytes([int16Value]);
-        if (int16Value < 3000) bucket.add(int16Value);
-      }
-      if (bucket.length > 40000) {
-        setState(() {
-          bucket = bucket.sublist(bucket.length - 40000);
-        });
       }
     });
 
@@ -79,7 +83,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
     });
     widget.onRecordCompleted();
 
-    await Future.delayed(const Duration(milliseconds: 500)); // wait for bytes streaming to stream all
+    await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
     audioBytesStream?.cancel();
     File file = await WavBytesUtil.createWavFile(bytes, filename: '${widget.sample.id}.wav');
     await uploadSample(file, SharedPreferencesUtil().uid); // optimistic request
@@ -92,7 +96,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
     setState(() {
       recording = false;
       speechRecorded = false;
-      bucket = List.filled(40000, 0).toList(growable: true);
+      // bucket = List.filled(40000, 0).toList(growable: true);
     });
   }
 
@@ -102,109 +106,79 @@ class _RecordSampleTabState extends State<RecordSampleTab> {
   void dispose() {
     audioBytesStream?.cancel();
     audioStorage?.clearAudioBytes();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    int seconds = (audioStorage?.audioBytes.length ?? 0) ~/ 8000;
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
+    // int seconds = (audioStorage?.audioBytes.length ?? 0) ~/ 8000;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const SizedBox(height: 32),
         Center(
           child: Text(
-            'Sample: ${widget.sampleIdx + 1} / ${widget.totalSamples}',
+            'Sample: ${widget.sampleIdx + 1}/${widget.totalSamples}',
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
           ),
         ),
         const SizedBox(height: 32),
-        Center(
-          child: Text(
-            widget.sample.phrase,
-            style: TextStyle(color: Colors.grey.shade200, fontSize: 40, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.center,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Center(
+            child: Text(
+              widget.sample.phrase,
+              style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
-        const SizedBox(height: 80),
-        recording || speechRecorded
-            ? SizedBox(
-                height: 80,
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 12,
-                    ),
-                    Text('${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                          color: Colors.grey.shade200,
-                          fontSize: 18,
-                        )),
-                    const SizedBox(
-                      width: 16,
-                    ),
-                    Expanded(
-                      child: CustomPaint(
-                        painter: DashedLinePainter(bucket),
-                        child: Container(),
-                      ),
-                    ),
-                    const SizedBox(
-                      width: 16,
-                    ),
-                  ],
+        SizedBox(
+          height: 200,
+          width: 200,
+          child: Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (recording)
+                  AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      return Container(
+                        height: 88 * _animation.value,
+                        width: 88 * _animation.value,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [Colors.white, Colors.grey.shade900],
+                            stops: const [0.6, 1],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                Container(
+                  height: 88,
+                  width: 88,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    shape: BoxShape.circle,
+                  ),
+                  child: !speechRecorded
+                      ? IconButton(
+                          onPressed: recording ? confirmRecording : startRecording,
+                          icon: const Icon(Icons.mic, color: Colors.white, size: 48),
+                        )
+                      : IconButton(
+                          onPressed: widget.goNext,
+                          icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
+                        ),
                 ),
-              )
-            : const SizedBox(height: 80),
-        const SizedBox(height: 12),
-        !recording && !speechRecorded
-            ? Center(
-                child: IconButton(
-                  onPressed: startRecording,
-                  icon: const Icon(Icons.mic, color: Colors.white, size: 48),
-                ),
-              )
-            : const SizedBox.shrink(),
-        recording
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      onPressed: cancelRecording,
-                      icon: const Icon(Icons.stop_circle, color: Colors.red, size: 32),
-                    ),
-                    const SizedBox(width: 24),
-                    IconButton(
-                      onPressed: confirmRecording,
-                      icon: Icon(Icons.check_circle, color: Colors.grey.shade200, size: 32),
-                    ),
-                  ],
-                ),
-              )
-            : const SizedBox.shrink(),
-        speechRecorded
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: cancelRecording,
-                      icon: const Icon(Icons.refresh, color: Colors.white, size: 40),
-                    ),
-                    // const SizedBox(width: 24),
-                    // IconButton(
-                    //   onPressed: listenRecording,
-                    //   icon: Icon(Icons.play_arrow, color: Colors.grey.shade200, size: 32),
-                    // ),
-                  ],
-                ),
-              )
-            : const SizedBox.shrink(),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 32),
       ],
     );
