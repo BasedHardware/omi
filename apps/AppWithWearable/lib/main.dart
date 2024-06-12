@@ -83,7 +83,7 @@ class _MyAppState extends State<MyApp> {
             selectionColor: Colors.deepPurple,
           )),
       themeMode: ThemeMode.dark,
-      home: (!SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
+      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
           ? const HomePageWrapper()
           : const WelcomePage(),
     );
