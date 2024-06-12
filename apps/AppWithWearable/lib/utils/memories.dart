@@ -79,6 +79,7 @@ Future<MemoryRecord> saveFailureMemory(String transcript, Structured structuredM
       discarded: true);
   MemoryStorage.addMemory(memory);
   MixpanelManager().memoryCreated(memory);
+  debugPrint(memory.toJson().toString());
   return memory;
 }
 

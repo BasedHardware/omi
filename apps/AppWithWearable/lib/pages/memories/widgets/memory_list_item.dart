@@ -1,10 +1,6 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:fonnx/onnx/ort_ffi_bindings.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/pages/memories/widgets/memory_operations.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/temp.dart';
 
@@ -32,7 +28,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
         widget.loadMemories();
       },
       child: Container(
-        margin: EdgeInsets.only(top: 12),
+        margin: const EdgeInsets.only(top: 12),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -88,7 +84,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
             children: [
               widget.memory.discarded
                   ? const SizedBox.shrink()
-                  : Text(widget.memory.structured.emoji,
+                  : Text(widget.memory.structured.getEmoji(),
                       style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
               widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
                   ? const SizedBox(

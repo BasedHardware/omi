@@ -111,3 +111,4 @@ env.g.dart
 
 # Jekyll
 docs/_site/
+.jekyll-metadata

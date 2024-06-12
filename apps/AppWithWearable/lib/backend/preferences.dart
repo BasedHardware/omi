@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/segment.dart';
@@ -18,6 +19,7 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    // _preferences!.clear();
     if (!_preferences!.containsKey('uid')) {
       _preferences!.setString('uid', const Uuid().v4());
     }
@@ -69,6 +71,14 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
+  bool get coachIsChecked => getBool('coachIsChecked') ?? true;
+
+  set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
+
+  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
+
+  set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
+
   List<Message> get chatMessages {
     final List<String> messages = getStringList('messages') ?? [];
     return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
@@ -109,15 +119,15 @@ class SharedPreferencesUtil {
     pluginsEnabled = plugins;
   }
 
-  List<int> get temporalAudioBytes {
-    final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
-    return bytes.map((e) => int.parse(e)).toList();
-  }
+  // List<int> get temporalAudioBytes {
+  //   final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
+  //   return bytes.map((e) => int.parse(e)).toList();
+  // }
 
-  set temporalAudioBytes(List<int> value) {
-    final List<String> bytes = value.map((e) => e.toString()).toList();
-    saveStringList('temporalAudioBytes', bytes);
-  }
+  // set temporalAudioBytes(List<int> value) {
+  //   final List<String> bytes = value.map((e) => e.toString()).toList();
+  //   saveStringList('temporalAudioBytes', bytes);
+  // }
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
@@ -176,6 +186,10 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
+
+  set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
+
+  bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>

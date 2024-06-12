@@ -18,16 +18,16 @@ SKIP and INSTALL PRE-BUILT FIRMWARE: Looking into the git repository, in the [fi
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-<img src="https://basedhardware.github.io/Friend/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%">
+<img src="/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%">
 
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
 
-   <img src="https://basedhardware.github.io/Friend/images/addbuild.png" alt="Add Build Configuration" width="200">
+   <img src="/images/addbuild.png" alt="Add Build Configuration" width="200">
 
 4. Choose the board as "xiao_ble_sense" and select the configuration as "prj.conf". Then, click "Build Configuration".
 
-   <img src="https://basedhardware.github.io/Friend/images/build_settings.png" alt="Build Settings" width="400">
+   <img src="/images/build_settings.png" alt="Build Settings" width="400">
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
@@ -35,8 +35,8 @@ SKIP and INSTALL PRE-BUILT FIRMWARE: Looking into the git repository, in the [fi
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
-   <img src="https://basedhardware.github.io/Friend/images/pinout.jpg" alt="Pinout" width="300">
+   <img src="/images/pinout.jpg" alt="Pinout" width="300">
 
 That's it! You have successfully installed the firmware on your device.
 
-[Next Step: Audio Test →](https://basedhardware.github.io/Friend/assembly/audio_test/){: .btn .btn-purple }
+[Next Step: Audio Test →](/assembly/audio_test/){: .btn .btn-purple }
