@@ -71,6 +71,9 @@ dependencies:
 
   path_provider: any
   ml_linalg: any
+  objectbox: ^4.0.1
+  objectbox_flutter_libs: any
+
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
@@ -86,6 +89,7 @@ dev_dependencies:
     sdk: flutter
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
+  objectbox_generator: any
 
 
 flutter_launcher_icons:
