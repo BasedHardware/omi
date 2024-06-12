@@ -11,7 +11,6 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
-import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 

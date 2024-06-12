@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
@@ -15,9 +14,9 @@ class FoundDevices extends StatefulWidget {
   final List<BTDeviceStruct?> deviceList;
 
   const FoundDevices({
-    Key? key,
+    super.key,
     required this.deviceList,
-  }) : super(key: key);
+  });
 
   @override
   _FoundDevicesState createState() => _FoundDevicesState();
@@ -141,10 +140,10 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                           ),
                           trailing: isConnecting
                               ? Container(
-                                  padding: EdgeInsets.all(8.0),
+                                  padding: const EdgeInsets.all(8.0),
                                   height: 24,
                                   width: 24,
-                                  child: CircularProgressIndicator(
+                                  child: const CircularProgressIndicator(
                                     strokeWidth: 3.0,
                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
