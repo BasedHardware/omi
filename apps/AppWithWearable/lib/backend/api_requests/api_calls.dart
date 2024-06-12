@@ -1,18 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
-import '../../utils/string_utils.dart';
+import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart';
+
+import '../../utils/string_utils.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -21,10 +24,12 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
+    final client = InstabugHttpClient();
+
     if (method == 'POST') {
-      return await http.post(Uri.parse(url), headers: headers, body: body);
+      return await client.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
-      return await http.get(Uri.parse(url), headers: headers);
+      return await client.get(Uri.parse(url), headers: headers);
     }
   } catch (e) {
     debugPrint('HTTP request failed: $e');

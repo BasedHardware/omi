@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -269,7 +271,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ),
               const SizedBox(height: 16),
               ExpandableTextWidget(
-                text: widget.memory.transcript,
+                text: utf8.decode(widget.memory.transcript.toString().codeUnits),
                 maxLines: 6,
                 linkColor: Colors.grey.shade300,
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),

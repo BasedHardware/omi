@@ -119,15 +119,15 @@ class SharedPreferencesUtil {
     pluginsEnabled = plugins;
   }
 
-  List<int> get temporalAudioBytes {
-    final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
-    return bytes.map((e) => int.parse(e)).toList();
-  }
+  // List<int> get temporalAudioBytes {
+  //   final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
+  //   return bytes.map((e) => int.parse(e)).toList();
+  // }
 
-  set temporalAudioBytes(List<int> value) {
-    final List<String> bytes = value.map((e) => e.toString()).toList();
-    saveStringList('temporalAudioBytes', bytes);
-  }
+  // set temporalAudioBytes(List<int> value) {
+  //   final List<String> bytes = value.map((e) => e.toString()).toList();
+  //   saveStringList('temporalAudioBytes', bytes);
+  // }
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
