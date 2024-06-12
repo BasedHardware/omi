@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
@@ -42,8 +43,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
         enableInstructions = true;
       });
     });
-      // Update foundDevicesMap with new devices and remove the ones not found anymore
-  Map<String, BTDeviceStruct?> foundDevicesMap = {};
+    // Update foundDevicesMap with new devices and remove the ones not found anymore
+    Map<String, BTDeviceStruct?> foundDevicesMap = {};
 
     _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       List<BTDeviceStruct?> foundDevices = await scanDevices();
@@ -57,15 +58,12 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
         }
       }
       // Remove devices that are no longer found
-      foundDevicesMap.keys
-          .where((id) => !updatedDevicesMap.containsKey(id))
-          .toList()
-          .forEach(foundDevicesMap.remove);
+      foundDevicesMap.keys.where((id) => !updatedDevicesMap.containsKey(id)).toList().forEach(foundDevicesMap.remove);
 
       // Merge the new devices into the current map to maintain order
       foundDevicesMap.addAll(updatedDevicesMap);
-   
-         // Convert the values of the map back to a list
+
+      // Convert the values of the map back to a list
       List<BTDeviceStruct?> orderedDevices = foundDevicesMap.values.toList();
 
       if (orderedDevices.isNotEmpty) {

@@ -1,15 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
@@ -67,13 +69,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = _buildDiarizedTranscriptMessage(
-        SharedPreferencesUtil().transcriptSegments);
-    File file = await WavBytesUtil.createWavFile(
-        SharedPreferencesUtil().temporalAudioBytes);
-    String? fileName = await uploadFile(file);
-    processTranscriptContent(context, transcript, fileName, file.path,
-        retrievedFromCache: true);
+    String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    processTranscriptContent(context, transcript, null, null, retrievedFromCache: true);
     SharedPreferencesUtil().transcriptSegments = [];
   }
 
@@ -84,8 +81,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // VadUtil vad = VadUtil();
     // await vad.init();
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id,
-        onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
       // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
@@ -99,20 +95,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       }
       if (toProcessBytes.audioBytes.length % 240000 == 0) {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
-        SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
+        // SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav')
-            .then((f) async {
+        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
-            List<TranscriptSegment> segments =
-                await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
             processCustomTranscript(segments);
           } catch (e) {
             debugPrint(e.toString());
-            toProcessBytes.insertAudioBytes(bytesCopy.sublist(
-                0, 232000)); // remove last 1 sec to avoid duplicate
+            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
           }
         });
       }
@@ -168,12 +161,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     _initiateMemoryCreationTimer();
   }
 
-  void resetState(
-      {bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('transcript.dart resetState called');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-
 
     if (!restartBytesProcessing && segments.isNotEmpty) {
       _createMemory();
@@ -208,8 +199,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // - Each advice should be stored, and ideally mapped to a memory
     // - Advice should consider conversations in other languages
     // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
-    _conversationAdvisorTimer =
-        Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
+    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
       addEventToContext('Conversation Advisor Timer Triggered');
       var transcript = _buildDiarizedTranscriptMessage(segments);
       debugPrint('_initiateConversationAdvisorTimer: $transcript');
@@ -217,10 +207,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       if (advice.isNotEmpty) {
         MixpanelManager().coachAdvisorFeedback(transcript, advice);
         clearNotification(3);
-        createNotification(
-            notificationId: 3,
-            title: 'Your Conversation Coach Says',
-            body: advice);
+        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
       }
     });
   }
@@ -239,7 +226,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     String? fileName = await uploadFile(file);
     await processTranscriptContent(context, transcript, fileName, file.path);
     await widget.refreshMemories();
-    SharedPreferencesUtil().temporalAudioBytes = [];
+    // SharedPreferencesUtil().temporalAudioBytes = [];
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     setState(() => memoryCreating = false);
@@ -285,6 +272,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   _getDeepgramTranscriptUI() {
+    var needsUtf8 = SharedPreferencesUtil().recordingsLanguage != 'en';
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
@@ -305,12 +293,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Image.asset(
-                      data.isUser
-                          ? 'assets/images/speaker_0_icon.png'
-                          : 'assets/images/speaker_1_icon.png',
-                      width: 26,
-                      height: 26),
+                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      width: 26, height: 26),
                   const SizedBox(width: 12),
                   Text(
                     data.isUser ? 'You' : 'Speaker ${data.speakerId}',
@@ -323,9 +307,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    data.text,
-                    style:
-                        const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
+                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
                 ),

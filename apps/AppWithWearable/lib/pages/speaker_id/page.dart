@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/sample.dart';
@@ -174,8 +175,14 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
       } else {
         Navigator.pop(context);
       }
-
       return;
+    }
+    if (_currentIdx == 0) {
+      if (widget.onbording) {
+        MixpanelManager().speechProfileStartedOnboarding();
+      } else {
+        MixpanelManager().speechProfileStarted();
+      }
     }
     _currentIdx += 1;
     _controller?.animateTo(_currentIdx);
