@@ -17,7 +17,7 @@ class Collection {
   final Map<String, Document> documents = {};
 
   void addDocument(String? id, String text, Float64List embedding, {Map<String, String>? metadata}) {
-    var uuid = Uuid();
+    var uuid = const Uuid();
     final Document document = Document(
       id: id ?? uuid.v1(),
       text: text,

@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:wav/wav.dart';
 
 const int sampleRate = 8000;
 const int channelCount = 1;

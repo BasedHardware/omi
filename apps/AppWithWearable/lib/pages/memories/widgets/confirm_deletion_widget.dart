@@ -90,7 +90,6 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                             widget.onDelete?.call();
                             MixpanelManager().memoryDeleted(widget.memory);
                           },
-                          child: const Text('Delete'),
                           height: 40.0,
                           padding: const EdgeInsetsDirectional.fromSTEB(20.0, 0.0, 20.0, 0.0),
                           color: const Color(0xFF780000),
@@ -98,6 +97,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                           // STYLE ME
                           elevation: 0.0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                          child: const Text('Delete'),
                         ),
                       ),
                     ],

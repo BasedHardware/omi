@@ -5,6 +5,7 @@ class Plugin {
   String description;
   String prompt;
   bool isEnabled = false;
+  String image;
 
   Plugin({
     required this.id,
@@ -12,6 +13,7 @@ class Plugin {
     required this.author,
     required this.description,
     required this.prompt,
+    required this.image,
   });
 
   // Factory constructor to create a new Message instance from a map
@@ -22,6 +24,7 @@ class Plugin {
       author: json['author'],
       description: json['description'],
       prompt: json['prompt'],
+      image: json['image'],
     );
   }
 
@@ -33,6 +36,7 @@ class Plugin {
       'author': author,
       'description': description,
       'prompt': prompt,
+      'image': image,
     };
   }
 
