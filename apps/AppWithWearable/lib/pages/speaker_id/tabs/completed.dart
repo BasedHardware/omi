@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 
 class CompletionTab extends StatefulWidget {
@@ -14,6 +15,7 @@ class _CompletionTabState extends State<CompletionTab> {
   @override
   void initState() {
     SharedPreferencesUtil().hasSpeakerProfile = true;
+    MixpanelManager().speechProfileCompleted();
     super.initState();
   }
 

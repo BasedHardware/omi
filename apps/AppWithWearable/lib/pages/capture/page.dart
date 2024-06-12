@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
-import 'widgets/transcript.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:intl/intl.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'widgets/transcript.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -96,6 +97,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
                       GestureDetector(
                         onTap: () {
                           Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                          MixpanelManager().speechProfileCapturePageClicked();
                         },
                         child: Container(
                           decoration: BoxDecoration(

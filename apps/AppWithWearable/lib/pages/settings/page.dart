@@ -209,7 +209,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Reminder to reconnect',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150)),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -350,6 +350,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   InkWell(
                     onTap: () {
+                      MixpanelManager().pluginsOpened();
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
                     },
                     child: Padding(

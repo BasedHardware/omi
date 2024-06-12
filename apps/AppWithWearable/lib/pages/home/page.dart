@@ -55,6 +55,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _toggleDiscardMemories() async {
+    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
     setState(() => displayDiscardMemories = !displayDiscardMemories);
     _initiateMemories();
   }
