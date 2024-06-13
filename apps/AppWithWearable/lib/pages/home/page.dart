@@ -211,7 +211,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Container(
-                  margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                   decoration: const BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.all(Radius.circular(16)),

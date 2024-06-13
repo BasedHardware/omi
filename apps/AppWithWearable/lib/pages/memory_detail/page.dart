@@ -272,7 +272,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ),
               const SizedBox(height: 16),
               ExpandableTextWidget(
-                text: utf8.decode(widget.memory.transcript.toString().codeUnits),
+                text: widget.memory.getTranscript(),
                 maxLines: 6,
                 linkColor: Colors.grey.shade300,
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
