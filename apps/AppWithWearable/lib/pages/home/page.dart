@@ -54,7 +54,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
-    memories = await MemoryProvider().getMemoriesOrdered(includeDiscarded: displayDiscardMemories);
+    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: displayDiscardMemories)).reversed.toList();
     setState(() {});
     // FocusScope.of(context).unfocus();
     // chatTextFieldFocusNode.unfocus();

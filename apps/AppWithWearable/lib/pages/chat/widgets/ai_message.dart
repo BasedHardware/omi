@@ -2,7 +2,9 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/pages/memory_detail/page.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
@@ -67,9 +69,9 @@ class AIMessage extends StatelessWidget {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        // MixpanelManager().chatMessageMemoryClicked(memory);
-                        // await Navigator.of(context)
-                        //     .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
+                        MixpanelManager().chatMessageMemoryClicked(memory);
+                        await Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
                         // TODO: maybe refresh memories here too
                       },
                       child: Container(

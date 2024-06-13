@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -94,7 +95,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: _messages.length <= 1,
-                        // FIXME
                         memories: widget.memories.where((m) => messageMemoriesId.contains(m.id.toString())).toList(),
                       ),
                     );
@@ -198,7 +198,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
-    // FIXME, use either local vector search or migrate pinecone memories to new id
     String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
@@ -210,8 +209,10 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     if (memoriesId.isEmpty) {
       return ['', []];
     }
-    List<MemoryRecord> memories = await MemoryStorage.getAllMemoriesByIds(memoriesId);
-    return [MemoryRecord.memoriesToString(memories), memoriesId];
+    List<int> memoriesIdAsInt = memoriesId.map((e) => int.tryParse(e) ?? -1).where((e) => e != -1).toList();
+    debugPrint('memoriesIdAsInt: $memoriesIdAsInt');
+    List<Memory> memories = await MemoryProvider().getMemoriesById(memoriesIdAsInt);
+    return [Memory.memoriesToString(memories), memoriesId];
   }
 
   _prepareStreaming(String text) {

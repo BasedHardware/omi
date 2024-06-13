@@ -30,9 +30,9 @@ class Memory {
       Title: ${e.structured.target!.title}
       Summary: ${e.structured.target!.overview}
       ${e.structured.target!.actionItems.isNotEmpty ? 'Action Items:' : ''}
-      ${e.structured.target!.actionItems.map((item) => '  - $item').join('\n')}
+      ${e.structured.target!.actionItems.map((item) => '  - ${item.description}').join('\n')}
       ${e.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
-      ${e.pluginsResponse.map((response) => '  - $response').join('\n')}
+      ${e.pluginsResponse.map((response) => '  - ${response.content}').join('\n')}
       Category: ${e.structured.target!.category}
       '''
           .replaceAll('      ', '')
@@ -70,10 +70,10 @@ class Structured {
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
       for (var item in actionItems) {
-        str += '- $item\n';
+        str += '- ${item.description}\n';
       }
     }
-    return str;
+    return str.trim();
   }
 }
 
