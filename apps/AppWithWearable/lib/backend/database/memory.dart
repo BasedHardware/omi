@@ -1,5 +1,4 @@
-import '../../objectbox.g.dart';
-import 'box.dart';
+import 'package:objectbox/objectbox.dart';
 
 @Entity()
 class Memory {
@@ -8,14 +7,19 @@ class Memory {
 
   @Index()
   @Property(type: PropertyType.date)
-  DateTime? createdAt;
+  DateTime createdAt;
 
-  String? transcript;
+  String transcript;
   String? recordingFilePath;
-  Structured? structured;
+  final structured = ToOne<Structured>();
+
+  @Backlink('memory')
+  final pluginsResponse = ToMany<PluginResponse>();
 
   @Index()
-  bool discarded = false;
+  bool discarded;
+
+  Memory(this.createdAt, this.transcript, this.discarded, {this.id = 0});
 }
 
 @Entity()
@@ -23,68 +27,36 @@ class Structured {
   @Id()
   int id = 0;
 
-  String title = '';
-  String overview = '';
-  List<String> actionItems = [];
-  List<String> pluginsResponse = [];
-  String emoji = '';
-  String category = 'other';
+  String title;
+  String overview;
+  String emoji;
+  String category;
+
+  @Backlink('structured')
+  final actionItems = ToMany<ActionItem>();
+
+  Structured(this.title, this.overview, {this.emoji = '', this.category = 'other'});
 }
 
-class MemoryProvider {
-  static final MemoryProvider _instance = MemoryProvider._internal();
-  static final Box<Memory> _box = ObjectBoxUtil().box!.store.box<Memory>();
+@Entity()
+class ActionItem {
+  @Id()
+  int id = 0;
 
-  factory MemoryProvider() {
-    return _instance;
-  }
+  String description;
+  bool completed = false;
+  final structured = ToOne<Structured>();
 
-  MemoryProvider._internal();
+  ActionItem(this.description, {this.id = 0, this.completed = false});
+}
 
-  Future<List<Memory>> getMemories() async {
-    return _box.getAll();
-  }
+@Entity()
+class PluginResponse {
+  @Id()
+  int id = 0;
 
-  Future<List<Memory>> getMemoriesOrdered() async {
-    return _box.query().order(Memory_.createdAt).build().find();
-  }
+  String response;
+  final memory = ToOne<Memory>();
 
-  Future<void> saveMemory(Memory memory) async {
-    _box.put(memory);
-  }
-
-  Future<void> deleteMemory(Memory memory) async {
-    _box.remove(memory.id);
-  }
-
-  Future<void> updateMemory(Memory memory) async {
-    _box.put(memory);
-  }
-
-  Future<Memory?> getMemoryById(int id) async {
-    return _box.get(id);
-  }
-
-  Future<List<int>> storeMemories(List<Memory> memories) async {
-    return _box.putMany(memories);
-  }
-
-  Future<int> removeAllMemories() async {
-    return _box.removeAll();
-  }
-
-  Future<List<Memory>> getMemoriesById(List<int> ids) async {
-    var memories = _box.getMany(ids);
-    return memories.where((element) => element != null).toList() as List<Memory>;
-  }
-
-  Future<List<Memory>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {
-    DateTime timeLimit = DateTime.now().subtract(Duration(minutes: minutes));
-    var query = _box.query(Memory_.createdAt.greaterThan(timeLimit.millisecondsSinceEpoch)).build();
-    List<Memory> filtered = query.find();
-    query.close();
-
-    if (filtered.length > count) filtered = filtered.sublist(0, count);
-    return filtered;
-  }
+  PluginResponse(this.response);
 }
