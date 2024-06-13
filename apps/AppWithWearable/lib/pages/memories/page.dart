@@ -1,10 +1,11 @@
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/memory.dart';
+
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
-  final List<MemoryRecord> memories;
+  final List<Memory> memories;
   final Function refreshMemories;
   final bool displayDiscardMemories;
   final VoidCallback toggleDiscardMemories;
@@ -47,7 +48,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
             const SizedBox(width: 8),
             IconButton(
-                onPressed: () { 
+                onPressed: () {
                   widget.toggleDiscardMemories();
                 },
                 icon: Icon(

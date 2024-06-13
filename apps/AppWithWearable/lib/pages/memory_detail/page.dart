@@ -2,14 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
-  final MemoryRecord memory;
+  final Memory memory;
 
   const MemoryDetailPage({super.key, required this.memory});
 
@@ -22,17 +21,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
 
+  late Structured structured;
   TextEditingController titleController = TextEditingController();
   TextEditingController overviewController = TextEditingController();
-  TextEditingController actionItemsController = TextEditingController();
   bool editingTitle = false;
   bool editingOverview = false;
 
   @override
   void initState() {
-    titleController.text = widget.memory.structured.title;
-    overviewController.text = widget.memory.structured.overview;
-    actionItemsController.text = widget.memory.structured.actionItems.join('\n');
+    structured = widget.memory.structured.target!;
+    titleController.text = structured.title;
+    overviewController.text = structured.overview;
     super.initState();
   }
 
@@ -40,7 +39,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   void dispose() {
     titleController.dispose();
     overviewController.dispose();
-    actionItemsController.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     super.dispose();
@@ -72,7 +70,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ),
               Expanded(
                 child: Text(
-                    " ${widget.memory.structured.getEmoji()} ${widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title}"),
+                    " ${structured.getEmoji()} ${widget.memory.discarded ? 'Discarded Memory' : structured.title}"),
               ),
               const SizedBox(width: 8),
               IconButton(
@@ -102,8 +100,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                   leading: const Icon(Icons.send),
                                   onTap: () {
                                     // share loading
-                                    MixpanelManager().memoryShareButtonClick(widget.memory);
-                                    Share.share(widget.memory.getStructuredString());
+                                    // MixpanelManager().memoryShareButtonClick(widget.memory);
+                                    Share.share(structured.toString());
                                     HapticFeedback.lightImpact();
                                   },
                                 ),
@@ -129,10 +127,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                           alignment:
                                               const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                                           child: ConfirmDeletionWidget(
-                                              memory: widget.memory, onDelete: (){
-                                            Navigator.pop(context, true);
-                                            Navigator.pop(context, true);
-                                          }),
+                                              memory: widget.memory,
+                                              onDelete: () {
+                                                Navigator.pop(context, true);
+                                                Navigator.pop(context, true);
+                                              }),
                                         );
                                       },
                                     ).then((value) => setState(() {}));
@@ -152,11 +151,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
           child: ListView(
             children: [
               const SizedBox(height: 24),
-              Text(widget.memory.structured.getEmoji(),
+              Text(structured.getEmoji(),
                   style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
               const SizedBox(height: 16),
               Text(
-                widget.memory.discarded ? 'Discarded Memory' : widget.memory.structured.title,
+                widget.memory.discarded ? 'Discarded Memory' : structured.title,
                 style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
               ),
               const SizedBox(height: 16),
@@ -191,17 +190,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     ),
                   ]),
                   TableRow(children: [
-                    SizedBox(height: widget.memory.structured.category.isNotEmpty ? 12 : 0),
-                    SizedBox(height: widget.memory.structured.category.isNotEmpty ? 12 : 0),
+                    SizedBox(height: structured.category.isNotEmpty ? 12 : 0),
+                    SizedBox(height: structured.category.isNotEmpty ? 12 : 0),
                   ]),
-                  widget.memory.structured.category.isNotEmpty
+                  structured.category.isNotEmpty
                       ? TableRow(children: [
                           Text(
                             'Category',
                             style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
                           ),
                           Text(
-                            widget.memory.structured.category,
+                            structured.category,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ])
@@ -220,14 +219,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   ? const SizedBox.shrink()
                   : _getEditTextField(overviewController, editingOverview, focusOverviewField),
               widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-              widget.memory.structured.actionItems.isNotEmpty
+              structured.actionItems.isNotEmpty
                   ? Text(
                       'Action Items',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                     )
                   : const SizedBox.shrink(),
-              widget.memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
-              ...widget.memory.structured.actionItems.map<Widget>((item) {
+              structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
+              ...structured.actionItems.map<Widget>((item) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -236,19 +235,20 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         onChanged: (v) {},
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0))),
                     Expanded(
-                      child: Text(item, style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+                      child: Text(item.description,
+                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
                     ),
                   ],
                 );
               }),
-              if (widget.memory.structured.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
+              if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
                 const SizedBox(height: 40),
                 Text(
                   'Plugins 🧑‍💻',
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                 ),
                 const SizedBox(height: 24),
-                ...widget.memory.structured.pluginsResponse.map((response) => Container(
+                ...widget.memory.pluginsResponse.map((response) => Container(
                       margin: const EdgeInsets.only(bottom: 32),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -256,7 +256,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: ExpandableTextWidget(
-                        text: response.trim(),
+                        text: response.content.trim(),
                         style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                         maxLines: 6,
                         // Change this to 6 if you want the initial max lines to be 6
