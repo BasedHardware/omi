@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -389,6 +390,50 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
   }
 }
 
+Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
+  var startTime = DateTime.now();
+  Deepgram deepgram = Deepgram(Env.deepgramApiKey!, baseQueryParams: {
+    'model': 'nova-2-general',
+    'detect_language': false,
+    'language': SharedPreferencesUtil().recordingsLanguage,
+    'filler_words': false,
+    'punctuate': true,
+    'diarize': true,
+    'smart_format': true,
+    // TODO: try more options, sentiment analysis, intent, topics
+  });
+
+  DeepgramSttResult res = await deepgram.transcribeFromFile(file);
+  debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  var data = jsonDecode(res.json);
+  var result = data['results']['channels'][0]['alternatives'][0];
+  List<TranscriptSegment> segments = [];
+  for (var word in result['words']) {
+    if (segments.isEmpty) {
+      segments.add(TranscriptSegment(
+          speaker: 'SPEAKER_${word['speaker']}',
+          start: word['start'],
+          end: word['end'],
+          text: word['word'],
+          isUser: false));
+    } else {
+      var lastSegment = segments.last;
+      if (lastSegment.speakerId == word['speaker']) {
+        lastSegment.text += ' ${word['word']}';
+        lastSegment.end = word['end'];
+      } else {
+        segments.add(TranscriptSegment(
+            speaker: 'SPEAKER_${word['speaker']}',
+            start: word['start'],
+            end: word['end'],
+            text: word['word'],
+            isUser: false));
+      }
+    }
+  }
+  return segments;
+}
+
 Future<bool> userHasSpeakerProfile(String uid) async {
   var response = await makeApiCall(
     url: '${Env.customTranscriptApiBaseUrl}profile?uid=$uid',
@@ -436,3 +481,12 @@ Future<bool> uploadSample(File file, String uid) async {
     throw Exception('An error occurred uploadSample: $e');
   }
 }
+
+//curl \
+//   --request POST \
+//   --header 'Authorization: Token YOUR_DEEPGRAM_API_KEY' \
+//   --header 'Content-Type: application/json' \
+//   --data '{"url":"https://dpgr.am/spacewalk.wav"}' \
+//   --url 'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true'
+
+Future transcribeFromDeepgram(String url) async {}

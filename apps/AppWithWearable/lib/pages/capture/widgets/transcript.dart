@@ -101,7 +101,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
-            List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            List<TranscriptSegment> segments = await transcribeAudioFile2(f);
             processCustomTranscript(segments);
           } catch (e) {
             debugPrint(e.toString());
