@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -36,6 +39,27 @@ class Structured {
   final actionItems = ToMany<ActionItem>();
 
   Structured(this.title, this.overview, {this.emoji = '', this.category = 'other'});
+
+  getEmoji() {
+    try {
+      return utf8.decode(emoji.toString().codeUnits);
+    } catch (e) {
+      return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
+    }
+  }
+
+  @override
+  String toString() {
+    var str = '';
+    str += '${getEmoji()} $title ($category)\n\nSummary: $overview\n\n';
+    if (actionItems.isNotEmpty) {
+      str += 'Action Items:\n';
+      for (var item in actionItems) {
+        str += '- $item\n';
+      }
+    }
+    return str;
+  }
 }
 
 @Entity()
@@ -55,8 +79,8 @@ class PluginResponse {
   @Id()
   int id = 0;
 
-  String response;
+  String content;
   final memory = ToOne<Memory>();
 
-  PluginResponse(this.response);
+  PluginResponse(this.content);
 }

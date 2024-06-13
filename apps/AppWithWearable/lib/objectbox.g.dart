@@ -360,7 +360,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           object.id = id;
         },
         objectToFB: (PluginResponse object, fb.Builder fbb) {
-          final responseOffset = fbb.writeString(object.response);
+          final responseOffset = fbb.writeString(object.content);
           fbb.startTable(5);
           fbb.addInt64(0, object.id);
           fbb.addOffset(1, responseOffset);
@@ -468,7 +468,7 @@ class PluginResponse_ {
   static final id =
       obx.QueryIntegerProperty<PluginResponse>(_entities[3].properties[0]);
 
-  /// See [PluginResponse.response].
+  /// See [PluginResponse.content].
   static final response =
       obx.QueryStringProperty<PluginResponse>(_entities[3].properties[1]);
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -16,7 +17,7 @@ import 'package:uuid/uuid.dart';
 
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
-  final List<MemoryRecord> memories;
+  final List<Memory> memories;
 
   const ChatPage({
     super.key,
@@ -93,7 +94,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: _messages.length <= 1,
-                        memories: widget.memories.where((m) => messageMemoriesId.contains(m.id)).toList(),
+                        // FIXME
+                        memories: widget.memories.where((m) => messageMemoriesId.contains(m.id.toString())).toList(),
                       ),
                     );
                   }
@@ -196,6 +198,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
+    // FIXME, use either local vector search or migrate pinecone memories to new id
     String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null) {
