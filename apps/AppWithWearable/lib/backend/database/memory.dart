@@ -38,6 +38,18 @@ class Memory {
           .replaceAll('      ', '')
           .trim())
       .join('\n\n');
+
+  String getTranscript({int? maxCount}) {
+    try {
+      var transcript = this.transcript;
+      if (maxCount != null) {
+        transcript = transcript.substring(0, min(maxCount, transcript.length));
+      }
+      return utf8.decode(transcript.toString().codeUnits);
+    } catch (e) {
+      return transcript;
+    }
+  }
 }
 
 @Entity()
