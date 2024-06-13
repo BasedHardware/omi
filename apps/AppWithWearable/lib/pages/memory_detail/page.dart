@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -47,6 +45,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint(structured.actionItems.toString());
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -236,8 +235,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                         onChanged: (v) {},
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0))),
                     Expanded(
-                      child: Text(item.description,
-                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+                      child: SelectionArea(
+                        child: Text(
+                          item.description,
+                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                        ),
+                      ),
                     ),
                   ],
                 );
