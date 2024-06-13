@@ -99,6 +99,9 @@ Future<Memory> finalizeMemoryRecord(
     emoji: structuredMemory.emoji,
     category: structuredMemory.category,
   );
+  for (var actionItem in structuredMemory.actionItems) {
+    structured.actionItems.add(ActionItem(actionItem));
+  }
   var memory = Memory(DateTime.now(), transcript, false, recordingFilePath: recordingFilePath);
   memory.structured.target = structured;
 
