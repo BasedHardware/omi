@@ -12,6 +12,7 @@ import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart';
@@ -351,7 +352,8 @@ Future<List<Plugin>> retrievePlugins() async {
   if (response?.statusCode == 200) {
     try {
       return Plugin.fromJsonList(jsonDecode(response!.body));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      CrashReporting.reportHandledCrash(e, stackTrace);
       return [];
     }
   }
@@ -361,6 +363,7 @@ Future<List<Plugin>> retrievePlugins() async {
 // TODO: update vectors when fields updated
 
 Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+  final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(
@@ -370,7 +373,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
 
   try {
     var startTime = DateTime.now();
-    var streamedResponse = await request.send();
+    var streamedResponse = await client.send(request);
     var response = await http.Response.fromStream(streamedResponse);
     debugPrint('TranscribeAudioFile took: ${DateTime.now().difference(startTime).inSeconds} seconds');
     if (response.statusCode == 200) {
@@ -380,7 +383,8 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e) {
+  } catch (e, stackTrace) {
+    CrashReporting.reportHandledCrash(e, stackTrace);
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
 }
