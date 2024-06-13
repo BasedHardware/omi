@@ -1,0 +1,100 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:1521024926543535",
+      "lastPropertyId": "5:1519520653454061032",
+      "name": "Memory",
+      "properties": [
+        {
+          "id": "1:8192907449372324122",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1146945244623312213",
+          "name": "createdAt",
+          "type": 10,
+          "flags": 8,
+          "indexId": "1:4862313103417962125"
+        },
+        {
+          "id": "3:1067066826133615759",
+          "name": "transcript",
+          "type": 9
+        },
+        {
+          "id": "4:8255028376208853529",
+          "name": "recordingFilePath",
+          "type": 9
+        },
+        {
+          "id": "5:1519520653454061032",
+          "name": "discarded",
+          "type": 1,
+          "flags": 8,
+          "indexId": "2:2359101042900121877"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:6427539297124375252",
+      "lastPropertyId": "7:4057508104512714772",
+      "name": "Structured",
+      "properties": [
+        {
+          "id": "1:3948118750863357078",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9195755445020816093",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:2794378035287238174",
+          "name": "overview",
+          "type": 9
+        },
+        {
+          "id": "4:2626201971202508244",
+          "name": "actionItems",
+          "type": 30
+        },
+        {
+          "id": "5:1809459319638310611",
+          "name": "pluginsResponse",
+          "type": 30
+        },
+        {
+          "id": "6:1092528478436176027",
+          "name": "emoji",
+          "type": 9
+        },
+        {
+          "id": "7:4057508104512714772",
+          "name": "category",
+          "type": 9
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "2:6427539297124375252",
+  "lastIndexId": "2:2359101042900121877",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}
