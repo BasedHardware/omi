@@ -402,9 +402,10 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
   try {
+    var startTime = DateTime.now();
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-
+    debugPrint('TranscribeAudioFile took: ${DateTime.now().difference(startTime).inSeconds} seconds');
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('Response body: ${response.body}');
