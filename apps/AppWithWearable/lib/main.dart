@@ -40,14 +40,6 @@ void main() async {
   }
 }
 
-_initStuff() async {
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  await initializeNotifications();
-  await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
-  await ObjectBoxUtil.init();
-}
-
 _getRunApp() {
   return runApp(const MyApp());
 }
