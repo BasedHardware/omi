@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
@@ -112,8 +113,8 @@ Future<String> executeGptPrompt(String? prompt) async {
   return response;
 }
 
-_getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
-  var prevMemoriesStr = MemoryRecord.memoriesToString(previousMemories);
+_getPrevMemoriesStr(List<Memory> previousMemories) {
+  var prevMemoriesStr = Memory.memoriesToString(previousMemories);
   return prevMemoriesStr.isNotEmpty
       ? '''\nFor extra context consider the previous recent memories:
     These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
@@ -126,7 +127,7 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
       : '';
 }
 
-Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
+Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, List<Memory> previousMemories) async {
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
@@ -212,18 +213,6 @@ Future<String> adviseOnCurrentConversation(String transcript) async {
   var result = await executeGptPrompt(prompt);
   if (result.contains('N/A') || result.split(' ').length < 5) return '';
   return result;
-}
-
-Future<String> requestSummary(List<MemoryRecord> memories) async {
-  var prompt = '''
-    Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 
-    Write the final output only and make it very short and concise, less than 200 symbols total as bullet-points. 
-    Make it interesting with an insight, specific, professional and simple to read:
-    ``` 
-    ${MemoryRecord.memoriesToString(memories)}
-    ``` 
-    ''';
-  return await executeGptPrompt(prompt);
 }
 
 Future<List<double>> getEmbeddingsFromInput(String input) async {
