@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 Future streamApiResponse(
+  String personality,
   String context,
   Future<dynamic> Function(String) callback,
   List<Message> chatHistory,
@@ -20,7 +21,7 @@ Future streamApiResponse(
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
 
-  String body = qaStreamedBody(context, retrieveMostRecentMessages(chatHistory));
+  String body = qaStreamedBody(personality, context, retrieveMostRecentMessages(chatHistory));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
@@ -110,29 +111,29 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
   }
 }
 
-String qaStreamedBody(String context, List<Message> chatHistory) {
+String qaStreamedBody(String personality, String context, List<Message> chatHistory) {
   var prompt = '''
+    This is your personality, you should try to answer in this style: $personality
+
     You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
     If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
-    
-    Conversation History:
-    ${chatHistory.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}
 
     Context:
-    ``` 
+    ```
     $context
     ```
-    Answer:
     '''
       .replaceAll('    ', '');
-  debugPrint(prompt);
+  var systemMessage = 'You are an assistant with a friendly and helpful personality. ' + context;
+  List<Map<String, String>> messages = [{"role": "system", "content": systemMessage}];
+  for (var message in chatHistory) {
+    messages.add({"role": message.type, "content": message.text});
+    }
   var body = jsonEncode({
     "model": "gpt-4o",
-    "messages": [
-      {"role": "system", "content": prompt}
-    ],
+    "messages": messages,
     "stream": true,
-  });
+    });
   return body;
 }
