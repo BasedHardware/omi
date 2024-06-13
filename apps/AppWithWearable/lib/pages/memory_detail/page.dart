@@ -220,9 +220,25 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   : _getEditTextField(overviewController, editingOverview, focusOverviewField),
               widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
               structured.actionItems.isNotEmpty
-                  ? Text(
-                      'Action Items',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Action Items',
+                          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                        ),
+                        IconButton(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(
+                                  text: '- ${structured.actionItems.map((e) => e.description).join('\n- ')}'));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text('Copied to clipboard'),
+                                duration: Duration(seconds: 2),
+                              ));
+                            },
+                            icon: const Icon(Icons.copy, color: Colors.white, size: 20))
+                      ],
                     )
                   : const SizedBox.shrink(),
               structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
@@ -230,10 +246,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Checkbox(
-                        value: false,
-                        onChanged: (v) {},
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0))),
+                    Icon(Icons.circle_outlined, color: Colors.grey.shade300, size: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: SelectionArea(
                         child: Text(
@@ -245,8 +259,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   ],
                 );
               }),
+              structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
               if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
-                const SizedBox(height: 40),
+                structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
                 Text(
                   'Plugins 🧑‍💻',
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
