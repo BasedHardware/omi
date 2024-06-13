@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/temp.dart';
 
@@ -22,7 +23,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     Structured structured = widget.memory.structured.target!;
     return GestureDetector(
       onTap: () async {
-        // MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
+        MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         await Navigator.of(context).push(MaterialPageRoute(
             builder: (c) => MemoryDetailPage(
                   memory: widget.memory,

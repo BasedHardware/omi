@@ -80,6 +80,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   },
                 ),
         ),
+        const SizedBox(height: 80),
       ],
     );
   }

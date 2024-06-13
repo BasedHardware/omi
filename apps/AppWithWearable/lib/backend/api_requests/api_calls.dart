@@ -266,36 +266,14 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
-Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
-  // Construct the URL for the Pinecone API
-  var url = '${Env.pineconeIndexUrl}/vectors/update';
-
-  // Set up the headers for the request including the authentication token and content type
-  final headers = {
-    'Api-Key': Env.pineconeApiKey,
-    'Content-Type': 'application/json',
-  };
-
-  // Define the body of the request, including the ID and the new metadata for `created_at`
-  var body = jsonEncode({
-    'id': memoryId,
-    'setMetadata': {
-      'created_at': timestamp,
-    },
-    'namespace': Env.pineconeIndexNamespace,
-  });
-
-  // Make the HTTP POST request to update the record in Pinecone
-  var response = await http.post(
-    Uri.parse(url),
-    headers: headers,
-    body: body,
-  );
-
-  // Check the response, and if it's not successful, throw an error
-  if (response.statusCode != 200) {
-    throw Exception('Failed to update memory record in Pinecone: ${response.body}');
-  }
+Future<void> updatePineconeMemoryId(String memoryId, int newId) {
+  return pineconeApiCall(
+      urlSuffix: 'vectors/update',
+      body: jsonEncode({
+        'id': memoryId,
+        'setMetadata': {'memory_id': newId.toString()},
+        'namespace': Env.pineconeIndexNamespace,
+      }));
 }
 
 Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
@@ -346,12 +324,12 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
     'vector': vectorList,
     'topK': 5,
     'includeValues': false,
-    'includeMetadata': false,
+    'includeMetadata': true,
     'filter': filter,
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
   debugPrint(responseBody.toString());
-  return (responseBody['matches'])?.map<String>((e) => e['id'].toString()).toList() ?? [];
+  return (responseBody['matches'])?.map<String>((e) => e['metadata']['memory_id'].toString()).toList() ?? [];
 }
 
 Future<bool> deleteVector(String memoryId) async {

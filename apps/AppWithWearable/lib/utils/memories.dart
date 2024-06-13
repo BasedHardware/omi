@@ -59,7 +59,6 @@ Future<Memory?> memoryCreationBlock(
     }
   } else {
     Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
-    // MixpanelManager().memoryCreated(memory);
     debugPrint('Memory created: ${memory.id}');
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -84,7 +83,7 @@ Future<Memory> saveFailureMemory(String transcript, MemoryStructured structuredM
   Memory memory = Memory(DateTime.now(), transcript, true);
   memory.structured.target = structured;
   MemoryProvider().saveMemory(memory);
-  // MixpanelManager().memoryCreated(memory);
+  MixpanelManager().memoryCreated(memory);
   return memory;
 }
 

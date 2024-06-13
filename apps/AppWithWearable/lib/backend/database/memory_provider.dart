@@ -49,8 +49,8 @@ class MemoryProvider {
   }
 
   Future<List<Memory>> getMemoriesById(List<int> ids) async {
-    var memories = _box.getMany(ids);
-    return memories.where((element) => element != null).toList() as List<Memory>;
+    List<Memory?> memories = _box.getMany(ids);
+    return memories.whereType<Memory>().toList();
   }
 
   Future<List<Memory>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {

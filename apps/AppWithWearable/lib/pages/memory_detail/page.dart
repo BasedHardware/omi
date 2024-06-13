@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:share_plus/share_plus.dart';
@@ -100,7 +101,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                   leading: const Icon(Icons.send),
                                   onTap: () {
                                     // share loading
-                                    // MixpanelManager().memoryShareButtonClick(widget.memory);
+                                    MixpanelManager().memoryShareButtonClick(widget.memory);
                                     Share.share(structured.toString());
                                     HapticFeedback.lightImpact();
                                   },

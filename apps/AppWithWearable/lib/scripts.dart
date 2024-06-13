@@ -78,4 +78,15 @@ migrateMemoriesToObjectBox() async {
   MemoryProvider().storeMemories(memoriesOB);
   debugPrint('migrateMemoriesToObjectBox completed in ${DateTime.now().difference(time).inMilliseconds} milliseconds');
   SharedPreferencesUtil().scriptMemoriesToObjectBoxExecuted = true;
+
+  // updatePineconeMemoryId
+  for (var i = 0; i < memories.length; i++) {
+    var original = memories[i];
+    var memory = memoriesOB[i];
+    var f = updatePineconeMemoryId(original.id, memory.id);
+    if (i % 10 == 0) {
+      await f;
+      await Future.delayed(const Duration(seconds: 1));
+    }
+  }
 }
