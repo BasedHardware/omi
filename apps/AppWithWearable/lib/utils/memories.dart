@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:uuid/uuid.dart';
 
 import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
-Future<MemoryRecord?> processTranscriptContent(
+Future<Memory?> processTranscriptContent(
     BuildContext context, String content, String? audioFileName, String? recordingFilePath,
     {bool retrievedFromCache = false}) async {
   if (content.isNotEmpty) {
@@ -22,13 +23,13 @@ Future<MemoryRecord?> processTranscriptContent(
 }
 
 // Process the creation of memory records
-Future<MemoryRecord?> memoryCreationBlock(
+Future<Memory?> memoryCreationBlock(
   BuildContext context,
   String transcript,
   String? recordingFilePath,
   bool retrievedFromCache,
 ) async {
-  List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
+  List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
   MemoryStructured structuredMemory;
   try {
     structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
@@ -57,8 +58,8 @@ Future<MemoryRecord?> memoryCreationBlock(
       ));
     }
   } else {
-    MemoryRecord memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
-    MixpanelManager().memoryCreated(memory);
+    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
+    // MixpanelManager().memoryCreated(memory);
     debugPrint('Memory created: ${memory.id}');
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -73,40 +74,39 @@ Future<MemoryRecord?> memoryCreationBlock(
 }
 
 // Save failure memory when structured memory contains empty string
-Future<MemoryRecord> saveFailureMemory(String transcript, MemoryStructured structuredMemory) async {
-  MemoryRecord memory = MemoryRecord(
-      id: const Uuid().v4(),
-      createdAt: DateTime.now(),
-      transcript: transcript,
-      structured: structuredMemory,
-      discarded: true);
-  MemoryStorage.addMemory(memory);
-  MixpanelManager().memoryCreated(memory);
-  debugPrint(memory.toJson().toString());
+Future<Memory> saveFailureMemory(String transcript, MemoryStructured structuredMemory) async {
+  Structured structured = Structured(
+    structuredMemory.title,
+    structuredMemory.overview,
+    emoji: structuredMemory.emoji,
+    category: structuredMemory.category,
+  );
+  Memory memory = Memory(DateTime.now(), transcript, true);
+  memory.structured.target = structured;
+  MemoryProvider().saveMemory(memory);
+  // MixpanelManager().memoryCreated(memory);
   return memory;
 }
 
 // Finalize memory record after processing feedback
-Future<MemoryRecord> finalizeMemoryRecord(
-    String transcript, MemoryStructured structuredMemory, String? recordingFilePath) async {
-  MemoryRecord createdMemory = await createMemoryRecord(transcript, structuredMemory, recordingFilePath);
-  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
-    createPineconeVector(createdMemory.id, vector);
-  });
-  return createdMemory;
-  // storeMemoryVector
-}
+Future<Memory> finalizeMemoryRecord(
+  String transcript,
+  MemoryStructured structuredMemory,
+  String? recordingFilePath,
+) async {
+  Structured structured = Structured(
+    structuredMemory.title,
+    structuredMemory.overview,
+    emoji: structuredMemory.emoji,
+    category: structuredMemory.category,
+  );
+  var memory = Memory(DateTime.now(), transcript, false, recordingFilePath: recordingFilePath);
+  memory.structured.target = structured;
 
-// Create memory record
-Future<MemoryRecord> createMemoryRecord(String transcript, MemoryStructured structured, String? recordingFilePath) async {
-  var memory = MemoryRecord(
-      id: const Uuid().v4(),
-      createdAt: DateTime.now(),
-      transcript: transcript,
-      structured: structured,
-      discarded: false,
-      recordingFilePath: recordingFilePath);
-  MemoryStorage.addMemory(memory);
-  debugPrint('createMemoryRecord added memory: ${memory.id}');
+  await MemoryProvider().saveMemory(memory);
+
+  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
+    createPineconeVector(memory.id.toString(), vector);
+  });
   return memory;
 }

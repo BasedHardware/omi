@@ -94,16 +94,6 @@ class MemoryRecord {
         'discarded': discarded,
       };
 
-  static List<MemoryRecord> fromJsonList(List<dynamic> jsonList) {
-    List<MemoryRecord> memories = [];
-    for (var json in jsonList) {
-      memories.add(MemoryRecord.fromJson(json));
-    }
-    return memories;
-  }
-
-  String getStructuredString() => structured.toString();
-
   static String memoriesToString(List<MemoryRecord> memories) => memories
       .map((e) => '''
       ${e.createdAt.toIso8601String().split('.')[0]}
@@ -122,13 +112,6 @@ class MemoryRecord {
 
 class MemoryStorage {
   static const String _storageKey = '_memories';
-
-  static Future<void> addMemory(MemoryRecord memory) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    allMemories.add(jsonEncode(memory.toJson()));
-    await prefs.setStringList(_storageKey, allMemories);
-  }
 
   static Future<List<MemoryRecord>> getAllMemories({includeDiscarded = false}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -150,33 +133,12 @@ class MemoryStorage {
     return filtered;
   }
 
-  static Future<List<MemoryRecord>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {
-    List<MemoryRecord> allMemories = await getAllMemories();
-    DateTime now = DateTime.now();
-    DateTime timeLimit = now.subtract(Duration(minutes: minutes));
-    var filtered = allMemories.where((memory) => memory.createdAt.isAfter(timeLimit)).toList();
-    if (filtered.length > count) {
-      filtered = filtered.sublist(0, count);
-    }
-    return filtered;
-  }
-
   static Future<void> updateWholeMemory(MemoryRecord newMemory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
     int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == newMemory.id);
     if (index >= 0 && index < allMemories.length) {
       allMemories[index] = jsonEncode(newMemory.toJson());
-      await prefs.setStringList(_storageKey, allMemories);
-    }
-  }
-
-  static Future<void> deleteMemory(String memoryId) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
-    if (index >= 0 && index < allMemories.length) {
-      allMemories.removeAt(index);
       await prefs.setStringList(_storageKey, allMemories);
     }
   }

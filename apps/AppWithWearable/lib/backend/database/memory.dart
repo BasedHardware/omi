@@ -22,7 +22,22 @@ class Memory {
   @Index()
   bool discarded;
 
-  Memory(this.createdAt, this.transcript, this.discarded, {this.id = 0});
+  Memory(this.createdAt, this.transcript, this.discarded, {this.id = 0, this.recordingFilePath});
+
+  static String memoriesToString(List<Memory> memories) => memories
+      .map((e) => '''
+      ${e.createdAt.toIso8601String().split('.')[0]}
+      Title: ${e.structured.target!.title}
+      Summary: ${e.structured.target!.overview}
+      ${e.structured.target!.actionItems.isNotEmpty ? 'Action Items:' : ''}
+      ${e.structured.target!.actionItems.map((item) => '  - $item').join('\n')}
+      ${e.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
+      ${e.pluginsResponse.map((response) => '  - $response').join('\n')}
+      Category: ${e.structured.target!.category}
+      '''
+          .replaceAll('      ', '')
+          .trim())
+      .join('\n\n');
 }
 
 @Entity()
