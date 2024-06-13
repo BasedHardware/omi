@@ -29,7 +29,7 @@ Future<MemoryRecord?> memoryCreationBlock(
   bool retrievedFromCache,
 ) async {
   List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
-  Structured structuredMemory;
+  MemoryStructured structuredMemory;
   try {
     structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
   } catch (e) {
@@ -73,7 +73,7 @@ Future<MemoryRecord?> memoryCreationBlock(
 }
 
 // Save failure memory when structured memory contains empty string
-Future<MemoryRecord> saveFailureMemory(String transcript, Structured structuredMemory) async {
+Future<MemoryRecord> saveFailureMemory(String transcript, MemoryStructured structuredMemory) async {
   MemoryRecord memory = MemoryRecord(
       id: const Uuid().v4(),
       createdAt: DateTime.now(),
@@ -88,7 +88,7 @@ Future<MemoryRecord> saveFailureMemory(String transcript, Structured structuredM
 
 // Finalize memory record after processing feedback
 Future<MemoryRecord> finalizeMemoryRecord(
-    String transcript, Structured structuredMemory, String? recordingFilePath) async {
+    String transcript, MemoryStructured structuredMemory, String? recordingFilePath) async {
   MemoryRecord createdMemory = await createMemoryRecord(transcript, structuredMemory, recordingFilePath);
   getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
     createPineconeVector(createdMemory.id, vector);
@@ -98,7 +98,7 @@ Future<MemoryRecord> finalizeMemoryRecord(
 }
 
 // Create memory record
-Future<MemoryRecord> createMemoryRecord(String transcript, Structured structured, String? recordingFilePath) async {
+Future<MemoryRecord> createMemoryRecord(String transcript, MemoryStructured structured, String? recordingFilePath) async {
   var memory = MemoryRecord(
       id: const Uuid().v4(),
       createdAt: DateTime.now(),
