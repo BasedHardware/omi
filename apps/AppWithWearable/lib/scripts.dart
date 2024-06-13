@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 
@@ -54,24 +55,25 @@ migrateMemoriesToObjectBox() async {
   debugPrint('migrateMemoriesToObjectBox');
   var time = DateTime.now();
   var memories = (await MemoryStorage.getAllMemories(includeDiscarded: true)).reversed.toList();
-  debugPrint('Current box memories: ${(await MemoryProvider().getMemories()).length} memories');
+  // var mem = await MemoryProvider().getMemoriesOrdered(includeDiscarded: true);
+  // mem.forEach((m)=> debugPrint('${m.id.toString()}: ${m.createdAt}: ${m.structured.target!.title}'));
   MemoryProvider().removeAllMemories();
   List<Memory> memoriesOB = [];
   for (var memory in memories) {
-    debugPrint(':${memory.id} ~ ${memory.id.hashCode}');
-    var structured = Structured()
-      ..title = memory.structured.title
-      ..overview = memory.structured.overview
-      ..actionItems = memory.structured.actionItems
-      ..pluginsResponse = memory.structured.pluginsResponse
-      ..emoji = memory.structured.emoji
-      ..category = memory.structured.category;
+    debugPrint('Migrating memory: ${memory.id}');
+    var structured = Structured(memory.structured.title, memory.structured.overview,
+        emoji: memory.structured.emoji, category: memory.structured.category);
 
-    memoriesOB.add(Memory()
-      ..createdAt = memory.createdAt
-      ..structured = structured
-      ..transcript = memory.transcript
-      ..discarded = memory.discarded);
+    for (var actionItem in memory.structured.actionItems) {
+      structured.actionItems.add(ActionItem(actionItem));
+    }
+    Memory memoryOB = Memory(memory.createdAt, memory.transcript, memory.discarded);
+    memoryOB.structured.target = structured;
+
+    for (var pluginResponse in memory.structured.pluginsResponse) {
+      memoryOB.pluginsResponse.add(PluginResponse(pluginResponse));
+    }
+    memoriesOB.add(memoryOB);
   }
   MemoryProvider().storeMemories(memoriesOB);
   debugPrint('migrateMemoriesToObjectBox completed in ${DateTime.now().difference(time).inMilliseconds} milliseconds');

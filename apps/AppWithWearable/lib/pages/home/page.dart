@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -53,6 +54,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
+    // memories = await MemoryProvider.getMemoriesOrdered(includeDiscarded: displayDiscardMemories);
     setState(() {});
     // FocusScope.of(context).unfocus();
     // chatTextFieldFocusNode.unfocus();
