@@ -139,21 +139,21 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
   final pluginsList = SharedPreferencesUtil().pluginsList;
   final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
-
+  // ${_getPrevMemoriesStr(previousMemories)}
+  // TODO: try later with temperature 0
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is $languageCode. Make sure to use English for your response.
 
-    It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
+    It is possible that the conversation is not important, has no value or there is nothing to be remembered from it, in that case, output an empty title, overview, and action items.  
     The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
      
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
-    For the action items, use a list of actionable steps or bullet points for the conversation.
+    For the action items, include a list of scheduled events, specific tasks or truly actionable steps.
     For the category, classify the conversation into one of the available categories.
         
     Here is the transcript ```${transcript.trim()}```.
-    ${_getPrevMemoriesStr(previousMemories)}
     
     The output should be formatted as a JSON instance that conforms to the JSON schema below.
     
@@ -162,7 +162,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of scheduled events, specific tasks or truly actionable steps", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
     ```
     '''
           .replaceAll('     ', '')
@@ -400,12 +400,17 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
     'punctuate': true,
     'diarize': true,
     'smart_format': true,
+    // 'detect_topics': true,
+    // 'topics': true,
+    // 'intents': true,
+    // 'sentiment': true,
     // TODO: try more options, sentiment analysis, intent, topics
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
   debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
   var data = jsonDecode(res.json);
+  // debugPrint('Response body: ${res.json}');
   var result = data['results']['channels'][0]['alternatives'][0];
   List<TranscriptSegment> segments = [];
   for (var word in result['words']) {

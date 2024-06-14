@@ -32,10 +32,10 @@ Future<Memory?> memoryCreationBlock(
   DateTime? startedAt,
   DateTime? finishedAt,
 ) async {
-  List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
+  // List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
   MemoryStructured structuredMemory;
   try {
-    structuredMemory = await generateTitleAndSummaryForMemory(transcript, recentMemories);
+    structuredMemory = await generateTitleAndSummaryForMemory(transcript, []); // recentMemories
   } catch (e) {
     debugPrint('Error: $e');
     InstabugLog.logError(e.toString());
