@@ -106,7 +106,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
           ),
           Expanded(
             child: Text(
-              dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt),
+              dateTimeFormat('MMM d, h:mm a', widget.memory.startedAt ?? widget.memory.createdAt),
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
               maxLines: 1,
               textAlign: TextAlign.end,

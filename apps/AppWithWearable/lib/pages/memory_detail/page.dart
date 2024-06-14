@@ -169,7 +169,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   TableRow(
                     children: [
                       Text(
-                        'Date Created',
+                        'Created at',
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
                       ),
                       Text(
@@ -178,20 +178,22 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       ),
                     ],
                   ),
-                  const TableRow(children: [SizedBox(height: 12), SizedBox(height: 12)]),
+                  const TableRow(children: [SizedBox(height: 16), SizedBox(height: 16)]),
                   TableRow(children: [
                     Text(
-                      'Time Created',
+                      widget.memory.startedAt == null ? 'At time' : 'Between',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
                     ),
                     Text(
-                      dateTimeFormat('h:mm a', widget.memory.createdAt),
+                      widget.memory.startedAt == null
+                          ? dateTimeFormat('h:mm a', widget.memory.createdAt)
+                          : '${dateTimeFormat('h:mm', widget.memory.startedAt)} to ${dateTimeFormat('h:mm a', widget.memory.finishedAt)}',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ]),
                   TableRow(children: [
-                    SizedBox(height: structured.category.isNotEmpty ? 12 : 0),
-                    SizedBox(height: structured.category.isNotEmpty ? 12 : 0),
+                    SizedBox(height: structured.category.isNotEmpty ? 16 : 0),
+                    SizedBox(height: structured.category.isNotEmpty ? 16 : 0),
                   ]),
                   structured.category.isNotEmpty
                       ? TableRow(children: [
@@ -200,7 +202,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                             style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
                           ),
                           Text(
-                            structured.category,
+                            structured.category[0].toUpperCase() + structured.category.substring(1),
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ])
@@ -241,22 +243,24 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       ],
                     )
                   : const SizedBox.shrink(),
-              structured.actionItems.isNotEmpty ? const SizedBox(height: 8) : const SizedBox.shrink(),
               ...structured.actionItems.map<Widget>((item) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(Icons.circle_outlined, color: Colors.grey.shade300, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SelectionArea(
-                        child: Text(
-                          item.description,
-                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SelectionArea(
+                          child: Text(
+                            item.description,
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               }),
               structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
