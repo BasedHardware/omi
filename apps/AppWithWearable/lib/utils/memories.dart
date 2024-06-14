@@ -8,15 +8,16 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
-Future<Memory?> processTranscriptContent(
-    BuildContext context, String content, String? audioFileName, String? recordingFilePath,
-    {bool retrievedFromCache = false}) async {
+Future<Memory?> processTranscriptContent(BuildContext context, String content, String? recordingFilePath,
+    {bool retrievedFromCache = false, DateTime? startedAt, DateTime? finishedAt}) async {
   if (content.isNotEmpty) {
     return await memoryCreationBlock(
       context,
       content,
       recordingFilePath,
       retrievedFromCache,
+      startedAt,
+      finishedAt,
     );
   }
   return null;
@@ -28,6 +29,8 @@ Future<Memory?> memoryCreationBlock(
   String transcript,
   String? recordingFilePath,
   bool retrievedFromCache,
+  DateTime? startedAt,
+  DateTime? finishedAt,
 ) async {
   List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
   MemoryStructured structuredMemory;
@@ -46,7 +49,7 @@ Future<Memory?> memoryCreationBlock(
   debugPrint('Structured Memory: $structuredMemory');
 
   if (structuredMemory.title.isEmpty) {
-    await saveFailureMemory(transcript, structuredMemory);
+    await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -58,7 +61,7 @@ Future<Memory?> memoryCreationBlock(
       ));
     }
   } else {
-    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath);
+    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
     debugPrint('Memory created: ${memory.id}');
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -73,14 +76,19 @@ Future<Memory?> memoryCreationBlock(
 }
 
 // Save failure memory when structured memory contains empty string
-Future<Memory> saveFailureMemory(String transcript, MemoryStructured structuredMemory) async {
+Future<Memory> saveFailureMemory(
+  String transcript,
+  MemoryStructured structuredMemory,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+) async {
   Structured structured = Structured(
     structuredMemory.title,
     structuredMemory.overview,
     emoji: structuredMemory.emoji,
     category: structuredMemory.category,
   );
-  Memory memory = Memory(DateTime.now(), transcript, true);
+  Memory memory = Memory(DateTime.now(), transcript, true, startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
   MemoryProvider().saveMemory(memory);
   MixpanelManager().memoryCreated(memory);
@@ -92,6 +100,8 @@ Future<Memory> finalizeMemoryRecord(
   String transcript,
   MemoryStructured structuredMemory,
   String? recordingFilePath,
+  DateTime? startedAt,
+  DateTime? finishedAt,
 ) async {
   Structured structured = Structured(
     structuredMemory.title,
@@ -102,7 +112,8 @@ Future<Memory> finalizeMemoryRecord(
   for (var actionItem in structuredMemory.actionItems) {
     structured.actionItems.add(ActionItem(actionItem));
   }
-  var memory = Memory(DateTime.now(), transcript, false, recordingFilePath: recordingFilePath);
+  var memory = Memory(DateTime.now(), transcript, false,
+      recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
 
   await MemoryProvider().saveMemory(memory);

@@ -77,38 +77,39 @@ class _MemoryListItemState extends State<MemoryListItem> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-              child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : Text(widget.memory.structured.target!.getEmoji(),
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-              widget.memory.structured.target!.category.isNotEmpty && !widget.memory.discarded
-                  ? const SizedBox(
-                      width: 12,
-                    )
-                  : const SizedBox.shrink(),
-              widget.memory.structured.target!.category.isNotEmpty
-                  ? Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    )
-                  : const SizedBox.shrink(),
-            ],
-          )),
+          widget.memory.discarded
+              ? const SizedBox.shrink()
+              : Text(widget.memory.structured.target!.getEmoji(),
+              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+          widget.memory.structured.target!.category.isNotEmpty && !widget.memory.discarded
+              ? const SizedBox(
+            width: 12,
+          )
+              : const SizedBox.shrink(),
+          widget.memory.structured.target!.category.isNotEmpty
+              ? Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
+              style: Theme.of(context).textTheme.bodyMedium,
+              maxLines: 1,
+            ),
+          )
+              : const SizedBox.shrink(),
           const SizedBox(
-            width: 8,
+            width: 16,
           ),
-          Text(
-            ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          Expanded(
+            child: Text(
+              dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              maxLines: 1,
+              textAlign: TextAlign.end,
+            ),
           )
         ],
       ),
