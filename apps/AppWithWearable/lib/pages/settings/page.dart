@@ -4,6 +4,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -264,9 +265,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Opt In Analytics',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          Expanded(
+                            child: GestureDetector(
+                              child: const Text(
+                                'Help improve Friend by sharing anonymized analytics data',
+                                style: TextStyle(
+                                    color: Color.fromARGB(255, 150, 150, 150),
+                                    fontSize: 16,
+                                    decoration: TextDecoration.underline),
+                              ),
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                              },
+                            ),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -545,7 +556,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
     prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
- 
+
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
