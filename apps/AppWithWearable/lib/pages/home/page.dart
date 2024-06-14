@@ -53,6 +53,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
+  final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
+
   _initiateMemories() async {
     // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
@@ -96,6 +98,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
+    Upgrader.clearSavedSettings();
 
     _initiateMemories();
     _initiatePlugins();
@@ -168,6 +171,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Widget build(BuildContext context) {
     return WithForegroundTask(
         child: UpgradeAlert(
+      upgrader: _upgrader,
+      cupertinoButtonTextStyle: const TextStyle(color: Colors.white),
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
         body: GestureDetector(

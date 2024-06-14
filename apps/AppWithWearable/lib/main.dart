@@ -21,7 +21,6 @@ void main() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   await ObjectBoxUtil.init();
-  // await Upgrader.clearSavedSettings();
   if (Env.instabugApiKey != null) {
     runZonedGuarded(
       () {
