@@ -213,7 +213,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
   }
 
   _createMemory() async {
@@ -230,7 +230,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       finishedAt: currentTranscriptFinishedAt,
     );
     debugPrint(memory.toString());
-    if (memory != null && !memory.discarded) {
+    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
@@ -265,22 +265,22 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (segments.isEmpty) {
       return btDevice != null
           ? const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: 80),
-          Align(
-            alignment: Alignment.center,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.0),
-              child: Text(
-                textAlign: TextAlign.center,
-                'Your transcripts will start appearing\nhere after 30 seconds.',
-                style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
-              ),
-            ),
-          )
-        ],
-      )
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(height: 80),
+                Align(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      textAlign: TextAlign.center,
+                      'Your transcripts will start appearing\nhere after 30 seconds.',
+                      style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
+                    ),
+                  ),
+                )
+              ],
+            )
           : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
@@ -322,9 +322,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    needsUtf8 ? utf8.decode(data.text
-                        .toString()
-                        .codeUnits) : data.text,
+                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),

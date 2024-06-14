@@ -75,9 +75,13 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get coachIsChecked => getBool('coachIsChecked') ?? true;
+  bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
 
-  set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
+  set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
+
+  bool get postMemoryNotificationIsChecked => getBool('postMemoryNotificationIsChecked') ?? true;
+
+  set postMemoryNotificationIsChecked(bool value) => saveBool('postMemoryNotificationIsChecked', value);
 
   bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
 
