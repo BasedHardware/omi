@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
+import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 class TranscriptWidget extends StatefulWidget {
@@ -211,7 +213,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+    _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
   }
 
   _createMemory() async {
@@ -220,13 +222,25 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint('_createMemory transcript: \n$transcript');
     File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
     await uploadFile(file);
-    await processTranscriptContent(
+    Memory? memory = await processTranscriptContent(
       context,
       transcript,
       file.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
     );
+    debugPrint(memory.toString());
+    if (memory != null && !memory.discarded) {
+      postMemoryCreationNotification(memory).then((r) {
+        debugPrint('Notification response: $r');
+        if (r.isEmpty) return;
+        createNotification(
+          notificationId: 2,
+          title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
+          body: r,
+        );
+      });
+    }
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
@@ -251,22 +265,22 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     if (segments.isEmpty) {
       return btDevice != null
           ? const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(height: 80),
-                Align(
-                  alignment: Alignment.center,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32.0),
-                    child: Text(
-                      textAlign: TextAlign.center,
-                      'Your transcripts will start appearing\nhere after 30 seconds.',
-                      style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
-                    ),
-                  ),
-                )
-              ],
-            )
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: 80),
+          Align(
+            alignment: Alignment.center,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32.0),
+              child: Text(
+                textAlign: TextAlign.center,
+                'Your transcripts will start appearing\nhere after 30 seconds.',
+                style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
+              ),
+            ),
+          )
+        ],
+      )
           : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
@@ -308,7 +322,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
+                    needsUtf8 ? utf8.decode(data.text
+                        .toString()
+                        .codeUnits) : data.text,
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),

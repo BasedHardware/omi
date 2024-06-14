@@ -77,7 +77,7 @@ class Structured {
   getEmoji() {
     try {
       if (emoji.isNotEmpty) return utf8.decode(emoji.toString().codeUnits);
-      return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
+      return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
     } catch (e) {
       return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
     }
@@ -94,6 +94,16 @@ class Structured {
       }
     }
     return str.trim();
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'overview': overview,
+      'emoji': emoji,
+      'category': category,
+      'actionItems': actionItems.map((item) => item.description).toList(),
+    };
   }
 }
 
