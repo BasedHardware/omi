@@ -35,6 +35,10 @@ class SharedPreferencesUtil {
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
 
+  String get deepgramApiKey => getString('deepgramApiKey') ?? '';
+
+  set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -71,11 +75,11 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get coachIsChecked => getBool('coachIsChecked') ?? false;
+  bool get coachIsChecked => getBool('coachIsChecked') ?? true;
 
   set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
 
-  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? false;
+  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
@@ -119,15 +123,15 @@ class SharedPreferencesUtil {
     pluginsEnabled = plugins;
   }
 
-  List<int> get temporalAudioBytes {
-    final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
-    return bytes.map((e) => int.parse(e)).toList();
-  }
+  // List<int> get temporalAudioBytes {
+  //   final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
+  //   return bytes.map((e) => int.parse(e)).toList();
+  // }
 
-  set temporalAudioBytes(List<int> value) {
-    final List<String> bytes = value.map((e) => e.toString()).toList();
-    saveStringList('temporalAudioBytes', bytes);
-  }
+  // set temporalAudioBytes(List<int> value) {
+  //   final List<String> bytes = value.map((e) => e.toString()).toList();
+  //   saveStringList('temporalAudioBytes', bytes);
+  // }
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
@@ -190,7 +194,14 @@ class SharedPreferencesUtil {
   set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
 
   bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
+
+  set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
+
+  bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().useFriendApiKeys ? (Env.openAIAPIKey ?? '') : SharedPreferencesUtil().openAIApiKey;
+    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
+
+String getDeepgramApiKeyForUsage() =>
+    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;

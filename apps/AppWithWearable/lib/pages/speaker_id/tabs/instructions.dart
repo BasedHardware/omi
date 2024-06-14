@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 
 class InstructionsTab extends StatefulWidget {
   final VoidCallback goNext;

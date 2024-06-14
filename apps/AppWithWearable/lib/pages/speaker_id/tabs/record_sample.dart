@@ -134,7 +134,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
             ),
           ),
         ),
-        Container(
+        SizedBox(
           height: 200,
           width: 200,
           child: Center(

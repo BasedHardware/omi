@@ -17,21 +17,21 @@ class ContentResponse {
     if (json['choices'] != null) {
       choices = <Choices>[];
       json['choices'].forEach((v) {
-        choices!.add(new Choices.fromJson(v));
+        choices!.add(Choices.fromJson(v));
       });
     }
   }
 
   //sc2
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['object'] = this.object;
-    data['created'] = this.created;
-    data['model'] = this.model;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['object'] = object;
+    data['created'] = created;
+    data['model'] = model;
 
-    if (this.choices != null) {
-      data['choices'] = this.choices!.map((v) => v.toJson()).toList();
+    if (choices != null) {
+      data['choices'] = choices!.map((v) => v.toJson()).toList();
     }
 
     return data;
@@ -49,20 +49,20 @@ class Choices {
   Choices.fromJson(Map<String, dynamic> json) {
     String? a = json['message'].toString();
     index = json['index'];
-    delta = json['delta'] != null ? new Delta.fromJson(json['delta']) : null;
+    delta = json['delta'] != null ? Delta.fromJson(json['delta']) : null;
     message = json['message'] != null ? OpenAIMessage.fromJson(json['message']) : null; // Corrected
     finishReason = json['finish_reason']; // Fixed assignment syntax
   }
 
   //sc1
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['index'] = this.index;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['index'] = index;
 
-    if (this.delta != null) {
-      data['delta'] = this.delta!.toJson();
+    if (delta != null) {
+      data['delta'] = delta!.toJson();
     }
-    data['finish_reason'] = this.finishReason;
+    data['finish_reason'] = finishReason;
     return data;
   }
 }
@@ -77,8 +77,8 @@ class Delta {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['content'] = this.content;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['content'] = content;
     return data;
   }
 }
@@ -95,9 +95,9 @@ class OpenAIMessage {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['role'] = this.role;
-    data['content'] = this.content;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['role'] = role;
+    data['content'] = content;
     return data;
   }
 // Add your function code here!

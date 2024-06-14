@@ -52,21 +52,21 @@
 
 
     <!-- In the permission part of your manifest, these permission are needed if you target Android 14 phones -->
-    <!--    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />-->
-    <!--    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" /> &lt;!&ndash; Here, chose the type according to your app &ndash;&gt;-->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <!-- Add android:stopWithTask option only when necessary. -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="Friend"
         android:requestLegacyExternalStorage="true"
-        tools:replace="android:label"
-        android:usesCleartextTraffic="true">
-        <!--        <service-->
-        <!--            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"-->
-        <!--            android:exported="false"-->
-        <!--            android:stopWithTask="true"-->
-        <!--            android:foregroundServiceType="connectedDevice" />&lt;!&ndash; Here, chose the type according to your app &ndash;&gt;-->
+        android:usesCleartextTraffic="true"
+        tools:replace="android:label">
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="true" />
 
         <activity
             android:name=".MainActivity"
