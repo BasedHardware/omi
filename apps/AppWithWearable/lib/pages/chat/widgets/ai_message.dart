@@ -1,8 +1,8 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 
@@ -10,7 +10,7 @@ class AIMessage extends StatelessWidget {
   final Message message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final List<MemoryRecord> memories;
+  final List<Memory> memories;
 
   const AIMessage({
     super.key,
@@ -85,7 +85,7 @@ class AIMessage extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                memory.structured.title,
+                                memory.structured.target!.title,
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

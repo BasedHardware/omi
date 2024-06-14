@@ -6,14 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 class TranscriptWidget extends StatefulWidget {
@@ -44,15 +43,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   Timer? _conversationAdvisorTimer;
   bool memoryCreating = false;
 
+  DateTime? currentTranscriptStartedAt;
+  DateTime? currentTranscriptFinishedAt;
+
   @override
   void initState() {
     btDevice = widget.btDevice;
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initiateBytesProcessing();
     });
-    if (SharedPreferencesUtil().coachIsChecked) {
-      _initiateConversationAdvisorTimer();
-    }
+    // if (SharedPreferencesUtil().coachIsChecked) {
+    //   _initiateConversationAdvisorTimer();
+    // }
     _processCachedTranscript();
     super.initState();
   }
@@ -70,8 +72,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, null, retrievedFromCache: true);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true);
     SharedPreferencesUtil().transcriptSegments = [];
+    // TODO: include created at and finished at for this cached transcript
   }
 
   Future<void> initiateBytesProcessing() async {
@@ -101,7 +104,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
-            List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            // List<TranscriptSegment> segments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+            List<TranscriptSegment> segments = await transcribeAudioFile2(f);
             processCustomTranscript(segments);
           } catch (e) {
             debugPrint(e.toString());
@@ -116,7 +120,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _cleanTranscript(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m'];
+    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m', 'It was the worst case.', 'and,'];
+    // TODO: do this with any words that gets repeated twice
+    // - Replicate apparently has much more hallucinations
     for (var i = 0; i < segments.length; i++) {
       for (var hallucination in hallucinations) {
         segments[i].text = segments[i]
@@ -159,24 +165,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     widget.setHasTranscripts(true);
     setState(() {});
     _initiateMemoryCreationTimer();
+    currentTranscriptStartedAt ??= DateTime.now();
+    currentTranscriptFinishedAt = DateTime.now();
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('transcript.dart resetState called');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-
-    if (!restartBytesProcessing && segments.isNotEmpty) {
-      _createMemory();
-    }
-
-    setState(() {
-      if (btDevice != null) this.btDevice = btDevice;
-    });
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
+    if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) initiateBytesProcessing();
-    // if (restartBytesProcessing && segments.isNotEmpty && (segments.length > 1 || segments[0].text.isNotEmpty)) {
-    //   _initiateMemoryCreationTimer();
-    // }
   }
 
   String _buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
@@ -192,25 +191,25 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     return transcript.trim();
   }
 
-  _initiateConversationAdvisorTimer() {
-    // TODO: improvements
-    // - This triggers every 10 minutes when the app opens, but would be great if it triggered, every 10 min of conversation
-    // - And if the conversation finishes at 6 min, and memory is created, it should grab that portion not advised from, and advise
-    // - Each advice should be stored, and ideally mapped to a memory
-    // - Advice should consider conversations in other languages
-    // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
-    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
-      addEventToContext('Conversation Advisor Timer Triggered');
-      var transcript = _buildDiarizedTranscriptMessage(segments);
-      debugPrint('_initiateConversationAdvisorTimer: $transcript');
-      var advice = await adviseOnCurrentConversation(transcript);
-      if (advice.isNotEmpty) {
-        MixpanelManager().coachAdvisorFeedback(transcript, advice);
-        clearNotification(3);
-        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
-      }
-    });
-  }
+  // _initiateConversationAdvisorTimer() {
+  //   // TODO: improvements
+  //   // - This triggers every 10 minutes when the app opens, but would be great if it triggered, every 10 min of conversation
+  //   // - And if the conversation finishes at 6 min, and memory is created, it should grab that portion not advised from, and advise
+  //   // - Each advice should be stored, and ideally mapped to a memory
+  //   // - Advice should consider conversations in other languages
+  //   // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
+  //   _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
+  //     addEventToContext('Conversation Advisor Timer Triggered');
+  //     var transcript = _buildDiarizedTranscriptMessage(segments);
+  //     debugPrint('_initiateConversationAdvisorTimer: $transcript');
+  //     var advice = await adviseOnCurrentConversation(transcript);
+  //     if (advice.isNotEmpty) {
+  //       MixpanelManager().coachAdvisorFeedback(transcript, advice);
+  //       clearNotification(3);
+  //       createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
+  //     }
+  //   });
+  // }
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
@@ -219,14 +218,30 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _createMemory() async {
     setState(() => memoryCreating = true);
-    debugPrint('Creating memory from whispers');
     String transcript = _buildDiarizedTranscriptMessage(segments);
-    debugPrint('Transcript: \n$transcript');
+    debugPrint('_createMemory transcript: \n$transcript');
     File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-    String? fileName = await uploadFile(file);
-    await processTranscriptContent(context, transcript, fileName, file.path);
+    await uploadFile(file);
+    Memory? memory = await processTranscriptContent(
+      context,
+      transcript,
+      file.path,
+      startedAt: currentTranscriptStartedAt,
+      finishedAt: currentTranscriptFinishedAt,
+    );
+    debugPrint(memory.toString());
+    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
+      postMemoryCreationNotification(memory).then((r) {
+        debugPrint('Notification response: $r');
+        if (r.isEmpty) return;
+        createNotification(
+          notificationId: 2,
+          title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
+          body: r,
+        );
+      });
+    }
     await widget.refreshMemories();
-    // SharedPreferencesUtil().temporalAudioBytes = [];
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     setState(() => memoryCreating = false);

@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
@@ -11,6 +13,7 @@ import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart';
@@ -112,8 +115,8 @@ Future<String> executeGptPrompt(String? prompt) async {
   return response;
 }
 
-_getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
-  var prevMemoriesStr = MemoryRecord.memoriesToString(previousMemories);
+_getPrevMemoriesStr(List<Memory> previousMemories) {
+  var prevMemoriesStr = Memory.memoriesToString(previousMemories);
   return prevMemoriesStr.isNotEmpty
       ? '''\nFor extra context consider the previous recent memories:
     These below, are the user most recent memories, they were already structured and saved, so only use them for help structuring the new memory \
@@ -126,9 +129,9 @@ _getPrevMemoriesStr(List<MemoryRecord> previousMemories) {
       : '';
 }
 
-Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<MemoryRecord> previousMemories) async {
+Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, List<Memory> previousMemories) async {
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
-    return Structured(actionItems: [], pluginsResponse: [], category: '');
+    return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
 
   final languageCode = SharedPreferencesUtil().recordingsLanguage;
@@ -136,21 +139,21 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
   final pluginsList = SharedPreferencesUtil().pluginsList;
   final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
-
+  // ${_getPrevMemoriesStr(previousMemories)}
+  // TODO: try later with temperature 0
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is $languageCode. Make sure to use English for your response.
 
-    It is possible that the conversation is not important, has no value or is not worth remembering, in that case, output an empty title. 
+    It is possible that the conversation is not important, has no value or there is nothing to be remembered from it, in that case, output an empty title, overview, and action items.  
     The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
      
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
-    For the action items, use a list of actionable steps or bullet points for the conversation.
+    For the action items, include a list of scheduled events, specific tasks or truly actionable steps.
     For the category, classify the conversation into one of the available categories.
         
     Here is the transcript ```${transcript.trim()}```.
-    ${_getPrevMemoriesStr(previousMemories)}
     
     The output should be formatted as a JSON instance that conforms to the JSON schema below.
     
@@ -159,7 +162,7 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of scheduled events, specific tasks or truly actionable steps", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
     ```
     '''
           .replaceAll('     ', '')
@@ -176,7 +179,26 @@ Future<Structured> generateTitleAndSummaryForMemory(String transcript, List<Memo
   var structuredResponse = extractJson(await executeGptPrompt(prompt));
   List<String> responses = await allPluginResponses;
   var json = jsonDecode(structuredResponse);
-  return Structured.fromJson(json..['pluginsResponse'] = responses);
+  return MemoryStructured.fromJson(json..['pluginsResponse'] = responses);
+}
+
+Future<String> postMemoryCreationNotification(Memory memory) async {
+  if (memory.structured.target!.title.isEmpty) return '';
+  if (memory.structured.target!.actionItems.isEmpty) return '';
+
+  var prompt = '''
+  The following is the structuring from a transcript of a conversation that just finished.
+  First determine if there's crucial value to notify a busy entrepreneur about it.
+  If not, simply output an empty string, otherwise output a 10 words (at most) message to be notified.
+  Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
+  
+  ${memory.structured.target!.toJson()}
+  ''';
+  debugPrint(prompt);
+  var result = await executeGptPrompt(prompt);
+  debugPrint('postMemoryCreationNotification result: $result');
+  if (result.contains('N/A') || result.split(' ').length < 5) return '';
+  return result.replaceAll('```', '').trim();
 }
 
 Future<String> adviseOnCurrentConversation(String transcript) async {
@@ -212,18 +234,6 @@ Future<String> adviseOnCurrentConversation(String transcript) async {
   var result = await executeGptPrompt(prompt);
   if (result.contains('N/A') || result.split(' ').length < 5) return '';
   return result;
-}
-
-Future<String> requestSummary(List<MemoryRecord> memories) async {
-  var prompt = '''
-    Based on my recent memories below, summarize everything into 3-4 most important facts I need to remember. 
-    Write the final output only and make it very short and concise, less than 200 symbols total as bullet-points. 
-    Make it interesting with an insight, specific, professional and simple to read:
-    ``` 
-    ${MemoryRecord.memoriesToString(memories)}
-    ``` 
-    ''';
-  return await executeGptPrompt(prompt);
 }
 
 Future<List<double>> getEmbeddingsFromInput(String input) async {
@@ -277,36 +287,14 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
-Future<void> updateCreatedAtInPinecone(String memoryId, int timestamp) async {
-  // Construct the URL for the Pinecone API
-  var url = '${Env.pineconeIndexUrl}/vectors/update';
-
-  // Set up the headers for the request including the authentication token and content type
-  final headers = {
-    'Api-Key': Env.pineconeApiKey,
-    'Content-Type': 'application/json',
-  };
-
-  // Define the body of the request, including the ID and the new metadata for `created_at`
-  var body = jsonEncode({
-    'id': memoryId,
-    'setMetadata': {
-      'created_at': timestamp,
-    },
-    'namespace': Env.pineconeIndexNamespace,
-  });
-
-  // Make the HTTP POST request to update the record in Pinecone
-  var response = await http.post(
-    Uri.parse(url),
-    headers: headers,
-    body: body,
-  );
-
-  // Check the response, and if it's not successful, throw an error
-  if (response.statusCode != 200) {
-    throw Exception('Failed to update memory record in Pinecone: ${response.body}');
-  }
+Future<void> updatePineconeMemoryId(String memoryId, int newId) {
+  return pineconeApiCall(
+      urlSuffix: 'vectors/update',
+      body: jsonEncode({
+        'id': memoryId,
+        'setMetadata': {'memory_id': newId.toString()},
+        'namespace': Env.pineconeIndexNamespace,
+      }));
 }
 
 Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
@@ -357,12 +345,12 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
     'vector': vectorList,
     'topK': 5,
     'includeValues': false,
-    'includeMetadata': false,
+    'includeMetadata': true,
     'filter': filter,
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
   debugPrint(responseBody.toString());
-  return (responseBody['matches'])?.map<String>((e) => e['id'].toString()).toList() ?? [];
+  return (responseBody['matches'])?.map<String>((e) => e['metadata']['memory_id'].toString()).toList() ?? [];
 }
 
 Future<bool> deleteVector(String memoryId) async {
@@ -384,7 +372,8 @@ Future<List<Plugin>> retrievePlugins() async {
   if (response?.statusCode == 200) {
     try {
       return Plugin.fromJsonList(jsonDecode(response!.body));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      CrashReporting.reportHandledCrash(e, stackTrace);
       return [];
     }
   }
@@ -394,6 +383,7 @@ Future<List<Plugin>> retrievePlugins() async {
 // TODO: update vectors when fields updated
 
 Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+  final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(
@@ -402,9 +392,10 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
   try {
-    var streamedResponse = await request.send();
+    var startTime = DateTime.now();
+    var streamedResponse = await client.send(request);
     var response = await http.Response.fromStream(streamedResponse);
-
+    debugPrint('TranscribeAudioFile took: ${DateTime.now().difference(startTime).inSeconds} seconds');
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('Response body: ${response.body}');
@@ -412,9 +403,59 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e) {
+  } catch (e, stackTrace) {
+    CrashReporting.reportHandledCrash(e, stackTrace);
     throw Exception('An error occurred transcribeAudioFile: $e');
   }
+}
+
+Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
+  var startTime = DateTime.now();
+  Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
+    'model': 'nova-2-general',
+    'detect_language': false,
+    'language': SharedPreferencesUtil().recordingsLanguage,
+    'filler_words': false,
+    'punctuate': true,
+    'diarize': true,
+    'smart_format': true,
+    // 'detect_topics': true,
+    // 'topics': true,
+    // 'intents': true,
+    // 'sentiment': true,
+    // TODO: try more options, sentiment analysis, intent, topics
+  });
+
+  DeepgramSttResult res = await deepgram.transcribeFromFile(file);
+  debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  var data = jsonDecode(res.json);
+  // debugPrint('Response body: ${res.json}');
+  var result = data['results']['channels'][0]['alternatives'][0];
+  List<TranscriptSegment> segments = [];
+  for (var word in result['words']) {
+    if (segments.isEmpty) {
+      segments.add(TranscriptSegment(
+          speaker: 'SPEAKER_${word['speaker']}',
+          start: word['start'],
+          end: word['end'],
+          text: word['word'],
+          isUser: false));
+    } else {
+      var lastSegment = segments.last;
+      if (lastSegment.speakerId == word['speaker']) {
+        lastSegment.text += ' ${word['word']}';
+        lastSegment.end = word['end'];
+      } else {
+        segments.add(TranscriptSegment(
+            speaker: 'SPEAKER_${word['speaker']}',
+            start: word['start'],
+            end: word['end'],
+            text: word['word'],
+            isUser: false));
+      }
+    }
+  }
+  return segments;
 }
 
 Future<bool> userHasSpeakerProfile(String uid) async {
