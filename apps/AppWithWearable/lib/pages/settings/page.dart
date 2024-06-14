@@ -4,6 +4,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -18,12 +19,13 @@ class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
+  final TextEditingController deepgramAPIKeyController = TextEditingController();
+  final TextEditingController openAIKeyController = TextEditingController();
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
-  late bool useFriendAPIKeys;
   late bool optInAnalytics;
   late bool devModeEnabled;
-  late bool coachIsChecked;
+  late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
@@ -31,14 +33,15 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
+
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
 
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
-    useFriendAPIKeys = SharedPreferencesUtil().useFriendApiKeys;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    coachIsChecked = SharedPreferencesUtil().coachIsChecked;
+    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       print(packageInfo.toString());
@@ -147,12 +150,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   InkWell(
                     onTap: () {
                       setState(() {
-                        if (coachIsChecked) {
-                          coachIsChecked = false;
-                          SharedPreferencesUtil().coachIsChecked = false;
+                        if (postMemoryNotificationIsChecked) {
+                          postMemoryNotificationIsChecked = false;
                         } else {
-                          coachIsChecked = true;
-                          SharedPreferencesUtil().coachIsChecked = true;
+                          postMemoryNotificationIsChecked = true;
                         }
                       });
                     },
@@ -162,12 +163,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Conversation coach',
+                            'Post memory analysis',
                             style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
-                              color: coachIsChecked
+                              color: postMemoryNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
                                   : Colors.transparent, // Fill color when checked
                               border: Border.all(
@@ -178,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child: coachIsChecked // Show the icon only when checked
+                            child: postMemoryNotificationIsChecked // Show the icon only when checked
                                 ? const Icon(
                                     Icons.check,
                                     color: Colors.white, // Tick color
@@ -262,9 +263,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Opt In Analytics',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          Expanded(
+                            child: GestureDetector(
+                              child: const Text(
+                                'Help improve Friend by sharing anonymized analytics data',
+                                style: TextStyle(
+                                    color: Color.fromARGB(255, 150, 150, 150),
+                                    fontSize: 16,
+                                    decoration: TextDecoration.underline),
+                              ),
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                              },
+                            ),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -445,6 +456,28 @@ class _SettingsPageState extends State<SettingsPage> {
         width: double.infinity,
       ),
       const SizedBox(height: 40),
+      _getText('Set your own keys', underline: false),
+      const SizedBox(height: 16.0),
+      TextField(
+        controller: openAIKeyController,
+        obscureText: false,
+        autocorrect: false,
+        enabled: true,
+        enableSuggestions: false,
+        decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 24.0),
+      TextField(
+        controller: deepgramAPIKeyController,
+        obscureText: false,
+        autocorrect: false,
+        enabled: true,
+        enableSuggestions: false,
+        decoration: _getTextFieldDecoration('Deepgram API Key', hintText: ''),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 40),
       _getText('[Optional] Store your recordings in Google Cloud', underline: false),
       const SizedBox(height: 16.0),
       TextField(
@@ -470,22 +503,23 @@ class _SettingsPageState extends State<SettingsPage> {
     ];
   }
 
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
     return InputDecoration(
       labelText: label,
-      enabled: useFriendAPIKeys && canBeDisabled,
-      labelStyle: TextStyle(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+      enabled: true && canBeDisabled,
+      hintText: hintText,
+      labelStyle: TextStyle(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       border: const OutlineInputBorder(),
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       disabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       ),
       suffixIcon: suffixIcon,
     );
@@ -496,7 +530,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Text(
         text,
         style: TextStyle(
-          color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
+          color: true && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
           decoration: underline ? TextDecoration.underline : TextDecoration.none,
           fontSize: 16,
         ),
@@ -506,49 +540,26 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _saveSettings() {
-    if ((openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Error'),
-            content: const Text('Deepgram and OpenAI API keys are required'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-      return;
-    }
     saveSettings();
     Navigator.pop(context);
   }
 
   void saveSettings() async {
     final prefs = SharedPreferencesUtil();
-    prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
     prefs.optInAnalytics = optInAnalytics;
     prefs.devModeEnabled = devModeEnabled;
-    prefs.coachIsChecked = coachIsChecked;
+    prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
+    prefs.openAIApiKey = openaiApiKeyController.text.trim();
+    prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
       MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-    }
-
-    if (useFriendAPIKeys != prefs.useFriendApiKeys) {
-      prefs.useFriendApiKeys = useFriendAPIKeys;
     }
 
     if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {

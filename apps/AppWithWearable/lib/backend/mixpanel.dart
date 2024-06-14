@@ -1,6 +1,5 @@
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
@@ -133,6 +132,11 @@ class MixpanelManager {
 
   void chatMessageMemoryClicked(Memory memory) =>
       track('Chat Message Memory Clicked', properties: _getMemoryEventProperties(memory));
+
+  void addManualMemoryClicked() => track('Add Manual Memory Clicked');
+
+  void manualMemoryCreated(Memory memory) =>
+      track('Manual Memory Created', properties: _getMemoryEventProperties(memory));
 
 // TBI
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');

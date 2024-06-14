@@ -8,7 +8,6 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -71,47 +70,32 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Column(
-            children: [
-              Expanded(
-                  child: ListView.builder(
-                scrollDirection: Axis.vertical,
-                controller: listViewController,
-                itemCount: _messages.length,
-                itemBuilder: (context, chatIndex) {
-                  final message = _messages[chatIndex];
-                  if (message.type == 'ai') {
-                    var messageMemoriesId = Set<String>.from(message.memoryIds ?? []);
-                    return Padding(
-                      padding: EdgeInsets.only(
-                          bottom: chatIndex == _messages.length - 1
-                              ? widget.textFieldFocusNode.hasFocus
-                                  ? 120
-                                  : 160
-                              : 0),
-                      child: AIMessage(
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: ListView.builder(
+            scrollDirection: Axis.vertical,
+            controller: listViewController,
+            itemCount: _messages.length,
+            itemBuilder: (context, chatIndex) {
+              final message = _messages[chatIndex];
+              final isLastMessage = chatIndex == _messages.length - 1;
+              double topPadding = chatIndex == 0 ? 24 : 0;
+              double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 180) : 0;
+              return Padding(
+                key: ValueKey(message.id),
+                padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                child: message.type == 'ai'
+                    ? AIMessage(
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: _messages.length <= 1,
-                        memories: widget.memories.where((m) => messageMemoriesId.contains(m.id.toString())).toList(),
-                      ),
-                    );
-                  }
-                  return Padding(
-                    padding: EdgeInsets.only(
-                        bottom: chatIndex == _messages.length - 1
-                            ? widget.textFieldFocusNode.hasFocus
-                                ? 120
-                                : 160
-                            : 0),
-                    child: HumanMessage(message: message),
-                  );
-                },
-              )),
-              // const SizedBox(height: 160),
-            ],
+                        memories: widget.memories
+                            .where((m) => message.memoryIds?.contains(m.id.toString()) ?? false)
+                            .toList(),
+                      )
+                    : HumanMessage(message: message),
+              );
+            },
           ),
         ),
         Align(
@@ -121,7 +105,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
             child: Container(
               width: double.maxFinite,
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              margin: const EdgeInsets.fromLTRB(32, 0, 32, 0),
+              margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
               decoration: const BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -243,6 +227,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _moveListToBottom({bool initial = false}) async {
-    listViewController.jumpTo(listViewController.position.maxScrollExtent + (initial ? 240 : 0));
+    listViewController.jumpTo(listViewController.position.maxScrollExtent);
   }
 }
