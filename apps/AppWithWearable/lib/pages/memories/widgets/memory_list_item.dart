@@ -1,14 +1,12 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/temp.dart';
 
 class MemoryListItem extends StatefulWidget {
   final int memoryIdx;
-  final MemoryRecord memory;
+  final Memory memory;
   final Function loadMemories;
 
   const MemoryListItem({super.key, required this.memory, required this.loadMemories, required this.memoryIdx});
@@ -20,6 +18,7 @@ class MemoryListItem extends StatefulWidget {
 class _MemoryListItemState extends State<MemoryListItem> {
   @override
   Widget build(BuildContext context) {
+    Structured structured = widget.memory.structured.target!;
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
@@ -28,9 +27,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
                   memory: widget.memory,
                 )));
         widget.loadMemories();
+        // FocusScope.of(context).unfocus();
       },
       child: Container(
-        margin: const EdgeInsets.only(top: 12),
+        margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -47,7 +47,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
               widget.memory.discarded
                   ? const SizedBox.shrink()
                   : Text(
-                      widget.memory.structured.title,
+                      structured.title,
                       style: Theme.of(context).textTheme.titleLarge,
                       maxLines: 1,
                     ),
@@ -55,15 +55,13 @@ class _MemoryListItemState extends State<MemoryListItem> {
               widget.memory.discarded
                   ? const SizedBox.shrink()
                   : Text(
-                      widget.memory.structured.overview,
+                      structured.overview,
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                       maxLines: 2,
                     ),
               widget.memory.discarded
                   ? Text(
-                      widget.memory.transcript.length > 100
-                          ? '${utf8.decode(widget.memory.transcript.substring(0, 100).toString().codeUnits)}...'
-                          : utf8.decode(widget.memory.transcript.toString().codeUnits) ,
+                      widget.memory.getTranscript(maxCount: 100),
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                     )
                   : const SizedBox(height: 8),
@@ -80,38 +78,39 @@ class _MemoryListItemState extends State<MemoryListItem> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-              child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : Text(widget.memory.structured.getEmoji(),
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-              widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
-                  ? const SizedBox(
-                      width: 12,
-                    )
-                  : const SizedBox.shrink(),
-              widget.memory.structured.category.isNotEmpty
-                  ? Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(widget.memory.discarded ? 'Discarded' : widget.memory.structured.category,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    )
-                  : const SizedBox.shrink(),
-            ],
-          )),
+          widget.memory.discarded
+              ? const SizedBox.shrink()
+              : Text(widget.memory.structured.target!.getEmoji(),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+          widget.memory.structured.target!.category.isNotEmpty && !widget.memory.discarded
+              ? const SizedBox(
+                  width: 12,
+                )
+              : const SizedBox.shrink(),
+          widget.memory.structured.target!.category.isNotEmpty
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text(
+                    widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                  ),
+                )
+              : const SizedBox.shrink(),
           const SizedBox(
-            width: 8,
+            width: 16,
           ),
-          Text(
-            ' ~ ${dateTimeFormat('MMM d, h:mm a', widget.memory.createdAt)}',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          Expanded(
+            child: Text(
+              dateTimeFormat('MMM d, h:mm a', widget.memory.startedAt ?? widget.memory.createdAt),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              maxLines: 1,
+              textAlign: TextAlign.end,
+            ),
           )
         ],
       ),

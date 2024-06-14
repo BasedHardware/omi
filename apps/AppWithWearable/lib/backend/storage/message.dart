@@ -1,9 +1,15 @@
+// TODO: Migrate messages to object box
+// 1. Create a new class Message (include memories Id maybe as oneToMany relationship)
+// 2. Create messages provider
+// 3. Consume stuff from messages provider
+// 4. Make sure message creation includes memories properly in msg object
+
 class Message {
   String id;
   DateTime? createdAt;
   String text;
   String type;
-  List<String>? memoryIds;  // Optional list of strings.
+  List<String>? memoryIds; // Optional list of strings.
 
   Message({
     required this.text,

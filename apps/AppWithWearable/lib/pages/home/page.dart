@@ -6,10 +6,11 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -40,10 +41,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
-  List<MemoryRecord> memories = [];
-  bool displayDiscardMemories = false;
+  List<Memory> memories = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
+  FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
@@ -53,16 +54,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   BTDeviceStruct? _device;
 
   _initiateMemories() async {
-    memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
+    // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
+    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
     setState(() {});
     // FocusScope.of(context).unfocus();
     // chatTextFieldFocusNode.unfocus();
-  }
-
-  _toggleDiscardMemories() async {
-    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
-    setState(() => displayDiscardMemories = !displayDiscardMemories);
-    _initiateMemories();
   }
 
   _setupHasSpeakerProfile() async {
@@ -88,6 +84,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _migrationScripts() async {
     await migrateMemoriesCategoriesAndEmojis();
+    await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
 
@@ -176,6 +173,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         onTap: () {
           FocusScope.of(context).unfocus();
           chatTextFieldFocusNode.unfocus();
+          memoriesTextFieldFocusNode.unfocus();
         },
         child: Stack(
           children: [
@@ -185,11 +183,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   MemoriesPage(
-                    memories: memories,
-                    refreshMemories: _initiateMemories,
-                    displayDiscardMemories: displayDiscardMemories,
-                    toggleDiscardMemories: _toggleDiscardMemories,
-                  ),
+                      memories: memories,
+                      refreshMemories: _initiateMemories,
+                      textFieldFocusNode: memoriesTextFieldFocusNode),
                   CapturePage(
                     device: _device,
                     refreshMemories: _initiateMemories,
@@ -203,13 +199,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ],
               ),
             ),
-            if (chatTextFieldFocusNode.hasFocus)
+            if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
               const SizedBox.shrink()
             else
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Container(
-                  margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                   decoration: const BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.all(Radius.circular(16)),
