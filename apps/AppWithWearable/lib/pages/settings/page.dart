@@ -25,7 +25,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
   late bool devModeEnabled;
-  late bool coachIsChecked;
+  late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
@@ -41,7 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    coachIsChecked = SharedPreferencesUtil().coachIsChecked;
+    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       print(packageInfo.toString());
@@ -150,12 +150,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   InkWell(
                     onTap: () {
                       setState(() {
-                        if (coachIsChecked) {
-                          coachIsChecked = false;
-                          SharedPreferencesUtil().coachIsChecked = false;
+                        if (postMemoryNotificationIsChecked) {
+                          postMemoryNotificationIsChecked = false;
                         } else {
-                          coachIsChecked = true;
-                          SharedPreferencesUtil().coachIsChecked = true;
+                          postMemoryNotificationIsChecked = true;
                         }
                       });
                     },
@@ -165,12 +163,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Conversation coach',
+                            'Post memory analysis',
                             style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
-                              color: coachIsChecked
+                              color: postMemoryNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
                                   : Colors.transparent, // Fill color when checked
                               border: Border.all(
@@ -181,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child: coachIsChecked // Show the icon only when checked
+                            child: postMemoryNotificationIsChecked // Show the icon only when checked
                                 ? const Icon(
                                     Icons.check,
                                     color: Colors.white, // Tick color
@@ -552,7 +550,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
     prefs.optInAnalytics = optInAnalytics;
     prefs.devModeEnabled = devModeEnabled;
-    prefs.coachIsChecked = coachIsChecked;
+    prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
     prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
