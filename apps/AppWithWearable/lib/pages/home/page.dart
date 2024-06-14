@@ -41,9 +41,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
-  bool displayDiscardMemories = false;
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
+  FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
@@ -54,16 +54,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
-    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: displayDiscardMemories)).reversed.toList();
+    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
     setState(() {});
     // FocusScope.of(context).unfocus();
     // chatTextFieldFocusNode.unfocus();
-  }
-
-  _toggleDiscardMemories() async {
-    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
-    setState(() => displayDiscardMemories = !displayDiscardMemories);
-    _initiateMemories();
   }
 
   _setupHasSpeakerProfile() async {
@@ -178,6 +172,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         onTap: () {
           FocusScope.of(context).unfocus();
           chatTextFieldFocusNode.unfocus();
+          memoriesTextFieldFocusNode.unfocus();
         },
         child: Stack(
           children: [
@@ -187,11 +182,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   MemoriesPage(
-                    memories: memories,
-                    refreshMemories: _initiateMemories,
-                    displayDiscardMemories: displayDiscardMemories,
-                    toggleDiscardMemories: _toggleDiscardMemories,
-                  ),
+                      memories: memories,
+                      refreshMemories: _initiateMemories,
+                      textFieldFocusNode: memoriesTextFieldFocusNode),
                   CapturePage(
                     device: _device,
                     refreshMemories: _initiateMemories,
@@ -205,7 +198,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ],
               ),
             ),
-            if (chatTextFieldFocusNode.hasFocus)
+            if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
               const SizedBox.shrink()
             else
               Align(

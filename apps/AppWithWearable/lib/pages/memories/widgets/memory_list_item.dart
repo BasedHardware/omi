@@ -27,9 +27,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
                   memory: widget.memory,
                 )));
         widget.loadMemories();
+        // FocusScope.of(context).unfocus();
       },
       child: Container(
-        margin: const EdgeInsets.only(top: 12),
+        margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -80,25 +81,25 @@ class _MemoryListItemState extends State<MemoryListItem> {
           widget.memory.discarded
               ? const SizedBox.shrink()
               : Text(widget.memory.structured.target!.getEmoji(),
-              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
           widget.memory.structured.target!.category.isNotEmpty && !widget.memory.discarded
               ? const SizedBox(
-            width: 12,
-          )
+                  width: 12,
+                )
               : const SizedBox.shrink(),
           widget.memory.structured.target!.category.isNotEmpty
               ? Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
-              style: Theme.of(context).textTheme.bodyMedium,
-              maxLines: 1,
-            ),
-          )
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text(
+                    widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                  ),
+                )
               : const SizedBox.shrink(),
           const SizedBox(
             width: 16,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
@@ -7,62 +9,134 @@ import 'widgets/memory_list_item.dart';
 class MemoriesPage extends StatefulWidget {
   final List<Memory> memories;
   final Function refreshMemories;
-  final bool displayDiscardMemories;
-  final VoidCallback toggleDiscardMemories;
+  final FocusNode textFieldFocusNode;
 
-  const MemoriesPage(
-      {super.key,
-      required this.memories,
-      required this.refreshMemories,
-      required this.displayDiscardMemories,
-      required this.toggleDiscardMemories});
+  const MemoriesPage({
+    super.key,
+    required this.memories,
+    required this.refreshMemories,
+    required this.textFieldFocusNode,
+  });
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
 }
 
 class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+  TextEditingController textController = TextEditingController();
+  FocusNode textFieldFocusNode = FocusNode();
+  bool loading = false;
+  bool displayDiscardMemories = false;
+
+  changeLoadingState() {
+    setState(() {
+      loading = !loading;
+    });
+  }
+
+  _toggleDiscardMemories() async {
+    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
+    setState(() => displayDiscardMemories = !displayDiscardMemories);
+  }
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
+    var memories =
+        displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
+    memories = textController.text.isEmpty
+        ? memories
+        : memories
+            .where(
+              (memory) => (memory.transcript + memory.structured.target!.title + memory.structured.target!.overview)
+                  .toLowerCase()
+                  .contains(textController.text.toLowerCase()),
+            )
+            .toList();
+
     return CustomScrollView(
       slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18.0),
-            child: Text(
-              'Welcome back.',
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey, fontSize: 20),
+          child: Container(
+            width: double.maxFinite,
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+              border: GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 1,
+              ),
+              shape: BoxShape.rectangle,
+            ),
+            child: TextField(
+              enabled: true,
+              controller: textController,
+              onChanged: (s) {
+                setState(() {});
+              },
+              obscureText: false,
+              autofocus: false,
+              focusNode: widget.textFieldFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Search for memories...',
+                hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                suffixIcon: textController.text.isEmpty
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        icon: const Icon(
+                          Icons.cancel,
+                          color: Color(0xFFF7F4F4),
+                          size: 28.0,
+                        ),
+                        onPressed: () {
+                          textController.clear();
+                          setState(() {});
+                        },
+                      ),
+              ),
+              style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
             ),
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
         SliverToBoxAdapter(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                widget.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () {
-                  widget.toggleDiscardMemories();
-                },
-                icon: Icon(
-                  widget.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                  color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    _toggleDiscardMemories();
+                  },
+                  icon: Icon(
+                    displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        widget.memories.isEmpty
+        memories.isEmpty
             ? const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -76,11 +150,11 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   (context, index) {
                     return MemoryListItem(
                       memoryIdx: index,
-                      memory: widget.memories[index],
+                      memory: memories[index],
                       loadMemories: widget.refreshMemories,
                     );
                   },
-                  childCount: widget.memories.length,
+                  childCount: memories.length,
                 ),
               ),
         const SliverToBoxAdapter(
