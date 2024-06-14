@@ -545,7 +545,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
     prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
-
+ 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {

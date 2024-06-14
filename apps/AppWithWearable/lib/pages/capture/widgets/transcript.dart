@@ -44,6 +44,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   Timer? _conversationAdvisorTimer;
   bool memoryCreating = false;
 
+  DateTime? currentTranscriptStartedAt;
+  DateTime? currentTranscriptFinishedAt;
+
   @override
   void initState() {
     btDevice = widget.btDevice;
@@ -70,7 +73,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, null, retrievedFromCache: true);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true);
     SharedPreferencesUtil().transcriptSegments = [];
   }
 
@@ -162,24 +165,17 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     widget.setHasTranscripts(true);
     setState(() {});
     _initiateMemoryCreationTimer();
+    currentTranscriptStartedAt ??= DateTime.now();
+    currentTranscriptFinishedAt = DateTime.now();
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('transcript.dart resetState called');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-
-    if (!restartBytesProcessing && segments.isNotEmpty) {
-      _createMemory();
-    }
-
-    setState(() {
-      if (btDevice != null) this.btDevice = btDevice;
-    });
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
+    if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) initiateBytesProcessing();
-    // if (restartBytesProcessing && segments.isNotEmpty && (segments.length > 1 || segments[0].text.isNotEmpty)) {
-    //   _initiateMemoryCreationTimer();
-    // }
   }
 
   String _buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
@@ -222,14 +218,18 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _createMemory() async {
     setState(() => memoryCreating = true);
-    debugPrint('Creating memory from whispers');
     String transcript = _buildDiarizedTranscriptMessage(segments);
-    debugPrint('Transcript: \n$transcript');
+    debugPrint('_createMemory transcript: \n$transcript');
     File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-    String? fileName = await uploadFile(file);
-    await processTranscriptContent(context, transcript, fileName, file.path);
+    await uploadFile(file);
+    await processTranscriptContent(
+      context,
+      transcript,
+      file.path,
+      startedAt: currentTranscriptStartedAt,
+      finishedAt: currentTranscriptFinishedAt,
+    );
     await widget.refreshMemories();
-    // SharedPreferencesUtil().temporalAudioBytes = [];
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     setState(() => memoryCreating = false);

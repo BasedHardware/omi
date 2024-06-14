@@ -12,6 +12,12 @@ class Memory {
   @Property(type: PropertyType.date)
   DateTime createdAt;
 
+  @Property(type: PropertyType.date)
+  DateTime? startedAt;
+
+  @Property(type: PropertyType.date)
+  DateTime? finishedAt;
+
   String transcript;
   String? recordingFilePath;
   final structured = ToOne<Structured>();
@@ -22,7 +28,8 @@ class Memory {
   @Index()
   bool discarded;
 
-  Memory(this.createdAt, this.transcript, this.discarded, {this.id = 0, this.recordingFilePath});
+  Memory(this.createdAt, this.transcript, this.discarded,
+      {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
 
   static String memoriesToString(List<Memory> memories) => memories
       .map((e) => '''
