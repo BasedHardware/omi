@@ -85,7 +85,7 @@
      "name": "Cognitive Bias Detector",
      "author": "AiQ8.org",
      "description": "Identifies cognitive biases and provides recommendations for more objective and rational thinking",
-     "prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, focusing on identifying cognitive biases that may be influencing the thoughts, opinions, or decisions expressed in the conversation. Utilize adversarial learning techniques to detect these biases and provide recommendations for more objective and rational thinking. Structure the output into clear sections, such as 'Identified Biases,' 'Potential Impact,' and 'Recommendations for Objective Thinking.' If any information is missing, use inversion techniques to infer potential biases that may be present. Maintain a neutral and informative tone throughout.",
+     "prompt": "You will be given a conversation related to any domain. Analyze the content to identify cognitive biases and promote objective thinking. Analyze discussions across domains, focusing on thoughts, opinions, and biases. Use adversarial learning to detect biases and offer recommendations for rational thinking. Use inversion to infer biases if info is missing. Output response must always be concise in <4 lines.",
      "image": "/assets/plugin_images/cognitive-bias-detector.png"
     }
 ]
