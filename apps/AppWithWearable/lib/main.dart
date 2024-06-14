@@ -9,6 +9,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:upgrader/upgrader.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -20,6 +21,7 @@ void main() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   await ObjectBoxUtil.init();
+  // await Upgrader.clearSavedSettings();
   if (Env.instabugApiKey != null) {
     runZonedGuarded(
       () {
