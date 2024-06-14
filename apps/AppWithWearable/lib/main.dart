@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
@@ -16,13 +19,25 @@ void main() async {
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
+  await ObjectBoxUtil.init();
   if (Env.instabugApiKey != null) {
-    await Instabug.init(
-        token: Env.instabugApiKey!,
-        invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot]); //InvocationEvent.floatingButton
-    Instabug.setColorTheme(ColorTheme.dark);
+    runZonedGuarded(
+      () {
+        Instabug.init(
+          token: Env.instabugApiKey!,
+          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+        );
+        FlutterError.onError = (FlutterErrorDetails details) {
+          Zone.current.handleUncaughtError(details.exception, details.stack!);
+        };
+        Instabug.setColorTheme(ColorTheme.dark);
+        _getRunApp();
+      },
+      CrashReporting.reportCrash,
+    );
+  } else {
+    _getRunApp();
   }
-  _getRunApp();
 }
 
 _getRunApp() {
@@ -42,6 +57,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorObservers: [InstabugNavigatorObserver()],
       debugShowCheckedModeBanner: false,
       title: 'Friend',
       localizationsDelegates: const [

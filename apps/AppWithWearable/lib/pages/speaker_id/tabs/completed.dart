@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 
 class CompletionTab extends StatefulWidget {
@@ -14,6 +15,7 @@ class _CompletionTabState extends State<CompletionTab> {
   @override
   void initState() {
     SharedPreferencesUtil().hasSpeakerProfile = true;
+    MixpanelManager().speechProfileCompleted();
     super.initState();
   }
 
@@ -52,7 +54,7 @@ class _CompletionTabState extends State<CompletionTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Center(
             child: Text(
-              'You can always do it later and improve your speaker profile!',
+              'You can always do it later and improve it\'s accuracy!',
               style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.5),
               textAlign: TextAlign.center,
             ),

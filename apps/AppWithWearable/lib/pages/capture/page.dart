@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
+
 import 'widgets/transcript.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:intl/intl.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -30,128 +27,77 @@ class CapturePage extends StatefulWidget {
 }
 
 class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
-  bool _isLoading = true;
   bool _hasTranscripts = false;
 
   @override
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _checkMemorySchemaUpdated();
-  }
-
-  Future<void> _checkMemorySchemaUpdated() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isMemorySchemaUpdated = prefs.getBool('isMemorySchemaUpdated') ?? false;
-
-    if (!isMemorySchemaUpdated) {
-      debugPrint("Updating Memory Schema in Pinecone");
-      await updateCreatedAtToEpoch();
-      await prefs.setBool('isMemorySchemaUpdated', true);
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  Future<void> updateCreatedAtToEpoch() async {
-    List<MemoryRecord> memoryRecords = await MemoryStorage.getAllMemories();
-    DateFormat dateFormat = DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
-
-    for (MemoryRecord memoryRecord in memoryRecords) {
-      DateTime dateTime = dateFormat.parse(memoryRecord.createdAt.toString());
-      int timestamp = dateTime.millisecondsSinceEpoch ~/ 1000;
-      updateCreatedAtInPinecone(memoryRecord.id, timestamp);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return _isLoading
-        ? const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    return ListView(children: [
+      SharedPreferencesUtil().hasSpeakerProfile
+          ? const SizedBox(height: 16)
+          : Stack(
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text(
-                  'Updating Memory Schema, do not close',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                    MixpanelManager().speechProfileCapturePageClicked();
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: const BorderRadius.all(Radius.circular(12)),
+                    ),
+                    margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                    padding: const EdgeInsets.all(16),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(Icons.multitrack_audio),
+                              SizedBox(width: 16),
+                              Text(
+                                'Set up speech profile',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_ios)
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 24,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                   ),
                 ),
               ],
             ),
-          )
-        : ListView(children: [
-            SharedPreferencesUtil().hasSpeakerProfile
-                ? const SizedBox(height: 16)
-                : Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
-                            borderRadius: const BorderRadius.all(Radius.circular(12)),
-                          ),
-                          margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                          padding: const EdgeInsets.all(16),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.multitrack_audio),
-                                    SizedBox(width: 16),
-                                    Text(
-                                      'Set up speech profile',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(Icons.arrow_forward_ios)
-                            ],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 12,
-                        right: 24,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                        ),
-                      ),
-                    ],
-                  ),
-            ..._getConnectedDeviceWidgets(),
-            TranscriptWidget(
-                btDevice: widget.device,
-                key: widget.transcriptChildWidgetKey,
-                refreshMemories: widget.refreshMemories,
-                setHasTranscripts: (hasTranscripts) {
-                  if (_hasTranscripts == hasTranscripts) return;
-                  setState(() {
-                    _hasTranscripts = hasTranscripts;
-                  });
-                }),
-            const SizedBox(height: 16)
-          ]);
+      ..._getConnectedDeviceWidgets(),
+      TranscriptWidget(
+          btDevice: widget.device,
+          key: widget.transcriptChildWidgetKey,
+          refreshMemories: widget.refreshMemories,
+          setHasTranscripts: (hasTranscripts) {
+            if (_hasTranscripts == hasTranscripts) return;
+            setState(() {
+              _hasTranscripts = hasTranscripts;
+            });
+          }),
+      const SizedBox(height: 16)
+    ]);
   }
 
   _getConnectedDeviceWidgets() {
-    debugPrint(_hasTranscripts.toString());
     if (_hasTranscripts) return [];
     if (widget.device == null) {
       return [

@@ -38,7 +38,6 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:fonnx/models/sileroVad/silero_vad.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:path/path.dart' as path;
 
