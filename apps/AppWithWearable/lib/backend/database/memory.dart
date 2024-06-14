@@ -12,6 +12,12 @@ class Memory {
   @Property(type: PropertyType.date)
   DateTime createdAt;
 
+  @Property(type: PropertyType.date)
+  DateTime? startedAt;
+
+  @Property(type: PropertyType.date)
+  DateTime? finishedAt;
+
   String transcript;
   String? recordingFilePath;
   final structured = ToOne<Structured>();
@@ -22,7 +28,8 @@ class Memory {
   @Index()
   bool discarded;
 
-  Memory(this.createdAt, this.transcript, this.discarded, {this.id = 0, this.recordingFilePath});
+  Memory(this.createdAt, this.transcript, this.discarded,
+      {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
 
   static String memoriesToString(List<Memory> memories) => memories
       .map((e) => '''
@@ -69,7 +76,8 @@ class Structured {
 
   getEmoji() {
     try {
-      return utf8.decode(emoji.toString().codeUnits);
+      if (emoji.isNotEmpty) return utf8.decode(emoji.toString().codeUnits);
+      return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
     } catch (e) {
       return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
     }
@@ -86,6 +94,16 @@ class Structured {
       }
     }
     return str.trim();
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'overview': overview,
+      'emoji': emoji,
+      'category': category,
+      'actionItems': actionItems.map((item) => item.description).toList(),
+    };
   }
 }
 

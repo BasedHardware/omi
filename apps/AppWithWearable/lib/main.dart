@@ -23,28 +23,21 @@ void main() async {
   if (Env.instabugApiKey != null) {
     runZonedGuarded(
       () {
-        _initStuff();
         Instabug.init(
           token: Env.instabugApiKey!,
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
         );
+        FlutterError.onError = (FlutterErrorDetails details) {
+          Zone.current.handleUncaughtError(details.exception, details.stack!);
+        };
         Instabug.setColorTheme(ColorTheme.dark);
         _getRunApp();
       },
       CrashReporting.reportCrash,
     );
   } else {
-    _initStuff();
     _getRunApp();
   }
-}
-
-_initStuff() async {
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  await initializeNotifications();
-  await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
-  await ObjectBoxUtil.init();
 }
 
 _getRunApp() {

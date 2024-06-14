@@ -35,6 +35,10 @@ class SharedPreferencesUtil {
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
 
+  String get deepgramApiKey => getString('deepgramApiKey') ?? '';
+
+  set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -71,9 +75,13 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get coachIsChecked => getBool('coachIsChecked') ?? true;
+  bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
 
-  set coachIsChecked(bool value) => saveBool('coachIsChecked', value);
+  set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
+
+  bool get postMemoryNotificationIsChecked => getBool('postMemoryNotificationIsChecked') ?? true;
+
+  set postMemoryNotificationIsChecked(bool value) => saveBool('postMemoryNotificationIsChecked', value);
 
   bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
 
@@ -197,4 +205,7 @@ class SharedPreferencesUtil {
 }
 
 String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().useFriendApiKeys ? (Env.openAIAPIKey ?? '') : SharedPreferencesUtil().openAIApiKey;
+    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
+
+String getDeepgramApiKeyForUsage() =>
+    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
