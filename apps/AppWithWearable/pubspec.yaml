@@ -75,7 +75,6 @@ dependencies:
   objectbox_flutter_libs: any
   flutter_foreground_task: ^6.5.0
   deepgram_speech_to_text: ^2.1.1
-  firebase_messaging: ^15.0.1
 
 dependency_overrides:
   http: ^1.2.1
