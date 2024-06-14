@@ -5,6 +5,7 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
+import 'widgets/add_memory_widget.dart';
 
 class MemoriesPage extends StatefulWidget {
   final List<Memory> memories;
@@ -41,6 +42,15 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
 
   @override
   bool get wantKeepAlive => true;
+
+  void _onAddButtonPressed() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return const AddMemoryDialog();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +130,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
               children: [
                 Text(
                   displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 const SizedBox(width: 8),
