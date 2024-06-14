@@ -75,6 +75,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
     processTranscriptContent(context, transcript, null, retrievedFromCache: true);
     SharedPreferencesUtil().transcriptSegments = [];
+    // TODO: include created at and finished at for this cached transcript
   }
 
   Future<void> initiateBytesProcessing() async {
