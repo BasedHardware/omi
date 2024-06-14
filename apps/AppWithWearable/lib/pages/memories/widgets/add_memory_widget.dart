@@ -1,10 +1,14 @@
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:flutter/material.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/memories.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class AddMemoryDialog extends StatefulWidget {
-  const AddMemoryDialog({super.key});
+  final Function(Memory) onMemoryAdded;
+
+  const AddMemoryDialog({super.key, required this.onMemoryAdded});
 
   @override
   _AddMemoryDialogState createState() => _AddMemoryDialogState();
@@ -13,9 +17,7 @@ class AddMemoryDialog extends StatefulWidget {
 class _AddMemoryDialogState extends State<AddMemoryDialog> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final List<TextEditingController> _actionItemControllers = [
-    TextEditingController()
-  ];
+  final List<TextEditingController> _actionItemControllers = [];
 
   void _addActionItem() {
     setState(() {
@@ -32,18 +34,22 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
   void _onSaveButtonPressed() async {
     String title = _titleController.text;
     String description = _descriptionController.text;
-    List<String> actionItems =
-        _actionItemControllers.map((controller) => controller.text).toList();
-    MemoryRecord memory = await finalizeMemoryRecord(
+    List<String> actionItems = _actionItemControllers.map((controller) => controller.text).toList();
+    // TODO: create memory
+    Memory created = await finalizeMemoryRecord(
         '',
-        Structured(
-          title: title,
-          overview: description,
+        MemoryStructured(
           actionItems: actionItems,
           pluginsResponse: [],
+          title: title,
+          overview: description,
         ),
+        null,
+        null,
         null);
-    debugPrint('Memory created: ${memory.id}');
+    widget.onMemoryAdded(created);
+    MixpanelManager().manualMemoryCreated(created);
+    debugPrint('Memory created: ${created.id}');
     Navigator.of(context).pop();
   }
 
@@ -86,10 +92,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
               ),
               child: Text(
                 'Add Memory',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(color: Colors.white),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white),
               ),
             ),
             Flexible(
@@ -121,8 +124,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                           labelText: 'Title',
                           labelStyle: TextStyle(color: Colors.white70),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                     ),
@@ -148,20 +150,17 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: 'Overview',
+                          alignLabelWithHint: true,
                           labelStyle: TextStyle(color: Colors.white70),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Action Items',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(color: Colors.white),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 8),
                     ListView.builder(
@@ -177,8 +176,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                                 child: Container(
                                   decoration: const BoxDecoration(
                                     color: Colors.black,
-                                    borderRadius:
-                                        BorderRadius.all(Radius.circular(16)),
+                                    borderRadius: BorderRadius.all(Radius.circular(16)),
                                     border: GradientBoxBorder(
                                       gradient: LinearGradient(colors: [
                                         Color.fromARGB(127, 208, 208, 208),
@@ -195,12 +193,9 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
                                       hintText: 'Action item ${index + 1}',
-                                      hintStyle: const TextStyle(
-                                          color: Colors.white70),
+                                      hintStyle: const TextStyle(color: Colors.white70),
                                       border: InputBorder.none,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 16, vertical: 12),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     ),
                                   ),
                                 ),
@@ -208,8 +203,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                               if (index > 0)
                                 IconButton(
                                   onPressed: () => _removeActionItem(index),
-                                  icon: const Icon(Icons.remove_circle_outline,
-                                      color: Colors.pink),
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.pink),
                                 ),
                             ],
                           ),
@@ -225,8 +219,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
               child: TextButton.icon(
                 onPressed: _addActionItem,
                 icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text('Add Action Item',
-                    style: TextStyle(color: Colors.white)),
+                label: const Text('Add Action Item', style: TextStyle(color: Colors.white)),
               ),
             ),
             const Divider(color: Colors.white24),
@@ -237,8 +230,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel',
-                        style: TextStyle(color: Colors.white)),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white)),
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton(
@@ -246,8 +238,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
                       foregroundColor: const Color.fromARGB(255, 0, 0, 0),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: const Text('Add'),
                   ),
