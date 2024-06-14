@@ -195,7 +195,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     final pluginsList = SharedPreferencesUtil().pluginsList;
     final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
 
-    String personality = enabledPlugins.isNotEmpty ? enabledPlugins.first.prompt : "You are a helpful assistant";
+    // set personality to empty string if no plugins enabled
+    String personality = enabledPlugins.isNotEmpty ? enabledPlugins.first.prompt : "";
 
     await streamApiResponse(personality, ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
       _messages.last.memoryIds = memoryIds;

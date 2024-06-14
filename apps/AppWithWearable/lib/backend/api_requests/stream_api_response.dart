@@ -112,28 +112,30 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
 }
 
 String qaStreamedBody(String personality, String context, List<Message> chatHistory) {
+  var personalityPrompt = personality.isNotEmpty ? 'This is your personality, you should try to answer in this style: $personality\n' : '';
   var prompt = '''
-    This is your personality, you should try to answer in this style: $personality
-
+    $personalityPrompt
     You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
     If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
+    
+    Conversation History:
+    ${chatHistory.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}
 
     Context:
     ```
     $context
     ```
+    Answer:
     '''
       .replaceAll('    ', '');
-  var systemMessage = 'You are an assistant with a friendly and helpful personality. ' + context;
-  List<Map<String, String>> messages = [{"role": "system", "content": systemMessage}];
-  for (var message in chatHistory) {
-    messages.add({"role": message.type, "content": message.text});
-    }
+  debugPrint(prompt);
   var body = jsonEncode({
     "model": "gpt-4o",
-    "messages": messages,
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
     "stream": true,
-    });
+  });
   return body;
 }
