@@ -392,7 +392,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
 
 Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
   var startTime = DateTime.now();
-  Deepgram deepgram = Deepgram(Env.deepgramApiKey!, baseQueryParams: {
+  Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
     'model': 'nova-2-general',
     'detect_language': false,
     'language': SharedPreferencesUtil().recordingsLanguage,
@@ -481,12 +481,3 @@ Future<bool> uploadSample(File file, String uid) async {
     throw Exception('An error occurred uploadSample: $e');
   }
 }
-
-//curl \
-//   --request POST \
-//   --header 'Authorization: Token YOUR_DEEPGRAM_API_KEY' \
-//   --header 'Content-Type: application/json' \
-//   --data '{"url":"https://dpgr.am/spacewalk.wav"}' \
-//   --url 'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true'
-
-Future transcribeFromDeepgram(String url) async {}
