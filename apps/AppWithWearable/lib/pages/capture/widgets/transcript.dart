@@ -6,14 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
-import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 class TranscriptWidget extends StatefulWidget {
@@ -53,9 +50,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initiateBytesProcessing();
     });
-    if (SharedPreferencesUtil().coachIsChecked) {
-      _initiateConversationAdvisorTimer();
-    }
+    // if (SharedPreferencesUtil().coachIsChecked) {
+    //   _initiateConversationAdvisorTimer();
+    // }
     _processCachedTranscript();
     super.initState();
   }
@@ -192,25 +189,25 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     return transcript.trim();
   }
 
-  _initiateConversationAdvisorTimer() {
-    // TODO: improvements
-    // - This triggers every 10 minutes when the app opens, but would be great if it triggered, every 10 min of conversation
-    // - And if the conversation finishes at 6 min, and memory is created, it should grab that portion not advised from, and advise
-    // - Each advice should be stored, and ideally mapped to a memory
-    // - Advice should consider conversations in other languages
-    // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
-    _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
-      addEventToContext('Conversation Advisor Timer Triggered');
-      var transcript = _buildDiarizedTranscriptMessage(segments);
-      debugPrint('_initiateConversationAdvisorTimer: $transcript');
-      var advice = await adviseOnCurrentConversation(transcript);
-      if (advice.isNotEmpty) {
-        MixpanelManager().coachAdvisorFeedback(transcript, advice);
-        clearNotification(3);
-        createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
-      }
-    });
-  }
+  // _initiateConversationAdvisorTimer() {
+  //   // TODO: improvements
+  //   // - This triggers every 10 minutes when the app opens, but would be great if it triggered, every 10 min of conversation
+  //   // - And if the conversation finishes at 6 min, and memory is created, it should grab that portion not advised from, and advise
+  //   // - Each advice should be stored, and ideally mapped to a memory
+  //   // - Advice should consider conversations in other languages
+  //   // - Advice should have a tone, like a conversation purpose, chill with friends, networking, family, etc...
+  //   _conversationAdvisorTimer = Timer.periodic(const Duration(seconds: 60 * 10), (timer) async {
+  //     addEventToContext('Conversation Advisor Timer Triggered');
+  //     var transcript = _buildDiarizedTranscriptMessage(segments);
+  //     debugPrint('_initiateConversationAdvisorTimer: $transcript');
+  //     var advice = await adviseOnCurrentConversation(transcript);
+  //     if (advice.isNotEmpty) {
+  //       MixpanelManager().coachAdvisorFeedback(transcript, advice);
+  //       clearNotification(3);
+  //       createNotification(notificationId: 3, title: 'Your Conversation Coach Says', body: advice);
+  //     }
+  //   });
+  // }
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
