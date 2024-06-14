@@ -3,9 +3,9 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
+import 'widgets/add_memory_widget.dart';
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
-import 'widgets/add_memory_widget.dart';
 
 class MemoriesPage extends StatefulWidget {
   final List<Memory> memories;
@@ -44,10 +44,16 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   bool get wantKeepAlive => true;
 
   void _onAddButtonPressed() {
+    MixpanelManager().addManualMemoryClicked();
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return const AddMemoryDialog();
+        return AddMemoryDialog(
+          onMemoryAdded: (Memory memory) {
+            widget.memories.insert(0, memory);
+            setState(() {});
+          },
+        );
       },
     );
   }
@@ -125,24 +131,35 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                ),
-                const SizedBox(width: 8),
                 IconButton(
-                  onPressed: () {
-                    _toggleDiscardMemories();
-                  },
-                  icon: Icon(
-                    displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                    color: Colors.white,
-                  ),
-                ),
+                    onPressed: _onAddButtonPressed,
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                      size: 24,
+                      color: Colors.white,
+                    )),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        _toggleDiscardMemories();
+                      },
+                      icon: Icon(
+                        displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                )
               ],
             ),
           ),
