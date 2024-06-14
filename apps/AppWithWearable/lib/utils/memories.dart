@@ -49,7 +49,7 @@ Future<Memory?> memoryCreationBlock(
   debugPrint('Structured Memory: $structuredMemory');
 
   if (structuredMemory.title.isEmpty) {
-    await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
+    var created = await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -60,6 +60,7 @@ Future<Memory?> memoryCreationBlock(
         duration: Duration(seconds: 4),
       ));
     }
+    return created;
   } else {
     Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
     debugPrint('Memory created: ${memory.id}');

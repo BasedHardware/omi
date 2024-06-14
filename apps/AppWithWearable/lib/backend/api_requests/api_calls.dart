@@ -182,6 +182,25 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
   return MemoryStructured.fromJson(json..['pluginsResponse'] = responses);
 }
 
+Future<String> postMemoryCreationNotification(Memory memory) async {
+  if (memory.structured.target!.title.isEmpty) return '';
+  if (memory.structured.target!.actionItems.isEmpty) return '';
+
+  var prompt = '''
+  The following is the structuring from a transcript of a conversation that just finished.
+  First determine if there's crucial value to notify a busy entrepreneur about it.
+  If not, simply output an empty string, otherwise output a 10 words (at most) message to be notified.
+  Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
+  
+  ${memory.structured.target!.toJson()}
+  ''';
+  debugPrint(prompt);
+  var result = await executeGptPrompt(prompt);
+  debugPrint('postMemoryCreationNotification result: $result');
+  if (result.contains('N/A') || result.split(' ').length < 5) return '';
+  return result.replaceAll('```', '').trim();
+}
+
 Future<String> adviseOnCurrentConversation(String transcript) async {
   if (transcript.isEmpty) return '';
   if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it
