@@ -181,7 +181,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     );
   }
 
-  // FIXME: only supports 1 active plugin. When multiple are active uses the first one
   _sendMessageUtil(String message) async {
     changeLoadingState();
     _prepareStreaming(message);
@@ -196,7 +195,11 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
 
     // set personality to empty string if no plugins enabled
-    String personality = enabledPlugins.isNotEmpty ? enabledPlugins.first.prompt : "";
+    dynamic personality = enabledPlugins.isNotEmpty 
+        ? (enabledPlugins.length > 1 
+            ? enabledPlugins.map((e) => e.prompt).toList() 
+            : enabledPlugins.first.prompt) 
+        : "";
 
     await streamApiResponse(personality, ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
       _messages.last.memoryIds = memoryIds;

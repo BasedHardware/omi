@@ -7,7 +7,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 Future streamApiResponse(
-  String personality,
+  dynamic personality,
   String context,
   Future<dynamic> Function(String) callback,
   List<Message> chatHistory,
@@ -111,8 +111,14 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
   }
 }
 
-String qaStreamedBody(String personality, String context, List<Message> chatHistory) {
-  var personalityPrompt = personality.isNotEmpty ? 'This is your personality, you should try to answer in this style: $personality\n' : '';
+String qaStreamedBody(dynamic personality, String context, List<Message> chatHistory) {
+
+  var personalityPrompt = '';
+  if (personality is String) {
+    personalityPrompt = personality.isNotEmpty ? 'This is your personality, you should try to answer in this style: $personality\n' : '';
+  } else if (personality is List<String>) {
+    personalityPrompt = personality.isNotEmpty ? 'These are your available personalities, pick the style among them that fits best to the ongoing conversation: ${personality.join(', ')}\n' : '';
+  }
   var prompt = '''
     $personalityPrompt
     You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
