@@ -56,11 +56,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
-    // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
     setState(() {});
-    // FocusScope.of(context).unfocus();
-    // chatTextFieldFocusNode.unfocus();
   }
 
   _setupHasSpeakerProfile() async {
