@@ -26,6 +26,7 @@ import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -52,6 +53,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   int batteryLevel = -1;
   BTDeviceStruct? _device;
+
+  final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
     // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
@@ -96,6 +99,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
+    Upgrader.clearSavedSettings();
 
     _initiateMemories();
     _initiatePlugins();
@@ -167,192 +171,196 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return WithForegroundTask(
-        child: Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      body: GestureDetector(
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          chatTextFieldFocusNode.unfocus();
-          memoriesTextFieldFocusNode.unfocus();
-        },
-        child: Stack(
-          children: [
-            Center(
-              child: TabBarView(
-                controller: _controller,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  MemoriesPage(
-                      memories: memories,
-                      refreshMemories: _initiateMemories,
-                      textFieldFocusNode: memoriesTextFieldFocusNode),
-                  CapturePage(
-                    device: _device,
-                    refreshMemories: _initiateMemories,
-                    transcriptChildWidgetKey: transcriptChildWidgetKey,
-                    // batteryLevel: batteryLevel,
-                  ),
-                  ChatPage(
-                    textFieldFocusNode: chatTextFieldFocusNode,
-                    memories: memories,
-                  ),
-                ],
-              ),
-            ),
-            if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
-              const SizedBox.shrink()
-            else
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.all(Radius.circular(16)),
-                    border: GradientBoxBorder(
-                      gradient: LinearGradient(colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236)
-                      ]),
-                      width: 2,
-                    ),
-                    shape: BoxShape.rectangle,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: MaterialButton(
-                          onPressed: () => _tabChange(0),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 20, bottom: 20),
-                            child: Text('Memories',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: MaterialButton(
-                          onPressed: () => _tabChange(1),
-                          child: Padding(
-                            padding: const EdgeInsets.only(
-                              top: 20,
-                              bottom: 20,
-                            ),
-                            child: Text('Capture',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: MaterialButton(
-                          onPressed: () => _tabChange(2),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 20, bottom: 20),
-                            child: Text('Chat',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-          ],
-        ),
-      ),
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
+        child: UpgradeAlert(
+      upgrader: _upgrader,
+      cupertinoButtonTextStyle: const TextStyle(color: Colors.white),
+      child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.grey,
-                  width: 1,
+        body: GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            chatTextFieldFocusNode.unfocus();
+            memoriesTextFieldFocusNode.unfocus();
+          },
+          child: Stack(
+            children: [
+              Center(
+                child: TabBarView(
+                  controller: _controller,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    MemoriesPage(
+                        memories: memories,
+                        refreshMemories: _initiateMemories,
+                        textFieldFocusNode: memoriesTextFieldFocusNode),
+                    CapturePage(
+                      device: _device,
+                      refreshMemories: _initiateMemories,
+                      transcriptChildWidgetKey: transcriptChildWidgetKey,
+                      // batteryLevel: batteryLevel,
+                    ),
+                    ChatPage(
+                      textFieldFocusNode: chatTextFieldFocusNode,
+                      memories: memories,
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: batteryLevel > 75
-                          ? const Color.fromARGB(255, 0, 255, 8)
-                          : batteryLevel > 20
-                              ? Colors.yellow.shade700
-                              : Colors.red,
-                      shape: BoxShape.circle,
+              if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
+                const SizedBox.shrink()
+              else
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    decoration: const BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      border: GradientBoxBorder(
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
+                        width: 2,
+                      ),
+                      shape: BoxShape.rectangle,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: MaterialButton(
+                            onPressed: () => _tabChange(0),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 20, bottom: 20),
+                              child: Text('Memories',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: MaterialButton(
+                            onPressed: () => _tabChange(1),
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                top: 20,
+                                bottom: 20,
+                              ),
+                              child: Text('Capture',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: MaterialButton(
+                            onPressed: () => _tabChange(2),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 20, bottom: 20),
+                              child: Text('Chat',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8.0),
-                  Text(
-                    '${batteryLevel.toString()}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
-            IconButton(
-              // TODO: Show the button only if a device is connected
-              // and there's a new firmware available
-              icon: const Icon(
-                Icons.download,
-                color: Colors.white,
-                size: 30,
-              ),
-              onPressed: () async {
-                if (_device != null) {
-                  MixpanelManager().firmwareUpdateButtonClick();
-                  await startDfu(_device!, '');
-                }
-              },
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.settings,
-                color: Colors.white,
-                size: 30,
-              ),
-              onPressed: () async {
-                MixpanelManager().settingsOpened();
-                var language = SharedPreferencesUtil().recordingsLanguage;
-                var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-                if (language != SharedPreferencesUtil().recordingsLanguage ||
-                    useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                  transcriptChildWidgetKey.currentState?.resetState();
-                }
-              },
-            )
-          ],
+                )
+            ],
+          ),
         ),
-        elevation: 0,
-        centerTitle: true,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.grey,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: batteryLevel > 75
+                            ? const Color.fromARGB(255, 0, 255, 8)
+                            : batteryLevel > 20
+                                ? Colors.yellow.shade700
+                                : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      '${batteryLevel.toString()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+              IconButton(
+                // TODO: Show the button only if a device is connected
+                // and there's a new firmware available
+                icon: const Icon(
+                  Icons.download,
+                  color: Colors.white,
+                  size: 30,
+                ),
+                onPressed: () async {
+                  if (_device != null) {
+                    MixpanelManager().firmwareUpdateButtonClick();
+                    await startDfu(_device!, '');
+                  }
+                },
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.settings,
+                  color: Colors.white,
+                  size: 30,
+                ),
+                onPressed: () async {
+                  MixpanelManager().settingsOpened();
+                  var language = SharedPreferencesUtil().recordingsLanguage;
+                  var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                  if (language != SharedPreferencesUtil().recordingsLanguage ||
+                      useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
+                    transcriptChildWidgetKey.currentState?.resetState();
+                  }
+                },
+              )
+            ],
+          ),
+          elevation: 0,
+          centerTitle: true,
+        ),
       ),
     ));
   }
