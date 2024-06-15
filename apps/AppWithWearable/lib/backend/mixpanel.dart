@@ -138,6 +138,11 @@ class MixpanelManager {
   void manualMemoryCreated(Memory memory) =>
       track('Manual Memory Created', properties: _getMemoryEventProperties(memory));
 
+  void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
+    _mixpanel?.getPeople().setOnce('What the user does', whatDoYouDo);
+    _mixpanel?.getPeople().setOnce('Using Friend At', whereDoYouPlanToUseYourFriend);
+    _mixpanel?.getPeople().setOnce('Age Range', ageRange);
+  }
 // TBI
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
