@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -7,6 +10,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -29,6 +33,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
+
+  bool loadingExportMemories = false;
 
   @override
   void initState() {
@@ -498,6 +504,38 @@ class _SettingsPageState extends State<SettingsPage> {
         enableSuggestions: false,
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 16),
+      TextButton(
+        child: Row(
+          children: [
+            const Text(
+              'Export Memories',
+              style: TextStyle(color: Colors.white, decoration: TextDecoration.underline, fontSize: 16),
+            ),
+            const SizedBox(width: 16),
+            loadingExportMemories
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ],
+        ),
+        onPressed: () async {
+          if (loadingExportMemories) return;
+          setState(() => loadingExportMemories = true);
+          File file = await MemoryProvider().exportMemoriesToFile();
+          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+          if (result.status == ShareResultStatus.success) {
+            print('Thank you for sharing the picture!');
+          }
+          setState(() => loadingExportMemories = false);
+        },
       ),
       const SizedBox(height: 64),
     ];
