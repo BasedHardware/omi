@@ -39,6 +39,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
 
 Future<List<BTDeviceStruct?>> scanDevices() async {
   List<BTDeviceStruct> foundDevices = await bleFindDevices();
-  var filteredDevices = foundDevices.where((device) => device.name == "Friend").toList();
+  // var filteredDevices = foundDevices.where((device) => device.name == "Friend").toList();
+  var filteredDevices = foundDevices.toList();
   return filteredDevices;
 }
