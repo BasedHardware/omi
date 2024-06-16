@@ -31,8 +31,8 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
     super.dispose();
   }
 
-  void _launchUrl(String _url) async {
-    if (!await launch(_url)) throw 'Could not launch $_url';
+  void _launchUrl(String url) async {
+    if (!await launch(url)) throw 'Could not launch $url';
   }
 
   @override
@@ -51,7 +51,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
         child: Stack(
           children: [
             Padding(
-              padding: EdgeInsets.only(
+              padding: const EdgeInsets.only(
                 bottom: 100,
               ),
               child: Center(
