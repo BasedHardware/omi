@@ -18,11 +18,15 @@ import 'package:uuid/uuid.dart';
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
   final List<Memory> memories;
+  final Function(List<Message>) setMessages;
+  final List<Message> messages;
 
   const ChatPage({
     super.key,
     required this.textFieldFocusNode,
     required this.memories,
+    required this.messages,
+    required this.setMessages,
   });
 
   @override
@@ -33,7 +37,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   TextEditingController textController = TextEditingController();
   ScrollController listViewController = ScrollController();
 
-  List<Message> _messages = [];
   var prefs = SharedPreferencesUtil();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -51,11 +54,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   @override
   void initState() {
     super.initState();
-    var msg = prefs.chatMessages;
-    _messages =
-        msg.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : prefs.chatMessages;
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _moveListToBottom(initial: true);
+      _moveListToBottom();
     });
   }
 
@@ -75,10 +75,10 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
           child: ListView.builder(
             scrollDirection: Axis.vertical,
             controller: listViewController,
-            itemCount: _messages.length,
+            itemCount: widget.messages.length,
             itemBuilder: (context, chatIndex) {
-              final message = _messages[chatIndex];
-              final isLastMessage = chatIndex == _messages.length - 1;
+              final message = widget.messages[chatIndex];
+              final isLastMessage = chatIndex == widget.messages.length - 1;
               double topPadding = chatIndex == 0 ? 24 : 0;
               double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 180) : 0;
               return Padding(
@@ -88,7 +88,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                     ? AIMessage(
                         message: message,
                         sendMessage: _sendMessageUtil,
-                        displayOptions: _messages.length <= 1,
+                        displayOptions: widget.messages.length <= 1,
                         memories: widget.memories
                             .where((m) => message.memoryIds?.contains(m.id.toString()) ?? false)
                             .toList(),
@@ -174,17 +174,17 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     List<String> memoryIds = ragInfo[1].cast<String>();
     debugPrint('RAG Context: $ragContext');
     MixpanelManager().chatMessageSent(message);
-    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
-      _messages.last.memoryIds = memoryIds;
-      prefs.chatMessages = _messages;
+    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
+      widget.messages.last.memoryIds = memoryIds;
+      prefs.chatMessages = widget.messages;
     });
     changeLoadingState();
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(_messages));
+    String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(widget.messages));
     debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
-    if (betterContextQuestion == null) {
+    if (betterContextQuestion == null || betterContextQuestion.isEmpty) {
       return ['', []];
     }
     List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
@@ -200,33 +200,31 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _prepareStreaming(String text) {
-    var messagesCopy = [..._messages];
+    var messagesCopy = [...widget.messages];
     messagesCopy.add(Message(text: text, type: 'human', id: const Uuid().v4()));
     setState(() {
-      // update locally
-      _messages = messagesCopy;
+      widget.setMessages(messagesCopy);
       textController.clear();
     });
     prefs.chatMessages = messagesCopy;
-    _moveListToBottom();
     // include initial empty message for streaming to save in
-    _messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
+    widget.messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
+    _moveListToBottom(extra: 0);
   }
 
   _callbackFunctionChatStreaming(List<String> memoryIds) {
     return (String content) async {
       debugPrint('Content: $content');
-      var messagesCopy = [..._messages];
+      var messagesCopy = [...widget.messages];
       messagesCopy.last.text += content;
       debugPrint(messagesCopy.last.text);
-      setState(() {
-        _messages = messagesCopy;
-      });
+      widget.setMessages(messagesCopy);
+      setState(() {});
       _moveListToBottom();
     };
   }
 
-  _moveListToBottom({bool initial = false}) async {
-    listViewController.jumpTo(listViewController.position.maxScrollExtent);
+  _moveListToBottom({double extra = 0}) async {
+    listViewController.jumpTo(listViewController.position.maxScrollExtent + extra);
   }
 }
