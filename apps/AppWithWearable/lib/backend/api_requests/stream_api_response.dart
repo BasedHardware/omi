@@ -117,7 +117,10 @@ String qaStreamedBody(dynamic personality, String context, List<Message> chatHis
   if (personality is String) {
     personalityPrompt = personality.isNotEmpty ? 'This is your personality, you should try to answer in this style: $personality\n' : '';
   } else if (personality is List<String>) {
-    personalityPrompt = personality.isNotEmpty ? 'These are your available personalities, pick the style among them that fits best to the ongoing conversation: ${personality.join(', ')}\n' : '';
+    if (personality.isNotEmpty) {
+      personalityPrompt = 'These are your available personalities, pick the style among them that fits best to the ongoing conversation:\n';
+      personalityPrompt += personality.map((p) => '- $p').join('\n') + '\n';
+    }
   }
   var prompt = '''
     $personalityPrompt
