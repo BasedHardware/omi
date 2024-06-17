@@ -9,21 +9,25 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:uuid/uuid.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
   final Function(bool) setHasTranscripts;
+  final Function(Message) addMessage;
 
   const TranscriptWidget({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
     required this.setHasTranscripts,
+    required this.addMessage,
   });
 
   final BTDeviceStruct? btDevice;
@@ -34,7 +38,23 @@ class TranscriptWidget extends StatefulWidget {
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
   BTDeviceStruct? btDevice;
-  List<TranscriptSegment> segments = [];
+  List<TranscriptSegment> segments = [
+    TranscriptSegment(text: '''
+  Speaker 0: have a minute i'm thinking of building the backup feature so people don't lose their memory for like any time mhmm is it export or the problem is that export is not for non deaf or for non techy people like it is for like what like we need to make sure people come back to make sure people come back to the app and not to their text why you just called them yes but like i was thinking we have they have a password and they encrypt that but they just put a password yeah i understand we encrypt that and say that some some way now they are encrypted so it's just a random string that we cannot access and then whenever they want to get back to it they just put their id and password the problem is that open source community will not like it do you work for so you work for everyone by default yes by default mhmm what i think it should be is i think it should be a seasonal model is saving all day by default yes yes the problem that that is that made more right i mean let's say we are not like are we charging yet no okay yeah so let's now the second part i we can then opt in for battle can you start that way right yeah we wouldn't have to worry ever about losing memory thread yeah it should be worse it should be worse yeah because people for example yes people are losing the memories we have to make sure that migrations to for example adding new fields to the memory object like work well okay yeah i think i'll open for backup i will leave it by default will leave it by default well well now everyone has to open and i know they they have to set their their own password to encrypt the file yeah being with that is when they want to import memory because i think like yes you have the backup but maybe you don't have them in the app like and you have like right so you have to be able to inform them in some way but like go ahead yeah it doesn't back it say you're in yeah or should so i think realistically unfortunately we're always kept to be worried about people losing something mhmm which is why to determine some super simple structure this will be over the same network which will remove for us the kentucky and the like losing the you can just correct me if i'm wrong but i understand the biggest like issue is that let's say people will let's say people will lose like extra items for example like names both memories and stuff correct or no mhmm not every but like some pieces people will change something and so on 
+
+Speaker 1: yeah they could change something or maybe there there was an update that they had to install the app for example because sometimes apple asked you to install install the app mhmm they do that thing mhmm 
+
+Speaker 0: i think you can't uninstall app but also keep the data sorry i didn't know yes we have to rely on like yeah i think yeah we should do the compass yeah i think that's for the whole one but unfortunately it will be proprietary for the app local so 
+
+Speaker 1: and for the important thing do you agree that they gave us important because if it's just export we can just create an export button and they get the the strings and put it yeah 
+
+Speaker 0: it shouldn't be like export probably 1st it should be more like you know like if you log the data yeah the staging is covered you know and don't log it in cloud which is pretty much i guess what you call i think yes but not like manual aircraft export no no no no even though it might be good that's why i don't need good because that's for developers and that's what people no no it's it's shocking and very simple oh and it's person really wants like i kind of think yeah bro i think we should do that experts yes comcast for given to their super consumer app how many users do they have like that's 200 yeah and what it's different like i'm pressured like out of like a 1000 that bother the device 
+
+Speaker 1: yeah yeah yeah of course but at least like i'm just saying that like situations of hey guys i just need to be cast and i got lost my everything i hate phone i want your mother to die mhmm i think 
+
+Speaker 0: yeah but they yeah they can export it that's fine but then the real user like the real consumers what will they do with that data i think there'll be there'll be there'll be you know slightly do you think that's better than having the backup i think backup is definitely much better much better but i think backup is much more complex mhmm our path is like like a power more correct if i'm wrong yeah that's fine that's fine i think yeah for example for situations like now where we need people to you know speech which is just like automatic and all of that stuff i think it would be and then but the post call yeah i think yes okay okay you you by any chance don't have anyone greatshow less ↑
+  ''', speaker: 'speaker_00', isUser: false, start: 10, end: 13)
+  ];
 
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
@@ -213,7 +233,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+    _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
   }
 
   _createMemory() async {
@@ -232,8 +252,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint(memory.toString());
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
+        r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
+        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
+        widget.addMessage(Message(text: r, type: 'ai', id: const Uuid().v4(), memoryIds: [memory.id.toString()]));
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',

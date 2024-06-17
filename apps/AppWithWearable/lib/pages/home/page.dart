@@ -11,6 +11,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -42,6 +43,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
+  List<Message> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -57,6 +59,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
+    setState(() {});
+  }
+
+  _loadMessages() async {
+    var msgs = SharedPreferencesUtil().chatMessages;
+    messages = msgs.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : msgs;
     setState(() {});
   }
 
@@ -98,6 +106,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     Upgrader.clearSavedSettings();
 
     _initiateMemories();
+    _loadMessages();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
@@ -186,18 +195,26 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     MemoriesPage(
-                        memories: memories,
-                        refreshMemories: _initiateMemories,
-                        textFieldFocusNode: memoriesTextFieldFocusNode),
+                      memories: memories,
+                      refreshMemories: _initiateMemories,
+                      textFieldFocusNode: memoriesTextFieldFocusNode,
+                    ),
                     CapturePage(
                       device: _device,
                       refreshMemories: _initiateMemories,
                       transcriptChildWidgetKey: transcriptChildWidgetKey,
+                      addMessage: (msg) {
+                        messages.add(msg);
+                        SharedPreferencesUtil().chatMessages = messages;
+                        setState(() {});
+                      },
                       // batteryLevel: batteryLevel,
                     ),
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
                       memories: memories,
+                      messages: messages,
+                      setMessages: (msgs) => messages = msgs,
                     ),
                   ],
                 ),
