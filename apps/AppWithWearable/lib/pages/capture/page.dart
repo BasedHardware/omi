@@ -38,7 +38,8 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
   @override
   Widget build(BuildContext context) {
     return ListView(children: [
-      SharedPreferencesUtil().hasSpeakerProfile
+      // SharedPreferencesUtil().hasSpeakerProfile
+      true
           ? const SizedBox(height: 16)
           : Stack(
               children: [

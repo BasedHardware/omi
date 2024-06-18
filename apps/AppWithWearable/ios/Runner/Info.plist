@@ -81,5 +81,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+    	<string>daily-summary</string>
+    	<string>com.friend-app-with-wearable.ios12.daily-summary</string>
+    </array>
 </dict>
 </plist>
