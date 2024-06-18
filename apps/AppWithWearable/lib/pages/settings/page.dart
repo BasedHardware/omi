@@ -20,7 +20,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
   final TextEditingController deepgramAPIKeyController = TextEditingController();
@@ -38,7 +37,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void initState() {
-    openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
     deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
 
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
@@ -590,7 +589,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.devModeEnabled = devModeEnabled;
     prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
-    prefs.openAIApiKey = openaiApiKeyController.text.trim();
+    prefs.openAIApiKey = openAIKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
