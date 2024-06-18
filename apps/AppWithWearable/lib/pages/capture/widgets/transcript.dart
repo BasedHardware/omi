@@ -60,6 +60,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     //   _initiateConversationAdvisorTimer();
     // }
     _processCachedTranscript();
+    // processTranscriptContent(context, '''a''', null);
     super.initState();
   }
 
