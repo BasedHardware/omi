@@ -49,7 +49,6 @@ class _SettingsPageState extends State<SettingsPage> {
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
-      print(packageInfo.toString());
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
