@@ -29,11 +29,15 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:workmanager/workmanager.dart';
 
-@pragma('vm:entry-point') // Mandatory if the App is obfuscated or using Flutter 3.1+
+@pragma('vm:entry-point')
 void callbackDispatcher() {
-  print('Native called background task: ');
-  Workmanager().executeTask((task, inputData) {
-    print("Native called background task: $task"); //simpleTask will be emitted here.
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint("Native called background task: $task");
+    // createNotification(
+    //   title: 'Here is your action plan for tomorrow',
+    //   body: 'Check out your daily summary to see what you should do tomorrow.',
+    //   notificationId: 5,
+    // );
     return Future.value(true);
   });
 }
@@ -115,8 +119,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     Workmanager().registerPeriodicTask(
       "com.friend-app-with-wearable.ios12.daily-summary",
       "com.friend-app-with-wearable.ios12.daily-summary",
-      // frequency: const Duration(seconds: 15), // not considered for iOS
-      initialDelay: const Duration(seconds: 10),
+      frequency: const Duration(seconds: 60), // not considered for iOS
+      initialDelay: const Duration(seconds: 0),
       constraints: Constraints(networkType: NetworkType.connected),
     );
     debugPrint('_initDailySummaries registered');
@@ -146,7 +150,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       isMorningNotification: true,
     );
 
-    // _initDailySummaries();
+    _initDailySummaries();
     super.initState();
   }
 

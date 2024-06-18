@@ -19,7 +19,7 @@ import workmanager
     WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "daily-summary")
 
     // Register a periodic task in iOS 13+
-    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "com.friend-app-with-wearable.ios12.daily-summary", frequency: NSNumber(value: 60*60*24))
+    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "com.friend-app-with-wearable.ios12.daily-summary", frequency: NSNumber(value: 60))
 //     UIApplication.shared.setMinimumBackgroundFetchInterval(TimeInterval(60*15))
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
