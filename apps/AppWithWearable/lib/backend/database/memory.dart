@@ -57,6 +57,17 @@ class Memory {
       return transcript;
     }
   }
+
+  toJson() {
+    return {
+      'createdAt': createdAt.toIso8601String(),
+      'transcript': transcript,
+      'recordingFilePath': recordingFilePath,
+      'structured': structured.target!.toJson(),
+      'pluginsResponse': pluginsResponse.map((response) => response.content).toList(),
+      'discarded': discarded,
+    };
+  }
 }
 
 @Entity()
