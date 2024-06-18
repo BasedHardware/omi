@@ -112,6 +112,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _migrationScripts();
     authenticateGCP();
     scanAndConnectDevice().then(_onConnected);
+    createNotification(
+        title: 'Don\'t forget to wear Friend today',
+        body: 'Wear your friend and capture your memories today.',
+        notificationId: 4,
+        isMorningNotification: true);
     super.initState();
   }
 

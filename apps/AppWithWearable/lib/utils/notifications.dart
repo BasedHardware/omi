@@ -38,22 +38,47 @@ Future<void> requestNotificationPermissions() async {
   }
 }
 
-void createNotification(
-    {String title = '', String body = '', int notificationId = 1, Map<String, String?>? payload}) async {
+void createNotification({
+  String title = '',
+  String body = '',
+  int notificationId = 1,
+  Map<String, String?>? payload,
+  bool isMorningNotification = false,
+}) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
+  NotificationCalendar? interval;
+  if (isMorningNotification) {
+    // TODO: allow people to set a notification time in settings
+    var scheduled = await AwesomeNotifications().listScheduledNotifications();
+    var hasMorningNotification = scheduled.any((element) => element.content?.id == 4);
+    debugPrint('hasMorningNotification: $hasMorningNotification');
+    if (hasMorningNotification) return;
+    interval = NotificationCalendar(
+      hour: 8,
+      minute: 0,
+      second: 0,
+      repeats: true,
+      preciseAlarm: false,
+      allowWhileIdle: true,
+    );
+  }
   AwesomeNotifications().createNotification(
-      content: NotificationContent(
-    id: notificationId,
-    channelKey: 'channel',
-    actionType: ActionType.Default,
-    title: title,
-    body: body,
-    wakeUpScreen: true,
-    payload: payload,
-  ));
+    content: NotificationContent(
+      id: notificationId,
+      channelKey: 'channel',
+      actionType: ActionType.Default,
+      title: title,
+      body: body,
+      wakeUpScreen: true,
+      payload: payload,
+    ),
+    schedule: interval,
+  );
 }
+
+clearNotification(int id) => AwesomeNotifications().cancel(id);
 
 class NotificationUtil {
   static ReceivePort? receivePort;
@@ -116,5 +141,3 @@ class NotificationUtil {
     }
   }
 }
-
-clearNotification(int id) => AwesomeNotifications().cancel(id);
