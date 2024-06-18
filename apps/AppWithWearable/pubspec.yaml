@@ -76,6 +76,7 @@ dependencies:
   flutter_foreground_task: ^6.5.0
   deepgram_speech_to_text: ^2.1.1
   upgrader: ^10.3.0
+  flutter_flavorizr: ^2.2.3
 
 dependency_overrides:
   http: ^1.2.1
