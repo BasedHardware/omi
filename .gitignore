@@ -1,4 +1,6 @@
 .env
+.env.prod
+.env.dev
 __pycache__/
 libraries/
 myenv/

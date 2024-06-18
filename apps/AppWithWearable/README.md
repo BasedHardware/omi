@@ -55,10 +55,11 @@ If you prefer to set up the project manually, follow these steps:
     ```
 
 4. **Environment Configuration**:
-   Create `.env` using template `.env.template`
+   Create `.env` files for development and production using template `.env.template`
     ```
     cd ..
-    cat .env.template > .env
+    cat .env.template > .env.dev
+    cat .env.template > .env.prod
     ```
 
 5. **API Keys**:
@@ -73,7 +74,7 @@ If you prefer to set up the project manually, follow these steps:
 7. **Run the App**:
     And select the target device when prompted 
     ```
-    flutter run
+    flutter run --flavor=development
     ```
 
 This guide should help you get started with running the Friend App on your local machine. Make sure each step is completed to avoid any issues.

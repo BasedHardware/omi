@@ -21,8 +21,9 @@ cd ..
 # ...
 
 # Create .env file from template
-echo "Creating .env file..."
-cat .env.template > .env
+echo "Creating .env files..."
+cat .env.template > .env.dev
+cat .env.template > .env.prod
 
 # Prompt user to add API keys to .env file
 echo "Please add your API keys to the .env file."

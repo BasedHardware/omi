@@ -1,0 +1,7 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "Generated.xcconfig"
+
+FLUTTER_TARGET=lib/main_production.dart
+ASSET_PREFIX=production
+BUNDLE_NAME=Friend
+BUNDLE_DISPLAY_NAME=Friend

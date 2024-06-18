@@ -1,15 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:upgrader/upgrader.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -17,6 +18,9 @@ import 'env/env.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+
+  _initializeFlavors();
+
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
@@ -38,6 +42,14 @@ void main() async {
     );
   } else {
     _getRunApp();
+  }
+}
+
+void _initializeFlavors() {
+  if (appFlavor == 'production') {
+    F.appFlavor = Flavor.production;
+  } else {
+    F.appFlavor = Flavor.development;
   }
 }
 

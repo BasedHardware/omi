@@ -1,0 +1,17 @@
+flavors:
+
+  development:
+    app:
+      name: "Friend DEV"
+    android:
+      applicationId: "com.friend.ios.dev"
+    ios:
+      bundleId: "com.friend.ios.dev"
+
+  production:
+    app:
+      name: "Friend"
+    android:
+      applicationId: "com.friend.ios"
+    ios:
+      bundleId: "com.friend.ios"
