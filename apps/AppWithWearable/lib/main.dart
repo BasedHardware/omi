@@ -9,13 +9,13 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:upgrader/upgrader.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Env.init();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
@@ -51,7 +51,8 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
 }
 
 class _MyAppState extends State<MyApp> {
@@ -76,7 +77,8 @@ class _MyAppState extends State<MyApp> {
           ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
-            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+            contentTextStyle: const TextStyle(
+                fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
           ),
           textTheme: TextTheme(
             titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
@@ -89,7 +91,8 @@ class _MyAppState extends State<MyApp> {
             selectionColor: Colors.deepPurple,
           )),
       themeMode: ThemeMode.dark,
-      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
+      home: (SharedPreferencesUtil().onboardingCompleted &&
+              SharedPreferencesUtil().deviceId != '')
           ? const HomePageWrapper()
           : const WelcomePage(),
     );
