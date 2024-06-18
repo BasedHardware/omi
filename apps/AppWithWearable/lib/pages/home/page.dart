@@ -31,6 +31,7 @@ import 'package:workmanager/workmanager.dart';
 
 @pragma('vm:entry-point') // Mandatory if the App is obfuscated or using Flutter 3.1+
 void callbackDispatcher() {
+  print('Native called background task: ');
   Workmanager().executeTask((task, inputData) {
     print("Native called background task: $task"); //simpleTask will be emitted here.
     return Future.value(true);
@@ -78,7 +79,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    // SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
   }
 
   Future<void> _initiatePlugins() async {
@@ -105,18 +106,20 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _initDailySummaries() {
+    debugPrint('_initDailySummaries');
     Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
     var now = DateTime.now();
     var target = DateTime(now.year, now.month, now.day, 20, 0);
     if (now.isAfter(target)) target = target.add(const Duration(days: 1));
     var delay = target.difference(now);
     Workmanager().registerPeriodicTask(
-      "daily-summary",
-      "dailySummary",
-      frequency: const Duration(seconds: 30),
-      // initialDelay: delay,
+      "com.friend-app-with-wearable.ios12.daily-summary",
+      "com.friend-app-with-wearable.ios12.daily-summary",
+      // frequency: const Duration(seconds: 15), // not considered for iOS
+      initialDelay: const Duration(seconds: 10),
       constraints: Constraints(networkType: NetworkType.connected),
     );
+    debugPrint('_initDailySummaries registered');
   }
 
   @override
@@ -143,7 +146,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       isMorningNotification: true,
     );
 
-    _initDailySummaries();
+    // _initDailySummaries();
     super.initState();
   }
 
@@ -246,7 +249,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       textFieldFocusNode: chatTextFieldFocusNode,
                       memories: memories,
                       messages: messages,
-                      setMessages: (msgs) => messages = msgs,
+                      setMessages: (msgs) {
+                        setState(() => messages = msgs);
+                      },
+                      addMessage: (Message msg, bool stored) {
+                        messages.add(msg);
+                        if (stored) SharedPreferencesUtil().chatMessages = messages;
+                        setState(() {});
+                      },
                     ),
                   ],
                 ),

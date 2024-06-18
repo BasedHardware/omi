@@ -19,6 +19,7 @@ class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
   final List<Memory> memories;
   final Function(List<Message>) setMessages;
+  final Function(Message, bool) addMessage;
   final List<Message> messages;
 
   const ChatPage({
@@ -27,6 +28,7 @@ class ChatPage extends StatefulWidget {
     required this.memories,
     required this.messages,
     required this.setMessages,
+    required this.addMessage,
   });
 
   @override
@@ -174,6 +176,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     List<String> memoryIds = ragInfo[1].cast<String>();
     debugPrint('RAG Context: $ragContext');
     MixpanelManager().chatMessageSent(message);
+    // TODO: make sure about few things here
     await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
       widget.messages.last.memoryIds = memoryIds;
       prefs.chatMessages = widget.messages;
@@ -200,15 +203,9 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _prepareStreaming(String text) {
-    var messagesCopy = [...widget.messages];
-    messagesCopy.add(Message(text: text, type: 'human', id: const Uuid().v4()));
-    setState(() {
-      widget.setMessages(messagesCopy);
-      textController.clear();
-    });
-    prefs.chatMessages = messagesCopy;
-    // include initial empty message for streaming to save in
-    widget.messages.add(Message(text: '', type: 'ai', id: const Uuid().v4()));
+    textController.clear(); // setState if isolated
+    widget.addMessage(Message(text: text, type: 'human', id: const Uuid().v4()), true);
+    widget.addMessage(Message(text: '', type: 'ai', id: const Uuid().v4()), false);
     _moveListToBottom(extra: 0);
   }
 
@@ -217,6 +214,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       debugPrint('Content: $content');
       var messagesCopy = [...widget.messages];
       messagesCopy.last.text += content;
+      // TODO: better way for this?
       debugPrint(messagesCopy.last.text);
       widget.setMessages(messagesCopy);
       setState(() {});
