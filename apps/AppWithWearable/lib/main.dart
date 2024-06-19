@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/import/existing.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -88,8 +89,8 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
-          ? const HomePageWrapper()
-          : const WelcomePage(),
+          ? const HasBackupPage()
+          : const HasBackupPage(),
     );
   }
 }
