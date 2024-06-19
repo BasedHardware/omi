@@ -45,7 +45,7 @@ void createNotification({
   Map<String, String?>? payload,
   bool isMorningNotification = false,
   int? delayMinutes
-  }) async {
+}) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
