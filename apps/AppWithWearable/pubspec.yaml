@@ -80,6 +80,8 @@ dependencies:
     git:
       url: https://github.com/fluttercommunity/flutter_workmanager.git
       ref: b783000
+  device_calendar: ^4.3.2
+  timezone: ^0.9.3
 
 dependency_overrides:
   http: ^1.2.1
