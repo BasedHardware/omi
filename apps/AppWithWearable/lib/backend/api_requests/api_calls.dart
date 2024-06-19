@@ -130,6 +130,7 @@ _getPrevMemoriesStr(List<Memory> previousMemories) {
 }
 
 Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, List<Memory> previousMemories) async {
+  debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
@@ -141,16 +142,17 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
   final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
   // ${_getPrevMemoriesStr(previousMemories)}
   // TODO: try later with temperature 0
+  // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
+  // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is $languageCode. Make sure to use English for your response.
 
-    It is possible that the conversation is not important, has no value or there is nothing to be remembered from it, in that case, output an empty title, overview, and action items.  
-    The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
+    It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.  
      
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
-    For the action items, include a list of scheduled events, specific tasks or truly actionable steps.
+    For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.
     For the category, classify the conversation into one of the available categories.
         
     Here is the transcript ```${transcript.trim()}```.
@@ -162,16 +164,16 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of scheduled events, specific tasks or truly actionable steps", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "List of commitments, scheduled events, specific tasks or actionable steps.", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
     ```
     '''
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim();
-
+  debugPrint(prompt);
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
     String response = await executeGptPrompt(
-        '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()} ${_getPrevMemoriesStr(previousMemories)}, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
+        '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()}```, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
     return response;
   }).toList();
 

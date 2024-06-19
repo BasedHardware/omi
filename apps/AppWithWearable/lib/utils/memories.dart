@@ -116,6 +116,9 @@ Future<Memory> finalizeMemoryRecord(
   var memory = Memory(DateTime.now(), transcript, false,
       recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
+  for (var r in structuredMemory.pluginsResponse) {
+    memory.pluginsResponse.add(PluginResponse(r));
+  }
 
   await MemoryProvider().saveMemory(memory);
 
