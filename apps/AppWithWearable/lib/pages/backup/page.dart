@@ -13,16 +13,20 @@ class BackupsPage extends StatefulWidget {
 
 class _BackupsPageState extends State<BackupsPage> {
   var backupsEnabled = false;
+  bool hasPasswordSet = false;
 
   @override
   void initState() {
     backupsEnabled = SharedPreferencesUtil().backupsEnabled;
+    hasPasswordSet = SharedPreferencesUtil().hasBackupPassword;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    var backupHoursAgo = DateTime.now().difference(DateTime.parse(SharedPreferencesUtil().lastBackupDate));
+    var backupHoursAgo = SharedPreferencesUtil().lastBackupDate.isEmpty
+        ? null
+        : DateTime.now().difference(DateTime.parse(SharedPreferencesUtil().lastBackupDate));
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
@@ -49,16 +53,23 @@ class _BackupsPageState extends State<BackupsPage> {
                   backupsEnabled = v;
                 });
                 if (v) {
-                  executeBackup();
+                  executeBackup().then((_) => setState(() {}));
                 } else if (SharedPreferencesUtil().lastBackupDate != '') {
+                  SharedPreferencesUtil().lastBackupDate = '';
+                  setState(() {});
                   deleteBackupApi();
                 }
               },
             ),
-            SharedPreferencesUtil().lastBackupDate.length > 10 ? const SizedBox(height: 32) : Container(),
-            SharedPreferencesUtil().lastBackupDate.length > 10
+            ListTile(
+              title: const Text('User ID'),
+              subtitle: Text(SharedPreferencesUtil().uid),
+              trailing: IconButton(onPressed: () {}, icon: const Icon(Icons.copy)),
+            ),
+            backupHoursAgo != null ? const SizedBox(height: 32) : Container(),
+            backupHoursAgo != null
                 ? ListTile(
-                    title: const Text('Last backup made'),
+                    title: const Text('Last backup'),
                     subtitle: Text(
                       '${backupHoursAgo.inHours == 0 ? backupHoursAgo.inMinutes : backupHoursAgo.inHours} ${backupHoursAgo.inHours == 0 ? 'minutes ago' : 'hours ago'}',
                       // include just now
@@ -75,14 +86,9 @@ class _BackupsPageState extends State<BackupsPage> {
                     ),
                   )
                 : const SizedBox(),
-            ListTile(
-              title: const Text('User ID'),
-              subtitle: Text(SharedPreferencesUtil().uid),
-              trailing: IconButton(onPressed: () {}, icon: const Icon(Icons.copy)),
-            ),
             backupsEnabled
                 ? ListTile(
-                    title: const Text('Set up password'),
+                    title: Text(hasPasswordSet ? 'Change password' : 'Set up a password'),
                     subtitle: const Text('Create a new backup'),
                     onTap: () async {
                       await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupPasswordPage()));

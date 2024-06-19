@@ -40,7 +40,6 @@ Future<String> getEncodedMemories() async {
 
 Future<bool> executeBackup() async {
   var result = await getEncodedMemories();
-  print(result);
   if (result == '') return false;
   await getDecodedMemories(result);
   SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
