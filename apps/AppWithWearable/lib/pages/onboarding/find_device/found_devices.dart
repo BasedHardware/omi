@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/import/existing.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -44,8 +44,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
       // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
       // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HasBackupPage()));
     } catch (e) {
       print("Error fetching battery level: $e");
       setState(() {

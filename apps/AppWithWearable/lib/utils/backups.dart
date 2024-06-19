@@ -47,13 +47,13 @@ Future<bool> executeBackup() async {
   return true;
 }
 
-Future<bool> retrieveBackup(String uid, String password) async {
+Future<int> retrieveBackup(String uid, String password) async {
   var retrieved = await downloadBackupApi(uid);
-  if (retrieved == '') return false;
+  if (retrieved == '') return 0;
   var memories = await getDecodedMemories(retrieved);
   // TODO: password doesn't work, throw exception
   await MemoryProvider().storeMemories(memories);
-  return true;
+  return memories.length;
 }
 
 Future<List<Memory>> getDecodedMemories(String encodedMemories) async {
