@@ -14,20 +14,39 @@ jobs:
     runs-on: macos-latest
 
     steps:
-
-      # Clones the project on the machine
-      - uses: actions/checkout@v4
-
-      # Installs flutter and related dependency on this machine
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '12'
+      - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          # flutter-version: '3.16.8'
-          # ^ If you want to use a specific version of flutter
+          architecture: x64
 
-      # Fetches proj dependencies from pub
       - name: Install dependencies
         run: flutter pub get
         working-directory: apps/AppWithWearable
-        # ^ If you want to use a specific version of flutter
+
+      - name : Create Build
+        working-directory: apps/AppWithWearable
+        run: flutter build apk --release --split-per-abi
+
+      - name : Create iOS Build
+        working-directory: apps/AppWithWearable
+        run: |
+          flutter build ios --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          cd Payload
+          ln -s ../Runner.app
+          cd ..
+          zip -r app.ipa Payload
+
+      - name: Push to Releases
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/app/outputs/apk/release/*,build/ios/iphoneos/app.ipa"
+          tag: v1.0.${{ github.run_number }}
+          token: ${{ secrets.TOKEN }}
+
