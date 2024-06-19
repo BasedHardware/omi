@@ -31,16 +31,15 @@ class Memory {
   Memory(this.createdAt, this.transcript, this.discarded,
       {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
 
-  static String memoriesToString(List<Memory> memories) => memories
+  static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
       ${e.createdAt.toIso8601String().split('.')[0]}
       Title: ${e.structured.target!.title}
       Summary: ${e.structured.target!.overview}
       ${e.structured.target!.actionItems.isNotEmpty ? 'Action Items:' : ''}
       ${e.structured.target!.actionItems.map((item) => '  - ${item.description}').join('\n')}
-      ${e.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
-      ${e.pluginsResponse.map((response) => '  - ${response.content}').join('\n')}
       Category: ${e.structured.target!.category}
+      ${includeTranscript ? 'Transcript:\n${e.transcript}' : ''}
       '''
           .replaceAll('      ', '')
           .trim())

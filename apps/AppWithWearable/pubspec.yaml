@@ -82,6 +82,7 @@ dependencies:
       ref: b783000
   crypto: ^3.0.3
   encrypt: ^5.0.3
+  flutter_markdown: ^0.7.2+1
 
 dependency_overrides:
   http: ^1.2.1
