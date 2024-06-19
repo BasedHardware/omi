@@ -59,7 +59,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       if (now.hour < 20) return;
       // TODO: maybe a better way to optimize this. is it better to do on build state?
       debugPrint('now: $now');
-      debugPrint('SharedPreferencesUtil().lastDailySummaryDay ${SharedPreferencesUtil().lastDailySummaryDay}');
       if (SharedPreferencesUtil().lastDailySummaryDay != '') {
         var secondsFrom8pm = now.difference(DateTime(now.year, now.month, now.day, 20)).inSeconds;
         var at = DateTime.parse(SharedPreferencesUtil().lastDailySummaryDay);
