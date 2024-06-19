@@ -46,12 +46,29 @@ class Memory {
           .trim())
       .join('\n\n');
 
+  static Memory fromJson(Map<String, dynamic> json) {
+    var memory = Memory(
+      DateTime.parse(json['createdAt']),
+      json['transcript'],
+      json['discarded'],
+      // id: json['id'],
+      recordingFilePath: json['recordingFilePath'],
+      startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
+      finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
+    );
+    memory.structured.target = Structured.fromJson(json['structured']);
+    if (json['pluginsResponse'] != null) {
+      for (var response in json['pluginsResponse']) {
+        memory.pluginsResponse.add(PluginResponse(response));
+      }
+    }
+    return memory;
+  }
+
   String getTranscript({int? maxCount}) {
     try {
       var transcript = this.transcript;
-      if (maxCount != null) {
-        transcript = transcript.substring(0, min(maxCount, transcript.length));
-      }
+      if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
       return utf8.decode(transcript.toString().codeUnits);
     } catch (e) {
       return transcript;
@@ -60,6 +77,7 @@ class Memory {
 
   toJson() {
     return {
+      'id': id,
       'createdAt': createdAt.toIso8601String(),
       'transcript': transcript,
       'recordingFilePath': recordingFilePath,
@@ -83,7 +101,7 @@ class Structured {
   @Backlink('structured')
   final actionItems = ToMany<ActionItem>();
 
-  Structured(this.title, this.overview, {this.emoji = '', this.category = 'other'});
+  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
   getEmoji() {
     try {
@@ -92,6 +110,21 @@ class Structured {
     } catch (e) {
       return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
     }
+  }
+
+  static Structured fromJson(Map<String, dynamic> json) {
+    var structured = Structured(
+      json['title'],
+      json['overview'],
+      emoji: json['emoji'],
+      category: json['category'],
+    );
+    if (json['actionItems'] != null) {
+      for (var item in json['actionItems']) {
+        structured.actionItems.add(ActionItem(item));
+      }
+    }
+    return structured;
   }
 
   @override
