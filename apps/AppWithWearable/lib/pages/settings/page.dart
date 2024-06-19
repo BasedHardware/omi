@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -7,6 +10,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -16,7 +20,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
   final TextEditingController deepgramAPIKeyController = TextEditingController();
@@ -30,9 +33,11 @@ class _SettingsPageState extends State<SettingsPage> {
   String? version;
   String? buildVersion;
 
+  bool loadingExportMemories = false;
+
   @override
   void initState() {
-    openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
     deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
 
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
@@ -44,7 +49,6 @@ class _SettingsPageState extends State<SettingsPage> {
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
-      print(packageInfo.toString());
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
@@ -391,33 +395,33 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Speech Profile Set Up',
-                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                              ),
-                              Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // InkWell(
+                  //   onTap: () {
+                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                  //   },
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                  //     child: Container(
+                  //       decoration: BoxDecoration(
+                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                  //       ),
+                  //       child: const Padding(
+                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  //         child: Row(
+                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //           children: [
+                  //             Text(
+                  //               'Speech Profile Set Up',
+                  //               style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                  //             ),
+                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                  //           ],
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -499,6 +503,38 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
+      const SizedBox(height: 16),
+      TextButton(
+        child: Row(
+          children: [
+            const Text(
+              'Export Memories',
+              style: TextStyle(color: Colors.white, decoration: TextDecoration.underline, fontSize: 16),
+            ),
+            const SizedBox(width: 16),
+            loadingExportMemories
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ],
+        ),
+        onPressed: () async {
+          if (loadingExportMemories) return;
+          setState(() => loadingExportMemories = true);
+          File file = await MemoryProvider().exportMemoriesToFile();
+          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+          if (result.status == ShareResultStatus.success) {
+            print('Thank you for sharing the picture!');
+          }
+          setState(() => loadingExportMemories = false);
+        },
+      ),
       const SizedBox(height: 64),
     ];
   }
@@ -552,7 +588,7 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.devModeEnabled = devModeEnabled;
     prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
-    prefs.openAIApiKey = openaiApiKeyController.text.trim();
+    prefs.openAIApiKey = openAIKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
