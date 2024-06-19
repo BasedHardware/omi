@@ -51,6 +51,8 @@ void _initializeFlavors() {
   } else {
     F.appFlavor = Flavor.development;
   }
+
+  debugPrint('Running app with flavor: $appFlavor');
 }
 
 _getRunApp() {
