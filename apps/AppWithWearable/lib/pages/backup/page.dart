@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/password.dart';
 import 'package:friend_private/utils/backups.dart';
@@ -42,10 +43,16 @@ class _BackupsPageState extends State<BackupsPage> {
               value: backupsEnabled,
               checkboxShape: const CircleBorder(),
               onChanged: (v) {
+                // TODO: delete backup when unselected, create when set true?
                 SharedPreferencesUtil().backupsEnabled = v!;
                 setState(() {
                   backupsEnabled = v;
                 });
+                if (v) {
+                  executeBackup();
+                } else if (SharedPreferencesUtil().lastBackupDate != '') {
+                  deleteBackupApi();
+                }
               },
             ),
             SharedPreferencesUtil().lastBackupDate.length > 10 ? const SizedBox(height: 32) : Container(),
@@ -59,6 +66,10 @@ class _BackupsPageState extends State<BackupsPage> {
                     trailing: IconButton(
                       onPressed: () async {
                         await executeBackup();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Backup completed!')),
+                          // TODO: better snackbars UI here
+                        );
                       },
                       icon: const Icon(Icons.refresh),
                     ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -39,10 +40,20 @@ Future<String> getEncodedMemories() async {
 
 Future<bool> executeBackup() async {
   var result = await getEncodedMemories();
+  print(result);
   if (result == '') return false;
   await getDecodedMemories(result);
   SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
-  // TODO: upload backup to cloud
+  await uploadBackupApi(result);
+  return true;
+}
+
+Future<bool> retrieveBackup(String uid, String password) async {
+  var retrieved = await downloadBackupApi(uid);
+  if (retrieved == '') return false;
+  var memories = await getDecodedMemories(retrieved);
+  // TODO: password doesn't work, throw exception
+  await MemoryProvider().storeMemories(memories);
   return true;
 }
 
