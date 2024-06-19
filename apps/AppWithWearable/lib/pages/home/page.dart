@@ -11,6 +11,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -27,6 +28,20 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:workmanager/workmanager.dart';
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint("Native called background task: $task");
+    // createNotification(
+    //   title: 'Here is your action plan for tomorrow',
+    //   body: 'Check out your daily summary to see what you should do tomorrow.',
+    //   notificationId: 5,
+    // );
+    return Future.value(true);
+  });
+}
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -43,6 +58,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
+  List<Message> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -57,15 +73,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
-    // memories = await MemoryStorage.getAllMemories(includeDiscarded: displayDiscardMemories);
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
     setState(() {});
-    // FocusScope.of(context).unfocus();
-    // chatTextFieldFocusNode.unfocus();
+  }
+
+  _loadMessages() async {
+    var msgs = SharedPreferencesUtil().chatMessages;
+    messages = msgs.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : msgs;
+    setState(() {});
   }
 
   _setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    // SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
   }
 
   Future<void> _initiatePlugins() async {
@@ -91,6 +110,23 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateMemories();
   }
 
+  _initDailySummaries() {
+    debugPrint('_initDailySummaries');
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+    var now = DateTime.now();
+    var target = DateTime(now.year, now.month, now.day, 20, 0);
+    if (now.isAfter(target)) target = target.add(const Duration(days: 1));
+    var delay = target.difference(now);
+    Workmanager().registerPeriodicTask(
+      "com.friend-app-with-wearable.ios12.daily-summary",
+      "com.friend-app-with-wearable.ios12.daily-summary",
+      frequency: const Duration(seconds: 60), // not considered for iOS
+      initialDelay: const Duration(seconds: 0),
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
+    debugPrint('_initDailySummaries registered');
+  }
+
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
@@ -102,11 +138,20 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     Upgrader.clearSavedSettings();
 
     _initiateMemories();
+    _loadMessages();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
     scanAndConnectDevice().then(_onConnected);
+    createNotification(
+      title: 'Don\'t forget to wear Friend today',
+      body: 'Wear your friend and capture your memories today.',
+      notificationId: 4,
+      isMorningNotification: true,
+    );
+
+    _initDailySummaries();
     super.initState();
   }
 
@@ -190,18 +235,33 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     MemoriesPage(
-                        memories: memories,
-                        refreshMemories: _initiateMemories,
-                        textFieldFocusNode: memoriesTextFieldFocusNode),
+                      memories: memories,
+                      refreshMemories: _initiateMemories,
+                      textFieldFocusNode: memoriesTextFieldFocusNode,
+                    ),
                     CapturePage(
                       device: _device,
                       refreshMemories: _initiateMemories,
                       transcriptChildWidgetKey: transcriptChildWidgetKey,
+                      addMessage: (msg) {
+                        messages.add(msg);
+                        SharedPreferencesUtil().chatMessages = messages;
+                        setState(() {});
+                      },
                       // batteryLevel: batteryLevel,
                     ),
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
                       memories: memories,
+                      messages: messages,
+                      setMessages: (msgs) {
+                        setState(() => messages = msgs);
+                      },
+                      addMessage: (Message msg, bool stored) {
+                        messages.add(msg);
+                        if (stored) SharedPreferencesUtil().chatMessages = messages;
+                        setState(() {});
+                      },
                     ),
                   ],
                 ),

@@ -9,21 +9,25 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:uuid/uuid.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
   final Function(bool) setHasTranscripts;
+  final Function(Message) addMessage;
 
   const TranscriptWidget({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
     required this.setHasTranscripts,
+    required this.addMessage,
   });
 
   final BTDeviceStruct? btDevice;
@@ -56,6 +60,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     //   _initiateConversationAdvisorTimer();
     // }
     _processCachedTranscript();
+    // processTranscriptContent(context, '''a''', null);
     super.initState();
   }
 
@@ -232,8 +237,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint(memory.toString());
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
+        // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
+        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
+        widget.addMessage(Message(text: r, type: 'ai', id: const Uuid().v4(), memoryIds: [memory.id.toString()]));
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
