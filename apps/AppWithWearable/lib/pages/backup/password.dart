@@ -17,6 +17,10 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
   bool backupsEnabled = false;
   bool hasPasswordSet = false;
 
+  bool obscureCurrentPassword = true;
+  bool obscureNewPassword = true;
+  bool obscureRepeatPassword = true;
+
   @override
   void initState() {
     backupsEnabled = SharedPreferencesUtil().backupsEnabled;
@@ -43,6 +47,12 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
                 ? _getTextField(
                     currentPasswordController,
                     hintText: 'Current password',
+                    obscureText: obscureCurrentPassword,
+                    onVisibilityChanged: () {
+                      setState(() {
+                        obscureCurrentPassword = !obscureCurrentPassword;
+                      });
+                    },
                   )
                 : Container(),
             // password
@@ -62,7 +72,7 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 24),
                     child: Text(
-                      'New password',
+                      'New Password',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -71,10 +81,24 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
                   )
                 : Container(),
             const SizedBox(height: 32),
-            _getTextField(newPasswordController, hintText: 'New password'),
+            _getTextField(
+              newPasswordController,
+              hintText: 'New password',
+              obscureText: obscureNewPassword,
+              onVisibilityChanged: () {
+                setState(() {
+                  obscureNewPassword = !obscureNewPassword;
+                });
+              },
+            ),
             const SizedBox(height: 24),
             // repeat password
-            _getTextField(repeatPasswordController, hintText: 'Repeat new password'),
+            _getTextField(repeatPasswordController, hintText: 'Repeat new password', obscureText: obscureRepeatPassword,
+                onVisibilityChanged: () {
+              setState(() {
+                obscureRepeatPassword = !obscureRepeatPassword;
+              });
+            }),
             const SizedBox(height: 40),
             Center(
               child: MaterialButton(
@@ -86,7 +110,8 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
                 ),
                 child: const Text('SET NEW PASSWORD'),
               ),
-            )
+            ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -98,27 +123,41 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
       return;
     }
     if (hasPasswordSet && currentPasswordController.text != SharedPreferencesUtil().backupPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Current password is incorrect')));
+      _snackBar('Current password is incorrect  👀');
       return;
     }
     if (newPasswordController.text != repeatPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+      _snackBar('Passwords do not match   😕');
+      return;
+    }
+    var newPassword = newPasswordController.text;
+    if (newPassword.length < 8) {
+      _snackBar('Password must be at least 8 characters long   🔐', seconds: 2);
+      return;
+    }
+    // regex for password strength, 8 characters, 1 number, 1 special char
+    if (!RegExp(r'^(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{8,})').hasMatch(newPassword)) {
+      _snackBar('Password must contain at least 1 number and 1 special character   🔐', seconds: 2);
       return;
     }
     SharedPreferencesUtil().backupPassword = newPasswordController.text;
     hasPasswordSet = true;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password Reset')));
+    _snackBar('New password set   🎉');
     Navigator.of(context).pop();
   }
 
-  _getTextField(TextEditingController controller, {String hintText = ''}) {
+  _getTextField(
+    TextEditingController controller, {
+    String hintText = '',
+    bool obscureText = true,
+    VoidCallback? onVisibilityChanged,
+  }) {
     return Container(
       width: double.maxFinite,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
       decoration: const BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.all(Radius.circular(16)),
+        borderRadius: BorderRadius.all(Radius.circular(8)),
         border: GradientBoxBorder(
           gradient: LinearGradient(colors: [
             Color.fromARGB(127, 208, 208, 208),
@@ -126,25 +165,37 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
             Color.fromARGB(127, 86, 101, 182),
             Color.fromARGB(127, 126, 190, 236)
           ]),
-          width: 1,
+          width: 2,
         ),
         shape: BoxShape.rectangle,
       ),
       child: TextField(
         enabled: true,
         controller: controller,
-        obscureText: true,
+        obscureText: obscureText,
+        enableSuggestions: false,
+        autocorrect: false,
         decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
+            labelText: hintText,
+            labelStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            suffixIcon: IconButton(
+              icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade200,),
+              onPressed: onVisibilityChanged,
+            )),
         // maxLines: 8,
         // minLines: 1,
         // keyboardType: TextInputType.multiline,
         style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
       ),
     );
+  }
+
+  _snackBar(String content, {int seconds = 1}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(content),
+      duration: Duration(seconds: seconds),
+    ));
   }
 }

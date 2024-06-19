@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -10,7 +7,6 @@ import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -32,8 +28,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
-
-  bool loadingExportMemories = false;
 
   @override
   void initState() {
@@ -250,105 +244,115 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (optInAnalytics) {
-                          optInAnalytics = false;
-                          SharedPreferencesUtil().optInAnalytics = false;
-                        } else {
-                          optInAnalytics = true;
-                          SharedPreferencesUtil().optInAnalytics = true;
-                        }
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              child: const Text(
-                                'Help improve Friend by sharing anonymized analytics data',
-                                style: TextStyle(
-                                    color: Color.fromARGB(255, 150, 150, 150),
-                                    fontSize: 16,
-                                    decoration: TextDecoration.underline),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (optInAnalytics) {
+                            optInAnalytics = false;
+                            SharedPreferencesUtil().optInAnalytics = false;
+                          } else {
+                            optInAnalytics = true;
+                            SharedPreferencesUtil().optInAnalytics = true;
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                child: const Text(
+                                  'Help improve Friend by sharing anonymized analytics data',
+                                  style: TextStyle(
+                                      color: Color.fromARGB(255, 150, 150, 150),
+                                      fontSize: 16,
+                                      decoration: TextDecoration.underline),
+                                ),
+                                onTap: () {
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                                },
                               ),
-                              onTap: () {
-                                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                              },
                             ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: optInAnalytics
-                                  ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors.transparent, // Fill color when checked
-                              border: Border.all(
-                                color: const Color.fromARGB(255, 150, 150, 150),
-                                width: 2,
+                            SizedBox(
+                              width: 8,
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: optInAnalytics
+                                    ? const Color.fromARGB(255, 150, 150, 150)
+                                    : Colors.transparent, // Fill color when checked
+                                border: Border.all(
+                                  color: const Color.fromARGB(255, 150, 150, 150),
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              width: 22,
+                              height: 22,
+                              child: optInAnalytics // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
                             ),
-                            width: 22,
-                            height: 22,
-                            child: optInAnalytics // Show the icon only when checked
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white, // Tick color
-                                    size: 18,
-                                  )
-                                : null, // No icon when unchecked
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (devModeEnabled) {
-                          devModeEnabled = false;
-                          SharedPreferencesUtil().devModeEnabled = false;
-                        } else {
-                          devModeEnabled = true;
-                          SharedPreferencesUtil().devModeEnabled = true;
-                        }
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Developer Mode',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: devModeEnabled
-                                  ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors.transparent, // Fill color when checked
-                              border: Border.all(
-                                color: const Color.fromARGB(255, 150, 150, 150),
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (devModeEnabled) {
+                            devModeEnabled = false;
+                            SharedPreferencesUtil().devModeEnabled = false;
+                          } else {
+                            devModeEnabled = true;
+                            SharedPreferencesUtil().devModeEnabled = true;
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Developer Mode',
+                              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                             ),
-                            width: 22,
-                            height: 22,
-                            child: devModeEnabled // Show the icon only when checked
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white, // Tick color
-                                    size: 18,
-                                  )
-                                : null, // No icon when unchecked
-                          ),
-                        ],
+                            Container(
+                              decoration: BoxDecoration(
+                                color: devModeEnabled
+                                    ? const Color.fromARGB(255, 150, 150, 150)
+                                    : Colors.transparent, // Fill color when checked
+                                border: Border.all(
+                                  color: const Color.fromARGB(255, 150, 150, 150),
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              width: 22,
+                              height: 22,
+                              child: devModeEnabled // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -363,7 +367,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  InkWell(
+                  GestureDetector(
                     onTap: () {
                       MixpanelManager().pluginsOpened();
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
@@ -422,7 +426,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   //     ),
                   //   ),
                   // ),
-                  InkWell(
+                  GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
                     },
@@ -535,38 +539,6 @@ class _SettingsPageState extends State<SettingsPage> {
         enableSuggestions: false,
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
-      ),
-      const SizedBox(height: 16),
-      TextButton(
-        child: Row(
-          children: [
-            const Text(
-              'Export Memories',
-              style: TextStyle(color: Colors.white, decoration: TextDecoration.underline, fontSize: 16),
-            ),
-            const SizedBox(width: 16),
-            loadingExportMemories
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ],
-        ),
-        onPressed: () async {
-          if (loadingExportMemories) return;
-          setState(() => loadingExportMemories = true);
-          File file = await MemoryProvider().exportMemoriesToFile();
-          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-          if (result.status == ShareResultStatus.success) {
-            print('Thank you for sharing the picture!');
-          }
-          setState(() => loadingExportMemories = false);
-        },
       ),
       const SizedBox(height: 64),
     ];

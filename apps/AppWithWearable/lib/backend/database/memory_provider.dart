@@ -22,9 +22,14 @@ class MemoryProvider {
 
   Future<List<Memory>> getMemoriesOrdered({bool includeDiscarded = false}) async {
     if (includeDiscarded) {
-      return _box.query().build().find();
+      // created at descending
+      return _box.query().order(Memory_.createdAt).build().find();
     } else {
-      return _box.query(Memory_.discarded.equals(false)).build().find();
+      return _box
+          .query(Memory_.discarded.equals(false))
+          .order(Memory_.createdAt, flags: Order.descending)
+          .build()
+          .find();
     }
   }
 
