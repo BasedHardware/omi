@@ -29,4 +29,5 @@ jobs:
       # Fetches proj dependencies from pub
       - name: Install dependencies
         run: flutter pub get
+        working-directory: apps/AppWithWearable
         # ^ If you want to use a specific version of flutter
