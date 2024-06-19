@@ -75,8 +75,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       widget.addMessage(Message(text: '', type: 'ai', id: const Uuid().v4(), daySummary: true), false);
       SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
 
-      // var memories = await MemoryProvider().retrieveDayMemories(now);
-      var memories = await MemoryProvider().getMemories();
+      var memories = await MemoryProvider().retrieveDayMemories(now);
+      // var memories = await MemoryProvider().getMemories();
       var result = await dailySummaryNotifications(memories);
 
       var messagesCopy = [...widget.messages];
