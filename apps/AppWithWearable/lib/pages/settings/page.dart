@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -15,35 +20,37 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController openaiApiKeyController = TextEditingController();
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
+  final TextEditingController deepgramAPIKeyController = TextEditingController();
+  final TextEditingController openAIKeyController = TextEditingController();
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
-  late bool useFriendAPIKeys;
   late bool optInAnalytics;
   late bool devModeEnabled;
-  late bool coachIsChecked;
+  late bool postMemoryNotificationIsChecked;
   late bool smartReminderIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
 
+  bool loadingExportMemories = false;
+
   @override
   void initState() {
-    openaiApiKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
+
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
 
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
-    useFriendAPIKeys = SharedPreferencesUtil().useFriendApiKeys;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    coachIsChecked = SharedPreferencesUtil().coachIsChecked;
+    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     smartReminderIsChecked = SharedPreferencesUtil().smartReminderIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
-      print(packageInfo.toString());
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
@@ -149,12 +156,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   InkWell(
                     onTap: () {
                       setState(() {
-                        if (coachIsChecked) {
-                          coachIsChecked = false;
-                          SharedPreferencesUtil().coachIsChecked = false;
+                        if (postMemoryNotificationIsChecked) {
+                          postMemoryNotificationIsChecked = false;
                         } else {
-                          coachIsChecked = true;
-                          SharedPreferencesUtil().coachIsChecked = true;
+                          postMemoryNotificationIsChecked = true;
                         }
                       });
                     },
@@ -164,12 +169,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Conversation coach',
+                            'Post memory analysis',
                             style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
-                              color: coachIsChecked
+                              color: postMemoryNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
                                   : Colors.transparent, // Fill color when checked
                               border: Border.all(
@@ -180,7 +185,53 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child: coachIsChecked // Show the icon only when checked
+                            child: postMemoryNotificationIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (smartReminderIsChecked) {
+                          smartReminderIsChecked = false;
+                          SharedPreferencesUtil().smartReminderIsChecked = false;
+                        } else {
+                          smartReminderIsChecked = true;
+                          SharedPreferencesUtil().smartReminderIsChecked = true;
+                        }
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Smart Reminder',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: smartReminderIsChecked
+                                  ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent, // Fill color when checked
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: smartReminderIsChecked // Show the icon only when checked
                                 ? const Icon(
                                     Icons.check,
                                     color: Colors.white, // Tick color
@@ -310,9 +361,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Opt In Analytics',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          Expanded(
+                            child: GestureDetector(
+                              child: const Text(
+                                'Help improve Friend by sharing anonymized analytics data',
+                                style: TextStyle(
+                                    color: Color.fromARGB(255, 150, 150, 150),
+                                    fontSize: 16,
+                                    decoration: TextDecoration.underline),
+                              ),
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                              },
+                            ),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -428,33 +489,33 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Speech Profile Set Up',
-                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                              ),
-                              Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // InkWell(
+                  //   onTap: () {
+                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                  //   },
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                  //     child: Container(
+                  //       decoration: BoxDecoration(
+                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                  //       ),
+                  //       child: const Padding(
+                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  //         child: Row(
+                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //           children: [
+                  //             Text(
+                  //               'Speech Profile Set Up',
+                  //               style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                  //             ),
+                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                  //           ],
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -493,6 +554,28 @@ class _SettingsPageState extends State<SettingsPage> {
         width: double.infinity,
       ),
       const SizedBox(height: 40),
+      _getText('Set your own keys', underline: false),
+      const SizedBox(height: 16.0),
+      TextField(
+        controller: openAIKeyController,
+        obscureText: false,
+        autocorrect: false,
+        enabled: true,
+        enableSuggestions: false,
+        decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 24.0),
+      TextField(
+        controller: deepgramAPIKeyController,
+        obscureText: false,
+        autocorrect: false,
+        enabled: true,
+        enableSuggestions: false,
+        decoration: _getTextFieldDecoration('Deepgram API Key', hintText: ''),
+        style: const TextStyle(color: Colors.white),
+      ),
+      const SizedBox(height: 40),
       _getText('[Optional] Store your recordings in Google Cloud', underline: false),
       const SizedBox(height: 16.0),
       TextField(
@@ -514,26 +597,59 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
+      const SizedBox(height: 16),
+      TextButton(
+        child: Row(
+          children: [
+            const Text(
+              'Export Memories',
+              style: TextStyle(color: Colors.white, decoration: TextDecoration.underline, fontSize: 16),
+            ),
+            const SizedBox(width: 16),
+            loadingExportMemories
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ],
+        ),
+        onPressed: () async {
+          if (loadingExportMemories) return;
+          setState(() => loadingExportMemories = true);
+          File file = await MemoryProvider().exportMemoriesToFile();
+          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+          if (result.status == ShareResultStatus.success) {
+            print('Thank you for sharing the picture!');
+          }
+          setState(() => loadingExportMemories = false);
+        },
+      ),
       const SizedBox(height: 64),
     ];
   }
 
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
     return InputDecoration(
       labelText: label,
-      enabled: useFriendAPIKeys && canBeDisabled,
-      labelStyle: TextStyle(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+      enabled: true && canBeDisabled,
+      hintText: hintText,
+      labelStyle: TextStyle(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       border: const OutlineInputBorder(),
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       disabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
         borderRadius: const BorderRadius.all(Radius.circular(20.0)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
       ),
       suffixIcon: suffixIcon,
     );
@@ -544,7 +660,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Text(
         text,
         style: TextStyle(
-          color: useFriendAPIKeys && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
+          color: true && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
           decoration: underline ? TextDecoration.underline : TextDecoration.none,
           fontSize: 16,
         ),
@@ -554,50 +670,27 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   _saveSettings() {
-    if ((openaiApiKeyController.text.isEmpty) && (!useFriendAPIKeys)) {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Error'),
-            content: const Text('Deepgram and OpenAI API keys are required'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-      return;
-    }
     saveSettings();
     Navigator.pop(context);
   }
 
   void saveSettings() async {
     final prefs = SharedPreferencesUtil();
-    prefs.openAIApiKey = openaiApiKeyController.text.trim();
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
     prefs.optInAnalytics = optInAnalytics;
     prefs.devModeEnabled = devModeEnabled;
-    prefs.coachIsChecked = coachIsChecked;
+    prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
     prefs.smartReminderIsChecked = smartReminderIsChecked;
     prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
+    prefs.openAIApiKey = openAIKeyController.text.trim();
+    prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
 
     optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
       MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-    }
-
-    if (useFriendAPIKeys != prefs.useFriendApiKeys) {
-      prefs.useFriendApiKeys = useFriendAPIKeys;
     }
 
     if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {

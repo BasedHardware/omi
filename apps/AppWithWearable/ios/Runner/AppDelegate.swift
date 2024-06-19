@@ -1,6 +1,7 @@
 import UIKit
 
 import Flutter
+import workmanager
 
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
@@ -10,10 +11,16 @@ import Flutter
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
     // here, Without this code the task will not work.
-    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
+    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(regbisterPlugins)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
+    // In AppDelegate.application method
+    WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "daily-summary")
+
+    // Register a periodic task in iOS 13+
+    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "com.friend-app-with-wearable.ios12.daily-summary", frequency: NSNumber(value: 60))
+//     UIApplication.shared.setMinimumBackgroundFetchInterval(TimeInterval(60*15))
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

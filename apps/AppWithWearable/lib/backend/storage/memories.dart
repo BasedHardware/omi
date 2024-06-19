@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 
-class Structured {
+class MemoryStructured {
   String title;
   String overview;
   List<String> actionItems;
@@ -11,7 +12,7 @@ class Structured {
   String emoji;
   String category;
 
-  Structured({
+  MemoryStructured({
     this.title = "",
     this.overview = "",
     required this.actionItems,
@@ -20,7 +21,7 @@ class Structured {
     this.category = '',
   });
 
-  factory Structured.fromJson(Map<String, dynamic> json) => Structured(
+  factory MemoryStructured.fromJson(Map<String, dynamic> json) => MemoryStructured(
       title: json['title'] ?? '',
       overview: json['overview'] ?? '',
       actionItems: List<String>.from(json['action_items'] ?? []),
@@ -64,7 +65,7 @@ class MemoryRecord {
   DateTime createdAt;
   String transcript;
   String? recordingFilePath;
-  Structured structured;
+  MemoryStructured structured;
   bool discarded;
 
   MemoryRecord({
@@ -81,7 +82,7 @@ class MemoryRecord {
         id: json['id'],
         recordingFilePath: json['recording_file_path'],
         createdAt: DateTime.parse(json['created_at']),
-        structured: Structured.fromJson(json['structured']),
+        structured: MemoryStructured.fromJson(json['structured']),
         discarded: json['discarded'] ?? false,
       );
 
@@ -93,16 +94,6 @@ class MemoryRecord {
         'recording_audio_path': recordingFilePath,
         'discarded': discarded,
       };
-
-  static List<MemoryRecord> fromJsonList(List<dynamic> jsonList) {
-    List<MemoryRecord> memories = [];
-    for (var json in jsonList) {
-      memories.add(MemoryRecord.fromJson(json));
-    }
-    return memories;
-  }
-
-  String getStructuredString() => structured.toString();
 
   static String memoriesToString(List<MemoryRecord> memories) => memories
     .map((e) {
@@ -124,13 +115,6 @@ class MemoryRecord {
 class MemoryStorage {
   static const String _storageKey = '_memories';
 
-  static Future<void> addMemory(MemoryRecord memory) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    allMemories.add(jsonEncode(memory.toJson()));
-    await prefs.setStringList(_storageKey, allMemories);
-  }
-
   static Future<List<MemoryRecord>> getAllMemories({includeDiscarded = false}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
@@ -151,17 +135,6 @@ class MemoryStorage {
     return filtered;
   }
 
-  static Future<List<MemoryRecord>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {
-    List<MemoryRecord> allMemories = await getAllMemories();
-    DateTime now = DateTime.now();
-    DateTime timeLimit = now.subtract(Duration(minutes: minutes));
-    var filtered = allMemories.where((memory) => memory.createdAt.isAfter(timeLimit)).toList();
-    if (filtered.length > count) {
-      filtered = filtered.sublist(0, count);
-    }
-    return filtered;
-  }
-
   static Future<void> updateWholeMemory(MemoryRecord newMemory) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
@@ -170,67 +143,5 @@ class MemoryStorage {
       allMemories[index] = jsonEncode(newMemory.toJson());
       await prefs.setStringList(_storageKey, allMemories);
     }
-  }
-
-  static Future<void> updateMemory(String memoryId, String updatedTitle, String updatedDescription) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
-    if (index >= 0 && index < allMemories.length) {
-      MemoryRecord oldMemory = MemoryRecord.fromJson(jsonDecode(allMemories[index]));
-      MemoryRecord updatedRecord = MemoryRecord(
-        id: oldMemory.id,
-        createdAt: oldMemory.createdAt,
-        transcript: oldMemory.transcript,
-        recordingFilePath: oldMemory.recordingFilePath,
-        structured: Structured(
-          title: updatedTitle,
-          overview: updatedDescription,
-          actionItems: oldMemory.structured.actionItems,
-          pluginsResponse: oldMemory.structured.pluginsResponse,
-          category: oldMemory.structured.category,
-        ),
-        discarded: oldMemory.discarded,
-      );
-      allMemories[index] = jsonEncode(updatedRecord.toJson());
-      await prefs.setStringList(_storageKey, allMemories);
-    }
-  }
-
-  static Future<void> deleteMemory(String memoryId) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> allMemories = prefs.getStringList(_storageKey) ?? [];
-    int index = allMemories.indexWhere((memory) => MemoryRecord.fromJson(jsonDecode(memory)).id == memoryId);
-    if (index >= 0 && index < allMemories.length) {
-      allMemories.removeAt(index);
-      await prefs.setStringList(_storageKey, allMemories);
-    }
-  }
-
-  static Future<List<MemoryRecord>> getMemoriesByDay(DateTime day) async {
-    List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories.where((memory) => isSameDay(memory.createdAt, day)).toList();
-  }
-
-  static Future<List<MemoryRecord>> getMemoriesOfLastWeek() async {
-    DateTime now = DateTime.now();
-    DateTime lastWeekStart = now.subtract(Duration(days: now.weekday + 6));
-    List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories
-        .where((memory) => memory.createdAt.isAfter(lastWeekStart) && memory.createdAt.isBefore(now))
-        .toList();
-  }
-
-  static Future<List<MemoryRecord>> getMemoriesOfLastMonth() async {
-    DateTime now = DateTime.now();
-    DateTime lastMonthStart = DateTime(now.year, now.month - 1, 1);
-    List<MemoryRecord> allMemories = await getAllMemories();
-    return allMemories
-        .where((memory) => memory.createdAt.isAfter(lastMonthStart) && memory.createdAt.isBefore(now))
-        .toList();
-  }
-
-  static bool isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }
