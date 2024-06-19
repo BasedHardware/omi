@@ -33,6 +33,8 @@ Future<http.Response?> makeApiCall({
       return await client.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
       return await client.get(Uri.parse(url), headers: headers);
+    } else if (method == 'DELETE') {
+      return await client.delete(Uri.parse(url), headers: headers);
     }
   } catch (e) {
     debugPrint('HTTP request failed: $e');
@@ -506,4 +508,38 @@ Future<bool> uploadSample(File file, String uid) async {
     debugPrint('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
   }
+}
+
+Future<void> uploadBackupApi(String backup) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'data': backup}),
+  );
+  debugPrint('uploadBackup: ${response?.body}');
+}
+
+Future<String> downloadBackupApi(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  debugPrint('downloadBackup: ${response.body}');
+  return jsonDecode(response.body)['data'];
+}
+
+Future<bool> deleteBackupApi() async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteBackup: ${response.body}');
+  return response.statusCode == 200;
 }
