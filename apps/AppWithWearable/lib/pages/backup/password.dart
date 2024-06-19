@@ -175,13 +175,17 @@ class _BackupPasswordPageState extends State<BackupPasswordPage> {
         obscureText: obscureText,
         enableSuggestions: false,
         autocorrect: false,
+        textInputAction: TextInputAction.done,
         decoration: InputDecoration(
             labelText: hintText,
             labelStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
             suffixIcon: IconButton(
-              icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade200,),
+              icon: Icon(
+                obscureText ? Icons.visibility_off : Icons.visibility,
+                color: Colors.grey.shade200,
+              ),
               onPressed: onVisibilityChanged,
             )),
         // maxLines: 8,

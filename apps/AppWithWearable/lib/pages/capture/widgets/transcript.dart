@@ -78,7 +78,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, retrievedFromCache: true);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
+      if (m != null && !m.discarded) executeBackup();
+    });
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
   }
