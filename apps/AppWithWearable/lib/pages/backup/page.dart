@@ -220,7 +220,10 @@ class _BackupsPageState extends State<BackupsPage> {
                         type: FileType.custom,
                         allowedExtensions: ['json'],
                       );
-                      if (file == null) return;
+                      if (file == null) {
+                        setState(() => loadingImportMemories = false);
+                        return;
+                      }
                       var xFile = file.files.first.xFile;
                       try {
                         var content = (await xFile.readAsString());
