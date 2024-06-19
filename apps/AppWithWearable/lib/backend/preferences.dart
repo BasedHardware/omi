@@ -27,6 +27,9 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
+  // DO NOT USE BESIDES BACKUP IMPORT
+  // set uid(String value) => saveString('uid', value);
+
   set deviceId(String value) => saveString('deviceId', value);
 
   String get deviceId => getString('deviceId') ?? '';
