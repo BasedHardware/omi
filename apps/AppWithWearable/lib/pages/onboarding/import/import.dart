@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -15,6 +16,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
   TextEditingController passwordController = TextEditingController();
 
   bool passwordVisible = true;
+  bool importLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -47,22 +49,27 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
                 const SizedBox(height: 40),
                 Center(
                   child: MaterialButton(
-                    onPressed: () {
-                      // Navigator.of(context)
-                      //     .pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
-                    },
+                    onPressed: importLoading ? null : _import,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: const BorderSide(color: Colors.deepPurple),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     color: Colors.deepPurple,
-                    child: const Text(
-                      'Import',
-                      style: TextStyle(color: Colors.white),
-                    ),
+                    child: importLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ))
+                        : const Text(
+                            'Import',
+                            style: TextStyle(color: Colors.white),
+                          ),
                   ),
                 ),
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -72,6 +79,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
   }
 
   _import() async {
+    if (importLoading) return;
     if (uidController.text.isEmpty || passwordController.text.isEmpty) return;
     if (uidController.text.length < 36) {
       _snackBar('Invalid User ID');
@@ -81,8 +89,32 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
       _snackBar('Invalid Password');
       return;
     }
-    var memoriesImported = await retrieveBackup(uidController.text, passwordController.text);
-    debugPrint('Memories Imported: $memoriesImported');
+    FocusScope.of(context).unfocus();
+    try {
+      setState(() => importLoading = true);
+      var memoriesImported = await retrieveBackup(uidController.text, passwordController.text);
+      if (memoriesImported == 0) {
+        _snackBar('No Memories Found');
+        setState(() => importLoading = false);
+        return;
+      }
+      debugPrint('Memories Imported: $memoriesImported');
+      // SharedPreferencesUtil().backupPassword = passwordController.text;
+      // SharedPreferencesUtil().backupsEnabled = true;
+      // SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+
+      _snackBar('$memoriesImported Memories Imported Successfully   🎉', seconds: 2);
+      await Future.delayed(const Duration(seconds: 2));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+    } catch (e) {
+      _snackBar(e.toString().replaceAll('Exception:', '').trim());
+      setState(() => importLoading = false);
+      return;
+    }
+    setState(() => importLoading = false);
+    // Test ID: d2234422-819d-491f-aaa6-174e4683d233
+    // Navigator.of(context)
+    //     .pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
   }
 
   _snackBar(String content, {int seconds = 1}) {

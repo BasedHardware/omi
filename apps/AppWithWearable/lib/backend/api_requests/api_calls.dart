@@ -552,7 +552,7 @@ Future<String> downloadBackupApi(String uid) async {
   );
   if (response == null) return '';
   debugPrint('downloadBackup: ${response.body}');
-  return jsonDecode(response.body)['data'];
+  return jsonDecode(response.body)['data'] ?? '';
 }
 
 Future<bool> deleteBackupApi() async {

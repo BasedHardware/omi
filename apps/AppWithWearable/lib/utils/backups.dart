@@ -39,9 +39,10 @@ Future<String> getEncodedMemories() async {
 }
 
 Future<bool> executeBackup() async {
+  if (!SharedPreferencesUtil().backupsEnabled) return false;
   var result = await getEncodedMemories();
   if (result == '') return false;
-  await getDecodedMemories(result);
+  await getDecodedMemories(result, SharedPreferencesUtil().backupPassword);
   SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
   await uploadBackupApi(result);
   return true;
@@ -49,16 +50,18 @@ Future<bool> executeBackup() async {
 
 Future<int> retrieveBackup(String uid, String password) async {
   var retrieved = await downloadBackupApi(uid);
-  if (retrieved == '') return 0;
-  var memories = await getDecodedMemories(retrieved);
-  // TODO: password doesn't work, throw exception
+  if (retrieved == '') throw Exception('No backup found for this user ID.');
+  var memories = await getDecodedMemories(retrieved, password);
   await MemoryProvider().storeMemories(memories);
   return memories.length;
 }
 
-Future<List<Memory>> getDecodedMemories(String encodedMemories) async {
-  var password = SharedPreferencesUtil().backupPassword;
+Future<List<Memory>> getDecodedMemories(String encodedMemories, String password) async {
   if (password.isEmpty) return [];
-  var decoded = decodeJson(encodedMemories, password);
-  return decoded.map((e) => Memory.fromJson(e)).toList();
+  try {
+    var decoded = decodeJson(encodedMemories, password);
+    return decoded.map((e) => Memory.fromJson(e)).toList();
+  } catch (e) {
+    throw Exception('The password is incorrect.');
+  }
 }

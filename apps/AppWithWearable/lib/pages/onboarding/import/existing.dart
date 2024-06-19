@@ -30,7 +30,7 @@ class _HasBackupPageState extends State<HasBackupPage> {
                 child: Column(
                   children: [
                     Text(
-                      'Already had an account? Press "Import Account" to continue, otherwise press "Skip".',
+                      'Already had an account? Press "Import" to continue, otherwise press "Skip".',
                       style: TextStyle(color: Colors.white, fontSize: 15, height: 1.5),
                       textAlign: TextAlign.center,
                     ),
@@ -56,7 +56,7 @@ class _HasBackupPageState extends State<HasBackupPage> {
                     ),
                     color: Colors.deepPurple,
                     child: const Text(
-                      'Import Account',
+                      'Import',
                       style: TextStyle(color: Colors.white),
                     ),
                   ),
