@@ -11,6 +11,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -235,6 +236,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       finishedAt: currentTranscriptFinishedAt,
     );
     debugPrint(memory.toString());
+    // TODO: backup when useful memory created, maybe less later
+    if (memory != null && !memory.discarded) executeBackup();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';

@@ -127,16 +127,6 @@ class SharedPreferencesUtil {
     pluginsEnabled = plugins;
   }
 
-  // List<int> get temporalAudioBytes {
-  //   final List<String> bytes = getStringList('temporalAudioBytes') ?? [];
-  //   return bytes.map((e) => int.parse(e)).toList();
-  // }
-
-  // set temporalAudioBytes(List<int> value) {
-  //   final List<String> bytes = value.map((e) => e.toString()).toList();
-  //   saveStringList('temporalAudioBytes', bytes);
-  // }
-
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
     return segments.map((e) => TranscriptSegment.fromJson(jsonDecode(e))).toList();
@@ -146,6 +136,20 @@ class SharedPreferencesUtil {
     final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('transcriptSegments', segments);
   }
+
+  bool get backupsEnabled => getBool('backupsEnabled') ?? false;
+
+  set backupsEnabled(bool value) => saveBool('backupsEnabled', value);
+
+  bool get hasBackupPassword => getString('backupPassword') != null && getString('backupPassword')!.isNotEmpty;
+
+  String get backupPassword => getString('backupPassword') ?? '';
+
+  set backupPassword(String value) => saveString('backupPassword', value);
+
+  String get lastBackupDate => getString('lastBackupDate') ?? '';
+
+  set lastBackupDate(String value) => saveString('lastBackupDate', value);
 
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
