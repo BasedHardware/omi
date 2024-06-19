@@ -10,6 +10,7 @@ class Message {
   String text;
   String type;
   List<String>? memoryIds; // Optional list of strings.
+  bool daySummary = false;
 
   Message({
     required this.text,
@@ -17,6 +18,7 @@ class Message {
     required this.id,
     this.createdAt,
     this.memoryIds,
+    this.daySummary = false
   });
 
   // Factory constructor to create a new Message instance from a map

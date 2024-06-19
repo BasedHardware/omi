@@ -205,6 +205,29 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   return result.replaceAll('```', '').trim();
 }
 
+Future<String> dailySummaryNotifications(List<Memory> memories) async {
+  var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
+  if (memories.isEmpty) return msg;
+  if (memories.where((m) => !m.discarded).length <= 1) return msg;
+
+  var prompt = '''
+  The following are a list of transcripts with its proper structuring, that were saved during the user's day.
+  The user wants to get a coherent advice on things that could've been better in those conversations, and what to do next.
+
+  Remember the person is busy so this has to be very efficient and concise.
+  Respond in at most 150 words.
+  
+  Output your response in plain text, without markdown.
+  ```
+  ${Memory.memoriesToString(memories, includeTranscript: true)}
+  ```
+  ''';
+  debugPrint(prompt);
+  var result = await executeGptPrompt(prompt);
+  debugPrint('dailySummaryNotifications result: $result');
+  return result.replaceAll('```', '').trim();
+}
+
 Future<String> adviseOnCurrentConversation(String transcript) async {
   if (transcript.isEmpty) return '';
   if (transcript.split(' ').length < 20) return ''; // not enough to extract something out of it

@@ -151,6 +151,10 @@ class SharedPreferencesUtil {
 
   set lastBackupDate(String value) => saveString('lastBackupDate', value);
 
+  String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
+
+  set lastDailySummaryDay(String value) => saveString('lastDailySummaryDate', value);
+
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
   }
