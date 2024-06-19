@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/objectbox.g.dart';
+import 'package:path_provider/path_provider.dart';
 
 class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
@@ -62,4 +66,18 @@ class MemoryProvider {
     if (filtered.length > count) filtered = filtered.sublist(0, count);
     return filtered;
   }
+
+  Future<File> exportMemoriesToFile() async {
+    List<Memory> memories = await getMemories();
+    String json = getPrettyJSONString(memories.map((m) => m.toJson()).toList());
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/memories.json');
+    await file.writeAsString(json);
+    return file;
+  }
+}
+
+String getPrettyJSONString(jsonObject) {
+  var encoder = const JsonEncoder.withIndent("     ");
+  return encoder.convert(jsonObject);
 }
