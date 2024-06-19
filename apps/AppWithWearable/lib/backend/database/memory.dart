@@ -57,7 +57,8 @@ class Memory {
     );
     memory.structured.target = Structured.fromJson(json['structured']);
     if (json['pluginsResponse'] != null) {
-      for (var response in json['pluginsResponse']) {
+      for (String response in json['pluginsResponse']) {
+        if (response.isEmpty) continue;
         memory.pluginsResponse.add(PluginResponse(response));
       }
     }
@@ -81,7 +82,7 @@ class Memory {
       'transcript': transcript,
       'recordingFilePath': recordingFilePath,
       'structured': structured.target!.toJson(),
-      'pluginsResponse': pluginsResponse.map((response) => response.content).toList(),
+      'pluginsResponse': pluginsResponse.map<String>((response) => response.content).toList(),
       'discarded': discarded,
     };
   }
@@ -119,7 +120,8 @@ class Structured {
       category: json['category'],
     );
     if (json['actionItems'] != null) {
-      for (var item in json['actionItems']) {
+      for (String item in json['actionItems']) {
+        if (item.isEmpty) continue;
         structured.actionItems.add(ActionItem(item));
       }
     }
