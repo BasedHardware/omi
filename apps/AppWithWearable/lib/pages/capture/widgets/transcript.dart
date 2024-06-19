@@ -57,9 +57,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initiateBytesProcessing();
     });
-    // if (SharedPreferencesUtil().coachIsChecked) {
-    //   _initiateConversationAdvisorTimer();
-    // }
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
     super.initState();
@@ -238,7 +235,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       finishedAt: currentTranscriptFinishedAt,
     );
     debugPrint(memory.toString());
-    // TODO: backup when useful memory created, maybe less later
+    // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
     if (memory != null && !memory.discarded) executeBackup();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
