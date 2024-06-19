@@ -15,7 +15,7 @@ class F {
       case Flavor.dev:
         return 'Friend Dev';
       default:
-        return 'title';
+        return 'Friend Dev';
     }
   }
 }
