@@ -30,6 +30,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
+  late bool remindersEnabled;
   String? version;
   String? buildVersion;
 
@@ -48,6 +49,8 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    remindersEnabled = SharedPreferencesUtil().remindersEnabled;
+
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -220,6 +223,47 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: reconnectNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: reconnectNotificationIsChecked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        remindersEnabled = !remindersEnabled;
+                        SharedPreferencesUtil().remindersEnabled = remindersEnabled;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Reminders app integration',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: remindersEnabled
+                                  ? const Color.fromARGB(255, 150, 150, 150)
                                   : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
@@ -229,7 +273,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child: reconnectNotificationIsChecked // Show the icon only when checked
+                            child: remindersEnabled // Show the icon only when checked
                                 ? const Icon(
                                     Icons.check,
                                     color: Colors.white, // Tick color

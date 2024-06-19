@@ -87,6 +87,10 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
+  bool get remindersEnabled => getBool('remindersEnabled') ?? false;
+
+  set remindersEnabled(bool value) => saveBool('remindersEnabled', value);
+
   List<Message> get chatMessages {
     final List<String> messages = getStringList('messages') ?? [];
     return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
