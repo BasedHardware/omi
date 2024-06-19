@@ -24,6 +24,14 @@ jobs:
           channel: 'stable'
           architecture: x64
 
+      - name: Setup Env
+        run: cat .env.template > .env
+        working-directory: apps/AppWithWearable
+
+      - name: Run Build Runner
+        run: dart run build_runner build
+        working-directory: apps/AppWithWearable
+
       - name: Install dependencies
         run: flutter pub get
         working-directory: apps/AppWithWearable
