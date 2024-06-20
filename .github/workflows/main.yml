@@ -14,25 +14,38 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const projectUrl = 'https://github.com/orgs/BasedHardware/projects/1'; // Replace with your project URL
-            const columnName = 'Backlog'; // Replace with the name of your target column
-            const issue = context.payload.issue;
-
-            // Fetch project columns
-            const projectColumns = await github.projects.listColumns({
-              project_id: 1 // Replace with your project ID
+            const projectNumber = 1; // Replace with your project number
+            const columnName = 'Backlog'; // Replace with your target column name
+            
+            // Fetch the list of projects for the repository
+            const { data: projects } = await github.rest.projects.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
             });
 
-            // Find the target column ID
-            const targetColumn = projectColumns.data.find(column => column.name === columnName);
+            // Find the project by number
+            const project = projects.find(proj => proj.number === projectNumber);
 
-            if (targetColumn) {
-              // Add the issue to the target column
-              await github.projects.createCard({
-                column_id: targetColumn.id,
-                content_id: issue.id,
-                content_type: 'Issue'
-              });
-            } else {
-              core.setFailed(`Column ${columnName} not found.`);
+            if (!project) {
+              throw new Error(`Project number ${projectNumber} not found.`);
             }
+
+            // Fetch the list of columns for the project
+            const { data: columns } = await github.rest.projects.listColumns({
+              project_id: project.id
+            });
+
+            // Find the column by name
+            const column = columns.find(col => col.name === columnName);
+
+            if (!column) {
+              throw new Error(`Column '${columnName}' not found in project ${projectNumber}.`);
+            }
+
+            // Add the issue to the column
+            await github.rest.projects.createCard({
+              column_id: column.id,
+              content_id: context.issue.id,
+              content_type: 'Issue'
+            });
