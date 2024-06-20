@@ -1,0 +1,38 @@
+name: Add issue to project on label "task"
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  add_to_project:
+    if: github.event.label.name == 'task'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add issue to project
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const projectUrl = 'https://github.com/orgs/BasedHardware/projects/1'; // Replace with your project URL
+            const columnName = 'To do'; // Replace with the name of your target column
+            const issue = context.payload.issue;
+
+            // Fetch project columns
+            const projectColumns = await github.projects.listColumns({
+              project_id: 1 // Replace with your project ID
+            });
+
+            // Find the target column ID
+            const targetColumn = projectColumns.data.find(column => column.name === columnName);
+
+            if (targetColumn) {
+              // Add the issue to the target column
+              await github.projects.createCard({
+                column_id: targetColumn.id,
+                content_id: issue.id,
+                content_type: 'Issue'
+              });
+            } else {
+              core.setFailed(`Column ${columnName} not found.`);
+            }
