@@ -13,6 +13,9 @@ jobs:
     # We are choosing macos-latest because we will be also building for iOS
     runs-on: macos-latest
 
+    env:
+      KEYSTORE_PATH: upload-keystore.jks
+
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-java@v3
@@ -31,6 +34,11 @@ jobs:
       - name: Run Build Runner
         run: dart run build_runner build --delete-conflicting-outputs
         working-directory: apps/AppWithWearable
+
+      - name: Decode and write keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SECRET_JKS }}
+        run: echo $KEYSTORE_BASE64 | base64 --decode > $KEYSTORE_PATH
 
       - name: Install dependencies
         run: flutter pub get
