@@ -11,6 +11,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -56,9 +57,6 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       initiateBytesProcessing();
     });
-    // if (SharedPreferencesUtil().coachIsChecked) {
-    //   _initiateConversationAdvisorTimer();
-    // }
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
     super.initState();
@@ -77,7 +75,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, retrievedFromCache: true);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
+      if (m != null && !m.discarded) executeBackup();
+    });
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
   }
@@ -235,6 +235,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       finishedAt: currentTranscriptFinishedAt,
     );
     debugPrint(memory.toString());
+    // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
+    if (memory != null && !memory.discarded) executeBackup();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';

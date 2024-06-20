@@ -235,11 +235,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                               Clipboard.setData(ClipboardData(
                                   text: '- ${structured.actionItems.map((e) => e.description).join('\n- ')}'));
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                content: Text('Copied to clipboard'),
+                                content: Text('Action items copied to clipboard'),
                                 duration: Duration(seconds: 2),
                               ));
                             },
-                            icon: const Icon(Icons.copy, color: Colors.white, size: 20))
+                            icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
                       ],
                     )
                   : const SizedBox.shrink(),
@@ -288,10 +288,23 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     )),
               ],
               const SizedBox(height: 8),
-              Text(
-                'Raw Transcript  💬',
-                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-              ),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Raw Transcript  💬',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                    ),
+                    IconButton(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
+                        },
+                        // TODO: improve UI of this copy buttons
+                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
+                  ]),
               const SizedBox(height: 16),
               ExpandableTextWidget(
                 text: widget.memory.getTranscript(),
@@ -379,7 +392,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
           Text(
             widget.text,
             style: widget.style,
-            maxLines: _isExpanded ? 100 : widget.maxLines,
+            maxLines: _isExpanded ? 10000 : widget.maxLines,
             overflow: TextOverflow.ellipsis,
           ),
           if (isOverflowing)
