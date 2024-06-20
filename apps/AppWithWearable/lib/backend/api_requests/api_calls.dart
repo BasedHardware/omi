@@ -64,18 +64,11 @@ Future<ReminderDetails?> analyzeTranscriptForReminder(String transcript) async {
     Response:
   ''';
 
-  var response = await executeGptPrompt(prompt);
+  var response = await executeGptPrompt(prompt, jsonResponseFormat: true);
 
-  // ensure it is valid JSON
-  var cleanResponse = response
-      .replaceAll(RegExp(r'```json'), '')
-      .replaceAll(RegExp(r'```'), '')
-      .replaceAll(RegExp(r'^.*?{'), '{')
-      .replaceAll(RegExp(r'}.*?$'), '}');
+  if (response.isEmpty || response == '{}') return null;
 
-  if (cleanResponse.isEmpty || cleanResponse == '{}') return null;
-
-  var data = jsonDecode(cleanResponse);
+  var data = jsonDecode(response);
   if (data.isEmpty) return null;
 
   return ReminderDetails(data['title'], DateTime.parse(data['dueDate']),
@@ -121,23 +114,24 @@ Future<dynamic> gptApiCall({
     'Content-Type': 'application/json; charset=utf-8',
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
-  final String body;
-  if (urlSuffix == 'embeddings') {
-    body = jsonEncode({'model': model, 'input': contentToEmbed});
-  } else {
-    var bodyData = {
-      'model': model,
-      'messages': messages,
-      'temperature': temperature
-    };
-    if (jsonResponseFormat) {
-      bodyData['response_format'] = {'type': 'json_object'};
-    } else if (tools.isNotEmpty) {
-      bodyData['tools'] = tools;
-      bodyData['tool_choice'] = 'auto';
-    }
-    body = jsonEncode(bodyData);
+  final Map<String, dynamic> bodyData = {
+    'model': model,
+    'messages': messages,
+    'temperature': temperature,
+  };
+
+  if (jsonResponseFormat) {
+    bodyData['response_format'] = {
+      'type': 'json_object'
+    }; // Add JSON response format
   }
+
+  if (tools.isNotEmpty) {
+    bodyData['tools'] = tools;
+    bodyData['tool_choice'] = 'auto';
+  }
+
+  final String body = jsonEncode(bodyData);
 
   var response =
       await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
@@ -146,7 +140,8 @@ Future<dynamic> gptApiCall({
       isFunctionCalling: tools.isNotEmpty);
 }
 
-Future<String> executeGptPrompt(String? prompt) async {
+Future<String> executeGptPrompt(String? prompt,
+    {bool jsonResponseFormat = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();
@@ -154,9 +149,12 @@ Future<String> executeGptPrompt(String? prompt) async {
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
   if (prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
 
-  String response = await gptApiCall(model: 'gpt-4o', messages: [
-    {'role': 'system', 'content': prompt}
-  ]);
+  String response = await gptApiCall(
+      model: 'gpt-4o',
+      messages: [
+        {'role': 'system', 'content': prompt}
+      ],
+      jsonResponseFormat: jsonResponseFormat);
   prefs.setGptCompletionCache(promptBase64, response);
   debugPrint('executeGptPrompt response: $response');
   return response;
