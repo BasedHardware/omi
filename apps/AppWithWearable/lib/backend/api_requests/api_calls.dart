@@ -120,15 +120,17 @@ Future<dynamic> gptApiCall({
     'temperature': temperature,
   };
 
-  if (jsonResponseFormat) {
-    bodyData['response_format'] = {
-      'type': 'json_object'
-    }; // Add JSON response format
-  }
-
-  if (tools.isNotEmpty) {
-    bodyData['tools'] = tools;
-    bodyData['tool_choice'] = 'auto';
+  if (urlSuffix == 'embeddings') {
+    bodyData['input'] = contentToEmbed;
+  } else {
+    bodyData['messages'] = messages;
+    if (jsonResponseFormat) {
+      bodyData['response_format'] = {'type': 'json_object'};
+    }
+    if (tools.isNotEmpty) {
+      bodyData['tools'] = tools;
+      bodyData['tool_choice'] = 'auto';
+    }
   }
 
   final String body = jsonEncode(bodyData);
