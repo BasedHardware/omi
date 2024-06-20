@@ -14,6 +14,7 @@ import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:uuid/uuid.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
@@ -35,7 +36,9 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
+class _ChatPageState extends State<ChatPage>
+    with AutomaticKeepAliveClientMixin {
+  String? selectedPluginId;
   TextEditingController textController = TextEditingController();
   ScrollController listViewController = ScrollController();
 
@@ -60,7 +63,9 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       // TODO: maybe a better way to optimize this. is it better to do on build state?
       debugPrint('now: $now');
       if (SharedPreferencesUtil().lastDailySummaryDay != '') {
-        var secondsFrom8pm = now.difference(DateTime(now.year, now.month, now.day, 20)).inSeconds;
+        var secondsFrom8pm = now
+            .difference(DateTime(now.year, now.month, now.day, 20))
+            .inSeconds;
         var at = DateTime.parse(SharedPreferencesUtil().lastDailySummaryDay);
         var secondsFromLast = now.difference(at).inSeconds;
         debugPrint('secondsFrom8pm: $secondsFrom8pm');
@@ -72,8 +77,12 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
       }
       timer.cancel();
 
-      widget.addMessage(Message(text: '', type: 'ai', id: const Uuid().v4(), daySummary: true), false);
-      SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
+      widget.addMessage(
+          Message(
+              text: '', type: 'ai', id: const Uuid().v4(), daySummary: true),
+          false);
+      SharedPreferencesUtil().lastDailySummaryDay =
+          DateTime.now().toIso8601String();
 
       var memories = await MemoryProvider().retrieveDayMemories(now);
       // var memories = await MemoryProvider().getMemories();
@@ -81,7 +90,10 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
 
       var messagesCopy = [...widget.messages];
       messagesCopy.last.text = result;
-      messagesCopy.last.memoryIds = memories.where((e) => !e.discarded).map((e) => e.id.toString()).toList();
+      messagesCopy.last.memoryIds = memories
+          .where((e) => !e.discarded)
+          .map((e) => e.id.toString())
+          .toList();
       widget.setMessages(messagesCopy);
       prefs.chatMessages = widget.messages;
       _moveListToBottom();
@@ -106,6 +118,10 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
 
   @override
   Widget build(BuildContext context) {
+    final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+    final pluginsList = SharedPreferencesUtil().pluginsList;
+    final enabledPlugins =
+        pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
     return Stack(
       children: [
         Align(
@@ -118,17 +134,25 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
               final message = widget.messages[chatIndex];
               final isLastMessage = chatIndex == widget.messages.length - 1;
               double topPadding = chatIndex == 0 ? 24 : 8;
-              double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 180) : 0;
+              double bottomPadding = isLastMessage
+                  ? (widget.textFieldFocusNode.hasFocus ? 120 : 180)
+                  : 0;
               return Padding(
                 key: ValueKey(message.id),
-                padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                padding: EdgeInsets.only(
+                    bottom: bottomPadding,
+                    left: 18,
+                    right: 18,
+                    top: topPadding),
                 child: message.type == 'ai'
                     ? AIMessage(
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: widget.messages.length <= 1,
                         memories: widget.memories
-                            .where((m) => message.memoryIds?.contains(m.id.toString()) ?? false)
+                            .where((m) =>
+                                message.memoryIds?.contains(m.id.toString()) ??
+                                false)
                             .toList(),
                       )
                     : HumanMessage(message: message),
@@ -139,7 +163,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
-            padding: EdgeInsets.only(bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
+            padding: EdgeInsets.only(
+                bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
             child: Container(
               width: double.maxFinite,
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -167,7 +192,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                 // canRequestFocus: true,
                 decoration: InputDecoration(
                     hintText: 'Ask your Friend anything',
-                    hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                    hintStyle:
+                        const TextStyle(fontSize: 14.0, color: Colors.grey),
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     suffixIcon: IconButton(
@@ -176,7 +202,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                               width: 24,
                               height: 24,
                               child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
                           : const Icon(
@@ -200,6 +227,32 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
             ),
           ),
         ),
+        if (enabledPlugins.isNotEmpty)
+          Align(
+            alignment: Alignment.topCenter,
+            child: DropdownButton<String>(
+              value: selectedPluginId,
+              icon: const Icon(Icons.arrow_downward),
+              elevation: 16,
+              style: const TextStyle(color: Colors.deepPurple),
+              underline: Container(
+                height: 2,
+                color: Colors.deepPurpleAccent,
+              ),
+              onChanged: (String? newValue) {
+                setState(() {
+                  selectedPluginId = newValue;
+                });
+              },
+              items:
+                  enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
+                return DropdownMenuItem<String>(
+                  value: plugin.id,
+                  child: Text(plugin.name),
+                );
+              }).toList(),
+            ),
+          ),
       ],
     );
   }
@@ -215,48 +268,59 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
 
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     final pluginsList = SharedPreferencesUtil().pluginsList;
-    final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+    final enabledPlugins =
+        pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
 
     // set personality to empty string if no plugins enabled
-    dynamic personality = enabledPlugins.isNotEmpty 
-        ? (enabledPlugins.length > 1 
-            ? enabledPlugins.map((e) => e.prompt).toList() 
-            : enabledPlugins.first.prompt) 
+    dynamic personality = enabledPlugins.isNotEmpty
+        ? (enabledPlugins.length > 1
+            ? enabledPlugins.map((e) => e.prompt).toList()
+            : enabledPlugins.first.prompt)
         : "";
 
-    await streamApiResponse(personality, ragContext, _callbackFunctionChatStreaming(memoryIds), _messages, () {
-      _messages.last.memoryIds = memoryIds;
-      prefs.chatMessages = _messages;
-    // TODO: make sure about few things here
-    //     await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
-    //       widget.messages.last.memoryIds = memoryIds;
-    //       prefs.chatMessages = widget.messages;
+    await streamApiResponse(personality, ragContext,
+        _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
+      widget.messages.last.memoryIds = memoryIds;
+      prefs.chatMessages = widget.messages;
+      // TODO: make sure about few things here
+      //     await streamApiResponse(ragContext, _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
+      //       widget.messages.last.memoryIds = memoryIds;
+      //       prefs.chatMessages = widget.messages;
     });
     changeLoadingState();
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion = await determineRequiresContext(retrieveMostRecentMessages(widget.messages));
-    debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
+    String? betterContextQuestion = await determineRequiresContext(
+        retrieveMostRecentMessages(widget.messages));
+    debugPrint(
+        '_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null || betterContextQuestion.isEmpty) {
       return ['', []];
     }
-    List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
+    List<double> vectorizedMessage =
+        await getEmbeddingsFromInput(betterContextQuestion);
     List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('queryPineconeVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
       return ['', []];
     }
-    List<int> memoriesIdAsInt = memoriesId.map((e) => int.tryParse(e) ?? -1).where((e) => e != -1).toList();
+    List<int> memoriesIdAsInt = memoriesId
+        .map((e) => int.tryParse(e) ?? -1)
+        .where((e) => e != -1)
+        .toList();
     debugPrint('memoriesIdAsInt: $memoriesIdAsInt');
-    List<Memory> memories = await MemoryProvider().getMemoriesById(memoriesIdAsInt);
+    List<Memory> memories =
+        await MemoryProvider().getMemoriesById(memoriesIdAsInt);
     return [Memory.memoriesToString(memories), memoriesId];
   }
 
   _prepareStreaming(String text) {
     textController.clear(); // setState if isolated
-    widget.addMessage(Message(text: text, type: 'human', id: const Uuid().v4()), true);
-    widget.addMessage(Message(text: '', type: 'ai', id: const Uuid().v4()), false);
+    widget.addMessage(
+        Message(text: text, type: 'human', id: const Uuid().v4()), true);
+    widget.addMessage(
+        Message(text: '', type: 'ai', id: const Uuid().v4()), false);
     _moveListToBottom(extra: 0);
   }
 
@@ -274,6 +338,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _moveListToBottom({double extra = 0}) async {
-    listViewController.jumpTo(listViewController.position.maxScrollExtent + extra);
+    listViewController
+        .jumpTo(listViewController.position.maxScrollExtent + extra);
   }
 }
