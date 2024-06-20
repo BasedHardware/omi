@@ -1,12 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
-import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -49,6 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     super.initState();
   }
+
+  bool loadingExportMemories = false;
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 },
                               ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               width: 8,
                             ),
                             Container(
@@ -540,6 +545,31 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: _getTextFieldDecoration('GCP Bucket Name'),
         style: const TextStyle(color: Colors.white),
       ),
+      const SizedBox(height: 24),
+      ListTile(
+        title: const Text('Export Memories'),
+        subtitle: const Text('Export all your memories to a JSON file.'),
+        trailing: loadingExportMemories
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Icon(Icons.upload),
+        onTap: () async {
+          if (loadingExportMemories) return;
+          setState(() => loadingExportMemories = true);
+          File file = await MemoryProvider().exportMemoriesToFile();
+          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+          if (result.status == ShareResultStatus.success) {
+            print('Thank you for sharing the picture!');
+          }
+          setState(() => loadingExportMemories = false);
+        },
+      ),
       const SizedBox(height: 64),
     ];
   }
@@ -549,18 +579,18 @@ class _SettingsPageState extends State<SettingsPage> {
       labelText: label,
       enabled: true && canBeDisabled,
       hintText: hintText,
-      labelStyle: TextStyle(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+      labelStyle: const TextStyle(color: Colors.white),
       border: const OutlineInputBorder(),
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
-        borderRadius: const BorderRadius.all(Radius.circular(20.0)),
+      enabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.white),
+        borderRadius: BorderRadius.all(Radius.circular(20.0)),
       ),
-      disabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
-        borderRadius: const BorderRadius.all(Radius.circular(20.0)),
+      disabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.white),
+        borderRadius: BorderRadius.all(Radius.circular(20.0)),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: false && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white),
+      focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.white),
       ),
       suffixIcon: suffixIcon,
     );
