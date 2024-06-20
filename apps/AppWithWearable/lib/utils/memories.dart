@@ -8,8 +8,11 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
-Future<Memory?> processTranscriptContent(BuildContext context, String content, String? recordingFilePath,
-    {bool retrievedFromCache = false, DateTime? startedAt, DateTime? finishedAt}) async {
+Future<Memory?> processTranscriptContent(
+    BuildContext context, String content, String? recordingFilePath,
+    {bool retrievedFromCache = false,
+    DateTime? startedAt,
+    DateTime? finishedAt}) async {
   if (content.isNotEmpty) {
     return await memoryCreationBlock(
       context,
@@ -35,21 +38,24 @@ Future<Memory?> memoryCreationBlock(
   // List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
   MemoryStructured structuredMemory;
   try {
-    structuredMemory = await generateTitleAndSummaryForMemory(transcript, []); // recentMemories
+    structuredMemory = await generateTitleAndSummaryForMemory(
+        transcript, []); // recentMemories
   } catch (e) {
     debugPrint('Error: $e');
     InstabugLog.logError(e.toString());
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('There was an error creating your memory, please check your open AI API keys.')));
+          content: Text(
+              'There was an error creating your memory, please check your open AI API keys.')));
     }
     return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
 
   if (structuredMemory.title.isEmpty) {
-    var created = await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
+    var created = await saveFailureMemory(
+        transcript, structuredMemory, startedAt, finishedAt);
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -62,12 +68,14 @@ Future<Memory?> memoryCreationBlock(
     }
     return created;
   } else {
-    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
+    Memory memory = await finalizeMemoryRecord(
+        transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
     debugPrint('Memory created: ${memory.id}');
     if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
+        content: Text('New memory created! 🚀',
+            style: TextStyle(color: Colors.white)),
         duration: Duration(seconds: 4),
       ));
     }
@@ -89,7 +97,8 @@ Future<Memory> saveFailureMemory(
     emoji: structuredMemory.emoji,
     category: structuredMemory.category,
   );
-  Memory memory = Memory(DateTime.now(), transcript, true, startedAt: startedAt, finishedAt: finishedAt);
+  Memory memory = Memory(DateTime.now(), transcript, true,
+      startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
   MemoryProvider().saveMemory(memory);
   MixpanelManager().memoryCreated(memory);
@@ -114,7 +123,9 @@ Future<Memory> finalizeMemoryRecord(
     structured.actionItems.add(ActionItem(actionItem));
   }
   var memory = Memory(DateTime.now(), transcript, false,
-      recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
+      recordingFilePath: recordingFilePath,
+      startedAt: startedAt,
+      finishedAt: finishedAt);
   memory.structured.target = structured;
   for (var r in structuredMemory.pluginsResponse) {
     memory.pluginsResponse.add(PluginResponse(r));
