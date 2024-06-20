@@ -50,7 +50,7 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
         working-directory: apps/AppWithWearable
 
-      # Decoding jks
+      # Decoding jks file
       - name: Decode and write keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.SECRET_JKS }}
