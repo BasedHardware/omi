@@ -127,6 +127,42 @@ class _ChatPageState extends State<ChatPage>
       children: [
         Align(
           alignment: Alignment.bottomCenter,
+          child: ListView.builder(
+            scrollDirection: Axis.vertical,
+            controller: listViewController,
+            itemCount: widget.messages.length,
+            itemBuilder: (context, chatIndex) {
+              final message = widget.messages[chatIndex];
+              final isLastMessage = chatIndex == widget.messages.length - 1;
+              double topPadding = chatIndex == 0 ? 24 : 8;
+              double bottomPadding = isLastMessage
+                  ? (widget.textFieldFocusNode.hasFocus ? 120 : 180)
+                  : 0;
+              return Padding(
+                key: ValueKey(message.id),
+                padding: EdgeInsets.only(
+                    bottom: bottomPadding,
+                    left: 18,
+                    right: 18,
+                    top: topPadding),
+                child: message.type == 'ai'
+                    ? AIMessage(
+                        message: message,
+                        sendMessage: _sendMessageUtil,
+                        displayOptions: widget.messages.length <= 1,
+                        memories: widget.memories
+                            .where((m) =>
+                                message.memoryIds?.contains(m.id.toString()) ??
+                                false)
+                            .toList(),
+                      )
+                    : HumanMessage(message: message),
+              );
+            },
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
           child: Padding(
             padding: EdgeInsets.only(
                 bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
