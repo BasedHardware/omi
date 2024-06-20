@@ -287,11 +287,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       });
     }
     // Analyze transcript and decide on setting a reminder
-    ReminderDetails? reminderDetails =
-        await analyzeTranscriptForReminder(transcript);
-    if (reminderDetails != null) {
-      reminders.addReminder(reminderDetails.title, reminderDetails.dueDate,
-          reminderDetails.duration);
+    if (SharedPreferencesUtil().remindersEnabled) {
+      ReminderDetails? reminderDetails =
+          await analyzeTranscriptForReminder(transcript);
+      if (reminderDetails != null) {
+        reminders.addReminder(reminderDetails.title, reminderDetails.dueDate,
+            reminderDetails.duration);
+      }
     }
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
