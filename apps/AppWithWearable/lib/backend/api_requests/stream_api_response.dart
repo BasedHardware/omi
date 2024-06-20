@@ -21,7 +21,8 @@ Future streamApiResponse(
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
 
-  String body = qaStreamedBody(personality, context, retrieveMostRecentMessages(chatHistory));
+  String body = qaStreamedBody(
+      personality, context, retrieveMostRecentMessages(chatHistory));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
@@ -56,7 +57,10 @@ _listStream(response, callback, onDone) {
         // Check for a complete message (or more than one)
         if (bufferString.contains("data:")) {
           // Split the buffer by 'data:' delimiter
-          var jsonBlocks = bufferString.split('data:').where((block) => block.isNotEmpty).toList();
+          var jsonBlocks = bufferString
+              .split('data:')
+              .where((block) => block.isNotEmpty)
+              .toList();
 
           int processedBlocks = 0;
           for (var jsonBlock in jsonBlocks) {
@@ -99,27 +103,28 @@ String? jsonEncodeString(String? regularString) {
   return encodedString.substring(1, encodedString.length - 1);
 }
 
-void handlePartialResponseContent(String data, Future<dynamic> Function(String) callback) {
+void handlePartialResponseContent(
+    String data, Future<dynamic> Function(String) callback) {
   if (data.contains("content")) {
-    ContentResponse contentResponse = ContentResponse.fromJson(jsonDecode(data));
+    ContentResponse contentResponse =
+        ContentResponse.fromJson(jsonDecode(data));
     if (contentResponse.choices != null &&
         contentResponse.choices![0].delta != null &&
         contentResponse.choices![0].delta!.content != null) {
-      String content = jsonEncodeString(contentResponse.choices![0].delta!.content!)!;
+      String content =
+          jsonEncodeString(contentResponse.choices![0].delta!.content!)!;
       callback(content);
     }
   }
 }
 
-String qaStreamedBody(dynamic personality, String context, List<Message> chatHistory) {
-
+String qaStreamedBody(
+    dynamic personality, String context, List<Message> chatHistory) {
   var personalityPrompt = '';
   if (personality is String) {
-    personalityPrompt = personality.isNotEmpty ? 'This is your personality, you should try to answer in this style: $personality\n' : '';
-  } else if (personality is List<String>) {
-    if (personality.isNotEmpty) {
-      personalityPrompt = 'These are your available personalities, pick the style among them that fits best to the ongoing conversation:\n${personality.map((p) => '- $p').join('\n')}\n';
-    }
+    personalityPrompt = personality.isNotEmpty
+        ? 'This is your personality, you should try to answer in this style: $personality\n'
+        : '';
   }
   var prompt = '''
     $personalityPrompt

@@ -234,23 +234,23 @@ class _ChatPageState extends State<ChatPage>
   _sendMessageUtil(String message) async {
     changeLoadingState();
     _prepareStreaming(message);
-    dynamic ragInfo = await _retrieveRAGContext(message);
-    String ragContext = ragInfo[0];
-    List<String> memoryIds = ragInfo[1].cast<String>();
-    debugPrint('RAG Context: $ragContext');
-    MixpanelManager().chatMessageSent(message);
 
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     final pluginsList = SharedPreferencesUtil().pluginsList;
     final enabledPlugins =
         pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+    String personality = "";
+    if (selectedPluginId != null) {
+      final selectedPlugin =
+          enabledPlugins.firstWhere((plugin) => plugin.id == selectedPluginId);
+      personality = selectedPlugin.prompt;
+    }
 
-    // set personality to empty string if no plugins enabled
-    dynamic personality = enabledPlugins.isNotEmpty
-        ? (enabledPlugins.length > 1
-            ? enabledPlugins.map((e) => e.prompt).toList()
-            : enabledPlugins.first.prompt)
-        : "";
+    dynamic ragInfo = await _retrieveRAGContext(message);
+    String ragContext = ragInfo[0];
+    List<String> memoryIds = ragInfo[1].cast<String>();
+    debugPrint('RAG Context: $ragContext');
+    MixpanelManager().chatMessageSent(message);
 
     await streamApiResponse(personality, ragContext,
         _callbackFunctionChatStreaming(memoryIds), widget.messages, () {
