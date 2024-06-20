@@ -63,6 +63,7 @@ class _HasBackupPageState extends State<HasBackupPage> {
                 ],
               ),
             ],
+            // TODO: include an option for setting up backup
           ),
         ),
       ),
