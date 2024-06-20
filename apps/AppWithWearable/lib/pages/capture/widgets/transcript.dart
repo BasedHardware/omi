@@ -293,7 +293,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       if (reminderDetails != null) {
         reminders.addReminder(reminderDetails.title, reminderDetails.dueDate,
             reminderDetails.duration);
-      }
+        // Show a SnackBar when a reminder is successfully created
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Calendar reminder created 📆',
+                style: TextStyle(color: Colors.white)),
+          ));
+        }
     }
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
