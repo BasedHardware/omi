@@ -1,10 +1,15 @@
-# Note: In a yml each level is padded by 2 spaces
 name:  Create flutter build
 
 on:
-  # Runs this action when you push on master
+  # Runs this action when you push on master and development
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"
+      - "development"
+  pull_request:
+    branches:
+      - "development"
+
 
 jobs:
   flutter_job:
@@ -27,14 +32,25 @@ jobs:
           channel: 'stable'
           architecture: x64
 
+      # Cache pub packages
+      - name: Cache pub packages
+        uses: actions/cache@v2
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-pub-
+
+      # Setup the env
       - name: Setup Env
         run: cat .env.template > .env
         working-directory: apps/AppWithWearable
 
+      # Build runner
       - name: Run Build Runner
         run: dart run build_runner build --delete-conflicting-outputs
         working-directory: apps/AppWithWearable
 
+      # Decoding jks
       - name: Decode and write keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.SECRET_JKS }}
@@ -44,22 +60,22 @@ jobs:
         run: flutter pub get
         working-directory: apps/AppWithWearable
 
-      - name : Create Build
+      - name : Create Android Build
         working-directory: apps/AppWithWearable
-#        run: flutter build apk --debug
         run: flutter build apk --release --split-per-abi
 
-#      - name : Create iOS Build
-#        working-directory: apps/AppWithWearable
-#        run: |
-#          flutter build ios --no-codesign
-#          cd build/ios/iphoneos
-#          mkdir Payload
-#          cd Payload
-#          ln -s ../Runner.app
-#          cd ..
-#          zip -r app.ipa Payload
+      - name : Create iOS Build
+        working-directory: apps/AppWithWearable
+        run: |
+          flutter build ios --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          cd Payload
+          ln -s ../Runner.app
+          cd ..
+          zip -r app.ipa Payload
 
+      #Creating bundles of output
       - name: Push to Releases
         uses: ncipollo/release-action@v1
         with:
