@@ -46,19 +46,19 @@ jobs:
 
       - name : Create Build
         working-directory: apps/AppWithWearable
-        run: flutter build apk --debug
-#        run: flutter build apk --release --split-per-abi
+#        run: flutter build apk --debug
+        run: flutter build apk --release --split-per-abi
 
-      - name : Create iOS Build
-        working-directory: apps/AppWithWearable
-        run: |
-          flutter build ios --no-codesign
-          cd build/ios/iphoneos
-          mkdir Payload
-          cd Payload
-          ln -s ../Runner.app
-          cd ..
-          zip -r app.ipa Payload
+#      - name : Create iOS Build
+#        working-directory: apps/AppWithWearable
+#        run: |
+#          flutter build ios --no-codesign
+#          cd build/ios/iphoneos
+#          mkdir Payload
+#          cd Payload
+#          ln -s ../Runner.app
+#          cd ..
+#          zip -r app.ipa Payload
 
       - name: Push to Releases
         uses: ncipollo/release-action@v1
