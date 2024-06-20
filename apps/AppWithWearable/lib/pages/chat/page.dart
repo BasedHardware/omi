@@ -156,19 +156,35 @@ class _ChatPageState extends State<ChatPage>
                       onPressed: () {
                         showModalBottomSheet(
                           context: context,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
                           builder: (BuildContext context) {
-                            return ListView(
-                              children: enabledPlugins.map((Plugin plugin) {
-                                return ListTile(
-                                  title: Text(plugin.name),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    setState(() {
-                                      selectedPluginId = plugin.id;
-                                    });
-                                  },
-                                );
-                              }).toList(),
+                            return Container(
+                              padding: const EdgeInsets.all(8),
+                              child: ListView(
+                                children: enabledPlugins.map((Plugin plugin) {
+                                  return ListTile(
+                                    title: Text(
+                                      plugin.name,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      setState(() {
+                                        selectedPluginId = plugin.id;
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
                             );
                           },
                         );
@@ -177,10 +193,10 @@ class _ChatPageState extends State<ChatPage>
                   Expanded(
                     child: TextField(
                       controller: textController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: 'Ask your Friend anything',
                         hintStyle:
-                            const TextStyle(fontSize: 14.0, color: Colors.grey),
+                            TextStyle(fontSize: 14.0, color: Colors.grey),
                         border: InputBorder.none,
                       ),
                       style: TextStyle(
