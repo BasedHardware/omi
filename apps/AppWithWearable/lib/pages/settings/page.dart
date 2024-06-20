@@ -72,10 +72,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void toggleReminders(bool isEnabled) {
+  void toggleReminders(bool isEnabled) async {
     if (isEnabled) {
-      reminders.addReminder("Checkup Reminder",
-          DateTime.now().add(Duration(days: 1)), Duration(hours: 2));
+      bool permissionsGranted = await reminders.enableCalendarPermissions();
+      if (!permissionsGranted) {
+        // TODO: Handle permissions not granted
+        debugPrint("Calendar permissions not granted.");
+      }
     }
   }
 
