@@ -5,9 +5,9 @@ import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/backend/storage/segment.dart';
@@ -279,7 +279,7 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
         - If it does, provide the topic (1 or 2 words, e.g. "Startups" "Funding" "Business Meetings") that is going to be used to retrieve more context, in the field "query". Leave empty if not context is needed.
         
         Conversation:
-        ${messages.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}\n
+        ${messages.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
         As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}

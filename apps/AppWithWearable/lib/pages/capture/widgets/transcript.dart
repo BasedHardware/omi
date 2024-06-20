@@ -7,28 +7,26 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api_calls.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:uuid/uuid.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
   final Function(bool) setHasTranscripts;
-  final Function(Message) addMessage;
 
   const TranscriptWidget({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
     required this.setHasTranscripts,
-    required this.addMessage,
   });
 
   final BTDeviceStruct? btDevice;
@@ -243,7 +241,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
         // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
-        widget.addMessage(Message(text: r, type: 'ai', id: const Uuid().v4(), memoryIds: [memory.id.toString()]));
+        var msg = Message(DateTime.now(), r, 'ai');
+        msg.memories.add(memory);
+        MessageProvider().saveMessage(msg);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
