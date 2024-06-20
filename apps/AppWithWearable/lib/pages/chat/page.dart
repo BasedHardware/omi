@@ -176,6 +176,9 @@ class _ChatPageState extends State<ChatPage>
                                             .onSurface,
                                       ),
                                     ),
+                                    trailing: selectedPluginId == plugin.id
+                                        ? Icon(Icons.check, color: Colors.green)
+                                        : null,
                                     onTap: () {
                                       Navigator.pop(context);
                                       setState(() {
