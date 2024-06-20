@@ -68,6 +68,8 @@ Future<ReminderDetails?> analyzeTranscriptForReminder(String transcript) async {
 
   // ensure it is valid JSON
   var cleanResponse = response
+      .replaceAll(RegExp(r'```json'), '')
+      .replaceAll(RegExp(r'```'), '')
       .replaceAll(RegExp(r'^.*?{'), '{')
       .replaceAll(RegExp(r'}.*?$'), '}');
 
