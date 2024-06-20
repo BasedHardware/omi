@@ -16,6 +16,9 @@ import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:uuid/uuid.dart';
+import 'package:friend_private/pages/settings/reminders_android.dart';
+import 'package:friend_private/pages/settings/reminders_ios.dart';
+import 'package:friend_private/pages/settings/reminders_interface.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
@@ -37,6 +40,7 @@ class TranscriptWidget extends StatefulWidget {
 }
 
 class TranscriptWidgetState extends State<TranscriptWidget> {
+  late RemindersInterface reminders;
   BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [];
 
@@ -62,6 +66,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
     super.initState();
+    if (Platform.isIOS) {
+      reminders = RemindersIOS();
+    } else {
+      reminders = RemindersAndroid();
+    }
   }
 
   @override
@@ -72,12 +81,23 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     super.dispose();
   }
 
+  void toggleReminders(bool isEnabled) {
+    if (isEnabled) {
+      reminders.addReminder(
+          "Checkup Reminder",
+          DateTime.now().add(const Duration(days: 1)),
+          const Duration(hours: 3));
+    }
+  }
+
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, retrievedFromCache: true);
+    String transcript = _buildDiarizedTranscriptMessage(
+        SharedPreferencesUtil().transcriptSegments);
+    processTranscriptContent(context, transcript, null,
+        retrievedFromCache: true);
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
   }
@@ -89,7 +109,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // VadUtil vad = VadUtil();
     // await vad.init();
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id,
+        onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
       // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
@@ -105,7 +126,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         // SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
+        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav')
+            .then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
@@ -114,7 +136,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             processCustomTranscript(segments);
           } catch (e) {
             debugPrint(e.toString());
-            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
+            toProcessBytes.insertAudioBytes(bytesCopy.sublist(
+                0, 232000)); // remove last 1 sec to avoid duplicate
           }
         });
       }
@@ -125,7 +148,13 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _cleanTranscript(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m', 'It was the worst case.', 'and,'];
+    var hallucinations = [
+      'Thank you.',
+      'I don\'t know what to do,',
+      'I\'m',
+      'It was the worst case.',
+      'and,'
+    ];
     // TODO: do this with any words that gets repeated twice
     // - Replicate apparently has much more hallucinations
     for (var i = 0; i < segments.length; i++) {
@@ -174,7 +203,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     currentTranscriptFinishedAt = DateTime.now();
   }
 
-  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+  void resetState(
+      {bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('transcript.dart resetState called');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
@@ -218,7 +248,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+    _memoryCreationTimer =
+        Timer(const Duration(seconds: 120), () => _createMemory());
   }
 
   _createMemory() async {
@@ -235,19 +266,32 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
       finishedAt: currentTranscriptFinishedAt,
     );
     debugPrint(memory.toString());
-    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
+    if (memory != null &&
+        !memory.discarded &&
+        SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
         // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
-        widget.addMessage(Message(text: r, type: 'ai', id: const Uuid().v4(), memoryIds: [memory.id.toString()]));
+        widget.addMessage(Message(
+            text: r,
+            type: 'ai',
+            id: const Uuid().v4(),
+            memoryIds: [memory.id.toString()]));
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
           body: r,
         );
       });
+    }
+    // Analyze transcript and decide on setting a reminder
+    ReminderDetails? reminderDetails =
+        await analyzeTranscriptForReminder(transcript);
+    if (reminderDetails != null) {
+      reminders.addReminder(reminderDetails.title, reminderDetails.dueDate,
+          reminderDetails.duration);
     }
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
@@ -283,7 +327,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                     child: Text(
                       textAlign: TextAlign.center,
                       'Your transcripts will start appearing\nhere after 30 seconds.',
-                      style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
+                      style: TextStyle(
+                          color: Colors.white,
+                          height: 1.5,
+                          decoration: TextDecoration.underline),
                     ),
                   ),
                 )
@@ -316,8 +363,12 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
-                      width: 26, height: 26),
+                  Image.asset(
+                      data.isUser
+                          ? 'assets/images/speaker_0_icon.png'
+                          : 'assets/images/speaker_1_icon.png',
+                      width: 26,
+                      height: 26),
                   const SizedBox(width: 12),
                   Text(
                     data.isUser ? 'You' : 'Speaker ${data.speakerId}',
@@ -330,8 +381,11 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
-                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                    needsUtf8
+                        ? utf8.decode(data.text.toString().codeUnits)
+                        : data.text,
+                    style:
+                        const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
                 ),
