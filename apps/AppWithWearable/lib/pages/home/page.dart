@@ -112,19 +112,25 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initDailySummaries() {
     debugPrint('_initDailySummaries');
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+    // Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
     var now = DateTime.now();
     var target = DateTime(now.year, now.month, now.day, 20, 0);
     if (now.isAfter(target)) target = target.add(const Duration(days: 1));
     var delay = target.difference(now);
-    Workmanager().registerPeriodicTask(
-      "com.friend-app-with-wearable.ios12.daily-summary",
-      "com.friend-app-with-wearable.ios12.daily-summary",
-      frequency: const Duration(seconds: 60), // not considered for iOS
-      initialDelay: const Duration(seconds: 0),
-      constraints: Constraints(networkType: NetworkType.connected),
+    createNotification(
+      title: 'Don\'t forget to wear Friend today',
+      body: 'Wear your friend and capture your memories today.',
+      notificationId: 4,
+      isMorningNotification: true,
     );
-    debugPrint('_initDailySummaries registered');
+    // Workmanager().registerPeriodicTask(
+    //   "com.friend-app-with-wearable.ios12.daily-summary",
+    //   "com.friend-app-with-wearable.ios12.daily-summary",
+    //   frequency: const Duration(seconds: 60), // not considered for iOS
+    //   initialDelay: const Duration(seconds: 0),
+    //   constraints: Constraints(networkType: NetworkType.connected),
+    // );
+    // debugPrint('_initDailySummaries registered');
   }
 
   @override
@@ -150,8 +156,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       notificationId: 4,
       isMorningNotification: true,
     );
+    createNotification(
+      title: 'Here is your action plan for tomorrow',
+      body: 'Check out your daily summary to see what you should do tomorrow.',
+      notificationId: 5,
+      isDailySummaryNotification: true,
+    );
 
-    _initDailySummaries();
+    // _initDailySummaries();
     super.initState();
   }
 

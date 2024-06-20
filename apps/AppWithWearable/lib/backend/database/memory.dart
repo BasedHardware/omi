@@ -31,27 +31,44 @@ class Memory {
   Memory(this.createdAt, this.transcript, this.discarded,
       {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
 
-  static String memoriesToString(List<Memory> memories) => memories
+  static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
       ${e.createdAt.toIso8601String().split('.')[0]}
       Title: ${e.structured.target!.title}
       Summary: ${e.structured.target!.overview}
       ${e.structured.target!.actionItems.isNotEmpty ? 'Action Items:' : ''}
       ${e.structured.target!.actionItems.map((item) => '  - ${item.description}').join('\n')}
-      ${e.pluginsResponse.isNotEmpty ? 'Plugins Response:' : ''}
-      ${e.pluginsResponse.map((response) => '  - ${response.content}').join('\n')}
       Category: ${e.structured.target!.category}
+      ${includeTranscript ? 'Transcript:\n${e.transcript}' : ''}
       '''
           .replaceAll('      ', '')
           .trim())
       .join('\n\n');
 
+  static Memory fromJson(Map<String, dynamic> json) {
+    var memory = Memory(
+      DateTime.parse(json['createdAt']),
+      json['transcript'],
+      json['discarded'],
+      // id: json['id'],
+      recordingFilePath: json['recordingFilePath'],
+      startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
+      finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
+    );
+    memory.structured.target = Structured.fromJson(json['structured']);
+    if (json['pluginsResponse'] != null) {
+      for (String response in json['pluginsResponse']) {
+        if (response.isEmpty) continue;
+        memory.pluginsResponse.add(PluginResponse(response));
+      }
+    }
+    return memory;
+  }
+
   String getTranscript({int? maxCount}) {
     try {
       var transcript = this.transcript;
-      if (maxCount != null) {
-        transcript = transcript.substring(0, min(maxCount, transcript.length));
-      }
+      if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
       return utf8.decode(transcript.toString().codeUnits);
     } catch (e) {
       return transcript;
@@ -60,11 +77,12 @@ class Memory {
 
   toJson() {
     return {
+      'id': id,
       'createdAt': createdAt.toIso8601String(),
       'transcript': transcript,
       'recordingFilePath': recordingFilePath,
       'structured': structured.target!.toJson(),
-      'pluginsResponse': pluginsResponse.map((response) => response.content).toList(),
+      'pluginsResponse': pluginsResponse.map<String>((response) => response.content).toList(),
       'discarded': discarded,
     };
   }
@@ -83,7 +101,7 @@ class Structured {
   @Backlink('structured')
   final actionItems = ToMany<ActionItem>();
 
-  Structured(this.title, this.overview, {this.emoji = '', this.category = 'other'});
+  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
   getEmoji() {
     try {
@@ -92,6 +110,22 @@ class Structured {
     } catch (e) {
       return ['🧠', '😎', '🧑‍💻', '🎂'][Random().nextInt(4)];
     }
+  }
+
+  static Structured fromJson(Map<String, dynamic> json) {
+    var structured = Structured(
+      json['title'],
+      json['overview'],
+      emoji: json['emoji'],
+      category: json['category'],
+    );
+    if (json['actionItems'] != null) {
+      for (String item in json['actionItems']) {
+        if (item.isEmpty) continue;
+        structured.actionItems.add(ActionItem(item));
+      }
+    }
+    return structured;
   }
 
   @override
