@@ -15,7 +15,7 @@ jobs:
         with:
           script: |
             const projectUrl = 'https://github.com/orgs/BasedHardware/projects/1'; // Replace with your project URL
-            const columnName = 'To do'; // Replace with the name of your target column
+            const columnName = 'Backlog'; // Replace with the name of your target column
             const issue = context.payload.issue;
 
             // Fetch project columns
