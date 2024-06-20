@@ -65,9 +65,15 @@ Future<ReminderDetails?> analyzeTranscriptForReminder(String transcript) async {
   ''';
 
   var response = await executeGptPrompt(prompt);
-  if (response.isEmpty || response == '{}') return null;
 
-  var data = jsonDecode(response);
+  // ensure it is valid JSON
+  var cleanResponse = response
+      .replaceAll(RegExp(r'^.*?{'), '{')
+      .replaceAll(RegExp(r'}.*?$'), '}');
+
+  if (cleanResponse.isEmpty || cleanResponse == '{}') return null;
+
+  var data = jsonDecode(cleanResponse);
   if (data.isEmpty) return null;
 
   return ReminderDetails(data['title'], DateTime.parse(data['dueDate']),
