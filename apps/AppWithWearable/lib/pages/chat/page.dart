@@ -217,6 +217,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     // TODO: make sure about few things here
     await streamApiResponse(ragContext, _callbackFunctionChatStreaming(aiMessage), () {
       aiMessage.memories.addAll(memories);
+      MessageProvider().updateMessage(aiMessage);
     });
     changeLoadingState();
   }
