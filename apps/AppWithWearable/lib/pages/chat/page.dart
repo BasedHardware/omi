@@ -122,44 +122,9 @@ class _ChatPageState extends State<ChatPage>
     final pluginsList = SharedPreferencesUtil().pluginsList;
     final enabledPlugins =
         pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+
     return Stack(
       children: [
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: ListView.builder(
-            scrollDirection: Axis.vertical,
-            controller: listViewController,
-            itemCount: widget.messages.length,
-            itemBuilder: (context, chatIndex) {
-              final message = widget.messages[chatIndex];
-              final isLastMessage = chatIndex == widget.messages.length - 1;
-              double topPadding = chatIndex == 0 ? 24 : 8;
-              double bottomPadding = isLastMessage
-                  ? (widget.textFieldFocusNode.hasFocus ? 120 : 180)
-                  : 0;
-              return Padding(
-                key: ValueKey(message.id),
-                padding: EdgeInsets.only(
-                    bottom: bottomPadding,
-                    left: 18,
-                    right: 18,
-                    top: topPadding),
-                child: message.type == 'ai'
-                    ? AIMessage(
-                        message: message,
-                        sendMessage: _sendMessageUtil,
-                        displayOptions: widget.messages.length <= 1,
-                        memories: widget.memories
-                            .where((m) =>
-                                message.memoryIds?.contains(m.id.toString()) ??
-                                false)
-                            .toList(),
-                      )
-                    : HumanMessage(message: message),
-              );
-            },
-          ),
-        ),
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
@@ -183,76 +148,66 @@ class _ChatPageState extends State<ChatPage>
                 ),
                 shape: BoxShape.rectangle,
               ),
-              child: TextField(
-                enabled: true,
-                controller: textController,
-                // textCapitalization: TextCapitalization.sentences,
-                obscureText: false,
-                focusNode: widget.textFieldFocusNode,
-                // canRequestFocus: true,
-                decoration: InputDecoration(
-                    hintText: 'Ask your Friend anything',
-                    hintStyle:
-                        const TextStyle(fontSize: 14.0, color: Colors.grey),
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    suffixIcon: IconButton(
-                      icon: loading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: Color(0xFFF7F4F4),
-                              size: 30.0,
-                            ),
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              String message = textController.text;
-                              if (message.isEmpty) return;
-                              _sendMessageUtil(message);
-                            },
-                    )),
-                // maxLines: 8,
-                // minLines: 1,
-                // keyboardType: TextInputType.multiline,
-                style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+              child: Row(
+                children: [
+                  if (enabledPlugins.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.extension),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return ListView(
+                              children: enabledPlugins.map((Plugin plugin) {
+                                return ListTile(
+                                  title: Text(plugin.name),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() {
+                                      selectedPluginId = plugin.id;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  Expanded(
+                    child: TextField(
+                      controller: textController,
+                      decoration: InputDecoration(
+                        hintText: 'Ask your Friend anything',
+                        hintStyle:
+                            const TextStyle(fontSize: 14.0, color: Colors.grey),
+                        border: InputBorder.none,
+                      ),
+                      style: TextStyle(
+                          fontSize: 14.0, color: Colors.grey.shade200),
+                    ),
+                  ),
+                  IconButton(
+                    icon: loading
+                        ? const CircularProgressIndicator(
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          )
+                        : const Icon(Icons.send_rounded,
+                            color: Color(0xFFF7F4F4), size: 30.0),
+                    onPressed: loading
+                        ? null
+                        : () {
+                            String message = textController.text;
+                            if (message.isEmpty) return;
+                            _sendMessageUtil(message);
+                          },
+                  ),
+                ],
               ),
             ),
           ),
         ),
-        if (enabledPlugins.isNotEmpty)
-          Align(
-            alignment: Alignment.topCenter,
-            child: DropdownButton<String>(
-              value: selectedPluginId,
-              icon: const Icon(Icons.arrow_downward),
-              elevation: 16,
-              style: const TextStyle(color: Colors.deepPurple),
-              underline: Container(
-                height: 2,
-                color: Colors.deepPurpleAccent,
-              ),
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedPluginId = newValue;
-                });
-              },
-              items:
-                  enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
-                return DropdownMenuItem<String>(
-                  value: plugin.id,
-                  child: Text(plugin.name),
-                );
-              }).toList(),
-            ),
-          ),
       ],
     );
   }
