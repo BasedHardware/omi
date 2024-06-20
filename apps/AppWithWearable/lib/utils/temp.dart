@@ -1,10 +1,8 @@
-import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/database/message.dart';
 import 'package:intl/intl.dart';
 
 List<Message> retrieveMostRecentMessages(List<Message> ogChatHistory, {int count = 5}) {
-  if (ogChatHistory.length > count) {
-    return ogChatHistory.sublist(ogChatHistory.length - count);
-  }
+  if (ogChatHistory.length > count) return ogChatHistory.sublist(ogChatHistory.length - count);
   return ogChatHistory;
 }
 

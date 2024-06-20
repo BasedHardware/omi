@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -12,9 +10,9 @@ import 'widgets/transcript.dart';
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
   final BTDeviceStruct? device;
-  final Function(Message) addMessage;
 
-  // final int batteryLevel;
+  // final Function(Message) addMessage;
+
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
   const CapturePage({
@@ -22,7 +20,7 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.refreshMemories,
     required this.transcriptChildWidgetKey,
-    required this.addMessage,
+    // required this.addMessage,
   });
 
   @override
@@ -96,8 +94,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
             setState(() {
               _hasTranscripts = hasTranscripts;
             });
-          },
-          addMessage: widget.addMessage),
+          }),
       const SizedBox(height: 16)
     ]);
   }

@@ -57,7 +57,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
-  List<Message> messages = [];
+
+  // List<Message> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -76,11 +77,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
-  _loadMessages() async {
-    var msgs = SharedPreferencesUtil().chatMessages;
-    messages = msgs.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : msgs;
-    setState(() {});
-  }
+  // _loadMessages() async {
+  //   var msgs = SharedPreferencesUtil().chatMessages;
+  //   messages = msgs.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : msgs;
+  //   setState(() {});
+  // }
 
   _setupHasSpeakerProfile() async {
     // SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
@@ -143,7 +144,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     Upgrader.clearSavedSettings();
 
     _initiateMemories();
-    _loadMessages();
+    // _loadMessages();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
@@ -254,25 +255,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       device: _device,
                       refreshMemories: _initiateMemories,
                       transcriptChildWidgetKey: transcriptChildWidgetKey,
-                      addMessage: (msg) {
-                        messages.add(msg);
-                        SharedPreferencesUtil().chatMessages = messages;
-                        setState(() {});
-                      },
-                      // batteryLevel: batteryLevel,
                     ),
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
                       memories: memories,
-                      messages: messages,
-                      setMessages: (msgs) {
-                        setState(() => messages = msgs);
-                      },
-                      addMessage: (Message msg, bool stored) {
-                        messages.add(msg);
-                        if (stored) SharedPreferencesUtil().chatMessages = messages;
-                        setState(() {});
-                      },
                     ),
                   ],
                 ),
