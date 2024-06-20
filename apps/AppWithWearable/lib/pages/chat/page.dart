@@ -53,12 +53,48 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   @override
   bool get wantKeepAlive => true;
 
+  _initDailySummary() {
+    Timer.periodic(const Duration(seconds: 1), (timer) async {
+      var now = DateTime.now();
+      if (now.hour < 20) return;
+      // TODO: maybe a better way to optimize this. is it better to do on build state?
+      debugPrint('now: $now');
+      if (SharedPreferencesUtil().lastDailySummaryDay != '') {
+        var secondsFrom8pm = now.difference(DateTime(now.year, now.month, now.day, 20)).inSeconds;
+        var at = DateTime.parse(SharedPreferencesUtil().lastDailySummaryDay);
+        var secondsFromLast = now.difference(at).inSeconds;
+        debugPrint('secondsFrom8pm: $secondsFrom8pm');
+        debugPrint('secondsFromLast: $secondsFromLast');
+        if (secondsFromLast < secondsFrom8pm) {
+          timer.cancel();
+          return;
+        }
+      }
+      timer.cancel();
+
+      widget.addMessage(Message(text: '', type: 'ai', id: const Uuid().v4(), daySummary: true), false);
+      SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
+
+      var memories = await MemoryProvider().retrieveDayMemories(now);
+      // var memories = await MemoryProvider().getMemories();
+      var result = await dailySummaryNotifications(memories);
+
+      var messagesCopy = [...widget.messages];
+      messagesCopy.last.text = result;
+      messagesCopy.last.memoryIds = memories.where((e) => !e.discarded).map((e) => e.id.toString()).toList();
+      widget.setMessages(messagesCopy);
+      prefs.chatMessages = widget.messages;
+      _moveListToBottom();
+    });
+  }
+
   @override
   void initState() {
-    super.initState();
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _moveListToBottom();
     });
+    _initDailySummary();
+    super.initState();
   }
 
   @override
@@ -81,7 +117,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
             itemBuilder: (context, chatIndex) {
               final message = widget.messages[chatIndex];
               final isLastMessage = chatIndex == widget.messages.length - 1;
-              double topPadding = chatIndex == 0 ? 24 : 0;
+              double topPadding = chatIndex == 0 ? 24 : 8;
               double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 180) : 0;
               return Padding(
                 key: ValueKey(message.id),

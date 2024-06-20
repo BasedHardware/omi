@@ -22,9 +22,14 @@ class MemoryProvider {
 
   Future<List<Memory>> getMemoriesOrdered({bool includeDiscarded = false}) async {
     if (includeDiscarded) {
-      return _box.query().build().find();
+      // created at descending
+      return _box.query().order(Memory_.createdAt).build().find();
     } else {
-      return _box.query(Memory_.discarded.equals(false)).build().find();
+      return _box
+          .query(Memory_.discarded.equals(false))
+          .order(Memory_.createdAt, flags: Order.descending)
+          .build()
+          .find();
     }
   }
 
@@ -64,6 +69,15 @@ class MemoryProvider {
     query.close();
 
     if (filtered.length > count) filtered = filtered.sublist(0, count);
+    return filtered;
+  }
+
+  Future<List<Memory>> retrieveDayMemories(DateTime day) async {
+    DateTime start = DateTime(day.year, day.month, day.day);
+    DateTime end = DateTime(day.year, day.month, day.day, 23, 59, 59);
+    var query = _box.query(Memory_.createdAt.between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)).build();
+    List<Memory> filtered = query.find();
+    query.close();
     return filtered;
   }
 

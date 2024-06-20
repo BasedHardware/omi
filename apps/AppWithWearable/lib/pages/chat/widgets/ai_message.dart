@@ -5,6 +5,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/utils/temp.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
@@ -54,9 +55,21 @@ class AIMessage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
+              message.daySummary
+                  ? Text(
+                      '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade300,
+                        decoration: TextDecoration.underline,
+                      ),
+                    )
+                  : SizedBox(),
+              message.daySummary ? const SizedBox(height: 16) : SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n'),
+                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (message.id != '1') _getCopyButton(context),

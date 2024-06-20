@@ -33,6 +33,8 @@ Future<http.Response?> makeApiCall({
       return await client.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
       return await client.get(Uri.parse(url), headers: headers);
+    } else if (method == 'DELETE') {
+      return await client.delete(Uri.parse(url), headers: headers);
     }
   } catch (e) {
     debugPrint('HTTP request failed: $e');
@@ -200,6 +202,29 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var result = await executeGptPrompt(prompt);
   debugPrint('postMemoryCreationNotification result: $result');
   if (result.contains('N/A') || result.split(' ').length < 5) return '';
+  return result.replaceAll('```', '').trim();
+}
+
+Future<String> dailySummaryNotifications(List<Memory> memories) async {
+  var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
+  if (memories.isEmpty) return msg;
+  if (memories.where((m) => !m.discarded).length <= 1) return msg;
+
+  var prompt = '''
+  The following are a list of transcripts with its proper structuring, that were saved during the user's day.
+  The user wants to get a coherent advice on things that could've been better in those conversations, and what to do next.
+
+  Remember the person is busy so this has to be very efficient and concise.
+  Respond in at most 150 words.
+  
+  Output your response in plain text, without markdown.
+  ```
+  ${Memory.memoriesToString(memories, includeTranscript: true)}
+  ```
+  ''';
+  debugPrint(prompt);
+  var result = await executeGptPrompt(prompt);
+  debugPrint('dailySummaryNotifications result: $result');
   return result.replaceAll('```', '').trim();
 }
 
@@ -506,4 +531,38 @@ Future<bool> uploadSample(File file, String uid) async {
     debugPrint('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
   }
+}
+
+Future<void> uploadBackupApi(String backup) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'data': backup}),
+  );
+  debugPrint('uploadBackup: ${response?.body}');
+}
+
+Future<String> downloadBackupApi(String uid) async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=$uid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  debugPrint('downloadBackup: ${response.body}');
+  return jsonDecode(response.body)['data'] ?? '';
+}
+
+Future<bool> deleteBackupApi() async {
+  var response = await makeApiCall(
+    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteBackup: ${response.body}');
+  return response.statusCode == 200;
 }
