@@ -300,6 +300,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 style: TextStyle(color: Colors.white)),
           ));
         }
+      }
     }
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
