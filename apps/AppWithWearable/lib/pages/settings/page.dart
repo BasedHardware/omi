@@ -74,8 +74,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void toggleReminders(bool isEnabled) {
     if (isEnabled) {
-      reminders.addReminder(
-          "Checkup Reminder", DateTime.now().add(Duration(days: 1)));
+      reminders.addReminder("Checkup Reminder",
+          DateTime.now().add(Duration(days: 1)), Duration(hours: 2));
     }
   }
 
