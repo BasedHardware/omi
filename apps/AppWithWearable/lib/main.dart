@@ -92,7 +92,7 @@ class _MyAppState extends State<MyApp> {
       // home: const HasBackupPage(),
       home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
           ? const HomePageWrapper()
-          : const WelcomePage(),
+          : const HomePageWrapper(),
     );
   }
 }
