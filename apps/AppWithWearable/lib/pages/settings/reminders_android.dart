@@ -5,7 +5,8 @@ import 'package:timezone/timezone.dart' as tz;
 
 class RemindersAndroid implements RemindersInterface {
   @override
-  void addReminder(String title, DateTime dueDate) async {
+  void addReminder(String title, DateTime dueDate,
+      [Duration duration = const Duration(hours: 1)]) async {
     var deviceCalendarPlugin = DeviceCalendarPlugin();
     var permissionsResult = await deviceCalendarPlugin.hasPermissions();
     if (!permissionsResult.isSuccess || !(permissionsResult.data ?? false)) {
@@ -25,7 +26,7 @@ class RemindersAndroid implements RemindersInterface {
     if (calendar != null) {
       final tz.TZDateTime startTZ = tz.TZDateTime.from(dueDate, tz.local);
       final tz.TZDateTime endTZ =
-          tz.TZDateTime.from(dueDate.add(Duration(hours: 1)), tz.local);
+          tz.TZDateTime.from(dueDate.add(duration), tz.local);
       final event =
           Event(calendar.id, title: title, start: startTZ, end: endTZ);
       await deviceCalendarPlugin.createOrUpdateEvent(event);
