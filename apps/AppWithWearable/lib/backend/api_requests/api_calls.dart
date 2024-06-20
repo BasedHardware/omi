@@ -52,13 +52,16 @@ Future<http.Response?> makeApiCall({
 
 Future<ReminderDetails?> analyzeTranscriptForReminder(String transcript) async {
   if (transcript.isEmpty) return null;
+  var now = DateTime.now();
+  var formattedDateTime = DateFormat('yyyy-MM-dd HH:mm').format(now);
 
   var prompt = '''
     Analyze the following transcript to determine if a reminder should be set. If a reminder is needed, provide the details as JSON with keys 'title', 'dueDate', and 'duration'. If no reminder is needed, return an empty JSON object.
+    Today's date and time is "$formattedDateTime"
 
     Example:
     Transcript: "Remember to call John about the project next Monday at 3 PM."
-    Response: {"title": "Call John", "dueDate": "2023-10-02T15:00:00Z", "duration": "1"}
+    Response: {"title": "Call John", "dueDate": "2024-10-02T15:00:00Z", "duration": "1"}
 
     Transcript: "$transcript"
     Response:

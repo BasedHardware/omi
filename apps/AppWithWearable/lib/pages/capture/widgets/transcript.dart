@@ -288,6 +288,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
     // Analyze transcript and decide on setting a reminder
     if (SharedPreferencesUtil().remindersEnabled) {
+      debugPrint(
+          'Reminders integration enabled. Analyzing transcript for reminders');
       ReminderDetails? reminderDetails =
           await analyzeTranscriptForReminder(transcript);
       if (reminderDetails != null) {
