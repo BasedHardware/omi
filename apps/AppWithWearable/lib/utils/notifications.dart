@@ -38,19 +38,13 @@ Future<void> requestNotificationPermissions() async {
   }
 }
 
-void createNotification({
-  String title = '',
-  String body = '',
-  int notificationId = 1,
-  Map<String, String?>? payload,
+_retrieveNotificationInterval({
   bool isMorningNotification = false,
+  bool isDailySummaryNotification = false,
 }) async {
-  var allowed = await AwesomeNotifications().isNotificationAllowed();
-  if (!allowed) return;
-  debugPrint('createNotification ~ Creating notification: $title');
   NotificationCalendar? interval;
+  // TODO: allow people to set a notification time in settings
   if (isMorningNotification) {
-    // TODO: allow people to set a notification time in settings
     var scheduled = await AwesomeNotifications().listScheduledNotifications();
     var hasMorningNotification = scheduled.any((element) => element.content?.id == 4);
     debugPrint('hasMorningNotification: $hasMorningNotification');
@@ -63,7 +57,38 @@ void createNotification({
       preciseAlarm: false,
       allowWhileIdle: true,
     );
+  } else if (isDailySummaryNotification) {
+    var scheduled = await AwesomeNotifications().listScheduledNotifications();
+    var hasDailySummaryNotification = scheduled.any((element) => element.content?.id == 5);
+    debugPrint('hasDailySummaryNotification: $hasDailySummaryNotification');
+    if (hasDailySummaryNotification) return;
+    interval = NotificationCalendar(
+      hour: 20,
+      minute: 0,
+      second: 0,
+      repeats: true,
+      preciseAlarm: false,
+      allowWhileIdle: false,
+    );
   }
+  return interval;
+}
+
+void createNotification({
+  String title = '',
+  String body = '',
+  int notificationId = 1,
+  Map<String, String?>? payload,
+  bool isMorningNotification = false,
+  bool isDailySummaryNotification = false,
+}) async {
+  var allowed = await AwesomeNotifications().isNotificationAllowed();
+  if (!allowed) return;
+  debugPrint('createNotification ~ Creating notification: $title');
+  NotificationCalendar? interval = await _retrieveNotificationInterval(
+    isMorningNotification: isMorningNotification,
+    isDailySummaryNotification: isDailySummaryNotification,
+  );
   AwesomeNotifications().createNotification(
     content: NotificationContent(
       id: notificationId,
