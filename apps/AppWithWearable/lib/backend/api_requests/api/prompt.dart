@@ -8,7 +8,11 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/string_utils.dart';
 
-Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, List<Memory> previousMemories) async {
+Future<MemoryStructured> generateTitleAndSummaryForMemory(
+  String transcript,
+  List<Memory> previousMemories, {
+  bool forceProcess = false,
+}) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
@@ -27,8 +31,8 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(String transcript, Lis
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is $languageCode. Make sure to use English for your response.
 
-    It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.  
-     
+    ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
+    
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
     For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.

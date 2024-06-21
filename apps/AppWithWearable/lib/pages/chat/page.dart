@@ -65,10 +65,15 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
         }
       }
       timer.cancel();
+      var memories = await MemoryProvider().retrieveDayMemories(now);
+      if (memories.isEmpty) {
+        SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
+        return;
+      }
+
       var message = Message(DateTime.now(), '', 'ai', type: 'daySummary');
       MessageProvider().saveMessage(message);
 
-      var memories = await MemoryProvider().retrieveDayMemories(now);
       var result = await dailySummaryNotifications(memories);
       SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
       message.text = result;
