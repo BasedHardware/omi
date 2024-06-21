@@ -58,7 +58,7 @@ migrateMemoriesToObjectBox() async {
   var memories = (await MemoryStorage.getAllMemories(includeDiscarded: true)).reversed.toList();
   // var mem = await MemoryProvider().getMemoriesOrdered(includeDiscarded: true);
   // mem.forEach((m)=> debugPrint('${m.id.toString()}: ${m.createdAt}: ${m.structured.target!.title}'));
-  MemoryProvider().removeAllMemories();
+  // MemoryProvider().removeAllMemories();
   List<Memory> memoriesOB = [];
   for (var memory in memories) {
     debugPrint('Migrating memory: ${memory.id}');

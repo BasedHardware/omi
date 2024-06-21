@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
@@ -194,6 +195,7 @@ class _BackupsPageState extends State<BackupsPage> {
                       if (result.status == ShareResultStatus.success) {
                         debugPrint('Thank you for sharing the picture!');
                       }
+                      // 54d2c392-57f1-46dc-b944-02740a651f7b
                       setState(() => loadingExportMemories = false);
                     },
                   )
@@ -230,6 +232,18 @@ class _BackupsPageState extends State<BackupsPage> {
                         var decoded = jsonDecode(content);
                         List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
                         await MemoryProvider().storeMemories(memories);
+                        for (var i = 0; i < memories.length; i++) {
+                          var memory = memories[i];
+                          if (memory.structured.target == null || memory.discarded) continue;
+                          var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
+                            createPineconeVector(memory.id.toString(), vector);
+                          });
+                          if (i % 10 == 0) {
+                            await f; // "wait" for previous 10 requests to finish
+                            await Future.delayed(const Duration(seconds: 1));
+                            debugPrint('Processing Memory: $i');
+                          }
+                        }
                         _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
                       } catch (e) {
                         debugPrint(e.toString());
