@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/llm.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -57,7 +58,7 @@ migrateMemoriesToObjectBox() async {
   var memories = (await MemoryStorage.getAllMemories(includeDiscarded: true)).reversed.toList();
   // var mem = await MemoryProvider().getMemoriesOrdered(includeDiscarded: true);
   // mem.forEach((m)=> debugPrint('${m.id.toString()}: ${m.createdAt}: ${m.structured.target!.title}'));
-  MemoryProvider().removeAllMemories();
+  // MemoryProvider().removeAllMemories();
   List<Memory> memoriesOB = [];
   for (var memory in memories) {
     debugPrint('Migrating memory: ${memory.id}');

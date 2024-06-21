@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -11,12 +12,27 @@ class ImportBackupPage extends StatefulWidget {
   State<ImportBackupPage> createState() => _ImportBackupPageState();
 }
 
-class _ImportBackupPageState extends State<ImportBackupPage> {
+class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerProviderStateMixin {
   TextEditingController uidController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
 
   bool passwordVisible = true;
   bool importLoading = false;
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 1, milliseconds: 500),
+      vsync: this,
+    )..repeat(reverse: true);
+    super.initState();
+  }
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +85,17 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
                           ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                importLoading
+                    ? FadeTransition(
+                        opacity: _animationController,
+                        child: const Text(
+                          'Wait, don\'t close the app ...',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(decoration: TextDecoration.underline, fontSize: 16),
+                        ),
+                      )
+                    : const SizedBox(height: 0),
                 const SizedBox(height: 40),
               ],
             ),
@@ -92,18 +119,33 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
     FocusScope.of(context).unfocus();
     try {
       setState(() => importLoading = true);
-      var memoriesImported = await retrieveBackup(uidController.text, passwordController.text);
-      if (memoriesImported == 0) {
+      var memories = await retrieveBackup(uidController.text, passwordController.text);
+      if (memories.isEmpty) {
         _snackBar('No Memories Found');
         setState(() => importLoading = false);
         return;
       }
-      debugPrint('Memories Imported: $memoriesImported');
+      debugPrint('Memories Imported: ${memories.length}');
       // SharedPreferencesUtil().backupPassword = passwordController.text;
       // SharedPreferencesUtil().backupsEnabled = true;
       // SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+      var nonDiscarded = memories.where((element) => !element.discarded).toList();
+      for (var i = 0; i < nonDiscarded.length; i++) {
+        var memory = nonDiscarded[i];
+        if (memory.structured.target == null || memory.discarded) continue;
+        var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
+          createPineconeVector(memory.id.toString(), vector);
+        });
+        if (i % 10 == 0) {
+          await f; // "wait" for previous 10 requests to finish
+          await Future.delayed(const Duration(seconds: 1));
+          debugPrint('Processing Memory: $i');
+        }
+      }
+      // 54d2c392-57f1-46dc-b944-02740a651f7b
+      if (nonDiscarded.length % 10 != 0) await Future.delayed(const Duration(seconds: 2));
 
-      _snackBar('$memoriesImported Memories Imported Successfully   🎉', seconds: 2);
+      _snackBar('${memories.length} Memories Imported Successfully   🎉', seconds: 2);
       await Future.delayed(const Duration(seconds: 2));
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {
@@ -113,8 +155,6 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
     }
     setState(() => importLoading = false);
     // Test ID: d2234422-819d-491f-aaa6-174e4683d233
-    // Navigator.of(context)
-    //     .pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
   }
 
   _snackBar(String content, {int seconds = 1}) {

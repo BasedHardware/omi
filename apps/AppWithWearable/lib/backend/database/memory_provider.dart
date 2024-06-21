@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
   static final Box<Memory> _box = ObjectBoxUtil().box!.store.box<Memory>();
+  static final Box<Structured> _boxStructured = ObjectBoxUtil().box!.store.box<Structured>();
 
   factory MemoryProvider() {
     return _instance;
@@ -37,13 +38,11 @@ class MemoryProvider {
     _box.put(memory);
   }
 
-  Future<void> deleteMemory(Memory memory) async {
-    _box.remove(memory.id);
-  }
+  bool deleteMemory(Memory memory) => _box.remove(memory.id);
 
-  Future<void> updateMemory(Memory memory) async {
-    _box.put(memory);
-  }
+  int updateMemory(Memory memory) => _box.put(memory);
+
+  int updateMemoryStructured(Structured structured) => _boxStructured.put(structured);
 
   Future<Memory?> getMemoryById(int id) async {
     return _box.get(id);

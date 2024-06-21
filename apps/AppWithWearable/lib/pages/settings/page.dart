@@ -6,8 +6,10 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -414,66 +416,72 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  // InkWell(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Text(
-                  //               'Speech Profile Set Up',
-                  //               style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
-                  // GestureDetector(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Row(
-                  //               children: [
-                  //                 Text(
-                  //                   'Backups',
-                  //                   style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //                 ),
-                  //                 SizedBox(width: 16),
-                  //                 Icon(Icons.backup, color: Colors.white, size: 16),
-                  //               ],
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+                  Visibility(
+                    visible: false,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Speech Profile Set Up',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Visibility(
+                    visible: false,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Backups',
+                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Icon(Icons.backup, color: Colors.white, size: 16),
+                                  ],
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
