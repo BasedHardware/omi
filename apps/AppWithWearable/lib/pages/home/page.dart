@@ -129,7 +129,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           setState(() {
             _device = null;
           });
-          InstabugLog.logWarn('Friend Device Disconnected');
+          InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
                 title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
