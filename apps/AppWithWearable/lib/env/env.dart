@@ -1,13 +1,10 @@
-import 'package:friend_private/env/prod_env.dart';
-
-import '../flavors.dart';
-import 'dev_env.dart';
+import 'package:friend_private/env/dev_env.dart';
 
 abstract class Env {
   static late final EnvFields _instance;
 
-  static void init() {
-    _instance = F.env == Environment.dev ? DevEnv() : ProdEnv();
+  static void init([EnvFields? instance]) {
+    _instance = instance ?? DevEnv();
   }
 
   static String? get sentryDSNKey => _instance.sentryDSNKey;
