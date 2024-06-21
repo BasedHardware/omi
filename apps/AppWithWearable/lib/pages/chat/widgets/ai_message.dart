@@ -23,6 +23,7 @@ class AIMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('AIMessage:  ${message.id} ${message.text}');
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,7 +56,7 @@ class AIMessage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
-              message.type == MessageType.daySummary
+              message.typeEnum == MessageType.daySummary
                   ? Text(
                       '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
                       style: TextStyle(
@@ -65,17 +66,17 @@ class AIMessage extends StatelessWidget {
                         decoration: TextDecoration.underline,
                       ),
                     )
-                  : SizedBox(),
-              message.type == MessageType.daySummary ? const SizedBox(height: 16) : SizedBox(),
+                  : const SizedBox(),
+              message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
                 message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               // FIXME
-              if (message.id != 0) _getCopyButton(context),
-              if (message.id == 0 && displayOptions) const SizedBox(height: 8),
-              if (message.id == 0 && displayOptions) ..._getInitialOptions(context),
+              if (message.id != 1) _getCopyButton(context),
+              if (message.id == 1 && displayOptions) const SizedBox(height: 8),
+              if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
               if (memories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var memory in (memories.length > 3 ? memories.sublist(0, 3) : memories)) ...[

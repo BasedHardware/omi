@@ -7,18 +7,17 @@ class MessageProvider {
   static final Box<Message> _box = ObjectBoxUtil().box!.store.box<Message>();
 
   factory MessageProvider() {
+    if (_box.isEmpty()) {
+      _box.put(Message(DateTime.now(), 'What would you like to search for?', 'ai'));
+    }
     return _instance;
   }
 
   MessageProvider._internal();
 
-  Future<List<Message>> getMessages() async {
-    return _box.getAll();
-  }
+  Future<List<Message>> getMessages() async => _box.getAll();
 
-  Stream<Query<Message>> getMessagesStreamed() {
-    return _box.query().watch(triggerImmediately: true);
-  }
+  Stream<Query<Message>> getMessagesStreamed() => _box.query().watch(triggerImmediately: true);
 
   Future<void> saveMessage(Message message) async => _box.put(message);
 
@@ -29,4 +28,6 @@ class MessageProvider {
     query.limit = limit;
     return query.find();
   }
+
+  int getMessagesCount() => _box.count();
 }
