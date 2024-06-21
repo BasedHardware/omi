@@ -34,11 +34,17 @@ Go to [Releases](https://github.com/BasedHardware/Friend/releases) in Github, an
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
-6. Double-click on the reset button of the device. The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
+6. Double-click on the reset button of the device(see on image below) . The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
    <img src="/images/pinout.jpg" alt="Pinout" width="300">
+
+   If you have an assembled device, you can put a stick pin/needle into this whole and double-click 2 times
+
+   
+   <img src="https://github.com/BasedHardware/Friend/assets/43514161/8136f688-8eac-4967-bd95-7aaeaac324cd)" alt="whole" width="300"> 
+
 
 That's it! You have successfully installed the firmware on your device.
 
