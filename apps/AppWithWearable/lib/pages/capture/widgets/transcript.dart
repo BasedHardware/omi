@@ -4,31 +4,30 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
-import 'package:uuid/uuid.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
   final Function(bool) setHasTranscripts;
-  final Function(Message) addMessage;
 
   const TranscriptWidget({
     super.key,
     required this.btDevice,
     required this.refreshMemories,
     required this.setHasTranscripts,
-    required this.addMessage,
   });
 
   final BTDeviceStruct? btDevice;
@@ -157,7 +156,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (segments.isNotEmpty &&
         (segments.last.speaker == joinedSimilarSegments[0].speaker ||
-            (segments.last.isUser && joinedSimilarSegments[0].isUser))) {
+            (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
+        segments.last.text.split(' ').length < 200) {
+      // for better UI included last line segments.last.text.split(' ').length < 200
+      // so even if speaker 0 then speaker 0 again (same thing), it will look better
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       joinedSimilarSegments.removeAt(0);
     }
@@ -243,7 +245,9 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
         // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
-        widget.addMessage(Message(text: r, type: 'ai', id: const Uuid().v4(), memoryIds: [memory.id.toString()]));
+        var msg = Message(DateTime.now(), r, 'ai');
+        msg.memories.add(memory);
+        MessageProvider().saveMessage(msg);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
@@ -294,6 +298,31 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
+    return const Stack(
+      children: [
+        // _getDeepgramTranscriptUI(),
+        // Row(
+        //   mainAxisAlignment: MainAxisAlignment.end,
+        //   children: [
+        //     Container(
+        //       decoration: BoxDecoration(
+        //         color: Colors.grey.shade900,
+        //         borderRadius: const BorderRadius.all(Radius.circular(12)),
+        //       ),
+        //       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        //       child: const Row(
+        //         crossAxisAlignment: CrossAxisAlignment.center,
+        //         children: [
+        //           Text('Finish conversation', style: TextStyle(color: Colors.white, fontSize: 16)),
+        //           SizedBox(width: 8),
+        //           Icon(Icons.stop, color: Colors.red, size: 20),
+        //         ],
+        //       ),
+        //     ),
+        //   ],
+        // )
+      ],
+    );
   }
 
   _getDeepgramTranscriptUI() {

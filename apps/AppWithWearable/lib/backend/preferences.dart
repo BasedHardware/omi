@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
@@ -90,15 +89,15 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
-  List<Message> get chatMessages {
-    final List<String> messages = getStringList('messages') ?? [];
-    return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
-  }
-
-  set chatMessages(List<Message> value) {
-    final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('messages', messages);
-  }
+  // List<Message> get chatMessages {
+  //   final List<String> messages = getStringList('messages') ?? [];
+  //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
+  // }
+  //
+  // set chatMessages(List<Message> value) {
+  //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
+  //   saveStringList('messages', messages);
+  // }
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 

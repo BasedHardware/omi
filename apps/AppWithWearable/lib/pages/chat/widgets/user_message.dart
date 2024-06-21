@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/storage/message.dart';
+
+import '../../../backend/database/message.dart';
 
 class HumanMessage extends StatelessWidget {
   final Message message;

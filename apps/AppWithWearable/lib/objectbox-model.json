@@ -151,11 +151,53 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "5:3905873968765933532",
+      "lastPropertyId": "5:5337649766892625543",
+      "name": "Message",
+      "properties": [
+        {
+          "id": "1:1878881834426487468",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9040753066664612555",
+          "name": "createdAt",
+          "type": 10,
+          "flags": 8,
+          "indexId": "7:296619579137476887"
+        },
+        {
+          "id": "3:3367360249871802822",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "4:3325943223378277861",
+          "name": "sender",
+          "type": 9
+        },
+        {
+          "id": "5:5337649766892625543",
+          "name": "type",
+          "type": 9
+        }
+      ],
+      "relations": [
+        {
+          "id": "1:7091380547659316419",
+          "name": "memories",
+          "targetId": "1:1521024926543535"
+        }
+      ]
     }
   ],
-  "lastEntityId": "4:8944838570398231806",
-  "lastIndexId": "6:2436940497868764355",
-  "lastRelationId": "0:0",
+  "lastEntityId": "5:3905873968765933532",
+  "lastIndexId": "7:296619579137476887",
+  "lastRelationId": "1:7091380547659316419",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,
