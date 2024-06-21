@@ -295,6 +295,31 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
           : const SizedBox.shrink();
     }
     return _getDeepgramTranscriptUI();
+    return const Stack(
+      children: [
+        // _getDeepgramTranscriptUI(),
+        // Row(
+        //   mainAxisAlignment: MainAxisAlignment.end,
+        //   children: [
+        //     Container(
+        //       decoration: BoxDecoration(
+        //         color: Colors.grey.shade900,
+        //         borderRadius: const BorderRadius.all(Radius.circular(12)),
+        //       ),
+        //       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        //       child: const Row(
+        //         crossAxisAlignment: CrossAxisAlignment.center,
+        //         children: [
+        //           Text('Finish conversation', style: TextStyle(color: Colors.white, fontSize: 16)),
+        //           SizedBox(width: 8),
+        //           Icon(Icons.stop, color: Colors.red, size: 20),
+        //         ],
+        //       ),
+        //     ),
+        //   ],
+        // )
+      ],
+    );
   }
 
   _getDeepgramTranscriptUI() {
