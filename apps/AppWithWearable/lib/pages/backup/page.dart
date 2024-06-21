@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -174,7 +174,7 @@ class _BackupsPageState extends State<BackupsPage> {
             SharedPreferencesUtil().devModeEnabled ? const SizedBox(height: 8) : const SizedBox(),
             SharedPreferencesUtil().devModeEnabled
                 ? ListTile(
-                    title: Text('Export Memories'),
+                    title: const Text('Export Memories'),
                     subtitle: const Text('Export all your memories to a JSON file.'),
                     trailing: loadingExportMemories
                         ? const SizedBox(
@@ -192,7 +192,7 @@ class _BackupsPageState extends State<BackupsPage> {
                       File file = await MemoryProvider().exportMemoriesToFile();
                       final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
                       if (result.status == ShareResultStatus.success) {
-                        print('Thank you for sharing the picture!');
+                        debugPrint('Thank you for sharing the picture!');
                       }
                       setState(() => loadingExportMemories = false);
                     },
@@ -232,7 +232,7 @@ class _BackupsPageState extends State<BackupsPage> {
                         await MemoryProvider().storeMemories(memories);
                         _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
                       } catch (e) {
-                        print(e);
+                        debugPrint(e.toString());
                         _snackBar('Make sure the file is a valid JSON file.');
                       }
                       setState(() => loadingImportMemories = false);

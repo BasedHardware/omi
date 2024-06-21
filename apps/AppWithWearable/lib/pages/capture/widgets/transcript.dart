@@ -4,7 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
