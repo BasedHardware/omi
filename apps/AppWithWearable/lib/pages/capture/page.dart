@@ -11,8 +11,6 @@ class CapturePage extends StatefulWidget {
   final Function refreshMemories;
   final BTDeviceStruct? device;
 
-  // final Function(Message) addMessage;
-
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
 
   const CapturePage({
@@ -20,7 +18,6 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.refreshMemories,
     required this.transcriptChildWidgetKey,
-    // required this.addMessage,
   });
 
   @override

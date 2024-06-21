@@ -23,7 +23,6 @@ class AIMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('AIMessage:  ${message.id} ${message.text}');
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +72,6 @@ class AIMessage extends StatelessWidget {
                 message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              // FIXME
               if (message.id != 1) _getCopyButton(context),
               if (message.id == 1 && displayOptions) const SizedBox(height: 8),
               if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
