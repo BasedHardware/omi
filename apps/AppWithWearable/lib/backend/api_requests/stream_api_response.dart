@@ -1,16 +1,17 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/message.dart';
-import 'package:friend_private/utils/temp.dart';
-import 'package:flutter/material.dart';
-import './streaming_models.dart';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:http/http.dart' as http;
+
+import './streaming_models.dart';
 
 Future streamApiResponse(
   dynamic personality,
   String context,
   Future<dynamic> Function(String) callback,
-  List<Message> chatHistory,
   VoidCallback onDone,
 ) async {
   var client = http.Client();
@@ -21,8 +22,8 @@ Future streamApiResponse(
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
 
-  String body = qaStreamedBody(
-      personality, context, retrieveMostRecentMessages(chatHistory));
+  String body = qaStreamedBody(personality, context,
+      await MessageProvider().retrieveMostRecentMessages(limit: 5));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
