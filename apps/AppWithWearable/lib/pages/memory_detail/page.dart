@@ -315,6 +315,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     overviewController.text = current.overview;
     titleController.text = current.title;
 
+    MixpanelManager().reProcessMemory(widget.memory);
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
