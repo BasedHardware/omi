@@ -271,7 +271,7 @@ class _ChatPageState extends State<ChatPage>
 
   _sendMessageUtil(String message) async {
     changeLoadingState();
-    _prepareStreaming(message);
+    Message aiMessage = await _prepareStreaming(message);
 
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     final pluginsList = SharedPreferencesUtil().pluginsList;
