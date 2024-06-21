@@ -156,7 +156,10 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (segments.isNotEmpty &&
         (segments.last.speaker == joinedSimilarSegments[0].speaker ||
-            (segments.last.isUser && joinedSimilarSegments[0].isUser))) {
+            (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
+        segments.last.text.split(' ').length < 200) {
+      // for better UI included last line segments.last.text.split(' ').length < 200
+      // so even if speaker 0 then speaker 0 again (same thing), it will look better
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       joinedSimilarSegments.removeAt(0);
     }
