@@ -2,8 +2,8 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/temp.dart';
 
@@ -55,7 +55,7 @@ class AIMessage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
-              message.daySummary
+              message.typeEnum == MessageType.daySummary
                   ? Text(
                       '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
                       style: TextStyle(
@@ -65,16 +65,16 @@ class AIMessage extends StatelessWidget {
                         decoration: TextDecoration.underline,
                       ),
                     )
-                  : SizedBox(),
-              message.daySummary ? const SizedBox(height: 16) : SizedBox(),
+                  : const SizedBox(),
+              message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
                 message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              if (message.id != '1') _getCopyButton(context),
-              if (message.id == '1' && displayOptions) const SizedBox(height: 8),
-              if (message.id == '1' && displayOptions) ..._getInitialOptions(context),
+              if (message.id != 1) _getCopyButton(context),
+              if (message.id == 1 && displayOptions) const SizedBox(height: 8),
+              if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
               if (memories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var memory in (memories.length > 3 ? memories.sublist(0, 3) : memories)) ...[

@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'reminders_interface.dart';
 import 'reminders_ios.dart';
 import 'reminders_android.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -466,6 +467,17 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
+                  ListTile(
+                    title: const Text('Need help?',
+                        style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('team@basedhardware.com'),
+                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                    trailing: const Icon(Icons.arrow_forward_ios,
+                        color: Colors.white, size: 16),
+                    onTap: () {
+                      launchUrl(Uri.parse('mailto:team@basedhardware.com'));
+                    },
+                  ),
                   const SizedBox(height: 36.0),
                   const Align(
                     alignment: Alignment.centerLeft,
@@ -684,6 +696,15 @@ class _SettingsPageState extends State<SettingsPage> {
             print('Thank you for sharing the picture!');
           }
           setState(() => loadingExportMemories = false);
+        },
+      ),
+      ListTile(
+        title: const Text('Join the community!',
+            style: TextStyle(color: Colors.white)),
+        subtitle: const Text('2300+ members and counting.'),
+        trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
+        onTap: () {
+          launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
         },
       ),
       const SizedBox(height: 64),
