@@ -143,6 +143,32 @@ class MixpanelManager {
     _mixpanel?.getPeople().setOnce('Using Friend At', whereDoYouPlanToUseYourFriend);
     _mixpanel?.getPeople().setOnce('Age Range', ageRange);
   }
-// TBI
+
+  void reProcessMemory(Memory memory) => track('Re-process Memory', properties: _getMemoryEventProperties(memory));
+
+  void backupsEnabled() => track('Backups Enabled');
+
+  void backupsDisabled() => track('Backups Disabled');
+
+  void developerModeEnabled() => track('Developer Mode Enabled');
+
+  void developerModeDisabled() => track('Developer Mode Disabled');
+
+  void userIDCopied() => track('User ID Copied');
+
+  void exportMemories() => track('Dev Mode Export Memories');
+
+  void importMemories() => track('Dev Mode Import Memories');
+
+  void importedMemories() => track('Dev Mode Imported Memories');
+
+  void backupsPasswordSet() => track('Backups Password Set');
+
+  void supportContacted() => track('Support Contacted');
+
+  void privacyDetailsPageOpened() => track('Privacy Details Page Opened');
+
+  void joinDiscordClicked() => track('Join Discord Clicked');
+
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
