@@ -3,6 +3,7 @@ final Map<String, String> availableLanguages = {
   'Dutch 🇳🇱': 'nl',
   'English 🇬🇧': 'en',
   'French 🇫🇷': 'fr',
+  'Finnish 🇫🇮': 'fi',
   'German 🇩🇪': 'de',
   'Greek 🇬🇷': 'el',
   'Hindi 🇮🇳': 'hi',
@@ -15,5 +16,6 @@ final Map<String, String> availableLanguages = {
   'Portuguese 🇵🇹': 'pt',
   'Russian 🇷🇺': 'ru',
   'Spanish 🇪🇸': 'es',
+  'Turkish 🇹🇷': 'tr',
   'Vietnamese 🇻🇳': 'vi',
 };
