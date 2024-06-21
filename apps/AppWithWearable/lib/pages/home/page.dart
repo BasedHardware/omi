@@ -57,6 +57,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
+    debugPrint('Memories: ${memories.length}');
     setState(() {});
   }
 
@@ -83,7 +84,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _migrationScripts() async {
     await migrateMemoriesCategoriesAndEmojis();
-    await migrateMemoriesToObjectBox();
+    // await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
 
