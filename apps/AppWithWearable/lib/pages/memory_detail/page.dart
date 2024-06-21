@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
@@ -31,11 +32,15 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   bool editingOverview = false;
   bool loadingReprocessMemory = false;
 
+  List<bool> pluginResponseExpanded = [];
+  bool isTranscriptExpanded = false;
+
   @override
   void initState() {
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
     super.initState();
   }
 
@@ -210,7 +215,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                 ),
                 const SizedBox(height: 24),
-                ...widget.memory.pluginsResponse.map((response) => Container(
+                ...widget.memory.pluginsResponse.mapIndexed((i, response) => Container(
                       margin: const EdgeInsets.only(bottom: 32),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -219,6 +224,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       ),
                       child: ExpandableTextWidget(
                         text: response.content.trim(),
+                        isExpanded: pluginResponseExpanded[i],
+                        toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
                         style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                         maxLines: 6,
                         // Change this to 6 if you want the initial max lines to be 6
@@ -250,6 +257,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 maxLines: 6,
                 linkColor: Colors.grey.shade300,
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                isExpanded: isTranscriptExpanded,
+                toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
               ),
               const SizedBox(height: 32),
             ],
@@ -406,11 +415,15 @@ class ExpandableTextWidget extends StatefulWidget {
   final String expandText;
   final String collapseText;
   final Color linkColor;
+  final bool isExpanded;
+  final Function toggleExpand;
 
   const ExpandableTextWidget({
     super.key,
     required this.text,
     required this.style,
+    required this.isExpanded,
+    required this.toggleExpand,
     this.maxLines = 3,
     this.expandText = 'show more ↓',
     this.collapseText = 'show less ↑',
@@ -422,14 +435,6 @@ class ExpandableTextWidget extends StatefulWidget {
 }
 
 class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
-  bool _isExpanded = false;
-
-  void _toggleExpand() {
-    setState(() {
-      _isExpanded = !_isExpanded;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final span = TextSpan(text: widget.text, style: widget.style);
@@ -448,16 +453,16 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
           Text(
             widget.text,
             style: widget.style,
-            maxLines: _isExpanded ? 10000 : widget.maxLines,
+            maxLines: widget.isExpanded ? 10000 : widget.maxLines,
             overflow: TextOverflow.ellipsis,
           ),
           if (isOverflowing)
             InkWell(
-              onTap: _toggleExpand,
+              onTap: () => widget.toggleExpand(),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
-                  _isExpanded ? widget.collapseText : widget.expandText,
+                  widget.isExpanded ? widget.collapseText : widget.expandText,
                   style: TextStyle(
                     color: Colors.deepPurple,
                     fontWeight: FontWeight.w500,
