@@ -5,7 +5,8 @@ class ContentResponse {
   String? model;
   List<Choices>? choices;
 
-  ContentResponse({this.id, this.object, this.created, this.model, this.choices});
+  ContentResponse(
+      {this.id, this.object, this.created, this.model, this.choices});
 
   ContentResponse.fromJson(Map<String, dynamic> json) {
     // Fixed method name and parameters
@@ -44,13 +45,19 @@ class Choices {
   OpenAIMessage? message;
   String? finishReason;
 
-  Choices({this.index, this.delta, this.message, this.finishReason}); // Fixed spacing
+  Choices(
+      {this.index,
+      this.delta,
+      this.message,
+      this.finishReason}); // Fixed spacing
 
   Choices.fromJson(Map<String, dynamic> json) {
     String? a = json['message'].toString();
     index = json['index'];
     delta = json['delta'] != null ? Delta.fromJson(json['delta']) : null;
-    message = json['message'] != null ? OpenAIMessage.fromJson(json['message']) : null; // Corrected
+    message = json['message'] != null
+        ? OpenAIMessage.fromJson(json['message'])
+        : null; // Corrected
     finishReason = json['finish_reason']; // Fixed assignment syntax
   }
 

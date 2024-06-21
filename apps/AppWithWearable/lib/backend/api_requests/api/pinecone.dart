@@ -7,13 +7,15 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:intl/intl.dart';
 
-Future<dynamic> pineconeApiCall({required String urlSuffix, required String body}) async {
+Future<dynamic> pineconeApiCall(
+    {required String urlSuffix, required String body}) async {
   var url = '${Env.pineconeIndexUrl}/$urlSuffix';
   final headers = {
     'Api-Key': Env.pineconeApiKey,
     'Content-Type': 'application/json',
   };
-  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response =
+      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   var responseBody = jsonDecode(response?.body ?? '{}');
   return responseBody;
 }
@@ -28,15 +30,18 @@ Future<void> updatePineconeMemoryId(String memoryId, int newId) {
       }));
 }
 
-Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) async {
+Future<bool> createPineconeVector(
+    String? memoryId, List<double>? vectorList) async {
   var body = jsonEncode({
     'vectors': [
       {
         'id': memoryId,
         'values': vectorList,
         'metadata': {
-          'created_at':
-              DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS").parse(DateTime.now().toString()).millisecondsSinceEpoch ~/ 1000,
+          'created_at': DateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS")
+                  .parse(DateTime.now().toString())
+                  .millisecondsSinceEpoch ~/
+              1000,
           'memory_id': memoryId,
           'uid': SharedPreferencesUtil().uid,
         }
@@ -44,7 +49,8 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
     ],
     'namespace': Env.pineconeIndexNamespace
   });
-  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
+  var responseBody =
+      await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
   debugPrint('createVectorPinecone response: $responseBody');
   return (responseBody['upserted_count'] ?? 0) > 0;
 }
@@ -52,7 +58,8 @@ Future<bool> createPineconeVector(String? memoryId, List<double>? vectorList) as
 /// Queries Pinecone vectors and optionally filters results based on a date range.
 /// The startTimestamp and endTimestamp should be provided as UNIX epoch timestamps in seconds.
 /// For example: 1622520000 represents Jun 01 2021 10:00:00 UTC.
-Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startTimestamp, int? endTimestamp}) async {
+Future<List<String>> queryPineconeVectors(List<double>? vectorList,
+    {int? startTimestamp, int? endTimestamp}) async {
   // Constructing the filter condition based on optional timestamp parameters
   Map<String, dynamic> filter = {
     'uid': {'\$eq': SharedPreferencesUtil().uid},
@@ -81,7 +88,10 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
   debugPrint(responseBody.toString());
-  return (responseBody['matches'])?.map<String>((e) => e['metadata']['memory_id'].toString()).toList() ?? [];
+  return (responseBody['matches'])
+          ?.map<String>((e) => e['metadata']['memory_id'].toString())
+          .toList() ??
+      [];
 }
 
 Future<bool> deleteVector(String memoryId) async {
@@ -101,5 +111,7 @@ Future<List<double>> getEmbeddingsFromInput(String input) async {
     urlSuffix: 'embeddings',
     contentToEmbed: input,
   );
-  return vector.map<double>((item) => double.tryParse(item.toString()) ?? 0.0).toList();
+  return vector
+      .map<double>((item) => double.tryParse(item.toString()) ?? 0.0)
+      .toList();
 }
