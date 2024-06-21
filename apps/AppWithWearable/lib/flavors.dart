@@ -1,18 +1,16 @@
-enum Flavor {
+enum Environment {
   prod,
   dev,
 }
 
 class F {
-  static Flavor? appFlavor;
-
-  static String get name => appFlavor?.name ?? '';
+  static Environment? env;
 
   static String get title {
-    switch (appFlavor) {
-      case Flavor.prod:
+    switch (env) {
+      case Environment.prod:
         return 'Friend';
-      case Flavor.dev:
+      case Environment.dev:
         return 'Friend Dev';
       default:
         return 'Friend Dev';

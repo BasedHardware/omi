@@ -7,7 +7,7 @@ abstract class Env {
   static late final EnvFields _instance;
 
   static void init() {
-    _instance = F.appFlavor == Flavor.dev ? DevEnv() : ProdEnv();
+    _instance = F.env == Environment.dev ? DevEnv() : ProdEnv();
   }
 
   static String? get sentryDSNKey => _instance.sentryDSNKey;
