@@ -260,6 +260,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
   }
 
   _moveListToBottom({double extra = 0}) async {
-    listViewController.jumpTo(listViewController.position.maxScrollExtent + extra);
+    try {
+      listViewController.jumpTo(listViewController.position.maxScrollExtent + extra);
+    } catch (e) {}
   }
 }
