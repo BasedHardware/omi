@@ -11,12 +11,22 @@ class ImportBackupPage extends StatefulWidget {
   State<ImportBackupPage> createState() => _ImportBackupPageState();
 }
 
-class _ImportBackupPageState extends State<ImportBackupPage> {
+class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerProviderStateMixin {
   TextEditingController uidController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
 
   bool passwordVisible = true;
   bool importLoading = false;
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 1, milliseconds: 500),
+      vsync: this,
+    )..repeat(reverse: true);
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +79,17 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
                           ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                importLoading
+                    ? FadeTransition(
+                        opacity: _animationController,
+                        child: const Text(
+                          'Wait, don\'t close the app ...',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(decoration: TextDecoration.underline, fontSize: 16),
+                        ),
+                      )
+                    : const SizedBox(height: 0),
                 const SizedBox(height: 40),
               ],
             ),
@@ -113,8 +134,6 @@ class _ImportBackupPageState extends State<ImportBackupPage> {
     }
     setState(() => importLoading = false);
     // Test ID: d2234422-819d-491f-aaa6-174e4683d233
-    // Navigator.of(context)
-    //     .pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
   }
 
   _snackBar(String content, {int seconds = 1}) {
