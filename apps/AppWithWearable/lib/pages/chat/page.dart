@@ -222,7 +222,9 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     final pluginsList = SharedPreferencesUtil().pluginsList;
     final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
     String personality = "";
-    if (widget.selectedPluginId != null) {
+    if (widget.selectedPluginId != null &&
+        widget.selectedPluginId != 'default' &&
+        widget.selectedPluginId != 'enable_plugins') {
       final selectedPlugin = enabledPlugins.firstWhere((plugin) => plugin.id == widget.selectedPluginId);
       personality = selectedPlugin.prompt;
     }

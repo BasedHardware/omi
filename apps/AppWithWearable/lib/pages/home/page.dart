@@ -380,24 +380,35 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   onChanged: (String? newValue) {
                     _handlePluginChanged(newValue);
                   },
-                  items: enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
-                    return DropdownMenuItem<String>(
-                      value: plugin.id,
-                      child: Row(
-                        children: [
-                          Image.network(
-                            'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
-                            width: 24,
-                            height: 24,
-                            errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                  items: enabledPlugins.isEmpty
+                      ? [
+                          const DropdownMenuItem<String>(
+                            value: 'default',
+                            child: Text('default'),
                           ),
-                          const SizedBox(width: 8),
-                          Text(plugin.name),
-                          if (selectedPluginId == plugin.id) const Icon(Icons.check, color: Colors.green)
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                          const DropdownMenuItem<String>(
+                            value: 'enable_plugins',
+                            child: Text('enable plugins'),
+                          ),
+                        ]
+                      : enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
+                          return DropdownMenuItem<String>(
+                            value: plugin.id,
+                            child: Row(
+                              children: [
+                                Image.network(
+                                  'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                                  width: 24,
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(plugin.name),
+                                if (selectedPluginId == plugin.id) const Icon(Icons.check, color: Colors.green)
+                              ],
+                            ),
+                          );
+                        }).toList(),
                   selectedItemBuilder: (BuildContext context) {
                     return enabledPlugins.map<Widget>((Plugin plugin) {
                       return Row(
