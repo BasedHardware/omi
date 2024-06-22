@@ -283,6 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 onTap: () {
                                   Navigator.of(context)
                                       .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                                  MixpanelManager().privacyDetailsPageOpened();
                                 },
                               ),
                             ),
@@ -323,8 +324,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           if (devModeEnabled) {
                             devModeEnabled = false;
                             SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
                           } else {
                             devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
                             SharedPreferencesUtil().devModeEnabled = true;
                           }
                         });
@@ -371,6 +374,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                     onTap: () {
                       launchUrl(Uri.parse('mailto:team@basedhardware.com'));
+                      MixpanelManager().supportContacted();
                     },
                   ),
                   const SizedBox(height: 36.0),
@@ -447,7 +451,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   Visibility(
-                    visible: false,
+                    visible: true,
                     child: GestureDetector(
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
@@ -594,6 +598,7 @@ class _SettingsPageState extends State<SettingsPage> {
         trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
         onTap: () {
           launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+          MixpanelManager().joinDiscordClicked();
         },
       ),
       const SizedBox(height: 64),

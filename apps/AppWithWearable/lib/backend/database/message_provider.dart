@@ -15,7 +15,7 @@ class MessageProvider {
 
   MessageProvider._internal();
 
-  Future<List<Message>> getMessages() async => _box.getAll();
+  List<Message> getMessages() => _box.getAll();
 
   Stream<Query<Message>> getMessagesStreamed() => _box.query().watch(triggerImmediately: true);
 
