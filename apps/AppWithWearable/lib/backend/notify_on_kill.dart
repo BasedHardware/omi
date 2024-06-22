@@ -10,8 +10,7 @@ class NotifyOnKill {
         'setNotificationOnKillService',
         {
           'title': "Application killed!",
-          'description':
-              "Restart Friend to continue syncing with your wearable",
+          'description': "Restart Friend to continue syncing with your wearable",
         },
       );
     } catch (e) {
