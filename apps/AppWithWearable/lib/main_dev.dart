@@ -8,3 +8,5 @@ Future<void> main() async {
   Env.init(DevEnv());
   runner.main();
 }
+
+// Run me with flutter run -t lib/main_dev.dart --flavor dev
