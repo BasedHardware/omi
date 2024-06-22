@@ -20,19 +20,24 @@ import 'package:friend_private/backend/storage/plugin.dart';
 class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
   final List<Memory> memories;
+  final String? selectedPluginId;
+  final List<Plugin> enabledPlugins;
+  final Function(String?) onPluginChanged;
 
   const ChatPage({
     super.key,
     required this.textFieldFocusNode,
     required this.memories,
+    required this.selectedPluginId,
+    required this.enabledPlugins,
+    required this.onPluginChanged,
   });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage>
-    with AutomaticKeepAliveClientMixin {
+class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String? selectedPluginId;
   TextEditingController textController = TextEditingController();
   ScrollController listViewController = ScrollController();
@@ -58,9 +63,7 @@ class _ChatPageState extends State<ChatPage>
       // TODO: maybe a better way to optimize this. is it better to do on build state?
       debugPrint('now: $now');
       if (SharedPreferencesUtil().lastDailySummaryDay != '') {
-        var secondsFrom8pm = now
-            .difference(DateTime(now.year, now.month, now.day, 20))
-            .inSeconds;
+        var secondsFrom8pm = now.difference(DateTime(now.year, now.month, now.day, 20)).inSeconds;
         var at = DateTime.parse(SharedPreferencesUtil().lastDailySummaryDay);
         var secondsFromLast = now.difference(at).inSeconds;
         debugPrint('secondsFrom8pm: $secondsFrom8pm');
@@ -73,8 +76,7 @@ class _ChatPageState extends State<ChatPage>
       timer.cancel();
       var memories = await MemoryProvider().retrieveDayMemories(now);
       if (memories.isEmpty) {
-        SharedPreferencesUtil().lastDailySummaryDay =
-            DateTime.now().toIso8601String();
+        SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
         return;
       }
 
@@ -82,8 +84,7 @@ class _ChatPageState extends State<ChatPage>
       MessageProvider().saveMessage(message);
 
       var result = await dailySummaryNotifications(memories);
-      SharedPreferencesUtil().lastDailySummaryDay =
-          DateTime.now().toIso8601String();
+      SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
       message.text = result;
       message.memories.addAll(memories);
       MessageProvider().updateMessage(message);
@@ -111,8 +112,7 @@ class _ChatPageState extends State<ChatPage>
   Widget build(BuildContext context) {
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     final pluginsList = SharedPreferencesUtil().pluginsList;
-    final enabledPlugins =
-        pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+    final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
 
     return Stack(
       children: [
@@ -139,16 +139,10 @@ class _ChatPageState extends State<ChatPage>
                   final message = messages[chatIndex];
                   final isLastMessage = chatIndex == messages.length - 1;
                   double topPadding = chatIndex == 0 ? 24 : 8;
-                  double bottomPadding = isLastMessage
-                      ? (widget.textFieldFocusNode.hasFocus ? 120 : 200)
-                      : 0;
+                  double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
                   return Padding(
                     key: ValueKey(message.id),
-                    padding: EdgeInsets.only(
-                        bottom: bottomPadding,
-                        left: 18,
-                        right: 18,
-                        top: topPadding),
+                    padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
                     child: message.senderEnum == MessageSender.ai
                         ? AIMessage(
                             message: message,
@@ -166,8 +160,7 @@ class _ChatPageState extends State<ChatPage>
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
-            padding: EdgeInsets.only(
-                bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
+            padding: EdgeInsets.only(bottom: widget.textFieldFocusNode.hasFocus ? 40 : 120),
             child: Container(
               width: double.maxFinite,
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -195,8 +188,7 @@ class _ChatPageState extends State<ChatPage>
                         showModalBottomSheet(
                           context: context,
                           shape: const RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.vertical(top: Radius.circular(20)),
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                           ),
                           builder: (BuildContext context) {
                             return Container(
@@ -209,14 +201,11 @@ class _ChatPageState extends State<ChatPage>
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
+                                        color: Theme.of(context).colorScheme.onSurface,
                                       ),
                                     ),
-                                    trailing: selectedPluginId == plugin.id
-                                        ? Icon(Icons.check, color: Colors.green)
-                                        : null,
+                                    trailing:
+                                        selectedPluginId == plugin.id ? Icon(Icons.check, color: Colors.green) : null,
                                     onTap: () {
                                       Navigator.pop(context);
                                       setState(() {
@@ -236,22 +225,18 @@ class _ChatPageState extends State<ChatPage>
                       controller: textController,
                       decoration: const InputDecoration(
                         hintText: 'Ask your Friend anything',
-                        hintStyle:
-                            TextStyle(fontSize: 14.0, color: Colors.grey),
+                        hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
                         border: InputBorder.none,
                       ),
-                      style: TextStyle(
-                          fontSize: 14.0, color: Colors.grey.shade200),
+                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
                     ),
                   ),
                   IconButton(
                     icon: loading
                         ? const CircularProgressIndicator(
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           )
-                        : const Icon(Icons.send_rounded,
-                            color: Color(0xFFF7F4F4), size: 30.0),
+                        : const Icon(Icons.send_rounded, color: Color(0xFFF7F4F4), size: 30.0),
                     onPressed: loading
                         ? null
                         : () {
@@ -275,12 +260,10 @@ class _ChatPageState extends State<ChatPage>
 
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     final pluginsList = SharedPreferencesUtil().pluginsList;
-    final enabledPlugins =
-        pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+    final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
     String personality = "";
     if (selectedPluginId != null) {
-      final selectedPlugin =
-          enabledPlugins.firstWhere((plugin) => plugin.id == selectedPluginId);
+      final selectedPlugin = enabledPlugins.firstWhere((plugin) => plugin.id == selectedPluginId);
       personality = selectedPlugin.prompt;
     }
 
@@ -290,8 +273,7 @@ class _ChatPageState extends State<ChatPage>
     debugPrint('RAG Context: $ragContext memories: ${memories.length}');
     MixpanelManager().chatMessageSent(message);
 
-    await streamApiResponse(
-        personality, ragContext, _callbackFunctionChatStreaming(aiMessage), () {
+    await streamApiResponse(personality, ragContext, _callbackFunctionChatStreaming(aiMessage), () {
       aiMessage.memories.addAll(memories);
       MessageProvider().updateMessage(aiMessage);
       // TODO: make sure about few things here
@@ -303,27 +285,21 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<List<dynamic>> _retrieveRAGContext(String message) async {
-    String? betterContextQuestion = await determineRequiresContext(
-        await MessageProvider().retrieveMostRecentMessages(limit: 5));
-    debugPrint(
-        '_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
+    String? betterContextQuestion =
+        await determineRequiresContext(await MessageProvider().retrieveMostRecentMessages(limit: 5));
+    debugPrint('_retrieveRAGContext betterContextQuestion: $betterContextQuestion');
     if (betterContextQuestion == null || betterContextQuestion.isEmpty) {
       return ['', []];
     }
-    List<double> vectorizedMessage =
-        await getEmbeddingsFromInput(betterContextQuestion);
+    List<double> vectorizedMessage = await getEmbeddingsFromInput(betterContextQuestion);
     List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
     debugPrint('queryPineconeVectors memories retrieved: $memoriesId');
     if (memoriesId.isEmpty) {
       return ['', []];
     }
-    List<int> memoriesIdAsInt = memoriesId
-        .map((e) => int.tryParse(e) ?? -1)
-        .where((e) => e != -1)
-        .toList();
+    List<int> memoriesIdAsInt = memoriesId.map((e) => int.tryParse(e) ?? -1).where((e) => e != -1).toList();
     debugPrint('memoriesIdAsInt: $memoriesIdAsInt');
-    List<Memory> memories =
-        await MemoryProvider().getMemoriesById(memoriesIdAsInt);
+    List<Memory> memories = await MemoryProvider().getMemoriesById(memoriesIdAsInt);
     return [Memory.memoriesToString(memories), memories];
   }
 
@@ -347,8 +323,7 @@ class _ChatPageState extends State<ChatPage>
 
   _moveListToBottom({double extra = 0}) async {
     try {
-      listViewController
-          .jumpTo(listViewController.position.maxScrollExtent + extra);
+      listViewController.jumpTo(listViewController.position.maxScrollExtent + extra);
     } catch (e) {}
   }
 }

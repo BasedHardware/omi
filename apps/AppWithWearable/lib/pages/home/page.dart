@@ -26,6 +26,7 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -42,6 +43,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
+
+  String? selectedPluginId;
+  List<Plugin> enabledPlugins = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -67,6 +71,24 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Future<void> _initiatePlugins() async {
     var plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
+    final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+    setState(() {
+      enabledPlugins = plugins.where((e) => pluginsEnabled.contains(e.id)).toList();
+    });
+  }
+
+  Future<void> _refreshPlugins() async {
+    var plugins = await retrievePlugins();
+    final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+    setState(() {
+      enabledPlugins = plugins.where((e) => pluginsEnabled.contains(e.id)).toList();
+    });
+  }
+
+  void _handlePluginChanged(String? newPluginId) {
+    setState(() {
+      selectedPluginId = newPluginId;
+    });
   }
 
   @override
@@ -175,6 +197,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {
       _controller!.index = index;
     });
+    // when switching to chat page
+    if (index == 2) {
+      _refreshPlugins();
+    }
   }
 
   @override
@@ -211,6 +237,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
                       memories: memories,
+                      selectedPluginId: selectedPluginId,
+                      enabledPlugins: enabledPlugins,
+                      onPluginChanged: (String? newPluginId) {
+                        setState(() {
+                          selectedPluginId = newPluginId;
+                        });
+                      },
                     ),
                   ],
                 ),
@@ -295,6 +328,54 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              if (_controller!.index == 2)
+                DropdownButton<String>(
+                  value: selectedPluginId,
+                  icon: const Icon(Icons.arrow_downward),
+                  elevation: 16,
+                  style: const TextStyle(color: Colors.deepPurple),
+                  underline: Container(
+                    height: 2,
+                    color: Colors.deepPurpleAccent,
+                  ),
+                  onChanged: (String? newValue) {
+                    _handlePluginChanged(newValue);
+                  },
+                  items: enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
+                    return DropdownMenuItem<String>(
+                      value: plugin.id,
+                      child: Row(
+                        children: [
+                          Image.network(
+                            'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                            width: 24,
+                            height: 24,
+                            errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(plugin.name),
+                          if (selectedPluginId == plugin.id) const Icon(Icons.check, color: Colors.green)
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  selectedItemBuilder: (BuildContext context) {
+                    return enabledPlugins.map<Widget>((Plugin plugin) {
+                      return Row(
+                        children: [
+                          Image.network(
+                            'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                            width: 24,
+                            height: 24,
+                            errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(plugin.name),
+                        ],
+                      );
+                    }).toList();
+                  },
+                ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -343,11 +424,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   MixpanelManager().settingsOpened();
                   var language = SharedPreferencesUtil().recordingsLanguage;
                   var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
                   if (language != SharedPreferencesUtil().recordingsLanguage ||
                       useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
                     transcriptChildWidgetKey.currentState?.resetState();
                   }
+                  _refreshPlugins();
                 },
               )
             ],
