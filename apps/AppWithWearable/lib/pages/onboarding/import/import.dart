@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -26,6 +27,11 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
       vsync: this,
     )..repeat(reverse: true);
     super.initState();
+  }
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -113,18 +119,33 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
     FocusScope.of(context).unfocus();
     try {
       setState(() => importLoading = true);
-      var memoriesImported = await retrieveBackup(uidController.text, passwordController.text);
-      if (memoriesImported == 0) {
+      var memories = await retrieveBackup(uidController.text, passwordController.text);
+      if (memories.isEmpty) {
         _snackBar('No Memories Found');
         setState(() => importLoading = false);
         return;
       }
-      debugPrint('Memories Imported: $memoriesImported');
+      debugPrint('Memories Imported: ${memories.length}');
       // SharedPreferencesUtil().backupPassword = passwordController.text;
       // SharedPreferencesUtil().backupsEnabled = true;
       // SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+      var nonDiscarded = memories.where((element) => !element.discarded).toList();
+      for (var i = 0; i < nonDiscarded.length; i++) {
+        var memory = nonDiscarded[i];
+        if (memory.structured.target == null || memory.discarded) continue;
+        var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
+          createPineconeVector(memory.id.toString(), vector);
+        });
+        if (i % 10 == 0) {
+          await f; // "wait" for previous 10 requests to finish
+          await Future.delayed(const Duration(seconds: 1));
+          debugPrint('Processing Memory: $i');
+        }
+      }
+      // 54d2c392-57f1-46dc-b944-02740a651f7b
+      if (nonDiscarded.length % 10 != 0) await Future.delayed(const Duration(seconds: 2));
 
-      _snackBar('$memoriesImported Memories Imported Successfully   🎉', seconds: 2);
+      _snackBar('${memories.length} Memories Imported Successfully   🎉', seconds: 2);
       await Future.delayed(const Duration(seconds: 2));
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
     } catch (e) {

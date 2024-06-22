@@ -9,6 +9,7 @@ import 'widgets/transcript.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
+  final Function refreshMessages;
   final BTDeviceStruct? device;
 
   final GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey;
@@ -18,6 +19,7 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.refreshMemories,
     required this.transcriptChildWidgetKey,
+    required this.refreshMessages,
   });
 
   @override
@@ -86,6 +88,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
           btDevice: widget.device,
           key: widget.transcriptChildWidgetKey,
           refreshMemories: widget.refreshMemories,
+          refreshMessages: widget.refreshMessages,
           setHasTranscripts: (hasTranscripts) {
             if (_hasTranscripts == hasTranscripts) return;
             setState(() {

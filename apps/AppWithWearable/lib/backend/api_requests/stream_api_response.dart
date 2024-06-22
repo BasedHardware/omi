@@ -133,7 +133,7 @@ String qaStreamedBody(
     If the message doesn't require context, it will be empty, so answer the question casually.
     
     Conversation History:
-    ${chatHistory.map((e) => '${e.type.toString().toUpperCase()}: ${e.text}').join('\n')}
+    ${chatHistory.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}
 
     Context:
     ```

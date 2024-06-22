@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/password.dart';
 import 'package:friend_private/utils/backups.dart';
@@ -99,11 +101,13 @@ class _BackupsPageState extends State<BackupsPage> {
                 if (v) {
                   executeBackup().then((_) => setState(() {}));
                   _snackBar('Backups enabled  🎉');
+                  MixpanelManager().backupsEnabled();
                 } else if (SharedPreferencesUtil().lastBackupDate != '') {
                   SharedPreferencesUtil().lastBackupDate = '';
                   setState(() {});
                   deleteBackupApi();
                   _snackBar('Backups disabled  ✔');
+                  MixpanelManager().backupsDisabled();
                 }
               },
             ),
@@ -113,6 +117,7 @@ class _BackupsPageState extends State<BackupsPage> {
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                 _snackBar('Copied to clipboard  ✅');
+                MixpanelManager().userIDCopied();
               },
               trailing: const Icon(Icons.copy, size: 20),
             ),
@@ -194,6 +199,8 @@ class _BackupsPageState extends State<BackupsPage> {
                       if (result.status == ShareResultStatus.success) {
                         debugPrint('Thank you for sharing the picture!');
                       }
+                      MixpanelManager().exportMemories();
+                      // 54d2c392-57f1-46dc-b944-02740a651f7b
                       setState(() => loadingExportMemories = false);
                     },
                   )
@@ -220,6 +227,7 @@ class _BackupsPageState extends State<BackupsPage> {
                         type: FileType.custom,
                         allowedExtensions: ['json'],
                       );
+                      MixpanelManager().importMemories();
                       if (file == null) {
                         setState(() => loadingImportMemories = false);
                         return;
@@ -230,7 +238,20 @@ class _BackupsPageState extends State<BackupsPage> {
                         var decoded = jsonDecode(content);
                         List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
                         await MemoryProvider().storeMemories(memories);
+                        for (var i = 0; i < memories.length; i++) {
+                          var memory = memories[i];
+                          if (memory.structured.target == null || memory.discarded) continue;
+                          var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
+                            createPineconeVector(memory.id.toString(), vector);
+                          });
+                          if (i % 10 == 0) {
+                            await f; // "wait" for previous 10 requests to finish
+                            await Future.delayed(const Duration(seconds: 1));
+                            debugPrint('Processing Memory: $i');
+                          }
+                        }
                         _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
+                        MixpanelManager().importedMemories();
                       } catch (e) {
                         debugPrint(e.toString());
                         _snackBar('Make sure the file is a valid JSON file.');

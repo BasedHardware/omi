@@ -8,6 +8,8 @@ import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -23,6 +25,7 @@ import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/foreground.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
@@ -44,6 +47,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<Memory> memories = [];
+  List<Message> messages = [];
 
   String? selectedPluginId;
   List<Plugin> enabledPlugins = [];
@@ -58,10 +62,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
-  final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
+  final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
-    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
+    memories = MemoryProvider().getMemoriesOrdered(includeDiscarded: true).reversed.toList();
+    setState(() {});
+  }
+
+  _refreshMessages() async {
+    messages = MessageProvider().getMessages();
     setState(() {});
   }
 
@@ -117,7 +126,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _migrationScripts() async {
     await migrateMemoriesCategoriesAndEmojis();
-    await migrateMemoriesToObjectBox();
+    // await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
 
@@ -130,7 +139,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
-    Upgrader.clearSavedSettings();
+    _refreshMessages();
 
     _initiateMemories();
     _initiatePlugins();
@@ -163,7 +172,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           setState(() {
             _device = null;
           });
-          InstabugLog.logWarn('Friend Device Disconnected');
+          InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
                 title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
@@ -219,9 +228,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return WithForegroundTask(
-        child: UpgradeAlert(
+        child: MyUpgradeAlert(
       upgrader: _upgrader,
-      cupertinoButtonTextStyle: const TextStyle(color: Colors.white),
+      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
         body: GestureDetector(
@@ -246,10 +255,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       device: _device,
                       refreshMemories: _initiateMemories,
                       transcriptChildWidgetKey: transcriptChildWidgetKey,
+                      refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
-                      memories: memories,
+                      messages: messages,
+                      refreshMessages: _refreshMessages,
                       selectedPluginId: selectedPluginId,
                       enabledPlugins: enabledPlugins,
                       onPluginChanged: (String? newPluginId) {
