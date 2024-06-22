@@ -368,36 +368,43 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               ),
               // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               if (_controller!.index == 2)
-                DropdownButton<String>(
-                  value: selectedPluginId,
-                  icon: const Icon(Icons.arrow_downward),
-                  elevation: 16,
-                  style: const TextStyle(color: Colors.deepPurple),
-                  underline: Container(
-                    height: 2,
-                    color: Colors.deepPurpleAccent,
-                  ),
-                  onChanged: (String? newValue) {
-                    _handlePluginChanged(newValue);
-                  },
-                  items: enabledPlugins.isEmpty
-                      ? [
-                          const DropdownMenuItem<String>(
+                enabledPlugins.isEmpty
+                    ? DropdownButton<String>(
+                        value: selectedPluginId,
+                        icon: const Icon(Icons.arrow_downward),
+                        elevation: 16,
+                        style: const TextStyle(color: Colors.deepPurple),
+                        underline: Container(
+                          height: 2,
+                          color: Colors.deepPurpleAccent,
+                        ),
+                        onChanged: (String? newValue) {
+                          _handlePluginChanged(newValue);
+                        },
+                        items: const [
+                          DropdownMenuItem<String>(
                             value: 'default',
-                            child: SizedBox(
-                              width: 150,
-                              child: Text('default'),
-                            ),
+                            child: Text('default'),
                           ),
-                          const DropdownMenuItem<String>(
+                          DropdownMenuItem<String>(
                             value: 'enable_plugins',
-                            child: SizedBox(
-                              width: 150,
-                              child: Text('enable plugins'),
-                            ),
-                          )
-                        ]
-                      : enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
+                            child: Text('enable plugins'),
+                          ),
+                        ],
+                      )
+                    : DropdownButton<String>(
+                        value: selectedPluginId,
+                        icon: const Icon(Icons.arrow_downward),
+                        elevation: 16,
+                        style: const TextStyle(color: Colors.deepPurple),
+                        underline: Container(
+                          height: 2,
+                          color: Colors.deepPurpleAccent,
+                        ),
+                        onChanged: (String? newValue) {
+                          _handlePluginChanged(newValue);
+                        },
+                        items: enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
                           return DropdownMenuItem<String>(
                             value: plugin.id,
                             child: Row(
@@ -415,23 +422,23 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ),
                           );
                         }).toList(),
-                  selectedItemBuilder: (BuildContext context) {
-                    return enabledPlugins.map<Widget>((Plugin plugin) {
-                      return Row(
-                        children: [
-                          Image.network(
-                            'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
-                            width: 24,
-                            height: 24,
-                            errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(plugin.name),
-                        ],
-                      );
-                    }).toList();
-                  },
-                ),
+                        selectedItemBuilder: (BuildContext context) {
+                          return enabledPlugins.map<Widget>((Plugin plugin) {
+                            return Row(
+                              children: [
+                                Image.network(
+                                  'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                                  width: 24,
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(plugin.name),
+                              ],
+                            );
+                          }).toList();
+                        },
+                      ),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
