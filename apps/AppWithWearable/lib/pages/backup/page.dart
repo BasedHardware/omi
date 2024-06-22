@@ -27,6 +27,8 @@ class _BackupsPageState extends State<BackupsPage> {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
+  bool backupInProgress = false;
+
   @override
   void initState() {
     backupsEnabled = SharedPreferencesUtil().backupsEnabled;
@@ -95,9 +97,7 @@ class _BackupsPageState extends State<BackupsPage> {
               checkboxShape: const CircleBorder(),
               onChanged: (v) {
                 SharedPreferencesUtil().backupsEnabled = v!;
-                setState(() {
-                  backupsEnabled = v;
-                });
+                setState(() => backupsEnabled = v);
                 if (v) {
                   executeBackup().then((_) => setState(() {}));
                   _snackBar('Backups enabled  🎉');
@@ -127,11 +127,23 @@ class _BackupsPageState extends State<BackupsPage> {
                     title: const Text('Last backup'),
                     subtitle: Text(timeAgo),
                     onTap: () async {
+                      setState(() => backupInProgress = true);
+                      // TODO: add loading
                       await executeBackup();
                       setState(() {});
                       _snackBar('Backup completed  🎉');
+                      setState(() => backupInProgress = false);
                     },
-                    trailing: const Icon(Icons.refresh, size: 24),
+                    trailing: backupInProgress
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.refresh, size: 20),
                   )
                 : const SizedBox(),
             backupsEnabled
@@ -191,18 +203,21 @@ class _BackupsPageState extends State<BackupsPage> {
                             ),
                           )
                         : const Icon(Icons.upload),
-                    onTap: () async {
-                      if (loadingExportMemories) return;
-                      setState(() => loadingExportMemories = true);
-                      File file = await MemoryProvider().exportMemoriesToFile();
-                      final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-                      if (result.status == ShareResultStatus.success) {
-                        debugPrint('Thank you for sharing the picture!');
-                      }
-                      MixpanelManager().exportMemories();
-                      // 54d2c392-57f1-46dc-b944-02740a651f7b
-                      setState(() => loadingExportMemories = false);
-                    },
+                    onTap: loadingExportMemories
+                        ? null
+                        : () async {
+                            if (loadingExportMemories) return;
+                            setState(() => loadingExportMemories = true);
+                            File file = await MemoryProvider().exportMemoriesToFile();
+                            final result =
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                            if (result.status == ShareResultStatus.success) {
+                              debugPrint('Thank you for sharing the picture!');
+                            }
+                            MixpanelManager().exportMemories();
+                            // 54d2c392-57f1-46dc-b944-02740a651f7b
+                            setState(() => loadingExportMemories = false);
+                          },
                   )
                 : const SizedBox(),
             SharedPreferencesUtil().devModeEnabled
