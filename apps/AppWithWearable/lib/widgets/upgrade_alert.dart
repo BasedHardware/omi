@@ -12,8 +12,8 @@ class MyUpgrader extends Upgrader {
   bool isUpdateAvailable() {
     final storeVersion = currentAppStoreVersion;
     final installedVersion = currentInstalledVersion;
-    print('storeVersion=$storeVersion');
-    print('installedVersion=$installedVersion');
+    // print('storeVersion=$storeVersion');
+    // print('installedVersion=$installedVersion');
     return super.isUpdateAvailable();
   }
 }

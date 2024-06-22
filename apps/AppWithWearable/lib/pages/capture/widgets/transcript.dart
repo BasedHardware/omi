@@ -21,6 +21,7 @@ import 'package:friend_private/utils/stt/wav_bytes.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final Function refreshMemories;
+  final Function refreshMessages;
   final Function(bool) setHasTranscripts;
 
   const TranscriptWidget({
@@ -28,6 +29,7 @@ class TranscriptWidget extends StatefulWidget {
     required this.btDevice,
     required this.refreshMemories,
     required this.setHasTranscripts,
+    required this.refreshMessages,
   });
 
   final BTDeviceStruct? btDevice;
@@ -248,6 +250,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         var msg = Message(DateTime.now(), r, 'ai');
         msg.memories.add(memory);
         MessageProvider().saveMessage(msg);
+        widget.refreshMessages();
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
