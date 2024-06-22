@@ -101,7 +101,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   objectbox_generator: any
-
+  flutter_flavorizr: ^2.2.3
 
 flutter_launcher_icons:
   android: true
