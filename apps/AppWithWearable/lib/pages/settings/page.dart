@@ -6,8 +6,10 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'reminders_interface.dart';
@@ -25,11 +27,9 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late RemindersInterface reminders;
 
-  final TextEditingController gcpCredentialsController =
-      TextEditingController();
+  final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController deepgramAPIKeyController =
-      TextEditingController();
+  final TextEditingController deepgramAPIKeyController = TextEditingController();
   final TextEditingController openAIKeyController = TextEditingController();
   bool openaiApiIsVisible = false;
   late String _selectedLanguage;
@@ -52,10 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    postMemoryNotificationIsChecked =
-        SharedPreferencesUtil().postMemoryNotificationIsChecked;
-    reconnectNotificationIsChecked =
-        SharedPreferencesUtil().reconnectNotificationIsChecked;
+    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
+    reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     remindersEnabled = SharedPreferencesUtil().remindersEnabled;
 
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
@@ -110,20 +108,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   padding: EdgeInsets.symmetric(horizontal: 4.0),
                   child: Text(
                     'Save',
-                    style: TextStyle(
-                        color: Colors.deepPurple,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16),
+                    style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 16),
                   ),
                 ),
               )
             ],
           ),
           body: Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 8,
-                right: 8),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 8, right: 8),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
@@ -135,10 +127,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'RECORDING SETTINGS',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500),
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                     ),
                   ),
@@ -150,8 +139,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       border: Border.all(color: Colors.white),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    padding: const EdgeInsets.only(
-                        left: 16, right: 12, top: 8, bottom: 10),
+                    padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
                     child: DropdownButton<String>(
                       menuMaxHeight: 350,
                       value: _selectedLanguage,
@@ -168,16 +156,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       isExpanded: true,
                       itemHeight: 48,
-                      items: availableLanguages.keys
-                          .map<DropdownMenuItem<String>>((String key) {
+                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
                         return DropdownMenuItem<String>(
                           value: availableLanguages[key],
                           child: Text(
                             '$key (${availableLanguages[key]})',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                           ),
                         );
                       }).toList(),
@@ -209,16 +193,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Post memory analysis',
-                            style: TextStyle(
-                                color: Color.fromARGB(255, 150, 150, 150),
-                                fontSize: 16),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
                               color: postMemoryNotificationIsChecked
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -227,14 +208,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                postMemoryNotificationIsChecked // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: postMemoryNotificationIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -245,12 +225,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         if (reconnectNotificationIsChecked) {
                           reconnectNotificationIsChecked = false;
-                          SharedPreferencesUtil()
-                              .reconnectNotificationIsChecked = false;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = false;
                         } else {
                           reconnectNotificationIsChecked = true;
-                          SharedPreferencesUtil()
-                              .reconnectNotificationIsChecked = true;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = true;
                         }
                       });
                     },
@@ -261,9 +239,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Reminder to reconnect',
-                            style: TextStyle(
-                                color: Color.fromARGB(255, 150, 150, 150),
-                                fontSize: 16),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
@@ -294,8 +270,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: () {
                       setState(() {
                         remindersEnabled = !remindersEnabled;
-                        SharedPreferencesUtil().remindersEnabled =
-                            remindersEnabled;
+                        SharedPreferencesUtil().remindersEnabled = remindersEnabled;
                         toggleReminders(
                             remindersEnabled); // This will call the platform-specific reminder functionality
                       });
@@ -307,16 +282,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           const Text(
                             'Reminders app integration',
-                            style: TextStyle(
-                                color: Color.fromARGB(255, 150, 150, 150),
-                                fontSize: 16),
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                           ),
                           Container(
                             decoration: BoxDecoration(
                               color: remindersEnabled
                                   ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors
-                                      .transparent, // Fill color when checked
+                                  : Colors.transparent, // Fill color when checked
                               border: Border.all(
                                 color: const Color.fromARGB(255, 150, 150, 150),
                                 width: 2,
@@ -325,14 +297,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             width: 22,
                             height: 22,
-                            child:
-                                remindersEnabled // Show the icon only when checked
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.white, // Tick color
-                                        size: 18,
-                                      )
-                                    : null, // No icon when unchecked
+                            child: remindersEnabled // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
                           ),
                         ],
                       ),
@@ -376,8 +347,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                       decoration: TextDecoration.underline),
                                 ),
                                 onTap: () {
-                                  Navigator.of(context).push(MaterialPageRoute(
-                                      builder: (c) => const PrivacyInfoPage()));
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                                  MixpanelManager().privacyDetailsPageOpened();
                                 },
                               ),
                             ),
@@ -388,25 +360,22 @@ class _SettingsPageState extends State<SettingsPage> {
                               decoration: BoxDecoration(
                                 color: optInAnalytics
                                     ? const Color.fromARGB(255, 150, 150, 150)
-                                    : Colors
-                                        .transparent, // Fill color when checked
+                                    : Colors.transparent, // Fill color when checked
                                 border: Border.all(
-                                  color:
-                                      const Color.fromARGB(255, 150, 150, 150),
+                                  color: const Color.fromARGB(255, 150, 150, 150),
                                   width: 2,
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               width: 22,
                               height: 22,
-                              child:
-                                  optInAnalytics // Show the icon only when checked
-                                      ? const Icon(
-                                          Icons.check,
-                                          color: Colors.white, // Tick color
-                                          size: 18,
-                                        )
-                                      : null, // No icon when unchecked
+                              child: optInAnalytics // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
                             ),
                           ],
                         ),
@@ -421,8 +390,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           if (devModeEnabled) {
                             devModeEnabled = false;
                             SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
                           } else {
                             devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
                             SharedPreferencesUtil().devModeEnabled = true;
                           }
                         });
@@ -434,33 +405,28 @@ class _SettingsPageState extends State<SettingsPage> {
                           children: [
                             const Text(
                               'Developer Mode',
-                              style: TextStyle(
-                                  color: Color.fromARGB(255, 150, 150, 150),
-                                  fontSize: 16),
+                              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                             ),
                             Container(
                               decoration: BoxDecoration(
                                 color: devModeEnabled
                                     ? const Color.fromARGB(255, 150, 150, 150)
-                                    : Colors
-                                        .transparent, // Fill color when checked
+                                    : Colors.transparent, // Fill color when checked
                                 border: Border.all(
-                                  color:
-                                      const Color.fromARGB(255, 150, 150, 150),
+                                  color: const Color.fromARGB(255, 150, 150, 150),
                                   width: 2,
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               width: 22,
                               height: 22,
-                              child:
-                                  devModeEnabled // Show the icon only when checked
-                                      ? const Icon(
-                                          Icons.check,
-                                          color: Colors.white, // Tick color
-                                          size: 18,
-                                        )
-                                      : null, // No icon when unchecked
+                              child: devModeEnabled // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
                             ),
                           ],
                         ),
@@ -468,14 +434,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   ListTile(
-                    title: const Text('Need help?',
-                        style: TextStyle(color: Colors.white)),
+                    title: const Text('Need help?', style: TextStyle(color: Colors.white)),
                     subtitle: const Text('team@basedhardware.com'),
                     contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-                    trailing: const Icon(Icons.arrow_forward_ios,
-                        color: Colors.white, size: 16),
+                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                     onTap: () {
                       launchUrl(Uri.parse('mailto:team@basedhardware.com'));
+                      MixpanelManager().supportContacted();
                     },
                   ),
                   const SizedBox(height: 36.0),
@@ -492,8 +457,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   GestureDetector(
                     onTap: () {
                       MixpanelManager().pluginsOpened();
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (c) => const PluginsPage()));
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
                     },
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
@@ -503,16 +467,13 @@ class _SettingsPageState extends State<SettingsPage> {
                           borderRadius: BorderRadius.circular(10.0),
                         ),
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 'Plugins',
-                                style: TextStyle(
-                                    color: Color.fromARGB(255, 150, 150, 150),
-                                    fontSize: 16),
+                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                               ),
                               Icon(
                                 Icons.arrow_forward_ios,
@@ -525,74 +486,78 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  // InkWell(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Text(
-                  //               'Speech Profile Set Up',
-                  //               style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
-                  // GestureDetector(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Row(
-                  //               children: [
-                  //                 Text(
-                  //                   'Backups',
-                  //                   style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //                 ),
-                  //                 SizedBox(width: 16),
-                  //                 Icon(Icons.backup, color: Colors.white, size: 16),
-                  //               ],
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+                  Visibility(
+                    visible: false,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Speech Profile Set Up',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Visibility(
+                    visible: true,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Backups',
+                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Icon(Icons.backup, color: Colors.white, size: 16),
+                                  ],
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: Text(
                       SharedPreferencesUtil().uid,
-                      style: const TextStyle(
-                          color: Color.fromARGB(255, 150, 150, 150),
-                          fontSize: 16),
+                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                       maxLines: 1,
                       textAlign: TextAlign.center,
                     ),
@@ -603,9 +568,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       alignment: Alignment.center,
                       child: Text(
                         'Version: $version+$buildVersion',
-                        style: const TextStyle(
-                            color: Color.fromARGB(255, 150, 150, 150),
-                            fontSize: 16),
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
                       ),
                     ),
                   ),
@@ -635,8 +598,7 @@ class _SettingsPageState extends State<SettingsPage> {
         autocorrect: false,
         enabled: true,
         enableSuggestions: false,
-        decoration:
-            _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
+        decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
         style: const TextStyle(color: Colors.white),
       ),
       const SizedBox(height: 24.0),
@@ -650,8 +612,7 @@ class _SettingsPageState extends State<SettingsPage> {
         style: const TextStyle(color: Colors.white),
       ),
       const SizedBox(height: 40),
-      _getText('[Optional] Store your recordings in Google Cloud',
-          underline: false),
+      _getText('[Optional] Store your recordings in Google Cloud', underline: false),
       const SizedBox(height: 16.0),
       TextField(
         controller: gcpCredentialsController,
@@ -690,8 +651,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (loadingExportMemories) return;
           setState(() => loadingExportMemories = true);
           File file = await MemoryProvider().exportMemoriesToFile();
-          final result = await Share.shareXFiles([XFile(file.path)],
-              text: 'Exported Memories from Friend');
+          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
           if (result.status == ShareResultStatus.success) {
             print('Thank you for sharing the picture!');
           }
@@ -699,22 +659,19 @@ class _SettingsPageState extends State<SettingsPage> {
         },
       ),
       ListTile(
-        title: const Text('Join the community!',
-            style: TextStyle(color: Colors.white)),
+        title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
         subtitle: const Text('2300+ members and counting.'),
         trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
         onTap: () {
           launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+          MixpanelManager().joinDiscordClicked();
         },
       ),
       const SizedBox(height: 64),
     ];
   }
 
-  _getTextFieldDecoration(String label,
-      {IconButton? suffixIcon,
-      bool canBeDisabled = false,
-      String hintText = ''}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
     return InputDecoration(
       labelText: label,
       enabled: true && canBeDisabled,
@@ -741,11 +698,8 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Text(
         text,
         style: TextStyle(
-          color: true && canBeDisabled
-              ? Colors.white.withOpacity(0.2)
-              : Colors.white,
-          decoration:
-              underline ? TextDecoration.underline : TextDecoration.none,
+          color: true && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
+          decoration: underline ? TextDecoration.underline : TextDecoration.none,
           fontSize: 16,
         ),
         textAlign: TextAlign.center,
@@ -769,17 +723,14 @@ class _SettingsPageState extends State<SettingsPage> {
     prefs.openAIApiKey = openAIKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
 
-    optInAnalytics
-        ? MixpanelManager().optInTracking()
-        : MixpanelManager().optOutTracking();
+    optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
 
     if (_selectedLanguage != prefs.recordingsLanguage) {
       prefs.recordingsLanguage = _selectedLanguage;
       MixpanelManager().recordingLanguageChanged(_selectedLanguage);
     }
 
-    if (gcpCredentialsController.text.isNotEmpty &&
-        gcpBucketNameController.text.isNotEmpty) {
+    if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
       authenticateGCP();
     }
 

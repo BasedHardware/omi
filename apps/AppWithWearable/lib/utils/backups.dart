@@ -34,7 +34,7 @@ List<dynamic> decodeJson(String encryptedJson, String password) {
 Future<String> getEncodedMemories() async {
   var password = SharedPreferencesUtil().backupPassword;
   if (password.isEmpty) return '';
-  var memories = await MemoryProvider().getMemories();
+  var memories = MemoryProvider().getMemories();
   return encodeJson(memories.map((e) => e.toJson()).toList(), password);
 }
 
@@ -48,12 +48,12 @@ Future<bool> executeBackup() async {
   return true;
 }
 
-Future<int> retrieveBackup(String uid, String password) async {
+Future<List<Memory>> retrieveBackup(String uid, String password) async {
   var retrieved = await downloadBackupApi(uid);
   if (retrieved == '') throw Exception('No backup found for this user ID.');
   var memories = await getDecodedMemories(retrieved, password);
-  await MemoryProvider().storeMemories(memories);
-  return memories.length;
+  MemoryProvider().storeMemories(memories);
+  return memories;
 }
 
 Future<List<Memory>> getDecodedMemories(String encodedMemories, String password) async {

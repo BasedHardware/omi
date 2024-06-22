@@ -74,6 +74,11 @@ class _MyAppState extends State<MyApp> {
             secondary: Colors.deepPurple,
             surface: Colors.black38,
           ),
+          // dialogTheme: const DialogTheme(
+          //   backgroundColor: Colors.black,
+          //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
+          //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
+          // ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
             contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
