@@ -413,7 +413,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: enabledPlugins.isEmpty ? 'default' : (selectedPluginId ?? enabledPlugins.first.id),
+                            value: selectedPluginId,
                             icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
                             elevation: 16,
                             style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
