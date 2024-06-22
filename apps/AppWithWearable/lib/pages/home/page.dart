@@ -23,6 +23,7 @@ import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/foreground.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
@@ -53,7 +54,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
-  final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
+  final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
     memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
@@ -181,9 +182,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return WithForegroundTask(
-        child: UpgradeAlert(
+        child: MyUpgradeAlert(
       upgrader: _upgrader,
-      cupertinoButtonTextStyle: const TextStyle(color: Colors.white),
+      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
         body: GestureDetector(

@@ -173,5 +173,9 @@ class MixpanelManager {
   void copiedMemoryDetails(Memory memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: _getMemoryEventProperties(memory));
 
+  void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
+
+  void upgradeModalClicked() => track('Upgrade Modal Clicked');
+
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
