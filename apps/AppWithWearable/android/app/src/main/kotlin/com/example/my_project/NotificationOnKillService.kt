@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import io.flutter.Log
+import android.graphics.BitmapFactory
 
 class NotificationOnKillService: Service() {
     private lateinit var title: String
@@ -32,16 +33,16 @@ class NotificationOnKillService: Service() {
             val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
 
             val notificationBuilder = NotificationCompat.Builder(this, "com.friend.ios")
-                .setSmallIcon(android.R.drawable.ic_notification_overlay)
+                .setSmallIcon(getSmallIconForNotification())
                 .setContentTitle(title)
                 .setContentText(description)
-                .setAutoCancel(false)
+                .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setContentIntent(pendingIntent)
                 .setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
 
-            val name = "Notification service on application kill"
-            val descriptionText = "Explain here why you need this notification"
+            val name = "Notification permission"
+            val descriptionText = "You need to enable notifications to receive your pro-active feedback."
             val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel("com.friend.ios", name, importance).apply {
                 description = descriptionText
@@ -55,8 +56,16 @@ class NotificationOnKillService: Service() {
             Log.d("NotificationOnKillService", "Error showing notification", e)
         }
         super.onTaskRemoved(rootIntent)
-    }
+        
 
+    }
+    private fun getSmallIconForNotification(): Int {
+        return if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
+            R.mipmap.ic_stat_launcher
+        } else {
+            R.mipmap.ic_launcher
+        }
+    }
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
