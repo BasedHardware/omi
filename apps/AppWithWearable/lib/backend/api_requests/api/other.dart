@@ -27,8 +27,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint(
-      'transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
   var data = jsonDecode(res.json);
   // debugPrint('Response body: ${res.json}');
   var result = data['results']['channels'][0]['alternatives'][0];
@@ -61,8 +60,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
-    url:
-        'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
+    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
     headers: {},
     body: '',
     method: 'GET',

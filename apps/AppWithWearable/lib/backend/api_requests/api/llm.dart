@@ -40,15 +40,12 @@ Future<dynamic> gptApiCall({
 
   final String body = jsonEncode(bodyData);
 
-  var response =
-      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   return extractContentFromResponse(response,
-      isEmbedding: urlSuffix == 'embeddings',
-      isFunctionCalling: tools.isNotEmpty);
+      isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
 }
 
-Future<String> executeGptPrompt(String? prompt,
-    {bool jsonResponseFormat = false}) async {
+Future<String> executeGptPrompt(String? prompt, {bool jsonResponseFormat = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();

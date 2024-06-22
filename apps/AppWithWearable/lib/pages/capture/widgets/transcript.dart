@@ -83,10 +83,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   void toggleReminders(bool isEnabled) {
     if (isEnabled) {
-      reminders.addReminder(
-          "Checkup Reminder",
-          DateTime.now().add(const Duration(days: 1)),
-          const Duration(hours: 3));
+      reminders.addReminder("Checkup Reminder", DateTime.now().add(const Duration(days: 1)), const Duration(hours: 3));
     }
   }
 
@@ -94,11 +91,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = _buildDiarizedTranscriptMessage(
-        SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null,
-            retrievedFromCache: true)
-        .then((m) {
+    String transcript = _buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
       if (m != null && !m.discarded) executeBackup();
     });
     SharedPreferencesUtil().transcriptSegments = [];
@@ -112,8 +106,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     // VadUtil vad = VadUtil();
     // await vad.init();
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id,
-        onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
       value.removeRange(0, 3);
       // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
@@ -129,8 +122,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
         var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
         // SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
         toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav')
-            .then((f) async {
+        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
@@ -139,8 +131,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
             processCustomTranscript(segments);
           } catch (e) {
             debugPrint(e.toString());
-            toProcessBytes.insertAudioBytes(bytesCopy.sublist(
-                0, 232000)); // remove last 1 sec to avoid duplicate
+            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
           }
         });
       }
@@ -151,13 +142,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _cleanTranscript(List<TranscriptSegment> segments) {
-    var hallucinations = [
-      'Thank you.',
-      'I don\'t know what to do,',
-      'I\'m',
-      'It was the worst case.',
-      'and,'
-    ];
+    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m', 'It was the worst case.', 'and,'];
     // TODO: do this with any words that gets repeated twice
     // - Replicate apparently has much more hallucinations
     for (var i = 0; i < segments.length; i++) {
@@ -209,8 +194,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     currentTranscriptFinishedAt = DateTime.now();
   }
 
-  void resetState(
-      {bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('transcript.dart resetState called');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
@@ -254,8 +238,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
 
   _initiateMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
-    _memoryCreationTimer =
-        Timer(const Duration(seconds: 120), () => _createMemory());
+    _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
   }
 
   _createMemory() async {
@@ -274,9 +257,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
     if (memory != null && !memory.discarded) executeBackup();
-    if (memory != null &&
-        !memory.discarded &&
-        SharedPreferencesUtil().postMemoryNotificationIsChecked) {
+    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
@@ -295,18 +276,14 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
     }
     // Analyze transcript and decide on setting a reminder
     if (SharedPreferencesUtil().remindersEnabled) {
-      debugPrint(
-          'Reminders integration enabled. Analyzing transcript for reminders');
-      ReminderDetails? reminderDetails =
-          await analyzeTranscriptForReminder(transcript);
+      debugPrint('Reminders integration enabled. Analyzing transcript for reminders');
+      ReminderDetails? reminderDetails = await analyzeTranscriptForReminder(transcript);
       if (reminderDetails != null) {
-        reminders.addReminder(reminderDetails.title, reminderDetails.dueDate,
-            reminderDetails.duration);
+        reminders.addReminder(reminderDetails.title, reminderDetails.dueDate, reminderDetails.duration);
         // Show a SnackBar when a reminder is successfully created
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Calendar reminder created 📆',
-                style: TextStyle(color: Colors.white)),
+            content: Text('Calendar reminder created 📆', style: TextStyle(color: Colors.white)),
           ));
         }
       }
@@ -345,10 +322,7 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                     child: Text(
                       textAlign: TextAlign.center,
                       'Your transcripts will start appearing\nhere after 30 seconds.',
-                      style: TextStyle(
-                          color: Colors.white,
-                          height: 1.5,
-                          decoration: TextDecoration.underline),
+                      style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
                     ),
                   ),
                 )
@@ -406,12 +380,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Image.asset(
-                      data.isUser
-                          ? 'assets/images/speaker_0_icon.png'
-                          : 'assets/images/speaker_1_icon.png',
-                      width: 26,
-                      height: 26),
+                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      width: 26, height: 26),
                   const SizedBox(width: 12),
                   Text(
                     data.isUser ? 'You' : 'Speaker ${data.speakerId}',
@@ -424,11 +394,8 @@ class TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    needsUtf8
-                        ? utf8.decode(data.text.toString().codeUnits)
-                        : data.text,
-                    style:
-                        const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                    needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
+                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
                 ),

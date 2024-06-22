@@ -8,8 +8,7 @@ class RemindersIOS implements RemindersInterface {
   DeviceCalendarPlugin deviceCalendarPlugin = DeviceCalendarPlugin();
 
   @override
-  void addReminder(String title, DateTime dueDate,
-      [Duration duration = const Duration(hours: 1)]) async {
+  void addReminder(String title, DateTime dueDate, [Duration duration = const Duration(hours: 1)]) async {
     var permissionsResult = await enableCalendarPermissions();
     if (!permissionsResult) {
       // TODO: Handle permissions not granted
@@ -18,20 +17,16 @@ class RemindersIOS implements RemindersInterface {
 
     var calendarsResult = await deviceCalendarPlugin.retrieveCalendars();
     if (!calendarsResult.isSuccess || calendarsResult.data == null) {
-      debugPrint(
-          'Failed to retrieve calendars: Success=${calendarsResult.isSuccess}, Data=${calendarsResult.data}');
+      debugPrint('Failed to retrieve calendars: Success=${calendarsResult.isSuccess}, Data=${calendarsResult.data}');
       return;
     }
 
-    var calendar =
-        calendarsResult.data!.firstWhereOrNull((cal) => cal.isDefault ?? false);
+    var calendar = calendarsResult.data!.firstWhereOrNull((cal) => cal.isDefault ?? false);
 
     if (calendar != null) {
       final tz.TZDateTime startTZ = tz.TZDateTime.from(dueDate, tz.local);
-      final tz.TZDateTime endTZ =
-          tz.TZDateTime.from(dueDate.add(duration), tz.local);
-      final event =
-          Event(calendar.id, title: title, start: startTZ, end: endTZ);
+      final tz.TZDateTime endTZ = tz.TZDateTime.from(dueDate.add(duration), tz.local);
+      final event = Event(calendar.id, title: title, start: startTZ, end: endTZ);
       var result = await deviceCalendarPlugin.createOrUpdateEvent(event);
       if (result != null) {
         if (!result.isSuccess) {

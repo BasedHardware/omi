@@ -23,8 +23,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
   final pluginsList = SharedPreferencesUtil().pluginsList;
-  final enabledPlugins =
-      pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
   // ${_getPrevMemoriesStr(previousMemories)}
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
@@ -89,8 +88,7 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
 }
 
 Future<String> dailySummaryNotifications(List<Memory> memories) async {
-  var msg =
-      'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
+  var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
   if (memories.isEmpty) return msg;
   if (memories.where((m) => !m.discarded).length <= 1) return msg;
 
@@ -141,11 +139,7 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
   ]);
   debugPrint('determineRequiresContext response: $response');
   try {
-    return jsonDecode(response
-        .toString()
-        .replaceAll('```', '')
-        .replaceAll('json', '')
-        .trim())['query'];
+    return jsonDecode(response.toString().replaceAll('```', '').replaceAll('json', '').trim())['query'];
   } catch (e) {
     return null;
   }
@@ -156,8 +150,7 @@ class ReminderDetails {
   final DateTime dueDate;
   final Duration duration;
 
-  ReminderDetails(this.title, this.dueDate,
-      {this.duration = const Duration(hours: 1)});
+  ReminderDetails(this.title, this.dueDate, {this.duration = const Duration(hours: 1)});
 }
 
 Future<ReminderDetails?> analyzeTranscriptForReminder(String transcript) async {
