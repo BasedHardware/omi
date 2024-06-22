@@ -74,9 +74,13 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
   First determine if there's crucial value to notify a busy entrepreneur about it.
-  If not, simply output an empty string, otherwise output a 10 words (at most) message to be notified.
+  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
+   
+  Transcript:
+  ${memory.transcript}
   
+  Structured version:
   ${memory.structured.target!.toJson()}
   ''';
   debugPrint(prompt);
