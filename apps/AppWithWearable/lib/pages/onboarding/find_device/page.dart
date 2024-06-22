@@ -9,7 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
-  const FindDevicesPage({super.key});
+  final VoidCallback goNext;
+
+  const FindDevicesPage({super.key, required this.goNext});
 
   @override
   _FindDevicesPageState createState() => _FindDevicesPageState();
@@ -82,122 +84,43 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    var screenSize = MediaQuery.of(context).size;
-    var size = MediaQuery.of(context).size; // obtain MediaQuery data
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: SafeArea(
-        child: Container(
-          height: size.height, // Make the container take up the full height
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 0), // Responsive padding
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              FoundDevices(deviceList: deviceList),
-              deviceList.isEmpty
-                  ? enableInstructions
-                      ? Padding(
-                          padding: EdgeInsets.only(
-                            bottom: 20, // Padding from the bottom for the button
-                            left: screenSize.width * 0.0, // Horizontal padding for button
-                            right: screenSize.width * 0.0,
-                          ),
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              bottom: 10, // Padding from the bottom for the button
-                              left: screenSize.width * 0.0, // Horizontal padding for button
-                              right: screenSize.width * 0.0,
-                            ),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: const Color.fromARGB(255, 55, 55, 55), width: 2.0),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  _launchURL();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: const Color.fromARGB(255, 17, 17, 17),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Container(
-                                  width: double.infinity, // Button takes full width of the padding
-                                  height: 45, // Fixed height for the button
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    'Contact Support',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w400,
-                                        fontSize: screenSize.width * 0.045,
-                                        color: const Color.fromARGB(255, 55, 55, 55)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ))
-                      : const SizedBox.shrink()
-                  : const SizedBox.shrink()
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SearchingSection extends StatelessWidget {
-  final bool enableInstructions;
-
-  const SearchingSection({
-    super.key,
-    required this.enableInstructions,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    var screenSize = MediaQuery.of(context).size;
-    return Expanded(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(bottom: 12, top: screenSize.height * 0.08),
-            child: const Text(
-              'SEARCHING FOR FRIEND...',
-              style: TextStyle(
-                color: Color.fromARGB(255, 255, 255, 255),
-                fontSize: 17,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ),
-          if (enableInstructions)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10.0),
-              child: Text(
-                "Check if your device is charged by double tapping the top. A green light should be blinking on the side if it's charged.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color.fromARGB(127, 255, 255, 255),
-                  fontSize: 12,
-                  fontWeight: FontWeight.normal,
-                ),
-              ),
-            ),
-          const Spacer(),
-          Center(
-            child: Image.asset(
-              "assets/images/searching.png",
-              width: MediaQuery.of(context).size.width * 0.9,
-            ),
-          ),
-          const Spacer(),
-        ],
-      ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        FoundDevices(deviceList: deviceList, goNext: widget.goNext),
+        deviceList.isEmpty
+            ? enableInstructions
+                ? Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color.fromARGB(255, 55, 55, 55), width: 2.0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _launchURL();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: const Color.fromARGB(255, 17, 17, 17),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        height: 45,
+                        alignment: Alignment.center,
+                        child: const Text(
+                          'Contact Support',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w400, fontSize: 16, color: Color.fromARGB(255, 55, 55, 55)),
+                        ),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink()
+            : const SizedBox.shrink()
+      ],
     );
   }
 }

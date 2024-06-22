@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/backups.dart';
-import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class ImportBackupPage extends StatefulWidget {
-  const ImportBackupPage({super.key});
+  final VoidCallback goBack;
+  final VoidCallback goNext;
+
+  const ImportBackupPage({super.key, required this.goNext, required this.goBack});
 
   @override
   State<ImportBackupPage> createState() => _ImportBackupPageState();
@@ -28,6 +29,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
     )..repeat(reverse: true);
     super.initState();
   }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -36,72 +38,66 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: true,
-      child: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new),
-                onPressed: () => Navigator.pop(context),
-              )),
-          body: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ListView(
-              children: [
-                const DeviceAnimationWidget(),
-                const SizedBox(height: 48),
-                _getTextField(uidController, hintText: 'Previous User ID', hasSuffixIcon: false, obscureText: false),
-                const SizedBox(height: 12),
-                _getTextField(passwordController, hintText: 'Backups Password', obscureText: passwordVisible,
-                    onVisibilityChanged: () {
-                  setState(() {
-                    passwordVisible = !passwordVisible;
-                  });
-                }),
-                const SizedBox(height: 40),
-                Center(
-                  child: MaterialButton(
-                    onPressed: importLoading ? null : _import,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: Colors.deepPurple),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    color: Colors.deepPurple,
-                    child: importLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ))
-                        : const Text(
-                            'Import',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                  ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _getTextField(uidController, hintText: 'Previous User ID', hasSuffixIcon: false, obscureText: false),
+        const SizedBox(height: 12),
+        _getTextField(passwordController, hintText: 'Backups Password', obscureText: passwordVisible,
+            onVisibilityChanged: () {
+          setState(() {
+            passwordVisible = !passwordVisible;
+          });
+        }),
+        const SizedBox(height: 40),
+        Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              TextButton(
+                  onPressed: widget.goBack,
+                  child: const Text(
+                    'Back',
+                    style: TextStyle(color: Colors.white),
+                  )),
+              const SizedBox(width: 16),
+              MaterialButton(
+                onPressed: importLoading ? null : _import,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Colors.deepPurple),
                 ),
-                const SizedBox(height: 16),
-                importLoading
-                    ? FadeTransition(
-                        opacity: _animationController,
-                        child: const Text(
-                          'Wait, don\'t close the app ...',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(decoration: TextDecoration.underline, fontSize: 16),
-                        ),
-                      )
-                    : const SizedBox(height: 0),
-                const SizedBox(height: 40),
-              ],
-            ),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                color: Colors.deepPurple,
+                child: importLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ))
+                    : const Text(
+                        'Import',
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+            ],
           ),
         ),
-      ),
+        const SizedBox(height: 16),
+        importLoading
+            ? FadeTransition(
+                opacity: _animationController,
+                child: const Text(
+                  'Wait, don\'t close the app ...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(decoration: TextDecoration.underline, fontSize: 16),
+                ),
+              )
+            : const SizedBox(height: 0),
+      ],
     );
   }
 
@@ -147,7 +143,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
 
       _snackBar('${memories.length} Memories Imported Successfully   🎉', seconds: 2);
       await Future.delayed(const Duration(seconds: 2));
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+      widget.goNext();
     } catch (e) {
       _snackBar(e.toString().replaceAll('Exception:', '').trim());
       setState(() => importLoading = false);
