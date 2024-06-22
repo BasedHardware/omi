@@ -4,18 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/onboarding/import/existing.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
   final List<BTDeviceStruct?> deviceList;
+  final VoidCallback goNext;
 
   const FoundDevices({
     super.key,
     required this.deviceList,
+    required this.goNext,
   });
 
   @override
@@ -43,9 +43,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
-      // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
-      // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HasBackupPage()));
+      widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
       setState(() {
@@ -74,7 +72,6 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const DeviceAnimationWidget(),
           !_isConnected
               ? Container(
                   margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
