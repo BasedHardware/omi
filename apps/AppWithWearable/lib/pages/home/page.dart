@@ -83,16 +83,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     setState(() {
       enabledPlugins = plugins.where((e) => pluginsEnabled.contains(e.id)).toList();
-      selectedPluginId = enabledPlugins.isNotEmpty ? enabledPlugins.first.id : null;
+      selectedPluginId = enabledPlugins.isNotEmpty ? enabledPlugins.first.id : 'default';
     });
   }
 
   void _handlePluginChanged(String? newPluginId) {
     if (newPluginId == 'enable_plugins') {
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PluginsPage()));
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PluginsPage())).then((_) {
+        _refreshPlugins();
+      });
     } else {
       setState(() {
-        selectedPluginId = newPluginId;
+        selectedPluginId = newPluginId ?? 'default';
       });
     }
   }
@@ -117,6 +119,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   @override
   void initState() {
+    selectedPluginId = enabledPlugins.isNotEmpty ? enabledPlugins.first.id : 'default';
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -395,7 +398,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: selectedPluginId,
+                          value: selectedPluginId ?? 'default',
                           icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
                           elevation: 16,
                           style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
