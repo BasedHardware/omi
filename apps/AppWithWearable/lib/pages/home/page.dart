@@ -82,6 +82,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
     setState(() {
       enabledPlugins = plugins.where((e) => pluginsEnabled.contains(e.id)).toList();
+      selectedPluginId = enabledPlugins.isNotEmpty ? enabledPlugins.first.id : null;
     });
   }
 
@@ -328,6 +329,44 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.grey,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: batteryLevel > 75
+                            ? const Color.fromARGB(255, 0, 255, 8)
+                            : batteryLevel > 20
+                                ? Colors.yellow.shade700
+                                : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      '${batteryLevel.toString()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               if (_controller!.index == 2)
                 DropdownButton<String>(
                   value: selectedPluginId,
@@ -376,44 +415,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     }).toList();
                   },
                 ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.grey,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: batteryLevel > 75
-                            ? const Color.fromARGB(255, 0, 255, 8)
-                            : batteryLevel > 20
-                                ? Colors.yellow.shade700
-                                : Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8.0),
-                    Text(
-                      '${batteryLevel.toString()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               IconButton(
                 icon: const Icon(
                   Icons.settings,

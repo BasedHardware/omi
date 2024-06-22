@@ -38,7 +38,6 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
-  String? selectedPluginId;
   TextEditingController textController = TextEditingController();
   ScrollController listViewController = ScrollController();
 
@@ -181,45 +180,6 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
               ),
               child: Row(
                 children: [
-                  if (enabledPlugins.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.extension),
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                          ),
-                          builder: (BuildContext context) {
-                            return Container(
-                              padding: const EdgeInsets.all(8),
-                              child: ListView(
-                                children: enabledPlugins.map((Plugin plugin) {
-                                  return ListTile(
-                                    title: Text(
-                                      plugin.name,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    trailing:
-                                        selectedPluginId == plugin.id ? Icon(Icons.check, color: Colors.green) : null,
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      setState(() {
-                                        selectedPluginId = plugin.id;
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
                   Expanded(
                     child: TextField(
                       controller: textController,
@@ -262,8 +222,8 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     final pluginsList = SharedPreferencesUtil().pluginsList;
     final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
     String personality = "";
-    if (selectedPluginId != null) {
-      final selectedPlugin = enabledPlugins.firstWhere((plugin) => plugin.id == selectedPluginId);
+    if (widget.selectedPluginId != null) {
+      final selectedPlugin = enabledPlugins.firstWhere((plugin) => plugin.id == widget.selectedPluginId);
       personality = selectedPlugin.prompt;
     }
 
