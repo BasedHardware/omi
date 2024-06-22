@@ -193,7 +193,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         body: GestureDetector(
           onTap: () {
             FocusScope.of(context).unfocus();
