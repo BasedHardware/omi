@@ -27,6 +27,7 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -87,9 +88,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   void _handlePluginChanged(String? newPluginId) {
-    setState(() {
-      selectedPluginId = newPluginId;
-    });
+    if (newPluginId == 'enable_plugins') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PluginsPage()));
+    } else {
+      setState(() {
+        selectedPluginId = newPluginId;
+      });
+    }
   }
 
   @override
