@@ -384,12 +384,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       ? [
                           const DropdownMenuItem<String>(
                             value: 'default',
-                            child: Text('default'),
+                            child: SizedBox(
+                              width: 150,
+                              child: Text('default'),
+                            ),
                           ),
                           const DropdownMenuItem<String>(
                             value: 'enable_plugins',
-                            child: Text('enable plugins'),
-                          ),
+                            child: SizedBox(
+                              width: 150,
+                              child: Text('enable plugins'),
+                            ),
+                          )
                         ]
                       : enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
                           return DropdownMenuItem<String>(
