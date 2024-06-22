@@ -170,5 +170,8 @@ class MixpanelManager {
 
   void joinDiscordClicked() => track('Join Discord Clicked');
 
+  void copiedMemoryDetails(Memory memory, {String source = ''}) =>
+      track('Copied Memory Detail $source'.trim(), properties: _getMemoryEventProperties(memory));
+
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

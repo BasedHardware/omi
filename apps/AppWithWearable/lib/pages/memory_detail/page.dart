@@ -182,6 +182,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                 content: Text('Action items copied to clipboard'),
                                 duration: Duration(seconds: 2),
                               ));
+                              MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Action Items');
                             },
                             icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
                       ],
@@ -247,6 +248,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                           Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
                           ScaffoldMessenger.of(context)
                               .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
+                          MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
                         },
                         // TODO: improve UI of this copy buttons
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
