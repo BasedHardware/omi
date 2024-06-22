@@ -373,77 +373,80 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               ),
               // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               if (_controller!.index == 2)
-                enabledPlugins.isEmpty
-                    ? DropdownButton<String>(
-                        value: selectedPluginId,
-                        icon: const Icon(Icons.arrow_downward),
-                        elevation: 16,
-                        style: const TextStyle(color: Colors.deepPurple),
-                        underline: Container(
-                          height: 2,
-                          color: Colors.deepPurpleAccent,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Added vertical padding
+                    child: Container(
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Reduced vertical padding inside
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                        border: GradientBoxBorder(
+                          gradient: LinearGradient(colors: [
+                            Color.fromARGB(127, 208, 208, 208),
+                            Color.fromARGB(127, 188, 99, 121),
+                            Color.fromARGB(127, 86, 101, 182),
+                            Color.fromARGB(127, 126, 190, 236)
+                          ]),
+                          width: 1,
                         ),
-                        onChanged: (String? newValue) {
-                          _handlePluginChanged(newValue);
-                        },
-                        items: const [
-                          DropdownMenuItem<String>(
-                            value: 'default',
-                            child: Text('default'),
-                          ),
-                          DropdownMenuItem<String>(
-                            value: 'enable_plugins',
-                            child: Text('enable plugins'),
-                          ),
-                        ],
-                      )
-                    : DropdownButton<String>(
-                        value: selectedPluginId,
-                        icon: const Icon(Icons.arrow_downward),
-                        elevation: 16,
-                        style: const TextStyle(color: Colors.deepPurple),
-                        underline: Container(
-                          height: 2,
-                          color: Colors.deepPurpleAccent,
-                        ),
-                        onChanged: (String? newValue) {
-                          _handlePluginChanged(newValue);
-                        },
-                        items: enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
-                          return DropdownMenuItem<String>(
-                            value: plugin.id,
-                            child: Row(
-                              children: [
-                                Image.network(
-                                  'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
-                                  width: 24,
-                                  height: 24,
-                                  errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(plugin.name),
-                                if (selectedPluginId == plugin.id) const Icon(Icons.check, color: Colors.green)
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        selectedItemBuilder: (BuildContext context) {
-                          return enabledPlugins.map<Widget>((Plugin plugin) {
-                            return Row(
-                              children: [
-                                Image.network(
-                                  'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
-                                  width: 24,
-                                  height: 24,
-                                  errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(plugin.name),
-                              ],
-                            );
-                          }).toList();
-                        },
                       ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedPluginId,
+                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                          elevation: 16,
+                          style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                          dropdownColor: Colors.black,
+                          isExpanded: true,
+                          onChanged: (String? newValue) {
+                            _handlePluginChanged(newValue);
+                          },
+                          items: enabledPlugins.isEmpty
+                              ? [
+                                  DropdownMenuItem<String>(
+                                    value: 'default',
+                                    child: Text('Default', style: TextStyle(color: Colors.grey.shade200)),
+                                  ),
+                                  DropdownMenuItem<String>(
+                                    value: 'enable_plugins',
+                                    child: Text('Enable plugins', style: TextStyle(color: Colors.grey.shade200)),
+                                  ),
+                                ]
+                              : enabledPlugins.map<DropdownMenuItem<String>>((Plugin plugin) {
+                                  return DropdownMenuItem<String>(
+                                    value: plugin.id,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Image.network(
+                                          'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                                          width: 24,
+                                          height: 24,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Icon(Icons.error, color: Colors.white, size: 24),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            plugin.name,
+                                            style: TextStyle(color: Colors.grey.shade200),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (selectedPluginId == plugin.id)
+                                          const Icon(Icons.check, color: Colors.green, size: 24)
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
