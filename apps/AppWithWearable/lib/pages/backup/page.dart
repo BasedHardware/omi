@@ -126,14 +126,15 @@ class _BackupsPageState extends State<BackupsPage> {
                 ? ListTile(
                     title: const Text('Last backup'),
                     subtitle: Text(timeAgo),
-                    onTap: () async {
-                      setState(() => backupInProgress = true);
-                      // TODO: add loading
-                      await executeBackup();
-                      setState(() {});
-                      _snackBar('Backup completed  🎉');
-                      setState(() => backupInProgress = false);
-                    },
+                    onTap: backupInProgress
+                        ? null
+                        : () async {
+                            setState(() => backupInProgress = true);
+                            await executeBackup();
+                            setState(() {});
+                            _snackBar('Backup completed  🎉');
+                            setState(() => backupInProgress = false);
+                          },
                     trailing: backupInProgress
                         ? const SizedBox(
                             height: 16,
@@ -152,7 +153,8 @@ class _BackupsPageState extends State<BackupsPage> {
                     trailing: const Icon(Icons.chevron_right_sharp, size: 28),
                     onTap: () async {
                       await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupPasswordPage()));
-                      await executeBackup();
+                      bool completed = await executeBackup();
+                      if (completed) hasPasswordSet = true;
                       setState(() {});
                     },
                   )
@@ -252,7 +254,7 @@ class _BackupsPageState extends State<BackupsPage> {
                         var content = (await xFile.readAsString());
                         var decoded = jsonDecode(content);
                         List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
-                        await MemoryProvider().storeMemories(memories);
+                        MemoryProvider().storeMemories(memories);
                         for (var i = 0; i < memories.length; i++) {
                           var memory = memories[i];
                           if (memory.structured.target == null || memory.discarded) continue;
