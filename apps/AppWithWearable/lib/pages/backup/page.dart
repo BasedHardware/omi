@@ -8,6 +8,7 @@ import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/password.dart';
 import 'package:friend_private/utils/backups.dart';
@@ -100,11 +101,13 @@ class _BackupsPageState extends State<BackupsPage> {
                 if (v) {
                   executeBackup().then((_) => setState(() {}));
                   _snackBar('Backups enabled  🎉');
+                  MixpanelManager().backupsEnabled();
                 } else if (SharedPreferencesUtil().lastBackupDate != '') {
                   SharedPreferencesUtil().lastBackupDate = '';
                   setState(() {});
                   deleteBackupApi();
                   _snackBar('Backups disabled  ✔');
+                  MixpanelManager().backupsDisabled();
                 }
               },
             ),
@@ -114,6 +117,7 @@ class _BackupsPageState extends State<BackupsPage> {
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                 _snackBar('Copied to clipboard  ✅');
+                MixpanelManager().userIDCopied();
               },
               trailing: const Icon(Icons.copy, size: 20),
             ),
@@ -195,6 +199,7 @@ class _BackupsPageState extends State<BackupsPage> {
                       if (result.status == ShareResultStatus.success) {
                         debugPrint('Thank you for sharing the picture!');
                       }
+                      MixpanelManager().exportMemories();
                       // 54d2c392-57f1-46dc-b944-02740a651f7b
                       setState(() => loadingExportMemories = false);
                     },
@@ -222,6 +227,7 @@ class _BackupsPageState extends State<BackupsPage> {
                         type: FileType.custom,
                         allowedExtensions: ['json'],
                       );
+                      MixpanelManager().importMemories();
                       if (file == null) {
                         setState(() => loadingImportMemories = false);
                         return;
@@ -245,6 +251,7 @@ class _BackupsPageState extends State<BackupsPage> {
                           }
                         }
                         _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
+                        MixpanelManager().importedMemories();
                       } catch (e) {
                         debugPrint(e.toString());
                         _snackBar('Make sure the file is a valid JSON file.');
