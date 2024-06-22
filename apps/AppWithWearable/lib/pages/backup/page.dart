@@ -95,8 +95,17 @@ class _BackupsPageState extends State<BackupsPage> {
               subtitle: const Text('Enable cloud stored encrypted backups'),
               value: backupsEnabled,
               checkboxShape: const CircleBorder(),
-              onChanged: (v) {
-                SharedPreferencesUtil().backupsEnabled = v!;
+              onChanged: (v) async {
+                if (v! && !hasPasswordSet) {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupPasswordPage()));
+                  hasPasswordSet = SharedPreferencesUtil().hasBackupPassword;
+                  if (!hasPasswordSet) {
+                    _snackBar('You must set a password to enable backups.', seconds: 2);
+                    return;
+                  }
+                }
+
+                SharedPreferencesUtil().backupsEnabled = v;
                 setState(() => backupsEnabled = v);
                 if (v) {
                   executeBackup().then((_) => setState(() {}));
@@ -153,8 +162,8 @@ class _BackupsPageState extends State<BackupsPage> {
                     trailing: const Icon(Icons.chevron_right_sharp, size: 28),
                     onTap: () async {
                       await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupPasswordPage()));
-                      bool completed = await executeBackup();
-                      if (completed) hasPasswordSet = true;
+                      hasPasswordSet = SharedPreferencesUtil().hasBackupPassword;
+                      await executeBackup();
                       setState(() {});
                     },
                   )
