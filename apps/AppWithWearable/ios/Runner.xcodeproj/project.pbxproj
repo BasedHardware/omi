@@ -49,6 +49,12 @@
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
 		5F7FD4162BF1232500923839 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		5FCEB2FA2C27586C00B17EE8 /* RunnerDebug-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-prod.entitlements"; sourceTree = "<group>"; };
+		5FCEB2FB2C27587100B17EE8 /* RunnerProfile-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerProfile-prod.entitlements"; sourceTree = "<group>"; };
+		5FCEB2FC2C2758B700B17EE8 /* RunnerRelease-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-prod.entitlements"; sourceTree = "<group>"; };
+		5FCEB2FD2C2758BA00B17EE8 /* RunnerDebug-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-dev.entitlements"; sourceTree = "<group>"; };
+		5FCEB2FE2C2758BD00B17EE8 /* RunnerProfile-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerProfile-dev.entitlements"; sourceTree = "<group>"; };
+		5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-dev.entitlements"; sourceTree = "<group>"; };
 		62C9205F666C6449BDF6C0DA /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -150,6 +156,12 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */,
+				5FCEB2FE2C2758BD00B17EE8 /* RunnerProfile-dev.entitlements */,
+				5FCEB2FD2C2758BA00B17EE8 /* RunnerDebug-dev.entitlements */,
+				5FCEB2FC2C2758B700B17EE8 /* RunnerRelease-prod.entitlements */,
+				5FCEB2FB2C27587100B17EE8 /* RunnerProfile-prod.entitlements */,
+				5FCEB2FA2C27586C00B17EE8 /* RunnerDebug-prod.entitlements */,
 				5F7FD4162BF1232500923839 /* Runner.entitlements */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
@@ -380,6 +392,7 @@
 			baseConfigurationReference = AECCF8117A9D16730F2FB06D /* Pods-Runner.debug-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-prod.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
@@ -392,6 +405,7 @@
 			baseConfigurationReference = 8E4E59E4F090C2FB228DAB92 /* Pods-Runner.profile-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-prod.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
@@ -404,6 +418,7 @@
 			baseConfigurationReference = 33E11154A80B4DFC4FC3822A /* Pods-Runner.release-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-prod.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
@@ -416,6 +431,7 @@
 			baseConfigurationReference = 7CB3810D07A561A2175BF07C /* Pods-Runner.debug-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
@@ -427,6 +443,7 @@
 			baseConfigurationReference = B5EA2AB07CAE9F4733A81081 /* Pods-Runner.profile-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
@@ -438,6 +455,7 @@
 			baseConfigurationReference = 62C9205F666C6449BDF6C0DA /* Pods-Runner.release-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-dev.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
