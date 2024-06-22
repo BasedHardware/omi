@@ -33,8 +33,7 @@ final class ProdEnv implements EnvFields {
   final String pineconeIndexUrl = _ProdEnv.pineconeIndexUrl;
 
   @override
-  @EnviedField(
-      varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true, defaultValue: '')
+  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true, defaultValue: '')
   final String pineconeIndexNamespace = _ProdEnv.pineconeIndexNamespace;
 
   @override
@@ -43,6 +42,5 @@ final class ProdEnv implements EnvFields {
 
   @override
   @EnviedField(varName: 'CUSTOM_TRANSCRIPT_API_BASE_URL', obfuscate: true)
-  final String? customTranscriptApiBaseUrl =
-      _ProdEnv.customTranscriptApiBaseUrl;
+  final String? customTranscriptApiBaseUrl = _ProdEnv.customTranscriptApiBaseUrl;
 }
