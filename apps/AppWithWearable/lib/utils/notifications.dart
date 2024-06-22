@@ -29,7 +29,7 @@ Future<void> initializeNotifications() async {
       ],
       debug: false);
   debugPrint('initializeNotifications: $initialized');
-  await NotifyOnKill.register();
+  NotifyOnKill.register();
 }
 
 Future<void> requestNotificationPermissions() async {
