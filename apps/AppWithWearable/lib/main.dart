@@ -51,7 +51,8 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
 }
 
 class _MyAppState extends State<MyApp> {
@@ -81,7 +82,8 @@ class _MyAppState extends State<MyApp> {
           // ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
-            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+            contentTextStyle: const TextStyle(
+                fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
           ),
           textTheme: TextTheme(
             titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
@@ -95,7 +97,8 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
+      home: (SharedPreferencesUtil().onboardingCompleted &&
+              SharedPreferencesUtil().deviceId != '')
           ? const HomePageWrapper()
           : const WelcomePage(),
     );
