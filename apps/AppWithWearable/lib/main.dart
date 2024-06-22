@@ -5,8 +5,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/onboarding/import/existing.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -51,8 +51,7 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) =>
-      context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 }
 
 class _MyAppState extends State<MyApp> {
@@ -60,8 +59,8 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorObservers: [InstabugNavigatorObserver()],
-      debugShowCheckedModeBanner: false,
-      title: 'Friend',
+      debugShowCheckedModeBanner: F.env == Environment.dev,
+      title: F.title,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -82,8 +81,7 @@ class _MyAppState extends State<MyApp> {
           // ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
-            contentTextStyle: const TextStyle(
-                fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
           ),
           textTheme: TextTheme(
             titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
@@ -97,10 +95,11 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted &&
-              SharedPreferencesUtil().deviceId != '')
+      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
           ? const HomePageWrapper()
           : const WelcomePage(),
     );
   }
 }
+
+// Do not run me directly, instead use main_dev.dart

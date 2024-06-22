@@ -380,7 +380,7 @@
 			baseConfigurationReference = AECCF8117A9D16730F2FB06D /* Pods-Runner.debug-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
 				PRODUCT_NAME = Runner;
@@ -392,7 +392,7 @@
 			baseConfigurationReference = 8E4E59E4F090C2FB228DAB92 /* Pods-Runner.profile-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
 				PRODUCT_NAME = Runner;
@@ -404,7 +404,7 @@
 			baseConfigurationReference = 33E11154A80B4DFC4FC3822A /* Pods-Runner.release-prod.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
 				PRODUCT_NAME = Runner;
@@ -416,7 +416,7 @@
 			baseConfigurationReference = 7CB3810D07A561A2175BF07C /* Pods-Runner.debug-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
 			};
@@ -427,7 +427,7 @@
 			baseConfigurationReference = B5EA2AB07CAE9F4733A81081 /* Pods-Runner.profile-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
 			};
@@ -438,7 +438,7 @@
 			baseConfigurationReference = 62C9205F666C6449BDF6C0DA /* Pods-Runner.release-dev.xcconfig */;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
-				DEVELOPMENT_TEAM = UA6Q3X7F6K;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = Runner;
 			};
