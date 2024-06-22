@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/pages/onboarding/import/existing.dart';
 import 'package:friend_private/pages/onboarding/import/import.dart';
@@ -63,13 +64,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         ),
                         HasBackupPage(
                           goNext: _goNext,
-                          onSkip: () => routeToPage(context, const HomePageWrapper(), replace: true),
+                          onSkip: () => _controller!.animateTo(_controller!.index + 2),
                         ),
                         ImportBackupPage(
                           goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),
                           goBack: () => _controller!.animateTo(_controller!.index - 1),
                         ),
-                        const Text('123'),
+                        CompletePage(
+                          goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),
+                        ),
                       ],
                     ),
                   ),
