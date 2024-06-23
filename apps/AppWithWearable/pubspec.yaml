@@ -84,6 +84,7 @@ dependencies:
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
+  record: ^5.1.1
 
 dependency_overrides:
   http: ^1.2.1
