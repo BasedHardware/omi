@@ -96,7 +96,7 @@ class PrivacyInfoPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Thank you for being a valued user of Friend. If you have any questions or concerns, feel free to reach out to us to nik@basedhardware.com.',
+                  'Thank you for being a valued user of Friend. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
                   style: TextStyle(fontSize: 16),
                 ),
               ],

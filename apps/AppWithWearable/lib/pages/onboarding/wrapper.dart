@@ -68,7 +68,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         ),
                         ImportBackupPage(
                           goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),
-                          goBack: () => _controller!.animateTo(_controller!.index - 1),
+                          goBack: () {
+                            _controller!.animateTo(_controller!.index - 1);
+                            FocusScope.of(context).unfocus();
+                          },
                         ),
                         CompletePage(
                           goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),

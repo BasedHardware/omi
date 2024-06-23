@@ -57,31 +57,40 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               TextButton(
-                  onPressed: widget.goBack,
+                  onPressed: importLoading ? null : widget.goBack,
                   child: const Text(
                     'Back',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.white, decoration: TextDecoration.underline),
                   )),
               const SizedBox(width: 16),
-              MaterialButton(
-                onPressed: importLoading ? null : _import,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: Colors.deepPurple),
+              Container(
+                decoration: BoxDecoration(
+                  border: const GradientBoxBorder(
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                color: Colors.deepPurple,
-                child: importLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ))
-                    : const Text(
-                        'Import',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                child: MaterialButton(
+                  onPressed: importLoading ? null : _import,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  child: importLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ))
+                      : const Text(
+                          'Import',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                ),
               ),
             ],
           ),
@@ -171,19 +180,6 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
       width: double.maxFinite,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.all(Radius.circular(8)),
-        border: GradientBoxBorder(
-          gradient: LinearGradient(colors: [
-            Color.fromARGB(127, 208, 208, 208),
-            Color.fromARGB(127, 188, 99, 121),
-            Color.fromARGB(127, 86, 101, 182),
-            Color.fromARGB(127, 126, 190, 236)
-          ]),
-          width: 2,
-        ),
-        shape: BoxShape.rectangle,
-      ),
       child: TextField(
         enabled: true,
         controller: controller,
@@ -193,9 +189,16 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
             labelText: hintText,
-            labelStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+            labelStyle: const TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+              decoration: TextDecoration.underline,
+            ),
+            // bottom border
             enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
+            ),
             suffixIcon: hasSuffixIcon
                 ? IconButton(
                     icon: Icon(
