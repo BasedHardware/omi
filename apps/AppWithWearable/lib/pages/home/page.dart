@@ -14,7 +14,6 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/page.dart';
-import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -50,7 +49,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
-  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
+  GlobalKey<CapturePageState> capturePageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
@@ -136,7 +135,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: false);
+          capturePageKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() {
             _device = null;
           });
@@ -166,7 +165,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     _startForeground();
@@ -216,9 +215,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
+                      key: capturePageKey,
                       device: _device,
                       refreshMemories: _initiateMemories,
-                      transcriptChildWidgetKey: transcriptChildWidgetKey,
                       refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
@@ -360,7 +359,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
                   if (language != SharedPreferencesUtil().recordingsLanguage ||
                       useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    transcriptChildWidgetKey.currentState?.resetState();
+                    capturePageKey.currentState?.resetState();
                   }
                 },
               )
