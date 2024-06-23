@@ -53,6 +53,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
+  Timer? _processPhoneMicAudioTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
 
@@ -99,18 +100,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           // var containsAudio = await vad.predict(f.readAsBytesSync());
           // debugPrint('Processing audio bytes: ${f.toString()}');
           try {
-            List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
-            TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-            if (newSegments.isNotEmpty) {
-              SharedPreferencesUtil().transcriptSegments = segments;
-              setState(() {});
-              setHasTranscripts(true);
-              debugPrint('Memory creation timer restarted');
-              _memoryCreationTimer?.cancel();
-              _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
-              currentTranscriptStartedAt ??= DateTime.now();
-              currentTranscriptFinishedAt = DateTime.now();
-            }
+            _processFileToTranscript(f);
           } catch (e) {
             debugPrint(e.toString());
             toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
@@ -121,6 +111,22 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     audioBytesStream = stream;
     audioStorage = wavBytesUtil;
+  }
+
+  _processFileToTranscript(File f) async {
+    List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
+    debugPrint('newSegments: $newSegments');
+    TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
+    if (newSegments.isNotEmpty) {
+      SharedPreferencesUtil().transcriptSegments = segments;
+      setState(() {});
+      setHasTranscripts(true);
+      debugPrint('Memory creation timer restarted');
+      _memoryCreationTimer?.cancel();
+      _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+      currentTranscriptStartedAt ??= DateTime.now();
+      currentTranscriptFinishedAt = DateTime.now();
+    }
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
@@ -136,12 +142,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     setState(() => memoryCreating = true);
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
-    File file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-    await uploadFile(file);
+    File? file;
+    try {
+      file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
+      await uploadFile(file);
+    } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
-      file.path,
+      file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
     );
@@ -224,35 +233,40 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
-  _stopRecording() async {
-    await record.stop();
-    setState(() => _state == RecordState.stop);
-    var file = File('${(await getApplicationDocumentsDirectory()).path}/recording.m4a');
+  _printFileSize(File file) async {
     int bytes = await file.length();
     var i = (log(bytes) / log(1024)).floor();
     const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
     var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
     debugPrint('File size: $size');
-    var segments = await transcribeAudioFile2(file);
-    debugPrint('segments: $segments');
+  }
+
+  _stopRecording() async {
+    setState(() => _state = RecordState.stop);
+    await record.stop();
+    if (segments.isNotEmpty) _createMemory();
+    _processPhoneMicAudioTimer?.cancel();
   }
 
   _startRecording() async {
-    setState(() => _state == RecordState.record);
-    record.onStateChanged().listen((event) {
-      debugPrint('event: $event');
-      setState(() => _state = event);
+    if (!(await record.hasPermission())) return;
+    var path = await getApplicationDocumentsDirectory();
+    var filePath = '${path.path}/recording.m4a';
+
+    setState(() => _state = RecordState.record);
+    await record.start(const RecordConfig(numChannels: 1), path: filePath);
+    _processPhoneMicAudioTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      var f = File(filePath);
+      if (await f.exists()) {
+        // TODO: improve this, have to .stop and to .start again every time?
+        await _printFileSize(f);
+        var fCopy = File('${path.path}/recording_copy.m4a');
+        await record.stop();
+        await f.copy(fCopy.path);
+        _processFileToTranscript(fCopy);
+        // TODO: background doesn't work this call.
+        await record.start(const RecordConfig(numChannels: 1), path: filePath);
+      }
     });
-    debugPrint('_startRecording: ${await record.hasPermission()}');
-    if (await record.hasPermission()) {
-      // Start recording to file
-      var path = await getApplicationDocumentsDirectory();
-      debugPrint(path.toString());
-      // await record.cancel();
-      await record.start(
-        const RecordConfig(numChannels: 1),
-        path: '${path.path}/recording.m4a',
-      );
-    }
   }
 }

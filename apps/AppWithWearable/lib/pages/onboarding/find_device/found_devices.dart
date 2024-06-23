@@ -39,7 +39,6 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
         _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().onboardingCompleted = true;
       SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
       debugPrint("Onboarding completed");
