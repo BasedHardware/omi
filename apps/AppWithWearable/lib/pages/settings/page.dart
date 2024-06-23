@@ -568,30 +568,30 @@ class _SettingsPageState extends State<SettingsPage> {
         style: const TextStyle(color: Colors.white),
       ),
       const SizedBox(height: 24),
-      ListTile(
-        title: const Text('Export Memories'),
-        subtitle: const Text('Export all your memories to a JSON file.'),
-        trailing: loadingExportMemories
-            ? const SizedBox(
-                height: 16,
-                width: 16,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.upload),
-        onTap: () async {
-          if (loadingExportMemories) return;
-          setState(() => loadingExportMemories = true);
-          File file = await MemoryProvider().exportMemoriesToFile();
-          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-          if (result.status == ShareResultStatus.success) {
-            print('Thank you for sharing the picture!');
-          }
-          setState(() => loadingExportMemories = false);
-        },
-      ),
+      // ListTile(
+      //   title: const Text('Export Memories'),
+      //   subtitle: const Text('Export all your memories to a JSON file.'),
+      //   trailing: loadingExportMemories
+      //       ? const SizedBox(
+      //           height: 16,
+      //           width: 16,
+      //           child: CircularProgressIndicator(
+      //             color: Colors.white,
+      //             strokeWidth: 2,
+      //           ),
+      //         )
+      //       : const Icon(Icons.upload),
+      //   onTap: () async {
+      //     if (loadingExportMemories) return;
+      //     setState(() => loadingExportMemories = true);
+      //     File file = await MemoryProvider().exportMemoriesToFile();
+      //     final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+      //     if (result.status == ShareResultStatus.success) {
+      //       print('Thank you for sharing the picture!');
+      //     }
+      //     setState(() => loadingExportMemories = false);
+      //   },
+      // ),
       ListTile(
         title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
         subtitle: const Text('2300+ members and counting.'),
