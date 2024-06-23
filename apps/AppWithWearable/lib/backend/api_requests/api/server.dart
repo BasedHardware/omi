@@ -17,7 +17,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(
-        '${Env.customTranscriptApiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
+        '${Env.apiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -41,7 +41,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
 
 Future<bool> userHasSpeakerProfile(String uid) async {
   var response = await makeApiCall(
-    url: '${Env.customTranscriptApiBaseUrl}profile?uid=$uid',
+    url: '${Env.apiBaseUrl}profile?uid=$uid',
     headers: {},
     method: 'GET',
     body: '',
@@ -53,7 +53,7 @@ Future<bool> userHasSpeakerProfile(String uid) async {
 
 Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
   var response = await makeApiCall(
-    url: '${Env.customTranscriptApiBaseUrl}samples?uid=$uid',
+    url: '${Env.apiBaseUrl}samples?uid=$uid',
     headers: {},
     method: 'GET',
     body: '',
@@ -66,7 +66,7 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
 Future<bool> uploadSample(File file, String uid) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.customTranscriptApiBaseUrl}samples/upload?uid=$uid'),
+    Uri.parse('${Env.apiBaseUrl}samples/upload?uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -89,7 +89,7 @@ Future<bool> uploadSample(File file, String uid) async {
 
 Future<void> uploadBackupApi(String backup) async {
   var response = await makeApiCall(
-    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    url: '${Env.apiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'data': backup}),
@@ -99,7 +99,7 @@ Future<void> uploadBackupApi(String backup) async {
 
 Future<String> downloadBackupApi(String uid) async {
   var response = await makeApiCall(
-    url: '${Env.customTranscriptApiBaseUrl}backup?uid=$uid',
+    url: '${Env.apiBaseUrl}backup?uid=$uid',
     headers: {},
     method: 'GET',
     body: '',
@@ -111,7 +111,7 @@ Future<String> downloadBackupApi(String uid) async {
 
 Future<bool> deleteBackupApi() async {
   var response = await makeApiCall(
-    url: '${Env.customTranscriptApiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
+    url: '${Env.apiBaseUrl}backup?uid=${SharedPreferencesUtil().uid}',
     headers: {},
     method: 'DELETE',
     body: '',

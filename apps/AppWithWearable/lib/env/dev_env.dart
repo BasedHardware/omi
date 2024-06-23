@@ -41,6 +41,6 @@ final class DevEnv implements EnvFields {
   final String? mixpanelProjectToken = _DevEnv.mixpanelProjectToken;
 
   @override
-  @EnviedField(varName: 'CUSTOM_TRANSCRIPT_API_BASE_URL', obfuscate: true)
-  final String? customTranscriptApiBaseUrl = _DevEnv.customTranscriptApiBaseUrl;
+  @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
+  final String? apiBaseUrl = _DevEnv.apiBaseUrl;
 }
