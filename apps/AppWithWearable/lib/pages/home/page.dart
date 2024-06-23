@@ -98,6 +98,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    SharedPreferencesUtil().onboardingCompleted = true;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
