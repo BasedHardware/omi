@@ -2,8 +2,6 @@ plugins {
    id "com.android.application"
    id "kotlin-android"
    id "dev.flutter.flutter-gradle-plugin"
-   
-   
 }
 
 def localProperties = new Properties()
@@ -52,6 +50,10 @@ android {
 
     compileSdkVersion 34
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
@@ -70,6 +72,7 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+//        multiDexEnabled true
     }
 
     signingConfigs {
@@ -99,4 +102,5 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10"
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+//    implementation 'androidx.multidex:multidex:2.0.1'
 }
