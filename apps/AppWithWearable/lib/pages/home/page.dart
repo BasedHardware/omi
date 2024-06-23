@@ -111,7 +111,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    scanAndConnectDevice().then(_onConnected);
+    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+      scanAndConnectDevice().then(_onConnected);
+    }
+
     createNotification(
       title: 'Don\'t forget to wear Friend today',
       body: 'Wear your friend and capture your memories today.',
