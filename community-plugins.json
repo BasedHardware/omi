@@ -101,6 +101,6 @@
      "author": "Bruce Bookman",
      "description": "Provides insight into conversation sentiment",
      "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Postive Sentiment, Negative Sentiment, and Neutral Centement.  For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
-     "image": "/assets/plugin_images/transcript-improver.png"
+     "image": "/assets/plugin_images/sentiment_analysis.png"
     }
 ]
