@@ -1,34 +1,47 @@
-import 'package:envied/envied.dart';
+import 'package:friend_private/env/dev_env.dart';
 
-part 'env.g.dart';
-
-@Envied(allowOptionalFields: true)
 abstract class Env {
-  @EnviedField(varName: 'SENTRY_DSN_KEY', obfuscate: true)
-  static String? sentryDSNKey = _Env.sentryDSNKey;
+  static late final EnvFields _instance;
 
-  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
-  static String? openAIAPIKey = _Env.openAIAPIKey;
+  static void init([EnvFields? instance]) {
+    _instance = instance ?? DevEnv();
+  }
 
-  @EnviedField(varName: 'DEEPGRAM_API_KEY', obfuscate: true)
-  static String? deepgramApiKey = _Env.deepgramApiKey;
+  static String? get sentryDSNKey => _instance.sentryDSNKey;
 
-  @EnviedField(varName: 'INSTABUG_API_KEY', obfuscate: true)
-  static String? instabugApiKey = _Env.instabugApiKey;
+  static String? get openAIAPIKey => _instance.openAIAPIKey;
 
-  // Pinecone
-  @EnviedField(varName: 'PINECONE_API_KEY', obfuscate: true)
-  static String pineconeApiKey = _Env.pineconeApiKey;
+  static String? get deepgramApiKey => _instance.deepgramApiKey;
 
-  @EnviedField(varName: 'PINECONE_INDEX_URL', obfuscate: true)
-  static String pineconeIndexUrl = _Env.pineconeIndexUrl;
+  static String? get instabugApiKey => _instance.instabugApiKey;
 
-  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true)
-  static String pineconeIndexNamespace = _Env.pineconeIndexNamespace;
+  static String get pineconeApiKey => _instance.pineconeApiKey;
 
-  @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
-  static String? mixpanelProjectToken = _Env.mixpanelProjectToken;
+  static String get pineconeIndexUrl => _instance.pineconeIndexUrl;
 
-  @EnviedField(varName: 'CUSTOM_TRANSCRIPT_API_BASE_URL', obfuscate: true)
-  static String? customTranscriptApiBaseUrl = _Env.customTranscriptApiBaseUrl;
+  static String get pineconeIndexNamespace => _instance.pineconeIndexNamespace;
+
+  static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
+
+  static String? get customTranscriptApiBaseUrl => _instance.customTranscriptApiBaseUrl;
+}
+
+abstract class EnvFields {
+  String? get sentryDSNKey;
+
+  String? get openAIAPIKey;
+
+  String? get deepgramApiKey;
+
+  String? get instabugApiKey;
+
+  String get pineconeApiKey;
+
+  String get pineconeIndexUrl;
+
+  String get pineconeIndexNamespace;
+
+  String? get mixpanelProjectToken;
+
+  String? get customTranscriptApiBaseUrl;
 }
