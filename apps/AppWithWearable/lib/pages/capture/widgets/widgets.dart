@@ -5,20 +5,21 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-getConnectionStateWidgets(bool hasTranscripts, BTDeviceStruct? device) {
+getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStruct? device) {
   if (hasTranscripts) return [];
-    debugPrint('device: $device hasTranscripts: $hasTranscripts');
   if (device == null) {
     return [
       const DeviceAnimationWidget(sizeMultiplier: 0.7),
       SharedPreferencesUtil().deviceId.isEmpty
-          ? _getNoFriendConnectedYet()
+          ? _getNoFriendConnectedYet(context)
           : const ScanningUI(
               string1: 'Looking for Friend wearable',
               string2: 'Locating your Friend device. Keep it near your phone for pairing',
@@ -80,46 +81,33 @@ getConnectionStateWidgets(bool hasTranscripts, BTDeviceStruct? device) {
   ];
 }
 
-_getNoFriendConnectedYet() {
+_getNoFriendConnectedYet(BuildContext context) {
   return Column(
     children: [
-      const Text(
-        'You have not connected a Friend yet  🥺',
-        style: TextStyle(color: Colors.white, fontSize: 18),
-        textAlign: TextAlign.center,
-      ),
       const SizedBox(height: 24),
-      Row(
+      Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          TextButton(
-            onPressed: () async {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Container(
-              width: 80,
-              height: 45, // Fixed height for the button
-              alignment: Alignment.center,
-              child: const Text(
-                'Connect',
-                style: TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 16,
-                  color: Colors.white,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
+        children: <Widget>[
+          // const Padding(
+          //     padding: EdgeInsets.symmetric(horizontal: 32),
+          //     child: Text(
+          //       'Get a Friend wearable to start capturing your memories.',
+          //       textAlign: TextAlign.center,
+          //       style: TextStyle(color: Colors.white, fontSize: 18),
+          //     )),
+          // const SizedBox(height: 32),
           Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               decoration: BoxDecoration(
-                color: Colors.deepPurple,
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TextButton(
@@ -127,12 +115,34 @@ _getNoFriendConnectedYet() {
                     launchUrl(Uri.parse('https://basedhardware.com'));
                   },
                   child: const Text(
-                    'Buy Now',
+                    'Get a Friend',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ))),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
+
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Connect',
+              style: TextStyle(
+                fontWeight: FontWeight.w400,
+                fontSize: 18,
+                color: Colors.white,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
         ],
       ),
-      const SizedBox(height: 32),
       // const Text(
       //   'Or you can use your phone as\nthe audio source 👇',
       //   style: TextStyle(color: Colors.white, fontSize: 18),
@@ -271,13 +281,14 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
   return Padding(
-    padding: const EdgeInsets.only(bottom: 140),
+    padding: const EdgeInsets.only(bottom: 128),
     child: Align(
       alignment: Alignment.bottomCenter,
       child: MaterialButton(
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white)),
+          borderRadius: BorderRadius.circular(12),
+          // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
+        ),
         onPressed: recordingToggled,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -287,7 +298,10 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             children: [
               state == RecordState.record ? const Icon(Icons.stop, color: Colors.red, size: 24) : const Icon(Icons.mic),
               const SizedBox(width: 8),
-              Text(state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+              Text(
+                state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic',
+                style: const TextStyle(fontSize: 14),
+              ),
               const SizedBox(width: 4),
             ],
           ),

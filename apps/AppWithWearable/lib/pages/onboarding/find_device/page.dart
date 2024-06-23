@@ -10,8 +10,9 @@ import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
   final VoidCallback goNext;
+  final bool includeSkip;
 
-  const FindDevicesPage({super.key, required this.goNext});
+  const FindDevicesPage({super.key, required this.goNext, this.includeSkip = true});
 
   @override
   _FindDevicesPageState createState() => _FindDevicesPageState();
@@ -40,11 +41,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
 
   Future<void> _scanDevices() async {
     // TODO: validate bluetooth turned on
-    _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
-      setState(() {
-        enableInstructions = true;
-      });
-    });
+    _didNotMakeItTimer = Timer(const Duration(seconds: 10), () => setState(() => enableInstructions = true));
     // Update foundDevicesMap with new devices and remove the ones not found anymore
     Map<String, BTDeviceStruct?> foundDevicesMap = {};
 
@@ -77,49 +74,50 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
     });
   }
 
-  void _launchURL() async {
-    const url = 'https://discord.com/servers/based-hardware-1192313062041067520';
-    if (!await launch(url)) throw 'Could not launch $url';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         FoundDevices(deviceList: deviceList, goNext: widget.goNext),
-        deviceList.isEmpty
-            ? enableInstructions
-                ? Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color.fromARGB(255, 55, 55, 55), width: 2.0),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _launchURL();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: const Color.fromARGB(255, 17, 17, 17),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        height: 45,
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'Contact Support',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w400, fontSize: 16, color: Color.fromARGB(255, 55, 55, 55)),
-                        ),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink()
-            : const SizedBox.shrink()
+        if (deviceList.isEmpty && enableInstructions) const SizedBox(height: 48),
+        if (deviceList.isEmpty && enableInstructions)
+          ElevatedButton(
+            onPressed: () => launchUrl(Uri.parse('mailto:team@basedhardware.com')),
+            child: Container(
+              width: double.infinity,
+              height: 45,
+              alignment: Alignment.center,
+              child: const Text(
+                'Contact Support?',
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 16,
+                  color: Colors.white,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
+        if (widget.includeSkip)
+          ElevatedButton(
+            onPressed: widget.goNext,
+            child: Container(
+              width: double.infinity,
+              height: 45,
+              alignment: Alignment.center,
+              child: const Text(
+                'Connect Later',
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 16,
+                  color: Colors.white,
+                  // decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

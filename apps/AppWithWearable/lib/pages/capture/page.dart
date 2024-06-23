@@ -130,6 +130,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+    // TODO: is this trigger when connected?
     debugPrint('resetState restartBytesProcessing: $restartBytesProcessing btDevice: $btDevice');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
@@ -216,7 +217,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       children: [
         ListView(children: [
           speechProfileWidget(context),
-          ...getConnectionStateWidgets(_hasTranscripts, widget.device),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
           getTranscriptWidget(memoryCreating, segments, widget.device),
           const SizedBox(height: 16)
         ]),

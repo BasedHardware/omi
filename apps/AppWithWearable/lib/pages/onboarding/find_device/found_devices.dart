@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -66,67 +67,98 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    var screenSize = MediaQuery.of(context).size;
-    return Expanded(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          !_isConnected
-              ? Container(
-                  margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
-                  child: Text(
-                    widget.deviceList.isEmpty
-                        ? 'Searching for devices...'
-                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: Color(0x66FFFFFF),
-                    ),
-                  ),
-                )
-              : Container(
-                  margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
-                  child: const Text(
-                    'PAIRING SUCCESSFUL',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: Color(0x66FFFFFF),
-                    ),
-                  ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        !_isConnected
+            ? Text(
+                widget.deviceList.isEmpty
+                    ? 'Searching for devices...'
+                    : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                  color: Color(0x66FFFFFF),
                 ),
-          !_isConnected
-              ? Expanded(
-                  // Create a scrollable list of devices
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: widget.deviceList.length,
-                    itemBuilder: (context, index) {
-                      final device = widget.deviceList[index];
-                      if (device == null) return Container(); // If device is null, return an empty container
+              )
+            : const Text(
+                'PAIRING SUCCESSFUL',
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 12,
+                  color: Color(0x66FFFFFF),
+                ),
+              ),
+        if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
+        if (!_isConnected) ..._devicesList(),
+        if (_isConnected)
+          Text(
+            deviceName.split('-').last.substring(0, 6),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 18,
+              color: Color(0xCCFFFFFF),
+            ),
+          ),
+        if (_isConnected)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                '🔋 ${batteryPercentage.toString()}%',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: batteryPercentage <= 25
+                      ? Colors.red
+                      : batteryPercentage > 25 && batteryPercentage <= 50
+                          ? Colors.orange
+                          : Colors.green,
+                ),
+              ))
+      ],
+    );
+  }
 
-                      bool isConnecting =
-                          _connectingToDeviceId == device.id; // Check if it's the device being connected to
+  _devicesList() {
+    var screenSize = MediaQuery.of(context).size;
+    return (widget.deviceList.mapIndexed((index, d) {
+      final device = widget.deviceList[index];
+      if (device == null) return Container(); // If device is null, return an empty container
 
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
-                        decoration: BoxDecoration(
-                          border: const GradientBoxBorder(
-                            gradient: LinearGradient(colors: [
-                              Color.fromARGB(127, 208, 208, 208),
-                              Color.fromARGB(127, 188, 99, 121),
-                              Color.fromARGB(127, 86, 101, 182),
-                              Color.fromARGB(127, 126, 190, 236)
-                            ]),
-                            width: 1,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          color: const Color.fromARGB(0, 0, 0, 0),
-                        ),
-                        child: ListTile(
-                          title: Text(
+      bool isConnecting = _connectingToDeviceId == device.id; // Check if it's the device being connected to
+
+      return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
+          decoration: BoxDecoration(
+            border: const GradientBoxBorder(
+              gradient: LinearGradient(colors: [
+                Color.fromARGB(127, 208, 208, 208),
+                Color.fromARGB(127, 188, 99, 121),
+                Color.fromARGB(127, 86, 101, 182),
+                Color.fromARGB(127, 126, 190, 236)
+              ]),
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            color: const Color.fromARGB(0, 0, 0, 0),
+          ),
+          child: GestureDetector(
+            onTap: !_isClicked ? () => handleTap(device) : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
                             device.id.split('-').last.substring(0, 6),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
@@ -135,50 +167,51 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                               color: Color(0xCCFFFFFF),
                             ),
                           ),
-                          trailing: isConnecting
-                              ? Container(
-                                  padding: const EdgeInsets.all(8.0),
-                                  height: 24,
-                                  width: 24,
-                                  child: const CircularProgressIndicator(
-                                    strokeWidth: 3.0,
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: isConnecting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
-                              : null, // Show loading indicator if connecting
-                          onTap: !_isClicked ? () => handleTap(device) : null,
-                        ),
-                      );
-                    },
-                  ),
-                )
-              : Text(
-                  deviceName.split('-').last.substring(0, 6),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                    color: Color(0xCCFFFFFF),
+                              : const SizedBox.shrink(), // Show loading indicator if connecting
+                        )
+                      ],
+                    ),
                   ),
                 ),
-          if (_isConnected)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(
-                  '🔋 ${batteryPercentage.toString()}%',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                    color: batteryPercentage <= 25
-                        ? Colors.red
-                        : batteryPercentage > 25 && batteryPercentage <= 50
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
-                ))
-        ],
-      ),
-    );
+              ],
+            ),
+          )
+          // child: ListTile(
+          //   title: Text(
+          //     device.id.split('-').last.substring(0, 6),
+          //     textAlign: TextAlign.center,
+          //     style: const TextStyle(
+          //       fontWeight: FontWeight.w500,
+          //       fontSize: 18,
+          //       color: Color(0xCCFFFFFF),
+          //     ),
+          //   ),
+          //   trailing: isConnecting
+          //       ? Container(
+          //           padding: const EdgeInsets.all(8.0),
+          //           height: 24,
+          //           width: 24,
+          //           child: const CircularProgressIndicator(
+          //             strokeWidth: 3.0,
+          //             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          //           ),
+          //         )
+          //       : null, // Show loading indicator if connecting
+          //   onTap: !_isClicked ? () => handleTap(device) : null,
+          // ),
+          );
+    }).toList());
   }
 }
