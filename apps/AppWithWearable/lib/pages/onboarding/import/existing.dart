@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class HasBackupPage extends StatefulWidget {
   final VoidCallback goNext;
@@ -35,16 +36,25 @@ class _HasBackupPageState extends State<HasBackupPage> {
               onPressed: widget.onSkip,
               child: const Text('Skip', style: TextStyle(decoration: TextDecoration.underline)),
             ),
-            MaterialButton(
-              onPressed: widget.goNext,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Colors.deepPurple),
+            Container(
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              color: Colors.deepPurple,
-              child: const Text(
-                'Import',
-                style: TextStyle(color: Colors.white),
+              child: MaterialButton(
+                onPressed: widget.goNext,
+                child: const Text(
+                  'Import',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
           ],
