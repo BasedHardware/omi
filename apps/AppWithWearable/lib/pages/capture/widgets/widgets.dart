@@ -121,8 +121,7 @@ _getNoFriendConnectedYet(BuildContext context) {
           const SizedBox(height: 4),
           TextButton(
             onPressed: () async {
-                  await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
-
+              await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
@@ -280,30 +279,35 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 128),
-    child: Align(
-      alignment: Alignment.bottomCenter,
-      child: MaterialButton(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
-        ),
-        onPressed: recordingToggled,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              state == RecordState.record ? const Icon(Icons.stop, color: Colors.red, size: 24) : const Icon(Icons.mic),
-              const SizedBox(width: 8),
-              Text(
-                state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(width: 4),
-            ],
+  return Visibility(
+    visible: false,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 128),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: MaterialButton(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
+          ),
+          onPressed: recordingToggled,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                state == RecordState.record
+                    ? const Icon(Icons.stop, color: Colors.red, size: 24)
+                    : const Icon(Icons.mic),
+                const SizedBox(width: 8),
+                Text(
+                  state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
           ),
         ),
       ),
