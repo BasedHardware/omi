@@ -4,13 +4,14 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'widgets/transcript.dart';
 
@@ -71,8 +72,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
     return Stack(
       children: [
         ListView(children: [
-          // SharedPreferencesUtil().hasSpeakerProfile
-          true
+          SharedPreferencesUtil().hasSpeakerProfile
               ? const SizedBox(height: 16)
               : Stack(
                   children: [
@@ -169,7 +169,7 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
                         ? const Icon(Icons.stop, color: Colors.red, size: 24)
                         : const Icon(Icons.mic),
                     const SizedBox(width: 8),
-                    Text(_state == RecordState.record ? 'Stop Recording' : 'Start Recording'),
+                    Text(_state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic'),
                     const SizedBox(width: 4),
                   ],
                 ),
@@ -188,10 +188,72 @@ class _CapturePageState extends State<CapturePage> with AutomaticKeepAliveClient
         const DeviceAnimationWidget(
           sizeMultiplier: 0.7,
         ),
-        const ScanningUI(
-          string1: 'Looking for Friend wearable',
-          string2: 'Locating your Friend device. Keep it near your phone for pairing',
-        ),
+        SharedPreferencesUtil().deviceId.isEmpty
+            ? Column(
+                children: [
+                  const Text(
+                    'You have not connected a Friend yet  🥺',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () async {
+
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Container(
+                          width: 80,
+                          height: 45, // Fixed height for the button
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'Connect',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 16,
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: TextButton(
+                              onPressed: () {
+                                launchUrl(Uri.parse('https://basedhardware.com'));
+                              },
+                              child: const Text(
+                                'Buy Now',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                              ))),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  // const Text(
+                  //   'Or you can use your phone as\nthe audio source 👇',
+                  //   style: TextStyle(color: Colors.white, fontSize: 18),
+                  //   textAlign: TextAlign.center,
+                  // ),
+                ],
+              )
+            : const ScanningUI(
+                string1: 'Looking for Friend wearable',
+                string2: 'Locating your Friend device. Keep it near your phone for pairing',
+              ),
       ];
     }
     // return [const DeviceAnimationWidget()];
