@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class CompletePage extends StatefulWidget {
   final VoidCallback goNext;
@@ -24,7 +25,7 @@ class _CompletePageState extends State<CompletePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: RichText(
               text: const TextSpan(
-            style: TextStyle(color: Colors.white, fontSize: 16, height: 1.3),
+            style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
             children: [
               // TextSpan(text: 'Recommendations: \n\n', style: TextStyle(fontWeight: FontWeight.bold)),
               TextSpan(text: 'Avoid closing the app from the background. '),
@@ -41,27 +42,26 @@ class _CompletePageState extends State<CompletePage> {
             ],
           )),
         ),
-        // CheckboxListTile(
-        //   value: false,
-        //   onChanged: (e) {},
-        //   title: const Text(
-        //     'Enable Notifications',
-        //     style: TextStyle(fontSize: 18),
-        //   ),
-        //   checkboxShape: RoundedRectangleBorder(
-        //     borderRadius: BorderRadius.circular(10),
-        //   ),
-        // ),
-        const SizedBox(height: 32),
-        MaterialButton(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              // side: const BorderSide(color: Colors.white, width: 1),
+        const SizedBox(height: 40),
+        Container(
+          decoration: BoxDecoration(
+            border: const GradientBoxBorder(
+              gradient: LinearGradient(colors: [
+                Color.fromARGB(127, 208, 208, 208),
+                Color.fromARGB(127, 188, 99, 121),
+                Color.fromARGB(127, 86, 101, 182),
+                Color.fromARGB(127, 126, 190, 236)
+              ]),
+              width: 2,
             ),
-            color: Colors.deepPurple,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: MaterialButton(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             onPressed: widget.goNext,
-            child: const Text('Get Started')),
+            child: const Text('Get Started'),
+          ),
+        ),
         // ElevatedButton()
       ],
     );
