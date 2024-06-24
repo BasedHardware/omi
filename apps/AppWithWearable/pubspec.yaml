@@ -84,6 +84,12 @@ dependencies:
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
+  record: ^5.1.1
+  record_android: ^1.2.2
+  record_platform_interface: ^1.1.0
+  record_darwin: ^1.1.0
+  flutter_sound: ^9.6.0
+  audio_session: ^0.1.19
 
 dependency_overrides:
   http: ^1.2.1

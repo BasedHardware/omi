@@ -74,9 +74,13 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
   First determine if there's crucial value to notify a busy entrepreneur about it.
-  If not, simply output an empty string, otherwise output a 10 words (at most) message to be notified.
+  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
+   
+  Transcript:
+  ${memory.transcript}
   
+  Structured version:
   ${memory.structured.target!.toJson()}
   ''';
   debugPrint(prompt);
@@ -92,11 +96,11 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
   if (memories.where((m) => !m.discarded).length <= 1) return msg;
 
   var prompt = '''
-  The following are a list of transcripts with its proper structuring, that were saved during the user's day.
-  The user wants to get a coherent advice on things that could've been better in those conversations, and what to do next.
+  The following are a list of user memories with the transcripts with its respective structuring, that were saved during the user's day.
+  The user wants to get a daily summary of the key action items he has to take based on his day memories.
 
   Remember the person is busy so this has to be very efficient and concise.
-  Respond in at most 150 words.
+  Respond in at most 50 words.
   
   Output your response in plain text, without markdown.
   ```
