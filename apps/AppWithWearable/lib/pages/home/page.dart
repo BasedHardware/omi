@@ -90,7 +90,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    await migrateMemoriesCategoriesAndEmojis();
+    // await migrateMemoriesCategoriesAndEmojis();
     // await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
