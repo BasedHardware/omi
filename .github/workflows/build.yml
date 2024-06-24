@@ -23,6 +23,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
@@ -31,6 +32,22 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64
+
+      #Steps for Fastlane
+      #1
+      #Setup ruby version
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 'latest'
+
+      #2
+      - name: Install Bundler
+        run: gem install bundler
+
+      #3
+      - name: Install Fastlane
+        run: bundle install
 
       # Cache pub packages
       - name: Cache pub packages
@@ -59,6 +76,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
         working-directory: apps/AppWithWearable
+
+      - name: Run Fastlane for Android
+        run: bundle exec fastlane android build
+
+      - name: Run Fastlane for iOS
+        run: bundle exec fastlane ios build
+        env:
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
 
       - name : Create Android Build
         working-directory: apps/AppWithWearable
