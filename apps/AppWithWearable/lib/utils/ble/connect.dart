@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 
 Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async {
   final device = BluetoothDevice.fromId(deviceId);
+  bool _isReconnecting = false;
   try {
     if (!autoConnect) return await device.connect(autoConnect: false, mtu: null);
     // Step 1: Connect with autoConnect
@@ -18,6 +19,15 @@ Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async 
       int desiredMtu = 512; // Example MTU size
       await device.requestMtu(desiredMtu);
     }
+    // Step 4: Monitor the connection state for reconnection
+    device.connectionState.listen((state) async {
+      if (state == BluetoothConnectionState.disconnected && !_isReconnecting) {
+        _isReconnecting = true;
+        debugPrint('Device disconnected, attempting to reconnect...');
+        await bleConnectDevice(deviceId, autoConnect: true);
+        _isReconnecting = false;
+      }
+    });
   } catch (e) {
     debugPrint('bleConnectDevice failed: $e');
   }
