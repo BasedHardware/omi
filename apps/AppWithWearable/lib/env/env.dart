@@ -25,8 +25,7 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  static String? get customTranscriptApiBaseUrl =>
-      _instance.customTranscriptApiBaseUrl;
+  static String? get customTranscriptApiBaseUrl => _instance.customTranscriptApiBaseUrl;
 }
 
 abstract class EnvFields {
