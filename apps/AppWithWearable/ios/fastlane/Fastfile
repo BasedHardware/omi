@@ -16,8 +16,13 @@
 default_platform(:ios)
 
 platform :ios do
-  desc "Description of what the lane does"
-  lane :run_tests do
-    sh "flutter test"
+  desc "Build a debug IPA"
+  lane :build_debug do
+    sh("flutter build ios --debug")
+  end
+
+  desc "Build a release IPA"
+  lane :build_release do
+    sh("flutter build ios --release")
   end
 end

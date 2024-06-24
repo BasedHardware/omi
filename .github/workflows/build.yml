@@ -88,11 +88,11 @@ jobs:
         working-directory: apps/AppWithWearable
 
       - name: Run Fastlane for Android
-        run: bundle exec fastlane android build
+        run: bundle exec fastlane build_debug
         working-directory: apps/AppWithWearable/android
 
       - name: Run Fastlane for iOS
-        run: bundle exec fastlane ios build
+        run: bundle exec fastlane build_debug
         working-directory: apps/AppWithWearable/ios
         env:
           LC_ALL: en_US.UTF-8
