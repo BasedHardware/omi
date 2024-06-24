@@ -41,6 +41,7 @@ final class ProdEnv implements EnvFields {
   final String? mixpanelProjectToken = _ProdEnv.mixpanelProjectToken;
 
   @override
-  @EnviedField(varName: 'CUSTOM_TRANSCRIPT_API_BASE_URL', obfuscate: true)
-  final String? customTranscriptApiBaseUrl = _ProdEnv.customTranscriptApiBaseUrl;
+  @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
+  final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
+  //fd861c28-effb-4594-a77c-4b9969576f75®
 }
