@@ -26,10 +26,7 @@ void main() async {
   if (Env.oneSignalAppId != null) {
     OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
     OneSignal.initialize(Env.oneSignalAppId!);
-    var permissionGranted = await OneSignal.Notifications.requestPermission(true);
-    if (permissionGranted) {
-      OneSignal.login(SharedPreferencesUtil().uid);
-    }
+    OneSignal.login(SharedPreferencesUtil().uid);
   }
 
   if (Env.instabugApiKey != null) {
