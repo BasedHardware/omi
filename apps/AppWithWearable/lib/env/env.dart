@@ -7,6 +7,8 @@ abstract class Env {
     _instance = instance ?? DevEnv();
   }
 
+  static String? get oneSignalAppId => _instance.oneSignalAppId;
+
   static String? get sentryDSNKey => _instance.sentryDSNKey;
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
@@ -27,6 +29,8 @@ abstract class Env {
 }
 
 abstract class EnvFields {
+  String? get oneSignalAppId;
+
   String? get sentryDSNKey;
 
   String? get openAIAPIKey;
