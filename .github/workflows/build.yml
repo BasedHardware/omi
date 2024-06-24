@@ -39,7 +39,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 'latest'
+          ruby-version: '3.3.3'
 
       #2
       - name: Install Bundler
