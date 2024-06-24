@@ -33,8 +33,7 @@ final class DevEnv implements EnvFields {
   final String pineconeIndexUrl = _DevEnv.pineconeIndexUrl;
 
   @override
-  @EnviedField(
-      varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true, defaultValue: '')
+  @EnviedField(varName: 'PINECONE_INDEX_NAMESPACE', obfuscate: true, defaultValue: '')
   final String pineconeIndexNamespace = _DevEnv.pineconeIndexNamespace;
 
   @override
