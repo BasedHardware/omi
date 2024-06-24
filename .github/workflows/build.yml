@@ -41,9 +41,19 @@ jobs:
         with:
           ruby-version: '3.3.3'
 
+
+
       #2
       - name: Install Bundler
         run: gem install bundler
+
+      - name: Cache Ruby gems
+        uses: actions/cache@v2
+        with:
+            path: vendor/bundle
+            key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+            restore-keys: |
+              ${{ runner.os }}-gems-  
 
       #3
       - name: Install Fastlane
