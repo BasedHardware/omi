@@ -24,19 +24,8 @@ import UserNotifications
       self?.handleMethodCall(call, result: result)
     }
 
-    // Request notification permission
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-      if let error = error {
-        print("Failed to request notification authorization: \(error)")
-      } else {
-        DispatchQueue.main.async {
-          UIApplication.shared.registerForRemoteNotifications()
-        }
-      }
-    }
-
     // here, Without this code the task will not work.
-    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(regbisterPlugins)
+    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
