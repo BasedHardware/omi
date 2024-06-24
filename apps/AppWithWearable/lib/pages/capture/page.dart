@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_sound/flutter_sound.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
@@ -20,6 +22,7 @@ import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 class CapturePage extends StatefulWidget {
@@ -191,6 +194,41 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     setState(() => _hasTranscripts = hasTranscripts);
   }
 
+  final FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
+  bool _mRecorderIsInited = false;
+  StreamSubscription? _mRecordingDataSubscription;
+  String? _mPath;
+
+  Future<void> _openRecorder() async {
+    debugPrint('_openRecorder');
+    // var status = await Permission.microphone.request();
+    // if (status != PermissionStatus.granted) {
+    //   throw RecordingPermissionException('Microphone permission not granted');
+    // }
+    await _mRecorder.openRecorder();
+    debugPrint('Recorder opened');
+    final session = await AudioSession.instance;
+    await session.configure(AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.record,
+      avAudioSessionCategoryOptions:
+          AVAudioSessionCategoryOptions.allowBluetooth | AVAudioSessionCategoryOptions.defaultToSpeaker,
+      avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+      avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+      androidAudioAttributes: const AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.speech,
+        flags: AndroidAudioFlags.none,
+        usage: AndroidAudioUsage.voiceCommunication,
+      ),
+      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      androidWillPauseWhenDucked: true,
+    ));
+
+    setState(() {
+      _mRecorderIsInited = true;
+    });
+  }
+
   @override
   void initState() {
     btDevice = widget.device;
@@ -242,32 +280,49 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('File size: $size');
   }
 
+  Future<IOSink> createFile() async {
+    var tempDir = await getTemporaryDirectory();
+    _mPath = '${tempDir.path}/flutter_sound_example.pcm';
+    var outputFile = File(_mPath!);
+    if (outputFile.existsSync()) {
+      await outputFile.delete();
+    }
+    return outputFile.openWrite();
+  }
+
+  // ----------------------  Here is the code to record to a Stream ------------
+
   _stopRecording() async {
     setState(() => _state = RecordState.stop);
-    await record.stop();
-    if (segments.isNotEmpty) _createMemory();
+    await _mRecorder.stopRecorder();
     _processPhoneMicAudioTimer?.cancel();
+    if (segments.isNotEmpty) _createMemory();
   }
 
   _startRecording() async {
     if (!(await record.hasPermission())) return;
-    var path = await getApplicationDocumentsDirectory();
-    var filePath = '${path.path}/recording.m4a';
+    await _openRecorder();
 
+    assert(_mRecorderIsInited);
+    var path = await getApplicationDocumentsDirectory();
+    var filePath = '${path.path}/recording.pcm';
     setState(() => _state = RecordState.record);
-    await record.start(const RecordConfig(numChannels: 1), path: filePath);
+    await _start(filePath);
     _processPhoneMicAudioTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      await _mRecorder.stopRecorder();
       var f = File(filePath);
-      if (await f.exists()) {
-        // TODO: improve this, have to .stop and to .start again every time?
-        await _printFileSize(f);
-        var fCopy = File('${path.path}/recording_copy.m4a');
-        await record.stop();
-        await f.copy(fCopy.path);
-        _processFileToTranscript(fCopy);
-        // TODO: background doesn't work this call.
-        await record.start(const RecordConfig(numChannels: 1), path: filePath);
-      }
+      // f.writeAsBytesSync([]);
+      // var fCopy = File('${path.path}/recording_copy.pcm');
+      // await f.copy(fCopy.path);
+      _processFileToTranscript(f);
     });
+  }
+  _start(String filePath) async{
+    await _mRecorder.startRecorder(
+      codec: Codec.pcm16,
+      toFile: filePath,
+      sampleRate: 16000,
+      numChannels: 1,
+    );
   }
 }
