@@ -19,6 +19,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
     'punctuate': true,
     'diarize': true,
     'smart_format': true,
+    'multichannel': true
     // 'detect_topics': true,
     // 'topics': true,
     // 'intents': true,

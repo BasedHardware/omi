@@ -99,7 +99,8 @@ class SharedPreferencesUtil {
   //   saveStringList('messages', messages);
   // }
 
-  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
