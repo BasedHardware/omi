@@ -60,7 +60,10 @@ def webhook(memory: Memory):
 
 **Things to be implemented soon:**
 
-- Memory creation has a developer field, of webhook result, if you want to do anything with it, it
-  could also be the status code.
-- Include the generated audio file too.
+- [ ] Memory creation has a developer field, of webhook result, if you want to do anything with it,
+  it could also be the status code.
+- [ ] Include the generated audio file too.
 
+### Custom Transcript Server
+
+To be implemented soon.
