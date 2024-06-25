@@ -5,12 +5,13 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/onboarding/import/existing.dart';
-import 'package:friend_private/pages/onboarding/import/import.dart';
-import 'package:friend_private/pages/onboarding/welcome/page.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+
 import 'backend/preferences.dart';
 import 'env/env.dart';
 
@@ -21,6 +22,15 @@ void main() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   await ObjectBoxUtil.init();
+  if (Env.oneSignalAppId != null) {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    OneSignal.initialize(Env.oneSignalAppId!);
+    // var permissionGranted = await OneSignal.Notifications.requestPermission(true);
+    // if (permissionGranted) {
+    OneSignal.login(SharedPreferencesUtil().uid);
+    // }
+  }
+
   if (Env.instabugApiKey != null) {
     runZonedGuarded(
       () {
@@ -59,8 +69,8 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorObservers: [InstabugNavigatorObserver()],
-      debugShowCheckedModeBanner: false,
-      title: 'Friend',
+      debugShowCheckedModeBanner: F.env == Environment.dev,
+      title: F.title,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -74,6 +84,11 @@ class _MyAppState extends State<MyApp> {
             secondary: Colors.deepPurple,
             surface: Colors.black38,
           ),
+          // dialogTheme: const DialogTheme(
+          //   backgroundColor: Colors.black,
+          //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
+          //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
+          // ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
             contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
@@ -90,9 +105,11 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted && SharedPreferencesUtil().deviceId != '')
+      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
           ? const HomePageWrapper()
-          : const WelcomePage(),
+          : const OnboardingWrapper(),
     );
   }
 }
+
+// Do not run me directly, instead use main_dev.dart

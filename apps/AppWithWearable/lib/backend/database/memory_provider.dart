@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
   static final Box<Memory> _box = ObjectBoxUtil().box!.store.box<Memory>();
+  static final Box<Structured> _boxStructured = ObjectBoxUtil().box!.store.box<Structured>();
 
   factory MemoryProvider() {
     return _instance;
@@ -16,11 +17,9 @@ class MemoryProvider {
 
   MemoryProvider._internal();
 
-  Future<List<Memory>> getMemories() async {
-    return _box.getAll();
-  }
+  List<Memory> getMemories() => _box.getAll();
 
-  Future<List<Memory>> getMemoriesOrdered({bool includeDiscarded = false}) async {
+  List<Memory> getMemoriesOrdered({bool includeDiscarded = false}) {
     if (includeDiscarded) {
       // created at descending
       return _box.query().order(Memory_.createdAt).build().find();
@@ -33,36 +32,26 @@ class MemoryProvider {
     }
   }
 
-  Future<void> saveMemory(Memory memory) async {
-    _box.put(memory);
-  }
+  int saveMemory(Memory memory) => _box.put(memory);
 
-  Future<void> deleteMemory(Memory memory) async {
-    _box.remove(memory.id);
-  }
+  bool deleteMemory(Memory memory) => _box.remove(memory.id);
 
-  Future<void> updateMemory(Memory memory) async {
-    _box.put(memory);
-  }
+  int updateMemory(Memory memory) => _box.put(memory);
 
-  Future<Memory?> getMemoryById(int id) async {
-    return _box.get(id);
-  }
+  int updateMemoryStructured(Structured structured) => _boxStructured.put(structured);
 
-  Future<List<int>> storeMemories(List<Memory> memories) async {
-    return _box.putMany(memories);
-  }
+  Memory? getMemoryById(int id) => _box.get(id);
 
-  Future<int> removeAllMemories() async {
-    return _box.removeAll();
-  }
+  List<int> storeMemories(List<Memory> memories) => _box.putMany(memories);
 
-  Future<List<Memory>> getMemoriesById(List<int> ids) async {
+  int removeAllMemories() => _box.removeAll();
+
+  List<Memory> getMemoriesById(List<int> ids) {
     List<Memory?> memories = _box.getMany(ids);
     return memories.whereType<Memory>().toList();
   }
 
-  Future<List<Memory>> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) async {
+  List<Memory> retrieveRecentMemoriesWithinMinutes({int minutes = 10, int count = 2}) {
     DateTime timeLimit = DateTime.now().subtract(Duration(minutes: minutes));
     var query = _box.query(Memory_.createdAt.greaterThan(timeLimit.millisecondsSinceEpoch)).build();
     List<Memory> filtered = query.find();
@@ -72,18 +61,21 @@ class MemoryProvider {
     return filtered;
   }
 
-  Future<List<Memory>> retrieveDayMemories(DateTime day) async {
+  List<Memory> retrieveDayMemories(DateTime day) {
     DateTime start = DateTime(day.year, day.month, day.day);
     DateTime end = DateTime(day.year, day.month, day.day, 23, 59, 59);
-    var query = _box.query(Memory_.createdAt.between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)).build();
+    var query = _box
+        .query(Memory_.createdAt
+            .between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)
+            .and(Memory_.discarded.equals(false)))
+        .build();
     List<Memory> filtered = query.find();
     query.close();
     return filtered;
   }
 
   Future<File> exportMemoriesToFile() async {
-    List<Memory> memories = await getMemories();
-    String json = getPrettyJSONString(memories.map((m) => m.toJson()).toList());
+    String json = getPrettyJSONString(getMemories().map((m) => m.toJson()).toList());
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/memories.json');
     await file.writeAsString(json);

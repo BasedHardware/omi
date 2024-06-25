@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-
-import '/backend/api_requests/api_calls.dart';
 
 // Perform actions periodically
 Future<Memory?> processTranscriptContent(BuildContext context, String content, String? recordingFilePath,
@@ -32,7 +32,6 @@ Future<Memory?> memoryCreationBlock(
   DateTime? startedAt,
   DateTime? finishedAt,
 ) async {
-  // List<Memory> recentMemories = await MemoryProvider().retrieveRecentMemoriesWithinMinutes(minutes: 10);
   MemoryStructured structuredMemory;
   try {
     structuredMemory = await generateTitleAndSummaryForMemory(transcript, []); // recentMemories
@@ -73,7 +72,6 @@ Future<Memory?> memoryCreationBlock(
     }
     return memory;
   }
-  return null;
 }
 
 // Save failure memory when structured memory contains empty string

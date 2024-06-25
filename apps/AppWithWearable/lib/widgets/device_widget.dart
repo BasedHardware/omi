@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 class DeviceAnimationWidget extends StatefulWidget {
+  final bool animatedBackground;
   final double sizeMultiplier;
 
-  const DeviceAnimationWidget({super.key, this.sizeMultiplier = 1.0});
+  const DeviceAnimationWidget({
+    super.key,
+    this.sizeMultiplier = 1.0,
+    this.animatedBackground = true,
+  });
 
   @override
   State<DeviceAnimationWidget> createState() => _DeviceAnimationWidgetState();
@@ -40,16 +45,18 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             Image.asset(
               "assets/images/stars.png",
             ),
-            AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                return Image.asset(
-                  "assets/images/blob.png",
-                  height: 390 * widget.sizeMultiplier * _animation.value,
-                  width: 390 * widget.sizeMultiplier * _animation.value,
-                );
-              },
-            ),
+            widget.animatedBackground
+                ? AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      return Image.asset(
+                        "assets/images/blob.png",
+                        height: 390 * widget.sizeMultiplier * _animation.value,
+                        width: 390 * widget.sizeMultiplier * _animation.value,
+                      );
+                    },
+                  )
+                : Container(),
             // Image.asset("assets/images/blob.png"),
             Image.asset(
               "assets/images/herologo.png",
