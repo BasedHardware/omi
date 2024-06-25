@@ -102,5 +102,13 @@
     "description": "Provides insight into conversation sentiment",
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/transcript-improver.png"
+  },
+    {
+    "id": "top5-hollywood-movies",
+    "name": "Top 5 Hollywood Movies",
+    "author": "Bruce Bookman",
+    "description": "Journaling assistant - Provides list of top 5 Hollywood Movies in the theater",
+    "prompt": "Provide a bullet point list of the top 5 Hollywood movies in the theater.  Include the name of the movie, the name of the main actor and the director.  Provide a 3 sentence synopsis",
+    "image": "/assets/plugin_images/top5-hollywood.png"
   }
 ]
