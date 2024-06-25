@@ -1,5 +1,6 @@
-import 'env/env.dart';
-import 'env/prod_env.dart';
+import 'package:friend_private/env/env.dart';
+import 'package:friend_private/env/prod_env.dart';
+
 import 'flavors.dart';
 import 'main.dart' as runner;
 

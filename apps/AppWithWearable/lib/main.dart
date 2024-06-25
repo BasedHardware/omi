@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
@@ -13,7 +14,6 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 import 'backend/preferences.dart';
-import 'env/env.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,7 +61,8 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
 }
 
 class _MyAppState extends State<MyApp> {
@@ -91,7 +92,8 @@ class _MyAppState extends State<MyApp> {
           // ),
           snackBarTheme: SnackBarThemeData(
             backgroundColor: Colors.grey.shade900,
-            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+            contentTextStyle: const TextStyle(
+                fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
           ),
           textTheme: TextTheme(
             titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
@@ -105,7 +107,8 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
+      home: (SharedPreferencesUtil()
+              .onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
           ? const HomePageWrapper()
           : const OnboardingWrapper(),
     );
