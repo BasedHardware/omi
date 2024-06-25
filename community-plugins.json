@@ -107,8 +107,8 @@
     "id": "this-day-in-history",
     "name": "This day in history",
     "author": "Bruce Bookman",
-    "description": "Journaling assistant - This day in history",
-    "prompt": "Find an interesting past historical event that happened on this day and provide a 5 sentence summary.  Include insight as to the significance of the event",
-    "image": "/assets/plugin_images/history.png"
+    "description": "Journaling assistant - Global News",
+    "prompt": "List 5 important global news stories.  For each, provide a 5 sentence summary.  Include information about why the news item is important",
+    "image": "/assets/plugin_images/globalnews.png"
   }
 ]
