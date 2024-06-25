@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -37,6 +38,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   void initState() {
+    // devModeWebhookCall(widget.memory);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -55,7 +57,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(structured.actionItems.toString());
     return PopScope(
       canPop: false,
       child: Scaffold(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -8,10 +9,16 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 // Perform actions periodically
-Future<Memory?> processTranscriptContent(BuildContext context, String content, String? recordingFilePath,
-    {bool retrievedFromCache = false, DateTime? startedAt, DateTime? finishedAt}) async {
+Future<Memory?> processTranscriptContent(
+  BuildContext context,
+  String content,
+  String? recordingFilePath, {
+  bool retrievedFromCache = false,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+}) async {
   if (content.isNotEmpty) {
-    return await memoryCreationBlock(
+    Memory? memory = await memoryCreationBlock(
       context,
       content,
       recordingFilePath,
@@ -19,6 +26,8 @@ Future<Memory?> processTranscriptContent(BuildContext context, String content, S
       startedAt,
       finishedAt,
     );
+    devModeWebhookCall(memory);
+    return memory;
   }
   return null;
 }
