@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -102,7 +103,10 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
           ),
         if (widget.includeSkip)
           ElevatedButton(
-            onPressed: widget.goNext,
+            onPressed: (){
+              widget.goNext();
+              MixpanelManager().useWithoutDeviceOnboardingFindDevices();
+            },
             child: Container(
               width: double.infinity,
               height: 45,

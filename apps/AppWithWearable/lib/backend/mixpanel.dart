@@ -189,5 +189,9 @@ class MixpanelManager {
 
   void advancedModeDocsOpened() => track('Advanced Mode Docs Opened');
 
+  void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
+
+  void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
+
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }
