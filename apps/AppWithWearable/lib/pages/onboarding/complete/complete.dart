@@ -13,12 +13,14 @@ class CompletePage extends StatefulWidget {
 class _CompletePageState extends State<CompletePage> {
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return ListView(
+      // TODO: improve UI on smaller devices
       children: [
-        const SizedBox(height: 40),
-        const Text(
-          'You are all set  🎉',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        const Center(
+          child: Text(
+            'You are all set  🎉',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+          ),
         ),
         const SizedBox(height: 32),
         Padding(
