@@ -145,7 +145,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     File? file;
     try {
       file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-      await uploadFile(file);
+      uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
       context,
