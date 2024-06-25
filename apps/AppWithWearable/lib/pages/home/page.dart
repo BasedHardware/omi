@@ -15,9 +15,9 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
-import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -310,44 +310,52 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _device != null
-                ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.grey,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
+                  ? GestureDetector(
+                      onTap: _device == null
+                          ? null
+                          : () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (c) => ConnectedDevice(
+                                    device: _device!,
+                                    batteryLevel: batteryLevel,
+                                  ))),
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : Colors.red,
-                            shape: BoxShape.circle,
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.grey,
+                              width: 1,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          '${batteryLevel.toString()}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: batteryLevel > 75
+                                      ? const Color.fromARGB(255, 0, 255, 8)
+                                      : batteryLevel > 20
+                                          ? Colors.yellow.shade700
+                                          : Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8.0),
+                              Text(
+                                '${batteryLevel.toString()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          )),
                     )
-                )
-                : const SizedBox.shrink(),
+                  : const SizedBox.shrink(),
               // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               IconButton(
                 icon: const Icon(
