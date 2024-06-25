@@ -7,6 +7,7 @@ import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/string_utils.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<MemoryStructured> generateTitleAndSummaryForMemory(
   String transcript,
@@ -18,18 +19,13 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
 
-  final languageCode = SharedPreferencesUtil().recordingsLanguage;
-  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
-  // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
-  final pluginsList = SharedPreferencesUtil().pluginsList;
-  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
-  // ${_getPrevMemoriesStr(previousMemories)}
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
   // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
+
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
-    The conversation language is $languageCode. Make sure to use English for your response.
+    The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Make sure to use English for your response.
 
     ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
     
@@ -54,17 +50,61 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .replaceAll('    ', '')
           .trim();
   debugPrint(prompt);
+  var structuredResponse = extractJson(await executeGptPrompt(prompt));
+  var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
+  if (structured.title.isEmpty) return structured;
+  structured.pluginsResponse = await executePlugins(transcript);
+  return structured;
+}
+
+Future<List<String>> executePlugins(String transcript) async {
+  final pluginsList = SharedPreferencesUtil().pluginsList;
+  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+  // TODO: include memory details parsed already as extra context?
+  // TODO: improve plugin result, include result + id to map it to.
   List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
-    String response = await executeGptPrompt(
-        '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()}```, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
-    return response;
+    try {
+      String response = await executeGptPrompt('''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Note: It is possible that the conversation you are given, has nothing to do with your task, \
+        in that case, output just an empty string. (For example, you are given a business conversation, but your task is medical analysis)
+        
+        Conversation: ```${transcript.trim()}```,
+       
+        Output your response in plain text, without markdown.
+        Make sure to be concise and clear.
+        '''
+          .replaceAll('     ', '')
+          .replaceAll('    ', '')
+          .trim());
+      return response;
+    } catch (e, stacktrace) {
+      CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+        'plugin': plugin.id,
+        'plugins_count': pluginsEnabled.length.toString(),
+        'transcript_length': transcript.length.toString(),
+      });
+      debugPrint('Error executing plugin ${plugin.id}');
+      return '';
+    }
   }).toList();
 
   Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
-  var structuredResponse = extractJson(await executeGptPrompt(prompt));
-  List<String> responses = await allPluginResponses;
-  var json = jsonDecode(structuredResponse);
-  return MemoryStructured.fromJson(json..['pluginsResponse'] = responses);
+  try {
+    var responses = await allPluginResponses;
+    return responses.where((e) => e.isNotEmpty).toList();
+  } catch (e, stacktrace) {
+    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+      'plugins_count': pluginsEnabled.length.toString(),
+      'transcript_length': transcript.length.toString(),
+    });
+    return [];
+  }
 }
 
 Future<String> postMemoryCreationNotification(Memory memory) async {
