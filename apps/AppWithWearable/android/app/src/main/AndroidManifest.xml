@@ -63,11 +63,6 @@
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
-        <receiver android:name=".RestartServiceReceiver" android:enabled="true" android:exported="false">
-    <intent-filter>
-        <action android:name="android.intent.action.BOOT_COMPLETED" />
-    </intent-filter>
-</receiver>
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
