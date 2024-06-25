@@ -15,13 +15,13 @@
 #define PDM_PWR_PIN NRF_GPIO_PIN_MAP(1, 10)
 
 // Codecs
-#define CODEC_PCM 1
-// #define CODEC_MU_LAW 1
+// #define CODEC_PCM 1
+#define CODEC_MU_LAW 1
 // #define CODEC_OPUS 1
 
 // Codec packages
 #if CODEC_PCM | CODEC_MU_LAW
-#define CODEC_DIVIDER 2           // 1 or 2
+#define CODEC_DIVIDER 1           // 1 or 2
 #define CODEC_PACKAGE_SAMPLES 160 // 10ms
 #if CODEC_PCM
 #define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES * 2
