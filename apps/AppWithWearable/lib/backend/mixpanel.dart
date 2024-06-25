@@ -51,10 +51,6 @@ class MixpanelManager {
 
   void pluginsOpened() => track('Plugins Opened');
 
-  void devModeEnabled() => track('Dev Mode Enabled');
-
-  void devModeDisabled() => track('Dev Mode Disabled');
-
   void recordingLanguageChanged(String language) =>
       track('Recording Language Changed', properties: {'language': language});
 
@@ -176,6 +172,22 @@ class MixpanelManager {
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
+
+  void getFriendClicked() => track('Get Friend Clicked');
+
+  void connectFriendClicked() => track('Connect Friend Clicked');
+
+  void disconnectFriendClicked() => track('Disconnect Friend Clicked');
+
+  void batteryIndicatorClicked() => track('Battery Indicator Clicked');
+
+  void devModeEnabled() => track('Dev Mode Enabled');
+
+  void devModeDisabled() => track('Dev Mode Disabled');
+
+  void devModePageOpened() => track('Dev Mode Page Opened');
+
+  void advancedModeDocsOpened() => track('Advanced Mode Docs Opened');
 
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

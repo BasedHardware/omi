@@ -113,6 +113,7 @@ _getNoFriendConnectedYet(BuildContext context) {
               child: TextButton(
                   onPressed: () {
                     launchUrl(Uri.parse('https://basedhardware.com'));
+                    MixpanelManager().getFriendClicked();
                   },
                   child: const Text(
                     'Get a Friend',
@@ -121,8 +122,9 @@ _getNoFriendConnectedYet(BuildContext context) {
           const SizedBox(height: 4),
           TextButton(
             onPressed: () async {
-              await Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
-            },
+              Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
+              MixpanelManager().connectFriendClicked();
+              },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shape: RoundedRectangleBorder(

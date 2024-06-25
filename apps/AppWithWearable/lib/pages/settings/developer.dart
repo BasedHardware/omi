@@ -132,6 +132,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       onTap: () {
                         launchUrl(Uri.parse(
                             'https://github.com/BasedHardware/Friend/blob/main/apps/AppWithWearable/lib/pages/settings/advanced_mode.md'));
+                        MixpanelManager().advancedModeDocsOpened();
                       },
                       child: const Padding(
                         padding: EdgeInsets.all(8.0),
