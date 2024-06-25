@@ -1,6 +1,13 @@
-app_identifier("[[APP_IDENTIFIER]]") # The bundle identifier of your app
-apple_id("[[APPLE_ID]]") # Your Apple Developer Portal username
+app_identifier("com.friend-app-with-wearable.ios12") # The bundle identifier of your app
+apple_id("vinaydevs00@gmail.com") # Your Apple Developer Portal username
 
-itc_team_id("[[XXXXX]]") # App Store Connect Team ID
-team_id("[XXXXX]]") # Developer Portal Team ID
+itc_team_id("127145375") # App Store Connect Team ID
+team_id("9536L8KLMP") # Developer Portal Team ID
+
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile
+# app_identifier("com.friend-app-with-wearable.ios12") # The bundle identifier of your app
+# apple_id("6502156163") # Your Apple Developer Portal username
+#
+# team_id("9536L8KLMP") # Developer Portal Team ID
 

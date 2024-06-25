@@ -87,31 +87,36 @@ jobs:
         run: flutter pub get
         working-directory: apps/AppWithWearable
 
-      - name: Run Fastlane for Android
-        run: bundle exec fastlane build_debug
-        working-directory: apps/AppWithWearable/android
+#      - name: Run Fastlane for Android
+#        run: bundle exec fastlane build_debug
+#        working-directory: apps/AppWithWearable/android
+
+
+#      - name : Create Android Build
+#        working-directory: apps/AppWithWearable
+#        run: flutter build apk --release --split-per-abi
+
+#      - name : Create iOS Build
+#        working-directory: apps/AppWithWearable
+#        run: |
+#          flutter build ios --no-codesign
+#          cd build/ios/iphoneos
+#          mkdir Payload
+#          cd Payload
+#          ln -s ../Runner.app
+#          cd ..
+#          zip -r app.ipa Payload
+          
 
       - name: Run Fastlane for iOS
-        run: bundle exec fastlane build_debug
+        run: bundle exec fastlane beta
         working-directory: apps/AppWithWearable/ios
         env:
-          LC_ALL: en_US.UTF-8
-          LANG: en_US.UTF-8
-
-      - name : Create Android Build
-        working-directory: apps/AppWithWearable
-        run: flutter build apk --release --split-per-abi
-
-      - name : Create iOS Build
-        working-directory: apps/AppWithWearable
-        run: |
-          flutter build ios --no-codesign
-          cd build/ios/iphoneos
-          mkdir Payload
-          cd Payload
-          ln -s ../Runner.app
-          cd ..
-          zip -r app.ipa Payload
+          FLUTTER_BUILD_DIR: build
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          FASTLANE_USER: ${{ secrets.APPLE_ID }}
+          FASTLANE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
 
       #Creating bundles of output
       - name: Push to Releases
