@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/segment.dart';
@@ -75,4 +76,20 @@ Future<List<Plugin>> retrievePlugins() async {
     }
   }
   return [];
+}
+
+Future<bool> devModeWebhookCall(Memory? memory) async {
+  debugPrint('devModeWebhookCall: $memory');
+  var url = SharedPreferencesUtil().webhookUrl;
+  debugPrint('webhook url: $url');
+  if (url.isEmpty || memory == null) return false;
+  var data = jsonEncode(memory.toJson());
+  var response = await makeApiCall(
+    url: url,
+    headers: {'Content-Type': 'application/json'},
+    body: data,
+    method: 'POST',
+  );
+  debugPrint('response: ${response?.statusCode}');
+  return response?.statusCode == 200;
 }
