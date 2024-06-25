@@ -25,7 +25,7 @@ import UserNotifications
     }
 
     // here, Without this code the task will not work.
-    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(regbisterPlugins)
+    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }

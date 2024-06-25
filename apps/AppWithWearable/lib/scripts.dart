@@ -32,7 +32,7 @@ migrateMemoriesCategoriesAndEmojis() async {
   
   Here is the output schema:
   ```
-  {"properties": {"parsed": {"title": "Parsed", "type": "array", "items": {"\$ref": "#/definitions/StructuredMemory"}}}, "required": ["parsed"], "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "StructuredMemory": {"title": "StructuredMemory", "type": "object", "properties": {"category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "🧠", "type": "string"}}}}}
+  {"properties": {"parsed": {"title": "Parsed", "type": "array", "items": {"\$ref": "#/definitions/StructuredMemory"}}}, "required": ["parsed"], "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "philosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "StructuredMemory": {"title": "StructuredMemory", "type": "object", "properties": {"category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "🧠", "type": "string"}}}}}
   ```
   '''
       .replaceAll('  ', '')

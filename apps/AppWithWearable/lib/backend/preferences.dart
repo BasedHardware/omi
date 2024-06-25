@@ -49,6 +49,13 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
+  String get webhookUrl => getString('webhookUrl') ?? '';
+
+  set webhookUrl(String value) => saveString('webhookUrl', value);
+  String get transcriptServerUrl => getString('transcriptServerUrl') ?? '';
+
+  set transcriptServerUrl(String value) => saveString('transcriptServerUrl', value);
+
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
@@ -99,7 +106,8 @@ class SharedPreferencesUtil {
   //   saveStringList('messages', messages);
   // }
 
-  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 

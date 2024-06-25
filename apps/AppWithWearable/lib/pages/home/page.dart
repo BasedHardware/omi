@@ -14,11 +14,10 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/page.dart';
-import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
-import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
@@ -50,7 +49,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
-  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
+  GlobalKey<CapturePageState> capturePageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
@@ -91,7 +90,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    await migrateMemoriesCategoriesAndEmojis();
+    // await migrateMemoriesCategoriesAndEmojis();
     // await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
@@ -99,6 +98,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    SharedPreferencesUtil().onboardingCompleted = true;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
@@ -111,7 +111,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    scanAndConnectDevice().then(_onConnected);
+    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+      scanAndConnectDevice().then(_onConnected);
+    }
+
     createNotification(
       title: 'Don\'t forget to wear Friend today',
       body: 'Wear your friend and capture your memories today.',
@@ -133,7 +136,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: false);
+          capturePageKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() {
             _device = null;
           });
@@ -163,7 +166,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     _startForeground();
@@ -193,7 +196,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         body: GestureDetector(
           onTap: () {
             FocusScope.of(context).unfocus();
@@ -213,9 +216,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
+                      key: capturePageKey,
                       device: _device,
                       refreshMemories: _initiateMemories,
-                      transcriptChildWidgetKey: transcriptChildWidgetKey,
                       refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
@@ -306,43 +309,56 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.grey,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: batteryLevel > 75
-                            ? const Color.fromARGB(255, 0, 255, 8)
-                            : batteryLevel > 20
-                                ? Colors.yellow.shade700
-                                : Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8.0),
-                    Text(
-                      '${batteryLevel.toString()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _device != null
+                  ? GestureDetector(
+                      onTap: _device == null
+                          ? null
+                          : () {
+                              Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (c) => ConnectedDevice(
+                                        device: _device!,
+                                        batteryLevel: batteryLevel,
+                                      )));
+                              MixpanelManager().batteryIndicatorClicked();
+                            },
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: batteryLevel > 75
+                                      ? const Color.fromARGB(255, 0, 255, 8)
+                                      : batteryLevel > 20
+                                          ? Colors.yellow.shade700
+                                          : Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8.0),
+                              Text(
+                                '${batteryLevel.toString()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          )),
+                    )
+                  : const SizedBox.shrink(),
               // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               IconButton(
                 icon: const Icon(
@@ -357,7 +373,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
                   if (language != SharedPreferencesUtil().recordingsLanguage ||
                       useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    transcriptChildWidgetKey.currentState?.resetState();
+                    capturePageKey.currentState?.resetState();
                   }
                 },
               )

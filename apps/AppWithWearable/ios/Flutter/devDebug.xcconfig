@@ -1,0 +1,7 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include "Generated.xcconfig"
+
+FLUTTER_TARGET=lib/main_dev.dart
+ASSET_PREFIX=dev
+BUNDLE_NAME=Friend Dev
+BUNDLE_DISPLAY_NAME=Friend Dev
