@@ -7,10 +7,10 @@ import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -22,6 +22,15 @@ void main() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   await ObjectBoxUtil.init();
+  if (Env.oneSignalAppId != null) {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    OneSignal.initialize(Env.oneSignalAppId!);
+    // var permissionGranted = await OneSignal.Notifications.requestPermission(true);
+    // if (permissionGranted) {
+    OneSignal.login(SharedPreferencesUtil().uid);
+    // }
+  }
+
   if (Env.instabugApiKey != null) {
     runZonedGuarded(
       () {

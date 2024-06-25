@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/notify_on_kill.dart';
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -26,6 +27,7 @@ Future<void> initializeNotifications() async {
       ],
       debug: false);
   debugPrint('initializeNotifications: $initialized');
+  NotifyOnKill.register();
 }
 
 Future<void> requestNotificationPermissions() async {

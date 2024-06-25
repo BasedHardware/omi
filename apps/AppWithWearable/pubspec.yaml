@@ -90,6 +90,7 @@ dependencies:
   record_darwin: ^1.1.0
   flutter_sound: ^9.6.0
   audio_session: ^0.1.19
+  onesignal_flutter: ^5.1.2
 
 dependency_overrides:
   http: ^1.2.1
