@@ -313,11 +313,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   ? GestureDetector(
                       onTap: _device == null
                           ? null
-                          : () => Navigator.of(context).push(MaterialPageRoute(
-                              builder: (c) => ConnectedDevice(
-                                    device: _device!,
-                                    batteryLevel: batteryLevel,
-                                  ))),
+                          : () {
+                              Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (c) => ConnectedDevice(
+                                        device: _device!,
+                                        batteryLevel: batteryLevel,
+                                      )));
+                              MixpanelManager().batteryIndicatorClicked();
+                            },
                       child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(

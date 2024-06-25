@@ -471,7 +471,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     visible: devModeEnabled,
                     child: GestureDetector(
                       onTap: () {
-                        MixpanelManager().pluginsOpened();
+                        MixpanelManager().devModePageOpened();
                         Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeveloperSettingsPage()));
                       },
                       child: Padding(
