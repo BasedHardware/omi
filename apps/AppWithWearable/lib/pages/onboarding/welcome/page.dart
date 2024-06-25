@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -144,6 +145,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
         TextButton(
             onPressed: () {
               widget.skipDevice();
+              MixpanelManager().useWithoutDeviceOnboardingWelcome();
             },
             child: const Text(
               'Use Without Device',
