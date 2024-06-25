@@ -47,7 +47,7 @@ class MixpanelManager {
 
   void settingsOpened() => track('Settings Opened');
 
-  void settingsSaved() => track('Settings Saved');
+  void settingsSaved() => track('Developer Settings Saved');
 
   void pluginsOpened() => track('Plugins Opened');
 

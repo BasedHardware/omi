@@ -19,7 +19,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   final TextEditingController openAIKeyController = TextEditingController();
   final TextEditingController webhookUrlController = TextEditingController();
   final TextEditingController transcriptServerUrlController = TextEditingController();
-  bool openaiApiIsVisible = false;
 
   bool savingSettingsLoading = false;
 
@@ -45,7 +44,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           title: const Text('Developer Settings'),
           actions: [
             MaterialButton(
-              onPressed: saveSettings,
+              onPressed: savingSettingsLoading ? null : saveSettings,
               color: Colors.transparent,
               elevation: 0,
               child: const Padding(
@@ -63,7 +62,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           child: ListView(
             children: [
               const SizedBox(height: 32),
-              _getText('Set your own keys', underline: false),
+              _getText('Your own Developer Keys', bold: true),
               const SizedBox(height: 16.0),
               TextField(
                 controller: openAIKeyController,
@@ -84,7 +83,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 style: const TextStyle(color: Colors.white),
               ),
               const SizedBox(height: 40),
-              _getText('[Optional] Store your recordings in Google Cloud', underline: false),
+              _getText('Store your audios in Google Cloud Storage', bold: true),
               const SizedBox(height: 16.0),
               TextField(
                 controller: gcpCredentialsController,
@@ -197,13 +196,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     );
   }
 
-  _getText(String text, {bool canBeDisabled = false, bool underline = false}) {
+  _getText(String text, {bool canBeDisabled = false, bool underline = false, bool bold = false}) {
     return Text(
       text,
       style: TextStyle(
         color: true && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
         decoration: underline ? TextDecoration.underline : TextDecoration.none,
         fontSize: 16,
+        fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
       ),
       // textAlign: TextAlign.center,
     );
