@@ -132,7 +132,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   GestureDetector(
                       onTap: () {
                         launchUrl(Uri.parse(
-                            'https://github.com/BasedHardware/Friend/main/apps/AppWithWearable/lib/pages/settings/advanced_mode.md'));
+                            'https://github.com/BasedHardware/Friend/blob/main/apps/AppWithWearable/lib/pages/settings/advanced_mode.md'));
                       },
                       child: const Padding(
                         padding: EdgeInsets.all(8.0),
@@ -149,7 +149,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               ),
               const SizedBox(height: 16),
               _getText('Webhooks: Every time a new memory get\'s created, send the details to your own server.'),
-              // TODO: include in memory detail webhook results.
               TextField(
                 controller: webhookUrlController,
                 obscureText: false,
@@ -159,17 +158,17 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 decoration: _getTextFieldDecoration('Webhook URL'),
                 style: const TextStyle(color: Colors.white),
               ),
-              const SizedBox(height: 16),
-              _getText('Transcript Server URL: Send your audio files to your own server.'),
-              TextField(
-                controller: transcriptServerUrlController,
-                obscureText: false,
-                autocorrect: false,
-                enabled: true,
-                enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Transcript Server URL'),
-                style: const TextStyle(color: Colors.white),
-              ),
+              // const SizedBox(height: 16),
+              // _getText('Transcript Server URL: Send your audio files to your own server.'),
+              // TextField(
+              //   controller: transcriptServerUrlController,
+              //   obscureText: false,
+              //   autocorrect: false,
+              //   enabled: true,
+              //   enableSuggestions: false,
+              //   decoration: _getTextFieldDecoration('Transcript Server URL'),
+              //   style: const TextStyle(color: Colors.white),
+              // ),
               const SizedBox(height: 64),
             ],
           ),
