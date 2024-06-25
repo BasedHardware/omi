@@ -73,7 +73,7 @@ If you prefer to set up the project manually, follow these steps:
 7. **Run the App**:
     And select the target device when prompted 
     ```
-    flutter run
+    flutter run -t lib/main_prod.dart --flavor prod
     ```
 
 This guide should help you get started with running the Friend App on your local machine. Make sure each step is completed to avoid any issues.
