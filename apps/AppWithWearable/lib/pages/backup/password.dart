@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class BackupPasswordPage extends StatefulWidget {
   const BackupPasswordPage({super.key});

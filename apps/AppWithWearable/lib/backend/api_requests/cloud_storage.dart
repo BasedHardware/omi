@@ -1,15 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 AuthClient? authClient;
 
-void authenticateGCP() async {
-  var credentialsBase64 = SharedPreferencesUtil().gcpCredentials;
+Future<void> authenticateGCP({String? base64}) async {
+  var credentialsBase64 = base64 ?? SharedPreferencesUtil().gcpCredentials;
   if (credentialsBase64.isEmpty) {
     debugPrint('No GCP credentials found');
     return;
