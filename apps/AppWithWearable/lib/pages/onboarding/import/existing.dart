@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/onboarding/import/import.dart';
-import 'package:friend_private/widgets/device_widget.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class HasBackupPage extends StatefulWidget {
-  const HasBackupPage({super.key});
+  final VoidCallback goNext;
+  final VoidCallback onSkip;
+
+  const HasBackupPage({super.key, required this.goNext, required this.onSkip});
 
   @override
   State<HasBackupPage> createState() => _HasBackupPageState();
@@ -13,60 +14,53 @@ class HasBackupPage extends StatefulWidget {
 class _HasBackupPageState extends State<HasBackupPage> {
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        appBar: AppBar(backgroundColor: Theme.of(context).colorScheme.primary),
-        body: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(32),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const DeviceAnimationWidget(),
-              const SizedBox(height: 48),
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Text(
-                      'Already had an account? Press "Import" to continue, otherwise press "Skip".',
-                      style: TextStyle(color: Colors.white, fontSize: 15, height: 1.5),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  MaterialButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
-                    },
-                    child: const Text('Skip', style: TextStyle(decoration: TextDecoration.underline)),
-                  ),
-                  MaterialButton(
-                    onPressed: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ImportBackupPage()));
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: Colors.deepPurple),
-                    ),
-                    color: Colors.deepPurple,
-                    child: const Text(
-                      'Import',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
+              Text(
+                'Already had an account? Press "Import" to continue, otherwise press "Skip".',
+                style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+                textAlign: TextAlign.center,
               ),
             ],
-            // TODO: include an option for setting up backup
           ),
         ),
-      ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            MaterialButton(
+              onPressed: widget.onSkip,
+              child: const Text('Skip', style: TextStyle(decoration: TextDecoration.underline)),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: MaterialButton(
+                onPressed: widget.goNext,
+                child: const Text(
+                  'Import',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+      // TODO: include an option for setting up backup
     );
   }
 }
