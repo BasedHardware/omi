@@ -9,8 +9,8 @@ class NotifyOnKill {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Application killed!",
-          'description': "Restart Friend to continue syncing with your wearable",
+          'title': "Friend Device Disconnected",
+          'description': "Please keep your app opened to continue using your Friend.",
         },
       );
     } catch (e) {
