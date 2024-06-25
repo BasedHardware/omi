@@ -6,10 +6,13 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -280,6 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 onTap: () {
                                   Navigator.of(context)
                                       .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                                  MixpanelManager().privacyDetailsPageOpened();
                                 },
                               ),
                             ),
@@ -320,8 +324,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           if (devModeEnabled) {
                             devModeEnabled = false;
                             SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
                           } else {
                             devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
                             SharedPreferencesUtil().devModeEnabled = true;
                           }
                         });
@@ -360,6 +366,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ),
+                  ),
+                  ListTile(
+                    title: const Text('Need help?', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('team@basedhardware.com'),
+                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                    onTap: () {
+                      launchUrl(Uri.parse('mailto:team@basedhardware.com'));
+                      MixpanelManager().supportContacted();
+                    },
                   ),
                   const SizedBox(height: 36.0),
                   const Align(
@@ -404,66 +420,72 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  // InkWell(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Text(
-                  //               'Speech Profile Set Up',
-                  //               style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
-                  // GestureDetector(
-                  //   onTap: () {
-                  //     Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
-                  //   },
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                  //     child: Container(
-                  //       decoration: BoxDecoration(
-                  //         color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                  //         borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                  //       ),
-                  //       child: const Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  //         child: Row(
-                  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //           children: [
-                  //             Row(
-                  //               children: [
-                  //                 Text(
-                  //                   'Backups',
-                  //                   style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                  //                 ),
-                  //                 SizedBox(width: 16),
-                  //                 Icon(Icons.backup, color: Colors.white, size: 16),
-                  //               ],
-                  //             ),
-                  //             Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+                  Visibility(
+                    visible: false,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Speech Profile Set Up',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Visibility(
+                    visible: true,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Backups',
+                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Icon(Icons.backup, color: Colors.white, size: 16),
+                                  ],
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -546,28 +568,37 @@ class _SettingsPageState extends State<SettingsPage> {
         style: const TextStyle(color: Colors.white),
       ),
       const SizedBox(height: 24),
+      // ListTile(
+      //   title: const Text('Export Memories'),
+      //   subtitle: const Text('Export all your memories to a JSON file.'),
+      //   trailing: loadingExportMemories
+      //       ? const SizedBox(
+      //           height: 16,
+      //           width: 16,
+      //           child: CircularProgressIndicator(
+      //             color: Colors.white,
+      //             strokeWidth: 2,
+      //           ),
+      //         )
+      //       : const Icon(Icons.upload),
+      //   onTap: () async {
+      //     if (loadingExportMemories) return;
+      //     setState(() => loadingExportMemories = true);
+      //     File file = await MemoryProvider().exportMemoriesToFile();
+      //     final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+      //     if (result.status == ShareResultStatus.success) {
+      //       print('Thank you for sharing the picture!');
+      //     }
+      //     setState(() => loadingExportMemories = false);
+      //   },
+      // ),
       ListTile(
-        title: const Text('Export Memories'),
-        subtitle: const Text('Export all your memories to a JSON file.'),
-        trailing: loadingExportMemories
-            ? const SizedBox(
-                height: 16,
-                width: 16,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.upload),
-        onTap: () async {
-          if (loadingExportMemories) return;
-          setState(() => loadingExportMemories = true);
-          File file = await MemoryProvider().exportMemoriesToFile();
-          final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-          if (result.status == ShareResultStatus.success) {
-            print('Thank you for sharing the picture!');
-          }
-          setState(() => loadingExportMemories = false);
+        title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('2300+ members and counting.'),
+        trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
+        onTap: () {
+          launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+          MixpanelManager().joinDiscordClicked();
         },
       ),
       const SizedBox(height: 64),

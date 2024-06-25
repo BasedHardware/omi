@@ -1,7 +1,12 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,12 +30,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   TextEditingController overviewController = TextEditingController();
   bool editingTitle = false;
   bool editingOverview = false;
+  bool loadingReprocessMemory = false;
+
+  List<bool> pluginResponseExpanded = [];
+  bool isTranscriptExpanded = false;
 
   @override
   void initState() {
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
     super.initState();
   }
 
@@ -74,73 +84,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed: () {
-                  showModalBottomSheet(
-                      context: context,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                      ),
-                      builder: (context) => Container(
-                            height: 216,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(16),
-                                topRight: Radius.circular(16),
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  title: const Text('Share memory'),
-                                  leading: const Icon(Icons.send),
-                                  onTap: () {
-                                    // share loading
-                                    MixpanelManager().memoryShareButtonClick(widget.memory);
-                                    Share.share(structured.toString());
-                                    HapticFeedback.lightImpact();
-                                  },
-                                ),
-                                // ListTile(
-                                //   title: const Text('Edit'),
-                                //   leading: const Icon(Icons.edit),
-                                //   onTap: () {},
-                                // ),
-                                ListTile(
-                                  title: const Text('Delete'),
-                                  leading: const Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
-                                  ),
-                                  onTap: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (dialogContext) {
-                                        return Dialog(
-                                          elevation: 0,
-                                          insetPadding: EdgeInsets.zero,
-                                          backgroundColor: Colors.transparent,
-                                          alignment:
-                                              const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                          child: ConfirmDeletionWidget(
-                                              memory: widget.memory,
-                                              onDelete: () {
-                                                Navigator.pop(context, true);
-                                                Navigator.pop(context, true);
-                                              }),
-                                        );
-                                      },
-                                    ).then((value) => setState(() {}));
-                                  },
-                                )
-                              ],
-                            ),
-                          ));
-                },
+                onPressed: _showOptionsBottomSheet,
                 icon: const Icon(Icons.more_horiz),
               ),
             ],
@@ -238,6 +182,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                 content: Text('Action items copied to clipboard'),
                                 duration: Duration(seconds: 2),
                               ));
+                              MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Action Items');
                             },
                             icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
                       ],
@@ -271,7 +216,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                 ),
                 const SizedBox(height: 24),
-                ...widget.memory.pluginsResponse.map((response) => Container(
+                ...widget.memory.pluginsResponse.mapIndexed((i, response) => Container(
                       margin: const EdgeInsets.only(bottom: 32),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -280,6 +225,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                       ),
                       child: ExpandableTextWidget(
                         text: response.content.trim(),
+                        isExpanded: pluginResponseExpanded[i],
+                        toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
                         style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                         maxLines: 6,
                         // Change this to 6 if you want the initial max lines to be 6
@@ -301,6 +248,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                           Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
                           ScaffoldMessenger.of(context)
                               .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
+                          MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
                         },
                         // TODO: improve UI of this copy buttons
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
@@ -311,6 +259,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 maxLines: 6,
                 linkColor: Colors.grey.shade300,
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                isExpanded: isTranscriptExpanded,
+                toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
               ),
               const SizedBox(height: 32),
             ],
@@ -341,6 +291,125 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
           ));
   }
+
+  _reProcessMemory(StateSetter setModalState) async {
+    setModalState(() => loadingReprocessMemory = true);
+    MemoryStructured structured =
+        await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
+    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
+    Structured current = widget.memory.structured.target!;
+    current.title = structured.title;
+    current.overview = structured.overview;
+    current.emoji = structured.emoji;
+    current.category = structured.category;
+    current.actionItems.clear();
+    current.actionItems.addAll(structured.actionItems.map<ActionItem>((e) => ActionItem(e)).toList());
+    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
+    widget.memory.structured.target = current;
+    widget.memory.discarded = false;
+    MemoryProvider().updateMemoryStructured(current);
+    MemoryProvider().updateMemory(widget.memory);
+
+    getEmbeddingsFromInput(structured.toString()).then((vector) {
+      createPineconeVector(widget.memory.id.toString(), vector);
+    });
+
+    overviewController.text = current.overview;
+    titleController.text = current.title;
+
+    MixpanelManager().reProcessMemory(widget.memory);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
+      ),
+    );
+    setModalState(() => loadingReprocessMemory = false);
+    setState(() {});
+    Navigator.pop(context);
+  }
+
+  void _showOptionsBottomSheet() {
+    showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        builder: (context) => StatefulBuilder(builder: (context, setModalState) {
+              return Container(
+                height: 216,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Share memory'),
+                      leading: const Icon(Icons.send),
+                      onTap: loadingReprocessMemory
+                          ? null
+                          : () {
+                              // share loading
+                              MixpanelManager().memoryShareButtonClick(widget.memory);
+                              Share.share(structured.toString());
+                              HapticFeedback.lightImpact();
+                            },
+                    ),
+                    ListTile(
+                      title: const Text('Delete'),
+                      leading: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                      ),
+                      onTap: loadingReprocessMemory
+                          ? null
+                          : () {
+                              showDialog(
+                                context: context,
+                                builder: (dialogContext) {
+                                  return Dialog(
+                                    elevation: 0,
+                                    insetPadding: EdgeInsets.zero,
+                                    backgroundColor: Colors.transparent,
+                                    alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                    child: ConfirmDeletionWidget(
+                                        memory: widget.memory,
+                                        onDelete: () {
+                                          Navigator.pop(context, true);
+                                          Navigator.pop(context, true);
+                                        }),
+                                  );
+                                },
+                              ).then((value) => setState(() {}));
+                            },
+                    ),
+                    widget.memory.discarded
+                        ? ListTile(
+                            title: const Text('Process again and ignore discard.'),
+                            leading: loadingReprocessMemory
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                                    ))
+                                : const Icon(Icons.refresh, color: Colors.deepPurple),
+                            onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
+                          )
+                        : const SizedBox()
+                  ],
+                ),
+              );
+            }));
+  }
 }
 
 class ExpandableTextWidget extends StatefulWidget {
@@ -350,11 +419,15 @@ class ExpandableTextWidget extends StatefulWidget {
   final String expandText;
   final String collapseText;
   final Color linkColor;
+  final bool isExpanded;
+  final Function toggleExpand;
 
   const ExpandableTextWidget({
     super.key,
     required this.text,
     required this.style,
+    required this.isExpanded,
+    required this.toggleExpand,
     this.maxLines = 3,
     this.expandText = 'show more ↓',
     this.collapseText = 'show less ↑',
@@ -366,14 +439,6 @@ class ExpandableTextWidget extends StatefulWidget {
 }
 
 class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
-  bool _isExpanded = false;
-
-  void _toggleExpand() {
-    setState(() {
-      _isExpanded = !_isExpanded;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final span = TextSpan(text: widget.text, style: widget.style);
@@ -392,16 +457,16 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
           Text(
             widget.text,
             style: widget.style,
-            maxLines: _isExpanded ? 10000 : widget.maxLines,
+            maxLines: widget.isExpanded ? 10000 : widget.maxLines,
             overflow: TextOverflow.ellipsis,
           ),
           if (isOverflowing)
             InkWell(
-              onTap: _toggleExpand,
+              onTap: () => widget.toggleExpand(),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
-                  _isExpanded ? widget.collapseText : widget.expandText,
+                  widget.isExpanded ? widget.collapseText : widget.expandText,
                   style: TextStyle(
                     color: Colors.deepPurple,
                     fontWeight: FontWeight.w500,

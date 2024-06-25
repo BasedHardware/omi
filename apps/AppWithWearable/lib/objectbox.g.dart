@@ -15,6 +15,7 @@ import 'package:objectbox/objectbox.dart' as obx;
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 
 import 'backend/database/memory.dart';
+import 'backend/database/message.dart';
 
 export 'package:objectbox/objectbox.dart'; // so that callers only have to import this file
 
@@ -172,6 +173,46 @@ final _entities = <obx_int.ModelEntity>[
             flags: 0)
       ],
       relations: <obx_int.ModelRelation>[],
+      backlinks: <obx_int.ModelBacklink>[]),
+  obx_int.ModelEntity(
+      id: const obx_int.IdUid(5, 3905873968765933532),
+      name: 'Message',
+      lastPropertyId: const obx_int.IdUid(5, 5337649766892625543),
+      flags: 0,
+      properties: <obx_int.ModelProperty>[
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(1, 1878881834426487468),
+            name: 'id',
+            type: 6,
+            flags: 1),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(2, 9040753066664612555),
+            name: 'createdAt',
+            type: 10,
+            flags: 8,
+            indexId: const obx_int.IdUid(7, 296619579137476887)),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(3, 3367360249871802822),
+            name: 'text',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(4, 3325943223378277861),
+            name: 'sender',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(5, 5337649766892625543),
+            name: 'type',
+            type: 9,
+            flags: 0)
+      ],
+      relations: <obx_int.ModelRelation>[
+        obx_int.ModelRelation(
+            id: const obx_int.IdUid(1, 7091380547659316419),
+            name: 'memories',
+            targetId: const obx_int.IdUid(1, 1521024926543535))
+      ],
       backlinks: <obx_int.ModelBacklink>[])
 ];
 
@@ -210,9 +251,9 @@ Future<obx.Store> openStore(
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
       entities: _entities,
-      lastEntityId: const obx_int.IdUid(4, 8944838570398231806),
-      lastIndexId: const obx_int.IdUid(6, 2436940497868764355),
-      lastRelationId: const obx_int.IdUid(0, 0),
+      lastEntityId: const obx_int.IdUid(5, 3905873968765933532),
+      lastIndexId: const obx_int.IdUid(7, 296619579137476887),
+      lastRelationId: const obx_int.IdUid(1, 7091380547659316419),
       lastSequenceId: const obx_int.IdUid(0, 0),
       retiredEntityUids: const [],
       retiredIndexUids: const [2159273736567567467],
@@ -407,6 +448,47 @@ obx_int.ModelDefinition getObjectBoxModel() {
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 10, 0);
           object.memory.attach(store);
           return object;
+        }),
+    Message: obx_int.EntityDefinition<Message>(
+        model: _entities[4],
+        toOneRelations: (Message object) => [],
+        toManyRelations: (Message object) =>
+            {obx_int.RelInfo<Message>.toMany(1, object.id): object.memories},
+        getId: (Message object) => object.id,
+        setId: (Message object, int id) {
+          object.id = id;
+        },
+        objectToFB: (Message object, fb.Builder fbb) {
+          final textOffset = fbb.writeString(object.text);
+          final senderOffset = fbb.writeString(object.sender);
+          final typeOffset = fbb.writeString(object.type);
+          fbb.startTable(6);
+          fbb.addInt64(0, object.id);
+          fbb.addInt64(1, object.createdAt.millisecondsSinceEpoch);
+          fbb.addOffset(2, textOffset);
+          fbb.addOffset(3, senderOffset);
+          fbb.addOffset(4, typeOffset);
+          fbb.finish(fbb.endTable());
+          return object.id;
+        },
+        objectFromFB: (obx.Store store, ByteData fbData) {
+          final buffer = fb.BufferContext(fbData);
+          final rootOffset = buffer.derefObject(0);
+          final createdAtParam = DateTime.fromMillisecondsSinceEpoch(
+              const fb.Int64Reader().vTableGet(buffer, rootOffset, 6, 0));
+          final textParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGet(buffer, rootOffset, 8, '');
+          final senderParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGet(buffer, rootOffset, 10, '');
+          final idParam =
+              const fb.Int64Reader().vTableGet(buffer, rootOffset, 4, 0);
+          final typeParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGet(buffer, rootOffset, 12, '');
+          final object = Message(createdAtParam, textParam, senderParam,
+              id: idParam, type: typeParam);
+          obx_int.InternalToManyAccess.setRelInfo<Message>(object.memories,
+              store, obx_int.RelInfo<Message>.toMany(1, object.id));
+          return object;
         })
   };
 
@@ -511,4 +593,31 @@ class PluginResponse_ {
   /// See [PluginResponse.content].
   static final content =
       obx.QueryStringProperty<PluginResponse>(_entities[3].properties[2]);
+}
+
+/// [Message] entity fields to define ObjectBox queries.
+class Message_ {
+  /// See [Message.id].
+  static final id =
+      obx.QueryIntegerProperty<Message>(_entities[4].properties[0]);
+
+  /// See [Message.createdAt].
+  static final createdAt =
+      obx.QueryDateProperty<Message>(_entities[4].properties[1]);
+
+  /// See [Message.text].
+  static final text =
+      obx.QueryStringProperty<Message>(_entities[4].properties[2]);
+
+  /// See [Message.sender].
+  static final sender =
+      obx.QueryStringProperty<Message>(_entities[4].properties[3]);
+
+  /// See [Message.type].
+  static final type =
+      obx.QueryStringProperty<Message>(_entities[4].properties[4]);
+
+  /// see [Message.memories]
+  static final memories =
+      obx.QueryRelationToMany<Message, Memory>(_entities[4].relations[0]);
 }

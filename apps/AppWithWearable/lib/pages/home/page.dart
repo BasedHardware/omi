@@ -4,16 +4,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/message.dart';
 import 'package:friend_private/pages/capture/page.dart';
-import 'package:friend_private/pages/capture/widgets/transcript.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -25,23 +25,10 @@ import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/foreground.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:upgrader/upgrader.dart';
-import 'package:workmanager/workmanager.dart';
-
-@pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((task, inputData) async {
-    debugPrint("Native called background task: $task");
-    // createNotification(
-    //   title: 'Here is your action plan for tomorrow',
-    //   body: 'Check out your daily summary to see what you should do tomorrow.',
-    //   notificationId: 5,
-    // );
-    return Future.value(true);
-  });
-}
 
 class HomePageWrapper extends StatefulWidget {
   final dynamic btDevice;
@@ -63,23 +50,22 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
-  GlobalKey<TranscriptWidgetState> transcriptChildWidgetKey = GlobalKey();
+  GlobalKey<CapturePageState> capturePageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
-  final _upgrader = Upgrader(debugLogging: false, debugDisplayOnce: false);
+  final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
-    memories = (await MemoryProvider().getMemoriesOrdered(includeDiscarded: true)).reversed.toList();
+    memories = MemoryProvider().getMemoriesOrdered(includeDiscarded: true).reversed.toList();
     setState(() {});
   }
 
-  _loadMessages() async {
-    var msgs = SharedPreferencesUtil().chatMessages;
-    messages = msgs.isEmpty ? [Message(text: 'What would you like to search for?', type: 'ai', id: '1')] : msgs;
+  _refreshMessages() async {
+    messages = MessageProvider().getMessages();
     setState(() {});
   }
 
@@ -105,51 +91,31 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    await migrateMemoriesCategoriesAndEmojis();
-    await migrateMemoriesToObjectBox();
+    // await migrateMemoriesCategoriesAndEmojis();
+    // await migrateMemoriesToObjectBox();
     _initiateMemories();
-  }
-
-  _initDailySummaries() {
-    debugPrint('_initDailySummaries');
-    // Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-    var now = DateTime.now();
-    var target = DateTime(now.year, now.month, now.day, 20, 0);
-    if (now.isAfter(target)) target = target.add(const Duration(days: 1));
-    var delay = target.difference(now);
-    createNotification(
-      title: 'Don\'t forget to wear Friend today',
-      body: 'Wear your friend and capture your memories today.',
-      notificationId: 4,
-      isMorningNotification: true,
-    );
-    // Workmanager().registerPeriodicTask(
-    //   "com.friend-app-with-wearable.ios12.daily-summary",
-    //   "com.friend-app-with-wearable.ios12.daily-summary",
-    //   frequency: const Duration(seconds: 60), // not considered for iOS
-    //   initialDelay: const Duration(seconds: 0),
-    //   constraints: Constraints(networkType: NetworkType.connected),
-    // );
-    // debugPrint('_initDailySummaries registered');
   }
 
   @override
   void initState() {
     _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    SharedPreferencesUtil().onboardingCompleted = true;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
-    Upgrader.clearSavedSettings();
+    _refreshMessages();
 
     _initiateMemories();
-    _loadMessages();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    scanAndConnectDevice().then(_onConnected);
+    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+      scanAndConnectDevice().then(_onConnected);
+    }
+
     createNotification(
       title: 'Don\'t forget to wear Friend today',
       body: 'Wear your friend and capture your memories today.',
@@ -163,7 +129,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       isDailySummaryNotification: true,
     );
 
-    // _initDailySummaries();
     super.initState();
   }
 
@@ -172,11 +137,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
-          transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: false);
+          capturePageKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() {
             _device = null;
           });
-          InstabugLog.logWarn('Friend Device Disconnected');
+          InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
                 title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
@@ -202,7 +167,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     });
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    transcriptChildWidgetKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     _startForeground();
@@ -228,11 +193,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return WithForegroundTask(
-        child: UpgradeAlert(
+        child: MyUpgradeAlert(
       upgrader: _upgrader,
-      cupertinoButtonTextStyle: const TextStyle(color: Colors.white),
+      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         body: GestureDetector(
           onTap: () {
             FocusScope.of(context).unfocus();
@@ -252,28 +217,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
+                      key: capturePageKey,
                       device: _device,
                       refreshMemories: _initiateMemories,
-                      transcriptChildWidgetKey: transcriptChildWidgetKey,
-                      addMessage: (msg) {
-                        messages.add(msg);
-                        SharedPreferencesUtil().chatMessages = messages;
-                        setState(() {});
-                      },
-                      // batteryLevel: batteryLevel,
+                      refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
                       textFieldFocusNode: chatTextFieldFocusNode,
-                      memories: memories,
                       messages: messages,
-                      setMessages: (msgs) {
-                        setState(() => messages = msgs);
-                      },
-                      addMessage: (Message msg, bool stored) {
-                        messages.add(msg);
-                        if (stored) SharedPreferencesUtil().chatMessages = messages;
-                        setState(() {});
-                      },
+                      refreshMessages: _refreshMessages,
                     ),
                   ],
                 ),
@@ -358,43 +310,45 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.grey,
-                    width: 1,
+              _device != null
+                ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.grey,
+                      width: 1,
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: batteryLevel > 75
-                            ? const Color.fromARGB(255, 0, 255, 8)
-                            : batteryLevel > 20
-                                ? Colors.yellow.shade700
-                                : Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8.0),
-                    Text(
-                      '${batteryLevel.toString()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: batteryLevel > 75
+                                ? const Color.fromARGB(255, 0, 255, 8)
+                                : batteryLevel > 20
+                                    ? Colors.yellow.shade700
+                                    : Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Text(
+                          '${batteryLevel.toString()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    )
+                )
+                : const SizedBox.shrink(),
               // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
               IconButton(
                 // TODO: Show the button only if a device is connected
@@ -424,7 +378,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
                   if (language != SharedPreferencesUtil().recordingsLanguage ||
                       useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    transcriptChildWidgetKey.currentState?.resetState();
+                    capturePageKey.currentState?.resetState();
                   }
                 },
               )

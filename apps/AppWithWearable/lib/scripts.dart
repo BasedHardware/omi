@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
+import 'package:friend_private/backend/api_requests/api/llm.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
@@ -31,7 +32,7 @@ migrateMemoriesCategoriesAndEmojis() async {
   
   Here is the output schema:
   ```
-  {"properties": {"parsed": {"title": "Parsed", "type": "array", "items": {"\$ref": "#/definitions/StructuredMemory"}}}, "required": ["parsed"], "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "StructuredMemory": {"title": "StructuredMemory", "type": "object", "properties": {"category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "🧠", "type": "string"}}}}}
+  {"properties": {"parsed": {"title": "Parsed", "type": "array", "items": {"\$ref": "#/definitions/StructuredMemory"}}}, "required": ["parsed"], "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "philosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "StructuredMemory": {"title": "StructuredMemory", "type": "object", "properties": {"category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "🧠", "type": "string"}}}}}
   ```
   '''
       .replaceAll('  ', '')
@@ -57,7 +58,7 @@ migrateMemoriesToObjectBox() async {
   var memories = (await MemoryStorage.getAllMemories(includeDiscarded: true)).reversed.toList();
   // var mem = await MemoryProvider().getMemoriesOrdered(includeDiscarded: true);
   // mem.forEach((m)=> debugPrint('${m.id.toString()}: ${m.createdAt}: ${m.structured.target!.title}'));
-  MemoryProvider().removeAllMemories();
+  // MemoryProvider().removeAllMemories();
   List<Memory> memoriesOB = [];
   for (var memory in memories) {
     debugPrint('Migrating memory: ${memory.id}');
