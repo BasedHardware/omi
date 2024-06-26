@@ -155,6 +155,20 @@ Before starting, make sure you have the following installed:
   <img src="https://contrib.rocks/image?repo=BasedHardware/Friend" />
 </a>
 
+## Plug-in requirements 
+
+* No bullying, harassment, racial bias, or hate speech 
+* No spam, self-promotion or commercial activity ￼
+* No illegal content or activities
+* Follow copyright laws
+* Use appropriate language and avoid offensive content
+* No NSFW content. Results must be appropriate dor a xhild of 10 yrs ￼
+* Prompt should conform to the examples already in the repository 
+* Icons should be no greater than 500 pixels by 500 pixels  ￼￼
+
+
+
+
 ## Licensing
 
 Friend is available under MIT License
