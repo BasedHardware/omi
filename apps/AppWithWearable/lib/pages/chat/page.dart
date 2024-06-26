@@ -230,14 +230,19 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     }
     // TODO: I feel like this always return the same memories? Test more.
     // TODO: how to show all the memories used in the chat, maybe a expand toggle?
-    Future<List<List<String>>> memoriesByTopic = Future.wait(topics.map((e) async {
+    Future<List<List<String>>> memoriesByTopic = Future.wait(topics.map((topic) async {
       try {
-        List<double> vectorizedMessage = await getEmbeddingsFromInput(e);
+        List<double> vectorizedMessage = await getEmbeddingsFromInput(topic);
         List<String> memoriesId = await queryPineconeVectors(vectorizedMessage);
-        debugPrint('queryPineconeVectors memories retrieved for topic $e: ${memoriesId.length}');
+        debugPrint('queryPineconeVectors memories retrieved for topic $topic: ${memoriesId.length}');
         return memoriesId;
       } catch (e, stacktrace) {
-        CrashReporting.reportHandledCrash(e, stacktrace);
+        CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
+          'message_length': message.length.toString(),
+          'topics_count': topics.length.toString(),
+          // 'topic_failed': topic,
+          // TODO: would it be okay to the vectorizedMessage instead? so we can replicate without knowing the message
+        });
         return [];
       }
     }));
