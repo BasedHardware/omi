@@ -82,7 +82,7 @@ class MixpanelManager {
     track('Coach Advisor Feedback', properties: properties);
   }
 
-  Map<String, dynamic> _getMemoryEventProperties(Memory memory) {
+  Map<String, dynamic> getMemoryEventProperties(Memory memory) {
     var properties = _getTranscriptProperties(memory.transcript);
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
@@ -91,7 +91,7 @@ class MixpanelManager {
   }
 
   void memoryCreated(Memory memory) {
-    var properties = _getMemoryEventProperties(memory);
+    var properties = getMemoryEventProperties(memory);
     properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = memory.structured.target!.actionItems.length;
     properties['transcript_language'] = _preferences.recordingsLanguage;
@@ -99,15 +99,15 @@ class MixpanelManager {
   }
 
   void memoryListItemClicked(Memory memory, int idx) =>
-      track('Memory List Item Clicked', properties: _getMemoryEventProperties(memory));
+      track('Memory List Item Clicked', properties: getMemoryEventProperties(memory));
 
   void memoryShareButtonClick(Memory memory) =>
-      track('Memory Share Button Clicked', properties: _getMemoryEventProperties(memory));
+      track('Memory Share Button Clicked', properties: getMemoryEventProperties(memory));
 
-  void memoryDeleted(Memory memory) => track('Memory Deleted', properties: _getMemoryEventProperties(memory));
+  void memoryDeleted(Memory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
 
   void memoryEdited(Memory memory, {required String fieldEdited}) {
-    var properties = _getMemoryEventProperties(memory);
+    var properties = getMemoryEventProperties(memory);
     properties['field_edited'] = fieldEdited;
     track('Memory Edited', properties: properties);
   }
@@ -127,12 +127,12 @@ class MixpanelManager {
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
   void chatMessageMemoryClicked(Memory memory) =>
-      track('Chat Message Memory Clicked', properties: _getMemoryEventProperties(memory));
+      track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
 
   void addManualMemoryClicked() => track('Add Manual Memory Clicked');
 
   void manualMemoryCreated(Memory memory) =>
-      track('Manual Memory Created', properties: _getMemoryEventProperties(memory));
+      track('Manual Memory Created', properties: getMemoryEventProperties(memory));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     _mixpanel?.getPeople().setOnce('What the user does', whatDoYouDo);
@@ -140,7 +140,7 @@ class MixpanelManager {
     _mixpanel?.getPeople().setOnce('Age Range', ageRange);
   }
 
-  void reProcessMemory(Memory memory) => track('Re-process Memory', properties: _getMemoryEventProperties(memory));
+  void reProcessMemory(Memory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
   void backupsEnabled() => track('Backups Enabled');
 
@@ -167,7 +167,7 @@ class MixpanelManager {
   void joinDiscordClicked() => track('Join Discord Clicked');
 
   void copiedMemoryDetails(Memory memory, {String source = ''}) =>
-      track('Copied Memory Detail $source'.trim(), properties: _getMemoryEventProperties(memory));
+      track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 

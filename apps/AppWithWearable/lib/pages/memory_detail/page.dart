@@ -1,7 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -10,6 +9,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
@@ -64,7 +64,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           title: Row(
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -294,10 +294,26 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   }
 
   _reProcessMemory(StateSetter setModalState) async {
+    debugPrint('_reProcessMemory');
     setModalState(() => loadingReprocessMemory = true);
-    MemoryStructured structured =
-        await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
+    MemoryStructured structured;
+    try {
+      structured = await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
+    } catch (err, stacktrace) {
+      var memoryReporting = MixpanelManager().getMemoryEventProperties(widget.memory);
+      CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
+        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+        'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error while processing memory. Please try again later.'),
+        ),
+      );
+      setModalState(() => loadingReprocessMemory = false);
+      return;
+    }
     Structured current = widget.memory.structured.target!;
     current.title = structured.title;
     current.overview = structured.overview;
@@ -305,12 +321,16 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     current.category = structured.category;
     current.actionItems.clear();
     current.actionItems.addAll(structured.actionItems.map<ActionItem>((e) => ActionItem(e)).toList());
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
     widget.memory.structured.target = current;
+
+    widget.memory.pluginsResponse.clear();
+    widget.memory.pluginsResponse
+        .addAll(structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e)).toList());
+
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
-
+    debugPrint('MemoryProvider().updateMemory');
     getEmbeddingsFromInput(structured.toString()).then((vector) {
       createPineconeVector(widget.memory.id.toString(), vector);
     });
@@ -325,13 +345,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
       ),
     );
+    debugPrint('Snackbar');
     setModalState(() => loadingReprocessMemory = false);
-    setState(() {});
-    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 
-  void _showOptionsBottomSheet() {
-    showModalBottomSheet(
+  void _showOptionsBottomSheet() async {
+    var result = await showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
@@ -410,6 +430,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 ),
               );
             }));
+    if (result) setState(() {});
+    debugPrint('showBottomSheet result: $result');
   }
 }
 
