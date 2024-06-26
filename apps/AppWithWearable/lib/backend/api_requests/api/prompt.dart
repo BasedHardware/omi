@@ -156,24 +156,25 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 // ------
 
-Future<String?> determineRequiresContext(List<Message> messages) async {
+Future<List<String>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
         Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
-        - If it does, provide the topic (1 or 2 words, e.g. "Startups" "Funding" "Business Meetings") that is going to be used to retrieve more context, in the field "query". Leave empty if not context is needed.
+        - If it does, provide a list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
         
         Conversation:
         ${messages.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
         As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
         the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
-
+        
         Here is the output schema:
         ```
-        {"properties": {"requires_context": {"title": "Requires context", \"description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "bool"}, "query": {"title": "Query", "description": "If context is required, the main topic to retrieve context from", "default": "", "type": "string"}, }}
+        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}}}
         ```
         '''
       .replaceAll('        ', '');
@@ -182,9 +183,17 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
     {"role": "user", "content": message}
   ]);
   debugPrint('determineRequiresContext response: $response');
+  var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
-    return jsonDecode(response.toString().replaceAll('```', '').replaceAll('json', '').trim())['query'];
+    var data = jsonDecode(cleanedResponse);
+    return data['topics'].map<String>((e) => e.toString()).toList();
   } catch (e) {
+    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.critical, userAttributes: {
+      'response': cleanedResponse,
+      'message_length': message.length.toString(),
+      'message_words': message.split(' ').length.toString(),
+    });
+    debugPrint('Error determining requires context: $e');
     return null;
   }
 }
