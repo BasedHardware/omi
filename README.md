@@ -39,7 +39,6 @@ We welcome contributions from the community! If you are interested in improving 
 
 We also want to give back to the community - and therefore, some of the tasks are paid bounties 💰! You can check which ones by the "Paid Bounty" label, [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
 
-
 ## How it works
 
 ```mermaid
@@ -101,43 +100,48 @@ Before starting, make sure you have the following installed:
 
 1. **Upgrade Flutter**:
    Before proceeding, make sure your Flutter SDK is up to date:
-    ```
-    flutter upgrade
-    ```
+
+   ```
+   flutter upgrade
+   ```
 
 2. **Get Flutter Dependencies**:
    From within `apps/AppWithWearable`, install flutter packages:
-    ```
-    flutter pub get
-    ```
+
+   ```
+   flutter pub get
+   ```
 
 3. **Install iOS Pods**:
    Navigate to the iOS directory and install the CocoaPods dependencies:
-    ```
-    cd ios
-    pod install
-    pod repo update
-    ```
+
+   ```
+   cd ios
+   pod install
+   pod repo update
+   ```
 
 4. **Environment Configuration**:
    Create `.env` using template `.env.template`
-    ```
-    cd ..
-    cat .env.template > .env
-    ```
+
+   ```
+   cd ..
+   cat .env.template > .env
+   ```
 
 5. **API Keys**:
    Add your API keys to the `.env` file. (Sentry is not needed)
 
 6. **Run Build Runner**:
    Generate necessary files with Build Runner:
-    ```
-    dart run build_runner build
-    ```
+
+   ```
+   dart run build_runner build
+   ```
 
 7. **Run the App**:
-    - Select your target device in Xcode or Android Studio.
-    - Run the app.
+   - Select your target device in Xcode or Android Studio.
+   - Run the app.
 
 [Next Step: Buying Guide →](https://docs.basedhardware.com/assembly/Buying_Guide/)
 
@@ -149,25 +153,22 @@ Before starting, make sure you have the following installed:
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
 - [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
+## Plug-in requirements
+
+- No bullying, harassment, racial bias, or hate speech
+- No spam, self-promotion or commercial activity ￼
+- No illegal content or activities
+- Follow copyright laws
+- Use appropriate language and avoid offensive content
+- No NSFW content. Results must be appropriate for a child
+- Prompt should conform to the examples already in the repository
+- Icons should be no greater than 500 pixels by 500 pixels ￼￼
+
 ## Made by the Community, with -❤️-:
 
 <a href="https://github.com/BasedHardware/Friend/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=BasedHardware/Friend" />
 </a>
-
-## Plug-in requirements 
-
-* No bullying, harassment, racial bias, or hate speech 
-* No spam, self-promotion or commercial activity ￼
-* No illegal content or activities
-* Follow copyright laws
-* Use appropriate language and avoid offensive content
-* No NSFW content. Results must be appropriate for a child 
-* Prompt should conform to the examples already in the repository 
-* Icons should be no greater than 500 pixels by 500 pixels  ￼￼
-
-
-
 
 ## Licensing
 
