@@ -102,5 +102,13 @@
     "description": "Provides insight into conversation sentiment",
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/transcript-improver.png"
-  }
+  },
+    {
+    "id": "language-coach",
+    "name": "Speek more clearly and correctly",
+    "author": "Bruce Bookman",
+    "description": "Provides feedback on the language used to assist with speaking better",
+    "prompt": "You will be given a conversation transcript. As an expert linguist, provide feedback on how the speakers can improve their speech.  Use 3 specific examples from the transcript and propose modifications to improve speech quality.  Only focus on the spoken words and not the punctuation",
+    "image": "/assets/plugin_images/language-coach.png"
+  },
 ]
