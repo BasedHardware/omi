@@ -16,13 +16,9 @@
 		42127D852C2839B60005AB40 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42127D842C2839B60005AB40 /* NotificationService.swift */; };
 		42127D892C2839B60005AB40 /* OneSignalNotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 42127D822C2839B60005AB40 /* OneSignalNotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		42127D972C283C250005AB40 /* OneSignalCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D962C283C250005AB40 /* OneSignalCore.xcframework */; };
-		42127D982C283C250005AB40 /* OneSignalCore.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D962C283C250005AB40 /* OneSignalCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		42127D9B2C283C310005AB40 /* OneSignalExtension.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */; };
-		42127D9C2C283C310005AB40 /* OneSignalExtension.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		42127D9E2C283C400005AB40 /* OneSignalOSCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9D2C283C400005AB40 /* OneSignalOSCore.xcframework */; };
-		42127D9F2C283C400005AB40 /* OneSignalOSCore.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9D2C283C400005AB40 /* OneSignalOSCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		42127DA12C283C4E0005AB40 /* OneSignalOutcomes.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127DA02C283C4E0005AB40 /* OneSignalOutcomes.xcframework */; };
-		42127DA22C283C4E0005AB40 /* OneSignalOutcomes.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 42127DA02C283C4E0005AB40 /* OneSignalOutcomes.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -55,20 +51,6 @@
 				42127D892C2839B60005AB40 /* OneSignalNotificationServiceExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		42127D992C283C250005AB40 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				42127D9C2C283C310005AB40 /* OneSignalExtension.xcframework in Embed Frameworks */,
-				42127D9F2C283C400005AB40 /* OneSignalOSCore.xcframework in Embed Frameworks */,
-				42127D982C283C250005AB40 /* OneSignalCore.xcframework in Embed Frameworks */,
-				42127DA22C283C4E0005AB40 /* OneSignalOutcomes.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
@@ -269,7 +251,6 @@
 				42127D7E2C2839B60005AB40 /* Sources */,
 				42127D7F2C2839B60005AB40 /* Frameworks */,
 				42127D802C2839B60005AB40 /* Resources */,
-				42127D992C283C250005AB40 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1477,7 +1458,7 @@
 					"$(PROJECT_DIR)/Flutter",
 				);
 				MTL_ENABLE_DEBUG_INFO = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.dev";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.develop";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -1548,7 +1529,7 @@
 					"$(PROJECT_DIR)/Flutter",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.dev";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.develop";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -1695,7 +1676,7 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.dev";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.develop";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

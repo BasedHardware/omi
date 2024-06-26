@@ -9,6 +9,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
@@ -37,6 +38,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   void initState() {
+    // devModeWebhookCall(widget.memory);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -55,7 +57,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(structured.actionItems.toString());
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -294,9 +295,24 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   _reProcessMemory(StateSetter setModalState) async {
     setModalState(() => loadingReprocessMemory = true);
-    MemoryStructured structured =
-        await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
+    MemoryStructured structured;
+    try {
+      structured = await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
+    } catch (err, stacktrace) {
+      var memoryReporting = MixpanelManager().getMemoryEventProperties(widget.memory);
+      CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
+        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+        'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error while processing memory. Please try again later.'),
+        ),
+      );
+      setModalState(() => loadingReprocessMemory = false);
+      return;
+    }
     Structured current = widget.memory.structured.target!;
     current.title = structured.title;
     current.overview = structured.overview;
@@ -304,8 +320,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     current.category = structured.category;
     current.actionItems.clear();
     current.actionItems.addAll(structured.actionItems.map<ActionItem>((e) => ActionItem(e)).toList());
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
     widget.memory.structured.target = current;
+
+    widget.memory.pluginsResponse.clear();
+    widget.memory.pluginsResponse
+        .addAll(structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e)).toList());
+
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
@@ -391,7 +411,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                               ).then((value) => setState(() {}));
                             },
                     ),
-                    widget.memory.discarded
+                    !widget.memory.discarded
                         ? ListTile(
                             title: const Text('Process again and ignore discard.'),
                             leading: loadingReprocessMemory
