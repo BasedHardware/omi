@@ -99,8 +99,16 @@
     "id": "sentiment-analyzer",
     "name": "Sentiment Statistics",
     "author": "Bruce Bookman",
-    "description": "Provides insight into conversation sentiment",
+    "description": "Provides insight into conversation sentiment",  
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/transcript-improver.png"
+  },
+    {
+    "id": "vocabulary-expander",
+    "name": "Vocabulary Expander",
+    "author": "Bruce Bookman",
+    "description": "What was said, but now with expanded vocabulary",
+    "prompt": "You will be given a conversation transcript. The speakers wish to learn more diverse vocabulary. As a linguist, you will choose 3 sentences and suggest alternative vocabulary.  Include an explanation of your suggestion and a short description and short definition of the words you suggested",
+     "image": "/assets/plugin_images/vocabulary-expander.png"
   }
 ]
