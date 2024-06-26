@@ -169,8 +169,10 @@ class PluginResponse {
   @Id()
   int id = 0;
 
+  String? pluginId;
   String content;
+
   final memory = ToOne<Memory>();
 
-  PluginResponse(this.content);
+  PluginResponse(this.content, {this.id = 0, this.pluginId});
 }
