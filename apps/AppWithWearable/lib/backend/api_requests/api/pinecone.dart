@@ -80,7 +80,7 @@ Future<List<String>> queryPineconeVectors(List<double>? vectorList, {int? startT
     'filter': filter,
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'query', body: body);
-  debugPrint(responseBody.toString());
+  // debugPrint(responseBody.toString());
   return (responseBody['matches'])?.map<String>((e) => e['metadata']['memory_id'].toString()).toList() ?? [];
 }
 

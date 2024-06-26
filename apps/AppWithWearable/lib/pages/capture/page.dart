@@ -129,8 +129,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
-    // TODO: is this trigger when connected?
-    debugPrint('resetState restartBytesProcessing: $restartBytesProcessing btDevice: $btDevice');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
@@ -145,7 +143,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     File? file;
     try {
       file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
-      await uploadFile(file);
+      uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
       context,
