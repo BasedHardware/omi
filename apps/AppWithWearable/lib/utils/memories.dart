@@ -89,7 +89,7 @@ Future<Memory?> memoryCreationBlock(
 
   if (structuredMemory.title.isEmpty) {
     var created = await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
-    if (!retrievedFromCache) {
+    if (!retrievedFromCache && !failed) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
@@ -103,7 +103,7 @@ Future<Memory?> memoryCreationBlock(
   } else {
     Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
     debugPrint('Memory created: ${memory.id}');
-    if (!retrievedFromCache && !failed) {
+    if (!retrievedFromCache) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
