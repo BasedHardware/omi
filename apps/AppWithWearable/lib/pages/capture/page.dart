@@ -129,8 +129,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
-    // TODO: is this trigger when connected?
-    debugPrint('resetState restartBytesProcessing: $restartBytesProcessing btDevice: $btDevice');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
