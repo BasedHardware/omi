@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -61,7 +63,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                     ),
               widget.memory.discarded
                   ? Text(
-                      widget.memory.getTranscript(maxCount: 100),
+                      utf8.decode(widget.memory.getTranscript(maxCount: 100).codeUnits),
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                     )
                   : const SizedBox(height: 8),
