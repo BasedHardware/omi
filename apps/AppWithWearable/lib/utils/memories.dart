@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 // Perform actions periodically
-Future<Memory?> processTranscriptContent(BuildContext context, String content, String? recordingFilePath,
-    {bool retrievedFromCache = false, DateTime? startedAt, DateTime? finishedAt}) async {
+Future<Memory?> processTranscriptContent(
+  BuildContext context,
+  String content,
+  String? recordingFilePath, {
+  bool retrievedFromCache = false,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+}) async {
   if (content.isNotEmpty) {
-    return await memoryCreationBlock(
+    Memory? memory = await memoryCreationBlock(
       context,
       content,
       recordingFilePath,
@@ -19,8 +27,33 @@ Future<Memory?> processTranscriptContent(BuildContext context, String content, S
       startedAt,
       finishedAt,
     );
+    devModeWebhookCall(memory);
+    return memory;
   }
   return null;
+}
+
+Future<MemoryStructured?> _retrieveStructure(
+  BuildContext context,
+  String transcript,
+  bool retrievedFromCache, {
+  bool ignoreCache = false,
+}) async {
+  MemoryStructured structuredMemory;
+  try {
+    structuredMemory = await generateTitleAndSummaryForMemory(transcript, [], ignoreCache: ignoreCache);
+  } catch (e, stacktrace) {
+    debugPrint('Error: $e');
+    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
+      'transcript_length': transcript.length.toString(),
+      'transcript_words': transcript.split(' ').length.toString(),
+      'language': SharedPreferencesUtil().recordingsLanguage,
+      'developer_mode_enabled': SharedPreferencesUtil().devModeEnabled.toString(),
+      'dev_mode_has_api_key': (SharedPreferencesUtil().openAIApiKey != '').toString(),
+    });
+    return null;
+  }
+  return structuredMemory;
 }
 
 // Process the creation of memory records
@@ -32,18 +65,25 @@ Future<Memory?> memoryCreationBlock(
   DateTime? startedAt,
   DateTime? finishedAt,
 ) async {
-  MemoryStructured structuredMemory;
-  try {
-    structuredMemory = await generateTitleAndSummaryForMemory(transcript, []); // recentMemories
-  } catch (e) {
-    debugPrint('Error: $e');
-    InstabugLog.logError(e.toString());
-    if (!retrievedFromCache) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('There was an error creating your memory, please check your open AI API keys.')));
+  MemoryStructured? structuredMemory = await _retrieveStructure(context, transcript, retrievedFromCache);
+  bool failed = false;
+  if (structuredMemory == null) {
+    structuredMemory = await _retrieveStructure(context, transcript, retrievedFromCache, ignoreCache: true);
+    if (structuredMemory == null) {
+      failed = true;
+      structuredMemory = MemoryStructured(actionItems: [], pluginsResponse: [], category: 'failed', emoji: '😢');
+      if (!retrievedFromCache) {
+        InstabugLog.logError('Unable to create memory structure.');
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Unexpected error creating your memory. Please check your discarded memories.',
+            style: TextStyle(color: Colors.white),
+          ),
+          duration: Duration(seconds: 4),
+        ));
+      }
     }
-    return null;
   }
   debugPrint('Structured Memory: $structuredMemory');
 
@@ -63,7 +103,7 @@ Future<Memory?> memoryCreationBlock(
   } else {
     Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
     debugPrint('Memory created: ${memory.id}');
-    if (!retrievedFromCache) {
+    if (!retrievedFromCache && !failed) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),

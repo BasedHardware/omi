@@ -123,38 +123,33 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   }
 
   _devicesList() {
-    var screenSize = MediaQuery.of(context).size;
     return (widget.deviceList.mapIndexed((index, d) {
       final device = widget.deviceList[index];
-      if (device == null) return Container(); // If device is null, return an empty container
+      if (device == null) return Container();
+      bool isConnecting = _connectingToDeviceId == device.id;
 
-      bool isConnecting = _connectingToDeviceId == device.id; // Check if it's the device being connected to
-
-      return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          padding: EdgeInsets.symmetric(horizontal: screenSize.width * 0, vertical: 0),
-          decoration: BoxDecoration(
-            border: const GradientBoxBorder(
-              gradient: LinearGradient(colors: [
-                Color.fromARGB(127, 208, 208, 208),
-                Color.fromARGB(127, 188, 99, 121),
-                Color.fromARGB(127, 86, 101, 182),
-                Color.fromARGB(127, 126, 190, 236)
-              ]),
-              width: 1,
+      return GestureDetector(
+        onTap: !_isClicked ? () => handleTap(device) : null,
+        child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              border: const GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(12),
             ),
-            borderRadius: BorderRadius.circular(12),
-            color: const Color.fromARGB(0, 0, 0, 0),
-          ),
-          child: GestureDetector(
-            onTap: !_isClicked ? () => handleTap(device) : null,
             child: Row(
               children: [
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Stack(
-                      alignment: Alignment.center,
                       children: [
                         Align(
                           alignment: Alignment.center,
@@ -186,32 +181,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                   ),
                 ),
               ],
-            ),
-          )
-          // child: ListTile(
-          //   title: Text(
-          //     device.id.split('-').last.substring(0, 6),
-          //     textAlign: TextAlign.center,
-          //     style: const TextStyle(
-          //       fontWeight: FontWeight.w500,
-          //       fontSize: 18,
-          //       color: Color(0xCCFFFFFF),
-          //     ),
-          //   ),
-          //   trailing: isConnecting
-          //       ? Container(
-          //           padding: const EdgeInsets.all(8.0),
-          //           height: 24,
-          //           width: 24,
-          //           child: const CircularProgressIndicator(
-          //             strokeWidth: 3.0,
-          //             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-          //           ),
-          //         )
-          //       : null, // Show loading indicator if connecting
-          //   onTap: !_isClicked ? () => handleTap(device) : null,
-          // ),
-          );
+            )),
+      );
     }).toList());
   }
 }

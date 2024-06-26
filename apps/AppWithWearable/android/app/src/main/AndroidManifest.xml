@@ -55,6 +55,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+
     <!-- Add android:stopWithTask option only when necessary. -->
     <application
         android:icon="@mipmap/ic_launcher"
@@ -67,6 +68,11 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice"
             android:stopWithTask="true" />
+
+        <service
+            android:name=".NotificationOnKillService"
+            android:enabled="true"
+            android:exported="false"/>
 
         <activity
             android:name=".MainActivity"

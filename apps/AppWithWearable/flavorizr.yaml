@@ -17,5 +17,5 @@ flavors:
       icon: "assets/images/app_launcher_icon.png"
       applicationId: "com.friend.ios.dev"
     ios:
-      bundleId: "com.friend-app-with-wearable.ios12.dev"
+      bundleId: "com.friend-app-with-wearable.ios12.develop"
       icon: "assets/images/app_launcher_icon.png"
