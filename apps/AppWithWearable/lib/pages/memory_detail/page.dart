@@ -62,6 +62,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    // TODO: include a way to trigger specific plugins
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -196,11 +197,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   : const SizedBox.shrink(),
               ...structured.actionItems.map<Widget>((item) {
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
+                  padding: const EdgeInsets.only(top: 10),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child:Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
@@ -481,7 +485,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 ),
               );
             }));
-    if (result) setState(() {});
+    if (result == true) setState(() {});
     debugPrint('showBottomSheet result: $result');
   }
 }
