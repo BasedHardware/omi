@@ -13,6 +13,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   String transcript,
   List<Memory> previousMemories, {
   bool forceProcess = false,
+  bool ignoreCache = false,
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
@@ -50,7 +51,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .replaceAll('    ', '')
           .trim();
   debugPrint(prompt);
-  var structuredResponse = extractJson(await executeGptPrompt(prompt));
+  var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
   var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
   if (structured.title.isEmpty) return structured;
   structured.pluginsResponse = await executePlugins(transcript);
