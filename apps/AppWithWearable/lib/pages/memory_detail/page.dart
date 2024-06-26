@@ -64,7 +64,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           title: Row(
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -294,6 +294,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   }
 
   _reProcessMemory(StateSetter setModalState) async {
+    debugPrint('_reProcessMemory');
     setModalState(() => loadingReprocessMemory = true);
     MemoryStructured structured;
     try {
@@ -329,7 +330,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
-
+    debugPrint('MemoryProvider().updateMemory');
     getEmbeddingsFromInput(structured.toString()).then((vector) {
       createPineconeVector(widget.memory.id.toString(), vector);
     });
@@ -344,13 +345,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
       ),
     );
+    debugPrint('Snackbar');
     setModalState(() => loadingReprocessMemory = false);
-    setState(() {});
-    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 
-  void _showOptionsBottomSheet() {
-    showModalBottomSheet(
+  void _showOptionsBottomSheet() async {
+    var result = await showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
@@ -411,7 +412,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                               ).then((value) => setState(() {}));
                             },
                     ),
-                    !widget.memory.discarded
+                    widget.memory.discarded
                         ? ListTile(
                             title: const Text('Process again and ignore discard.'),
                             leading: loadingReprocessMemory
@@ -429,6 +430,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 ),
               );
             }));
+    if (result) setState(() {});
+    debugPrint('showBottomSheet result: $result');
   }
 }
 
