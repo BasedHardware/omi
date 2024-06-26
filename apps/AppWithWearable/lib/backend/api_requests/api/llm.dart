@@ -39,13 +39,13 @@ Future<dynamic> gptApiCall({
       isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
 }
 
-Future<String> executeGptPrompt(String? prompt) async {
+Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
-  if (prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}
