@@ -324,8 +324,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     widget.memory.structured.target = current;
 
     widget.memory.pluginsResponse.clear();
-    widget.memory.pluginsResponse
-        .addAll(structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e)).toList());
+    widget.memory.pluginsResponse.addAll(
+      structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
+    );
 
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
