@@ -162,7 +162,7 @@ Before starting, make sure you have the following installed:
 * No illegal content or activities
 * Follow copyright laws
 * Use appropriate language and avoid offensive content
-* No NSFW content. Results must be appropriate dor a xhild of 10 yrs ￼
+* No NSFW content. Results must be appropriate for a child 
 * Prompt should conform to the examples already in the repository 
 * Icons should be no greater than 500 pixels by 500 pixels  ￼￼
 
