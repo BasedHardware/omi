@@ -101,7 +101,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
   Future<List<Tuple2<Plugin, String>>> allPluginResponses = Future.wait(pluginPrompts);
   try {
     var responses = await allPluginResponses;
-    return responses.where((e) => e.item2.isEmpty).toList();
+    return responses.where((e) => e.item2.length > 5).toList();
   } catch (e, stacktrace) {
     CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
       'plugins_count': pluginsEnabled.length.toString(),
