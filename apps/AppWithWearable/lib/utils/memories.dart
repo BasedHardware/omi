@@ -155,10 +155,10 @@ Future<Memory> finalizeMemoryRecord(
       recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
   for (var r in structuredMemory.pluginsResponse) {
-    memory.pluginsResponse.add(PluginResponse(r));
+    memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
   }
 
-  await MemoryProvider().saveMemory(memory);
+  MemoryProvider().saveMemory(memory);
 
   getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
     createPineconeVector(memory.id.toString(), vector);
