@@ -29,7 +29,9 @@ Future<void> initializeNotifications() async {
             ledColor: Colors.white)
       ],
       // Channel groups are only visual and are not required
-      channelGroups: [NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')],
+      channelGroups: [
+        NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')
+      ],
       debug: false);
   debugPrint('initializeNotifications: $initialized');
   NotifyOnKill.register();
@@ -137,7 +139,8 @@ class NotificationUtil {
     if (receivePort != null) {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
-      print('onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
+      print(
+          'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
