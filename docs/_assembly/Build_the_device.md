@@ -6,7 +6,7 @@ nav_order: 2
 
 # Building the device
 
-If you received an unassembled Friend or want build one yourself, follow the steps below:
+If you received an unassembled Friend or want to build one yourself, follow the steps below:
 
 **Step 0.** Components
 
@@ -14,7 +14,7 @@ Ensure you've purchased all required components from the [buying guide] (https:/
 
 <img src="/images/latest_assembly/components.png" alt="components" width="300">
 
-Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl).
+Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs/Latest%20design).
 
 If you don't have access to a 3D printer, send the file to a 3D printing service or check https://makerspace.com/ for 3D printing spaces.
 
@@ -27,7 +27,7 @@ If you don't have access to a 3D printer, send the file to a 3D printing service
 
 <img src="/images/latest_assembly/2.png" alt="wire" width="300">
 
-The wire stripper should have multiple notches labeled with AWG sizes. For this project, we recommend using *28 AWG*.
+The wire stripper should have multiple notches labelled with AWG sizes. For this project, we recommend using *28 AWG*.
 
 **Step 3.** Follow the soldering diagram to connect the battery and board.
 
