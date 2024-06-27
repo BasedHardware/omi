@@ -6,8 +6,10 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/utils/string_utils.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:tuple/tuple.dart';
 
 Future<MemoryStructured> generateTitleAndSummaryForMemory(
   String transcript,
@@ -19,6 +21,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
+  // TODO: if conversation words > 1000 or smth, should never discard?
 
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
@@ -58,13 +61,13 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   return structured;
 }
 
-Future<List<String>> executePlugins(String transcript) async {
+Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
   final pluginsList = SharedPreferencesUtil().pluginsList;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
   final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
   // TODO: include memory details parsed already as extra context?
   // TODO: improve plugin result, include result + id to map it to.
-  List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
+  List<Future<Tuple2<Plugin, String>>> pluginPrompts = enabledPlugins.map((plugin) async {
     try {
       String response = await executeGptPrompt('''
         Your are an AI with the following characteristics:
@@ -83,7 +86,7 @@ Future<List<String>> executePlugins(String transcript) async {
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim());
-      return response;
+      return Tuple2(plugin, response);
     } catch (e, stacktrace) {
       CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'plugin': plugin.id,
@@ -91,14 +94,14 @@ Future<List<String>> executePlugins(String transcript) async {
         'transcript_length': transcript.length.toString(),
       });
       debugPrint('Error executing plugin ${plugin.id}');
-      return '';
+      return Tuple2(plugin, '');
     }
   }).toList();
 
-  Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
+  Future<List<Tuple2<Plugin, String>>> allPluginResponses = Future.wait(pluginPrompts);
   try {
     var responses = await allPluginResponses;
-    return responses.where((e) => e.isNotEmpty).toList();
+    return responses.where((e) => e.item2.length > 5).toList();
   } catch (e, stacktrace) {
     CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
       'plugins_count': pluginsEnabled.length.toString(),
