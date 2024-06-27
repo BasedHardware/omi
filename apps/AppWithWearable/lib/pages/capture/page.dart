@@ -140,7 +140,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
-      // TODO: could trim last 2 minutes before doing this
+      // TODO: could trim last 2 minutes before doing this ~ Cant, should be done with VAD, as device disconnect, would not upload it well.
       file = (await audioStorage!.createWavFile()).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
