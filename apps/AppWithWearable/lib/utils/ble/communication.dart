@@ -95,7 +95,6 @@ Future<StreamSubscription?> getBleAudioBytesListener(
     var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
     var codecId = await codecCharacteristic?.read();
-    debugPrint('codecCharacteristic: ${await codecCharacteristic?.read()}');
     if (canNotify != null && codecCharacteristic != null) {
       String codec = codecId!.single == 1 ? 'pcm-8' : 'opus';
       debugPrint('codec is $codec');
@@ -111,4 +110,32 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   }
   debugPrint('Desired audio characteristic not found');
   return null;
+}
+
+enum BleAudioCodec {
+  pcm8,
+  opus,
+}
+
+Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
+  final device = BluetoothDevice.fromId(deviceId);
+  final services = await device.discoverServices();
+  final bytesService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
+
+  if (bytesService != null) {
+    var canNotify = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
+    var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+    var codecId = await codecCharacteristic?.read();
+    debugPrint('codecCharacteristic: ${await codecCharacteristic?.read()}');
+    if (canNotify != null && codecCharacteristic != null) {
+      String codec = codecId!.single == 1 ? 'pcm-8' : 'opus';
+      debugPrint('codec is $codec');
+      return codec == 'pcm-8' ? BleAudioCodec.pcm8 : BleAudioCodec.opus;
+    }
+  }
+  debugPrint('Desired audio characteristic not found');
+  return BleAudioCodec.pcm8; // defaults to pcm8, is this incorrect?
 }

@@ -79,10 +79,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // VadUtil vad = VadUtil();
     // await vad.init();
     // Variables to maintain state
-    WavBytesUtil2 wavBytesUtil2 = WavBytesUtil2();
-    WavBytesUtil2 toProcessBytes2 = WavBytesUtil2();
+    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+
+    WavBytesUtil2 wavBytesUtil2 = WavBytesUtil2(codec: codec);
+    WavBytesUtil2 toProcessBytes2 = WavBytesUtil2(codec: codec);
     StreamSubscription? stream =
-    await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
+        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
       wavBytesUtil2.storeBytes(value);
@@ -93,11 +95,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
         try {
           await _processFileToTranscript(data.item1);
+          // uploadFile(data.item1);
         } catch (e, stacktrace) {
-          CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.warning, userAttributes: {
-            'seconds': (data.item2.length ~/ 100).toString()
-          });
-          // TODO: is not catching this never? need to make sure if it's working
+          CrashReporting.reportHandledCrash(e, stacktrace,
+              level: NonFatalExceptionLevel.warning,
+              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
           debugPrint('Error: e.toString() ${e.toString()}');
           toProcessBytes2.insertAudioBytes(data.item2);
         }
@@ -138,6 +140,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
+      // TODO: could trim last 2 minutes before doing this
       file = (await audioStorage!.createWavFile()).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
