@@ -85,16 +85,21 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   required void Function(List<int>) onAudioBytesReceived,
 }) async {
   final device = BluetoothDevice.fromId(deviceId);
-  // await device.connect();
   final services = await device.discoverServices();
   final bytesService = services
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
 
   if (bytesService != null) {
-    var canNotify = bytesService.characteristics.firstWhereOrNull((characteristic) =>
-        characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214' ||
-        characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
-    if (canNotify != null) {
+    var canNotify = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
+    var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+    var codecId = await codecCharacteristic?.read();
+    debugPrint('codecCharacteristic: ${await codecCharacteristic?.read()}');
+    if (canNotify != null && codecCharacteristic != null) {
+      String codec = codecId!.single == 1 ? 'pcm-8' : 'opus';
+      debugPrint('codec is $codec');
+      // PCM is codec
       await canNotify.setNotifyValue(true);
       debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
       var listener = canNotify.lastValueStream.listen((value) {
