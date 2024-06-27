@@ -110,5 +110,13 @@
     "description": "Summarizes conversations into key points",
     "prompt": "You will be given a conversation transcript. Your task is to summarize the conversation into key points. Identify the main topics discussed and provide a concise summary of the conversation. Ensure that the summary captures the essence of the conversation and highlights the most important points. If the conversation is extremely long, focus on the most relevant parts.",
     "image": "/assets/plugin_images/conversation-summarizer.png"
+  },
+    {
+    "id": "ethics-analysis",
+    "name": "Conversation Summarizer",
+    "author": "Bruce Bookman",
+    "description": "Provides feedback on the ethical contents of the conversation",
+    "prompt": "You will be given a conversation transcript. Your task is to see if the speakers have violated ethical rules.  Provide 3 bullet points that include an explanation of the violation and the original transcript that exemplifies the violation the ethical slip",
+    "image": "/assets/plugin_images/ethics-analysis.png"
   }
 ]
