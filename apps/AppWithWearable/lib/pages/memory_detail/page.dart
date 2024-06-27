@@ -202,9 +202,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child:Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)
-                      ),
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)),
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
