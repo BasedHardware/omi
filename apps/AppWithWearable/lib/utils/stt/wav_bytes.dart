@@ -124,9 +124,6 @@ class WavBytesUtil2 {
   int lost = 0;
   final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
 
-  // TODO: create wav file differently if using opus
-  // TODO: try pcm again but 16k sample rate
-
   void storeBytes(value) {
     int index = value[0] + (value[1] << 8);
     int internal = value[2];
