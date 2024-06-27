@@ -102,5 +102,13 @@
     "description": "Provides insight into conversation sentiment",
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/transcript-improver.png"
+  },
+    {
+    "id": "improve-interpersonal-realations",
+    "name": "Improve interpersonal realizations",
+    "author": "Bruce Bookman",
+    "description": "Suggests how to improve interpersonal interactions",
+    "prompt": "You will be given a conversation transcript. You specialize in effective communication with emotional intelligence. Give feedback that includes the original statement and a re-writing of that part of the conversation to improve the personal interactions",
+    "image": "/assets/plugin_images/improve-interpersonal-realations.png"
   }
 ]
