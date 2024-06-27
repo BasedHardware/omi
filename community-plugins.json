@@ -102,5 +102,13 @@
     "description": "Provides insight into conversation sentiment",
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/transcript-improver.png"
+  },
+    {
+    "id": "fact-checker",
+    "name": "Fact Checker",
+    "author": "Bruce Bookman",
+    "description": "Helps improve ideas and arguements by providing facts and logical analysis",
+    "prompt": "You will be given a conversation transcript. As someone dedicated to logic, critical thinking and scientific reasoning, you will look for instances where the speakers make statements that may not align with fadctual evidence or the scientific consensus.  It may be the case that no error in fact is detected, for example personal interactions, brainstorming, and casual chat. When that is true, write one sentence explaining you found nothing to provide feeback for.  Otherwise, choose beteweem  and 3 examples and give short feedback about the logic and facts",
+    "image": "/assets/plugin_images/fact-checker.png"
   }
 ]
