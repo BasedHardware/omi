@@ -87,5 +87,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+    	<string>dev.flutter.background.refresh</string>
+	</array>
 </dict>
 </plist>

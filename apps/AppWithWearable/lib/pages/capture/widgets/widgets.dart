@@ -124,7 +124,7 @@ _getNoFriendConnectedYet(BuildContext context) {
             onPressed: () async {
               Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
               MixpanelManager().connectFriendClicked();
-              },
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shape: RoundedRectangleBorder(
@@ -282,7 +282,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
-    visible: false,
+    visible: true,
     child: Padding(
       padding: const EdgeInsets.only(bottom: 128),
       child: Align(
