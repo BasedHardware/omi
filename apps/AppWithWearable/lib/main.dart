@@ -59,15 +59,25 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  // The navigator key is necessary to navigate using static methods
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
 class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    NotificationUtil.initializeNotificationsEventListeners();
+    NotificationUtil.initializeIsolateReceivePort();
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorObservers: [InstabugNavigatorObserver()],
       debugShowCheckedModeBanner: F.env == Environment.dev,
       title: F.title,
+      navigatorKey: MyApp.navigatorKey,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
