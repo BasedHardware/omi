@@ -4,6 +4,13 @@ import 'dart:ui';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/notify_on_kill.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memories/page.dart';
+import 'package:path/path.dart';
+
+import '../pages/capture/page.dart';
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -22,9 +29,7 @@ Future<void> initializeNotifications() async {
             ledColor: Colors.white)
       ],
       // Channel groups are only visual and are not required
-      channelGroups: [
-        NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')
-      ],
+      channelGroups: [NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')],
       debug: false);
   debugPrint('initializeNotifications: $initialized');
   NotifyOnKill.register();
@@ -132,8 +137,7 @@ class NotificationUtil {
     if (receivePort != null) {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
-      print(
-          'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
+      print('onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
@@ -145,26 +149,19 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
+    final Map<String, int> screensWithRespectToPath = {
+      '/chat': 2,
+      '/capture': 1,
+      '/memories': 0,
+    };
     var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
-    print(message);
-    print(receivedAction.toMap().toString());
+    debugPrint(message);
+    debugPrint(receivedAction.toMap().toString());
+
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
-
-    bool isSilentAction = receivedAction.actionType == ActionType.SilentAction ||
-        receivedAction.actionType == ActionType.SilentBackgroundAction;
-
-    // SilentBackgroundAction runs on background thread and cannot show
-    // UI/visual elements
-
-    if (isSilentAction) {
-      debugPrint('isSilentAction: $isSilentAction');
-      return;
-    }
-    if (!AwesomeStringUtils.isNullOrEmpty(receivedAction.buttonKeyInput)) {
-      // receiveButtonInputText(receivedAction);
-    } else {
-      // receiveStandardNotificationAction(receivedAction);
-    }
+    final payload = receivedAction.payload;
+    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
+    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
   }
 }

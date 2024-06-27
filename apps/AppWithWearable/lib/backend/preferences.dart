@@ -220,10 +220,10 @@ class SharedPreferencesUtil {
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
+  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
 }
 
-String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
+String getOpenAIApiKeyForUsage() => SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
 
-String getDeepgramApiKeyForUsage() =>
-    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
+String getDeepgramApiKeyForUsage() => SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
