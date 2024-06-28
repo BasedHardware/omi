@@ -29,12 +29,12 @@ The main service has UUID of `19B10000-E8F2-537E-4F6C-D104768A1214` and has two 
 
 The possible values for the codec type are:
 - 0: PCM 16-bit, 16kHz, mono
-- 1: PCM 8-bit, 16kHz, mono
-- 10: Mu-law 16-bit, 16kHz, mono
-- 11: Mu-law 8-bit, 16kHz, mono
+- 1: PCM 16-bit, 8kHz, mono
+- 10: Mu-law 8-bit, 16kHz, mono
+- 11: Mu-law 8-bit, 8kHz, mono
 - 20: Opus 16-bit, 16kHz, mono
 
-The device default is PCM 8-bit, 16kHz, mono.
+The device default is PCM 16-bit, 8kHz, mono.
 
 ### Audio Data
 
