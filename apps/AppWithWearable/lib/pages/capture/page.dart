@@ -46,6 +46,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   bool _hasTranscripts = false;
   final record = AudioRecorder();
   RecordState _state = RecordState.stop;
+  static const quietSecondsForMemoryCreation = 120;
 
   /// ----
   BTDeviceStruct? btDevice;
@@ -87,14 +88,19 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
-      wavBytesUtil2.storeFramePacket(value);
       toProcessBytes2.storeFramePacket(value);
+      if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
+
       if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
 
-      if (toProcessBytes2.frames.length % 3000 == 0) {
+      if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
         try {
+          var segmentsEmpty = segments.isEmpty;
           await _processFileToTranscript(data.item1);
+          if (segmentsEmpty && segments.isNotEmpty) {
+            wavBytesUtil2.insertAudioBytes(data.item2);
+          }
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
           CrashReporting.reportHandledCrash(e, stacktrace,
@@ -120,7 +126,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       setHasTranscripts(true);
       debugPrint('Memory creation timer restarted');
       _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+      _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
       currentTranscriptStartedAt ??= DateTime.now();
       currentTranscriptFinishedAt = DateTime.now();
     }
@@ -129,18 +135,19 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) initiateBytesProcessing();
   }
 
-  _createMemory() async {
+  _createMemory({bool forcedCreation = false}) async {
     setState(() => memoryCreating = true);
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
-      // TODO: could trim last 2 minutes before doing this ~ Cant, should be done with VAD, as device disconnect, would not upload it well.
+      // USE VAD HERE
+      // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
       file = (await audioStorage!.createWavFile()).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
