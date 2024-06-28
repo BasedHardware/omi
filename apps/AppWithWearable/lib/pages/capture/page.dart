@@ -19,7 +19,9 @@ import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:record/record.dart';
+import 'package:tuple/tuple.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -44,6 +46,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   bool _hasTranscripts = false;
   final record = AudioRecorder();
   RecordState _state = RecordState.stop;
+  static const quietSecondsForMemoryCreation = 120;
 
   /// ----
   BTDeviceStruct? btDevice;
@@ -74,42 +77,43 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-    WavBytesUtil wavBytesUtil = WavBytesUtil();
-    WavBytesUtil toProcessBytes = WavBytesUtil();
     // VadUtil vad = VadUtil();
     // await vad.init();
+    // Variables to maintain state
+    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
+    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
+    WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
+    StreamSubscription? stream =
+        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
-      value.removeRange(0, 3);
-      // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
-      // so we are losing lots of resolution, and bit depth
-      for (int i = 0; i < value.length; i += 2) {
-        int byte1 = value[i];
-        int byte2 = value[i + 1];
-        int int16Value = (byte2 << 8) | byte1;
-        wavBytesUtil.addAudioBytes([int16Value]);
-        toProcessBytes.addAudioBytes([int16Value]);
-      }
-      if (toProcessBytes.audioBytes.length % 240000 == 0) {
-        var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
-        // SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
-        toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
-          // var containsAudio = await vad.predict(f.readAsBytesSync());
-          // debugPrint('Processing audio bytes: ${f.toString()}');
-          try {
-            _processFileToTranscript(f);
-          } catch (e) {
-            debugPrint(e.toString());
-            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
+
+      toProcessBytes2.storeFramePacket(value);
+      if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
+
+      // if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
+
+      if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
+        Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+        try {
+          var segmentsEmpty = segments.isEmpty;
+          await _processFileToTranscript(data.item1);
+          if (segmentsEmpty && segments.isNotEmpty) {
+            wavBytesUtil2.insertAudioBytes(data.item2);
           }
-        });
+          // uploadFile(data.item1);
+        } catch (e, stacktrace) {
+          CrashReporting.reportHandledCrash(e, stacktrace,
+              level: NonFatalExceptionLevel.warning,
+              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
+          debugPrint('Error: e.toString() ${e.toString()}');
+          toProcessBytes2.insertAudioBytes(data.item2);
+        }
       }
     });
 
     audioBytesStream = stream;
-    audioStorage = wavBytesUtil;
+    audioStorage = wavBytesUtil2;
   }
 
   _processFileToTranscript(File f) async {
@@ -122,7 +126,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       setHasTranscripts(true);
       debugPrint('Memory creation timer restarted');
       _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+      _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
       currentTranscriptStartedAt ??= DateTime.now();
       currentTranscriptFinishedAt = DateTime.now();
     }
@@ -131,18 +135,20 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) initiateBytesProcessing();
   }
 
-  _createMemory() async {
+  _createMemory({bool forcedCreation = false}) async {
     setState(() => memoryCreating = true);
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
-      file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
+      // USE VAD HERE
+      // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
+      file = (await audioStorage!.createWavFile()).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
