@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -63,7 +62,13 @@ class WavBytesUtil {
     lastPacketIndex = index; // Update packet id
   }
 
-  void trimFrames({required int untilSecond}) => frames.removeRange(0, min(untilSecond * 100, frames.length));
+  void removeFramesRange({
+    int fromSecond = 0, // unused
+    int toSecond = 0,
+  }) {
+    debugPrint('removing frames from ${fromSecond}s to ${toSecond}s');
+    return frames.removeRange(fromSecond, toSecond);
+  }
 
   void insertAudioBytes(List<List<int>> bytes) => frames.insertAll(0, bytes);
 
@@ -71,10 +76,14 @@ class WavBytesUtil {
 
   bool hasFrames() => frames.isNotEmpty;
 
-  Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename}) async {
+  Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
     File file = await createWavByCodec(filename: filename);
     var framesCopy = List<List<int>>.from(frames);
-    trimFrames(untilSecond: frames.length ~/ 100);
+    if (removeLastNSeconds > 0) {
+      removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
+    } else {
+      clearAudioBytes();
+    }
     return Tuple2(file, framesCopy);
   }
 
