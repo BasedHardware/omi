@@ -52,7 +52,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   List<TranscriptSegment> segments = [];
 
   StreamSubscription? audioBytesStream;
-  WavBytesUtil2? audioStorage;
+  WavBytesUtil? audioStorage;
 
   Timer? _processPhoneMicAudioTimer;
   Timer? _memoryCreationTimer;
@@ -81,14 +81,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    WavBytesUtil2 wavBytesUtil2 = WavBytesUtil2(codec: codec);
-    WavBytesUtil2 toProcessBytes2 = WavBytesUtil2(codec: codec);
+    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
+    WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     StreamSubscription? stream =
         await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
-      wavBytesUtil2.storeBytes(value);
-      toProcessBytes2.storeBytes(value);
+      wavBytesUtil2.storeFramePacket(value);
+      toProcessBytes2.storeFramePacket(value);
       if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
 
       if (toProcessBytes2.frames.length % 3000 == 0) {
