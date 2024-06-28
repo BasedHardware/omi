@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
@@ -91,15 +92,24 @@ class WavBytesUtil {
 
   Future<File> createWavByCodec({String? filename}) async {
     Uint8List wavBytes;
-    if (codec == BleAudioCodec.opus) {
+    if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
+      Int16List samples = getPcmSamples(frames);
+      // TODO: try pcm16
+      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000);
+    } else if (codec == BleAudioCodec.mulaw8 || codec == BleAudioCodec.mulaw16) {
+      throw UnimplementedError('mulaw codec not implemented');
+      // Int16List samples = getMulawSamples(frames);
+      // wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.mulaw8 ? 8000 : 16000);
+    } else if (codec == BleAudioCodec.opus) {
       List<int> decodedSamples = [];
       for (var frame in frames) {
         decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
       }
-      wavBytes = getUInt8ListBytes(decodedSamples);
+      wavBytes = getUInt8ListBytes(decodedSamples, 16000);
     } else {
-      Int16List samples = getPcm8Samples(frames);
-      wavBytes = getUInt8ListBytes(samples);
+      CrashReporting.reportHandledCrash(UnimplementedError('unknown codec'), StackTrace.current,
+          level: NonFatalExceptionLevel.error);
+      throw UnimplementedError('unknown codec');
     }
     return createWav(wavBytes, filename: filename);
   }
@@ -116,16 +126,10 @@ class WavBytesUtil {
     return file;
   }
 
-  Uint8List getUInt8ListBytes(List<int> audioBytes) {
-    Uint8List wavHeader;
-    if (codec == BleAudioCodec.opus) {
-      // TODO: how to determine this values? sample rate can't be higher?
-      // TODO: where is bit rate parameter in here?
-      // TODO: what is sample width for?
-      wavHeader = getWavHeader(audioBytes.length * 2, 16000, sampleWidth: 2);
-    } else {
-      wavHeader = getWavHeader(audioBytes.length * 2, 8000, sampleWidth: 2);
-    }
+  Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
+    // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
+    // https://github.com/BasedHardware/Friend/blob/main/docs/_developer/Protocol.md
+    Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
     return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
   }
 
@@ -178,7 +182,7 @@ class WavBytesUtil {
     return byteData.buffer.asUint8List();
   }
 
-  Int16List getPcm8Samples(List<List<int>> frames) {
+  Int16List getPcmSamples(List<List<int>> frames) {
     int totalLength = frames.fold(0, (sum, frame) => sum + frame.length);
 
     // Create an Int16List to store the samples
@@ -194,6 +198,19 @@ class WavBytesUtil {
         samples[sampleIndex++] = sample;
       }
     }
+    return samples;
+  }
+
+  Int16List getMulawSamples(List<List<int>> frames) {
+    int totalLength = frames.fold(0, (sum, frame) => sum + frame.length);
+    Int16List samples = Int16List(totalLength);
+    int sampleIndex = 0;
+    for (List<int> frame in frames) {
+      for (int i = 0; i < frame.length; i++) {
+        samples[sampleIndex++] = frame[i];
+      }
+    }
+
     return samples;
   }
 }

@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 // Future<String?> bleReceiveData(BTDeviceStruct btDevice) async {
 //   final device = BluetoothDevice.fromId(btDevice.id);
@@ -94,11 +95,7 @@ Future<StreamSubscription?> getBleAudioBytesListener(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
     var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
-    var codecId = await codecCharacteristic?.read();
     if (canNotify != null && codecCharacteristic != null) {
-      String codec = codecId!.single == 1 ? 'pcm-8' : 'opus';
-      debugPrint('codec is $codec');
-      // PCM is codec
       await canNotify.setNotifyValue(true);
       debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
       var listener = canNotify.lastValueStream.listen((value) {
@@ -112,10 +109,7 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   return null;
 }
 
-enum BleAudioCodec {
-  pcm8,
-  opus,
-}
+enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
 
 Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
@@ -128,14 +122,32 @@ Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
     var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
-    var codecId = await codecCharacteristic?.read();
     debugPrint('codecCharacteristic: ${await codecCharacteristic?.read()}');
     if (canNotify != null && codecCharacteristic != null) {
-      String codec = codecId!.single == 1 ? 'pcm-8' : 'opus';
-      debugPrint('codec is $codec');
-      return codec == 'pcm-8' ? BleAudioCodec.pcm8 : BleAudioCodec.opus;
+      var codecId = (await codecCharacteristic.read()).single;
+      BleAudioCodec codec;
+      switch (codecId) {
+        // case 0:
+        //   codec = BleAudioCodec.pcm16;
+        case 1:
+          codec = BleAudioCodec.pcm8; // INITIAL CODEC FOR ALL DEVICES
+        // case 10:
+        //   codec = BleAudioCodec.mulaw16;
+        // case 11:
+        //   codec = BleAudioCodec.mulaw8;
+        case 20:
+          codec = BleAudioCodec.opus;
+        default:
+          CrashReporting.reportHandledCrash(Exception('Unknown codec $codecId'), StackTrace.current,
+              level: NonFatalExceptionLevel.error);
+          throw Exception('Non handled codec yet $codecId');
+      }
+      debugPrint('Codec is $codec');
+      return codec;
     }
   }
   debugPrint('Desired audio characteristic not found');
-  return BleAudioCodec.pcm8; // defaults to pcm8, is this incorrect?
+  CrashReporting.reportHandledCrash(Exception('Desired audio characteristic not found'), StackTrace.current,
+      level: NonFatalExceptionLevel.error);
+  throw Exception('Desired audio characteristic not found');
 }
