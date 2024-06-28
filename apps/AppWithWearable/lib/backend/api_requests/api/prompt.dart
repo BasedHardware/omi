@@ -21,7 +21,9 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
-  // TODO: if conversation words > 1000 or smth, should never discard?
+  if (transcript.split(' ').length > 100) { // TODO: try lower count?
+    forceProcess = true;
+  }
 
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
