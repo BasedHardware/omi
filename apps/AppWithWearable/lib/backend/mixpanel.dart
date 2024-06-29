@@ -51,6 +51,10 @@ class MixpanelManager {
 
   void pluginsOpened() => track('Plugins Opened');
 
+  void pluginEnabled(String pluginId) => track('Plugin Enabled', properties: {'plugin_id': pluginId});
+
+  void pluginDisabled(String pluginId) => track('Plugin Disabled', properties: {'plugin_id': pluginId});
+
   void recordingLanguageChanged(String language) =>
       track('Recording Language Changed', properties: {'language': language});
 

@@ -21,7 +21,10 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
-  // TODO: if conversation words > 1000 or smth, should never discard?
+  if (transcript.split(' ').length > 100) {
+    // TODO: try lower count?
+    forceProcess = true;
+  }
 
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
@@ -159,25 +162,27 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 // ------
 
-Future<List<String>?> determineRequiresContext(List<Message> messages) async {
+Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
         Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
-        - If it does, provide a list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+        - Context could be 2 different things:
+          - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+          - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is ${DateTime.now().toIso8601String()}.
         
         Conversation:
-        ${messages.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
+        ${messages.reversed.map((e) => '${e.createdAt.toIso8601String()} ${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
-
+        
         As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
         the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
         
         Here is the output schema:
         ```
-        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}}}
+        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}, "dates_range": {"title": "Dates Range", "description": "The dates range to retrieve context from", "default": [], "type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date-time"}]}}}
         ```
         '''
       .replaceAll('        ', '');
@@ -189,7 +194,12 @@ Future<List<String>?> determineRequiresContext(List<Message> messages) async {
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
     var data = jsonDecode(cleanedResponse);
-    return data['topics'].map<String>((e) => e.toString()).toList();
+    debugPrint(data.toString());
+    List<String> topics = data['topics'].map<String>((e) => e.toString()).toList();
+    List<String> datesRange = data['dates_range'].map<String>((e) => e.toString()).toList();
+    List<DateTime> dates = datesRange.map((e) => DateTime.parse(e)).toList();
+    debugPrint('topics: $topics, dates: $dates');
+    return Tuple2<List<String>, List<DateTime>>(topics, dates);
   } catch (e) {
     CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.critical, userAttributes: {
       'response': cleanedResponse,

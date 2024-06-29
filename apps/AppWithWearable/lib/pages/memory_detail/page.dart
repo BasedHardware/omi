@@ -387,7 +387,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     MemoryProvider().updateMemory(widget.memory);
     debugPrint('MemoryProvider().updateMemory');
     getEmbeddingsFromInput(structured.toString()).then((vector) {
-      createPineconeVector(widget.memory.id.toString(), vector);
+      createPineconeVector(widget.memory.id.toString(), vector, widget.memory.createdAt);
     });
 
     overviewController.text = current.overview;
