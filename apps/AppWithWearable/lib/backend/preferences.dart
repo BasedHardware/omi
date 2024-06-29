@@ -222,6 +222,9 @@ class SharedPreferencesUtil {
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
   int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
+
+  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
+  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
 }
 
 String getOpenAIApiKeyForUsage() =>
