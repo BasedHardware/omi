@@ -1,61 +1,136 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter/material.dart';
 
-const int sampleRate = 8000;
-const int channelCount = 1;
-const int sampleWidth = 2;
+import 'package:flutter/material.dart';
+import 'package:friend_private/utils/ble/communication.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:opus_dart/opus_dart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:tuple/tuple.dart';
 
 class WavBytesUtil {
-  // List to hold audio data in bytes
-  final List<int> _audioBytes = [];
+  BleAudioCodec codec;
+  List<List<int>> frames = [];
+  final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
 
-  List<int> get audioBytes => _audioBytes;
+  WavBytesUtil({this.codec = BleAudioCodec.pcm8});
 
-  // Method to add audio bytes (now accepts List<int> instead of Uint8List)
-  void addAudioBytes(List<int> bytes) {
-    _audioBytes.addAll(bytes);
+  // needed variables for `storeFramePacket`
+  int lastPacketIndex = -1;
+  int lastFrameId = -1;
+  List<int> pending = [];
+  int lost = 0;
+
+  void storeFramePacket(value) {
+    int index = value[0] + (value[1] << 8);
+    int internal = value[2];
+    List<int> content = value.sublist(3);
+
+    // Start of a new frame
+    if (lastPacketIndex == -1 && internal == 0) {
+      lastPacketIndex = index;
+      lastFrameId = internal;
+      pending = content;
+      return;
+    }
+
+    if (lastPacketIndex == -1) return;
+
+    // Lost frame - reset state
+    if (index != lastPacketIndex + 1 || (internal != 0 && internal != lastFrameId + 1)) {
+      debugPrint('Lost frame');
+      lastPacketIndex = -1;
+      pending = [];
+      lost += 1;
+      return;
+    }
+
+    // Start of a new frame
+    if (internal == 0) {
+      frames.add(pending); // Save frame
+      pending = content; // Start new frame
+      lastFrameId = internal; // Update internal frame id
+      lastPacketIndex = index; // Update packet id
+      // debugPrint('Frames received: ${frames.length} && Lost: $lost');
+      return;
+    }
+
+    // Continue frame
+    pending.addAll(content);
+    lastFrameId = internal; // Update internal frame id
+    lastPacketIndex = index; // Update packet id
   }
 
-  void insertAudioBytes(List<int> bytes) {
-    _audioBytes.insertAll(0, bytes);
+  void removeFramesRange({
+    int fromSecond = 0, // unused
+    int toSecond = 0,
+  }) {
+    debugPrint('removing frames from ${fromSecond}s to ${toSecond}s');
+    return frames.removeRange(fromSecond, toSecond);
   }
 
-  // Method to clear audio bytes
-  void clearAudioBytes() {
-    _audioBytes.clear();
-    debugPrint('Cleared audio bytes');
+  void insertAudioBytes(List<List<int>> bytes) => frames.insertAll(0, bytes);
+
+  void clearAudioBytes() => frames.clear();
+
+  bool hasFrames() => frames.isNotEmpty;
+
+  Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
+    File file = await createWavByCodec(filename: filename);
+    var framesCopy = List<List<int>>.from(frames);
+    if (removeLastNSeconds > 0) {
+      removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
+    } else {
+      clearAudioBytes();
+    }
+    return Tuple2(file, framesCopy);
   }
 
-  void clearAudioBytesSegment({required int remainingSeconds}) {
-    _audioBytes.removeRange(0, (_audioBytes.length) - (remainingSeconds * 8000));
+  /// OPUS
+
+  Future<File> createWavByCodec({String? filename}) async {
+    Uint8List wavBytes;
+    if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
+      Int16List samples = getPcmSamples(frames);
+      // TODO: try pcm16
+      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000);
+    } else if (codec == BleAudioCodec.mulaw8 || codec == BleAudioCodec.mulaw16) {
+      throw UnimplementedError('mulaw codec not implemented');
+      // Int16List samples = getMulawSamples(frames);
+      // wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.mulaw8 ? 8000 : 16000);
+    } else if (codec == BleAudioCodec.opus) {
+      List<int> decodedSamples = [];
+      for (var frame in frames) {
+        decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
+      }
+      wavBytes = getUInt8ListBytes(decodedSamples, 16000);
+    } else {
+      CrashReporting.reportHandledCrash(UnimplementedError('unknown codec'), StackTrace.current,
+          level: NonFatalExceptionLevel.error);
+      throw UnimplementedError('unknown codec');
+    }
+    return createWav(wavBytes, filename: filename);
   }
 
-  // Method to create a WAV file from the stored audio bytes
-  static Future<File> createWavFile(List<int> audioBytes, {String? filename}) async {
-    debugPrint('Creating WAV file...');
-    // TODO: include VAD somewhere onnx pico-voice
-
+  Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
+    final directory = await getApplicationDocumentsDirectory();
     if (filename == null) {
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       filename = 'recording-$timestamp.wav';
     }
-
-    final wavBytes = getUInt8ListBytes(audioBytes);
-
-    final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$filename');
     await file.writeAsBytes(wavBytes);
     debugPrint('WAV file created: ${file.path}');
     return file;
   }
 
-  static Uint8List getUInt8ListBytes(List<int> audioBytes) {
-    final wavHeader = buildWavHeader(audioBytes.length * 2);
-    return Uint8List.fromList(wavHeader + convertToLittleEndianBytes(audioBytes));
+  Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
+    // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
+    // https://github.com/BasedHardware/Friend/blob/main/docs/_developer/Protocol.md
+    Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
+    return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
   }
 
   // Utility to convert audio data to little-endian format
@@ -67,7 +142,9 @@ class WavBytesUtil {
     return byteData.buffer.asUint8List();
   }
 
-  static Uint8List buildWavHeader(int dataLength) {
+  static Uint8List getWavHeader(int dataLength, int sampleRate, {int sampleWidth = 2}) {
+    int channelCount = 1;
+
     final byteData = ByteData(44);
     final size = dataLength + 36;
 
@@ -103,5 +180,37 @@ class WavBytesUtil {
     byteData.setUint32(40, dataLength, Endian.little);
 
     return byteData.buffer.asUint8List();
+  }
+
+  Int16List getPcmSamples(List<List<int>> frames) {
+    int totalLength = frames.fold(0, (sum, frame) => sum + frame.length);
+
+    // Create an Int16List to store the samples
+    Int16List samples = Int16List(totalLength ~/ 2);
+    int sampleIndex = 0;
+
+    // Iterate through each frame and each byte in the frame
+    for (int i = 0; i < frames.length; i++) {
+      for (int j = 0; j < frames[i].length; j += 2) {
+        int byte1 = frames[i][j];
+        int byte2 = frames[i][j + 1];
+        int sample = (byte2 << 8) | byte1;
+        samples[sampleIndex++] = sample;
+      }
+    }
+    return samples;
+  }
+
+  Int16List getMulawSamples(List<List<int>> frames) {
+    int totalLength = frames.fold(0, (sum, frame) => sum + frame.length);
+    Int16List samples = Int16List(totalLength);
+    int sampleIndex = 0;
+    for (List<int> frame in frames) {
+      for (int i = 0; i < frame.length; i++) {
+        samples[sampleIndex++] = frame[i];
+      }
+    }
+
+    return samples;
   }
 }
