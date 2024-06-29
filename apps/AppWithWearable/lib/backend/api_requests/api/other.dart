@@ -12,6 +12,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
   var startTime = DateTime.now();
+  // TODO: why there seems to be no punctuation
   Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
     'model': 'nova-2-general',
     'detect_language': false,
