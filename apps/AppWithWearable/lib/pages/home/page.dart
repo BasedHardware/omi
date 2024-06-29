@@ -131,6 +131,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       body: 'Check out your daily summary to see what you should do tomorrow.',
       notificationId: 5,
       isDailySummaryNotification: true,
+      payload: {'path': '/chat'},
     );
 
     super.initState();
@@ -147,7 +148,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           });
           InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
-            createNotification(title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+            createNotification(
+                title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
           }
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
@@ -205,6 +207,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           onTap: () {
             FocusScope.of(context).unfocus();
             chatTextFieldFocusNode.unfocus();
+
             memoriesTextFieldFocusNode.unfocus();
           },
           child: Stack(
@@ -244,8 +247,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       color: Colors.black,
                       borderRadius: BorderRadius.all(Radius.circular(16)),
                       border: GradientBoxBorder(
-                        gradient:
-                            LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
                         width: 2,
                       ),
                       shape: BoxShape.rectangle,
@@ -258,7 +265,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             onPressed: () => _tabChange(0),
                             child: Padding(
                               padding: const EdgeInsets.only(top: 20, bottom: 20),
-                              child: Text('Memories', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                              child: Text('Memories',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
                             ),
                           ),
                         ),
@@ -270,7 +281,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                 top: 20,
                                 bottom: 20,
                               ),
-                              child: Text('Capture', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                              child: Text('Capture',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
                             ),
                           ),
                         ),
@@ -279,7 +294,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             onPressed: () => _tabChange(2),
                             child: Padding(
                               padding: const EdgeInsets.only(top: 20, bottom: 20),
-                              child: Text('Chat', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                              child: Text('Chat',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
                             ),
                           ),
                         ),
@@ -359,7 +378,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   var language = SharedPreferencesUtil().recordingsLanguage;
                   var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-                  if (language != SharedPreferencesUtil().recordingsLanguage || useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
+                  if (language != SharedPreferencesUtil().recordingsLanguage ||
+                      useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
                     capturePageKey.currentState?.resetState();
                   }
                 },

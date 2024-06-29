@@ -224,6 +224,8 @@ class SharedPreferencesUtil {
   int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
 }
 
-String getOpenAIApiKeyForUsage() => SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
+String getOpenAIApiKeyForUsage() =>
+    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
 
-String getDeepgramApiKeyForUsage() => SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
+String getDeepgramApiKeyForUsage() =>
+    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
