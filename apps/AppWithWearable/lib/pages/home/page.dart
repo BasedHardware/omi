@@ -207,7 +207,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           onTap: () {
             FocusScope.of(context).unfocus();
             chatTextFieldFocusNode.unfocus();
-
             memoriesTextFieldFocusNode.unfocus();
           },
           child: Stack(
