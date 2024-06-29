@@ -1,91 +1,167 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/storage/vector_db.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
-import 'package:uuid/uuid.dart';
-import '/backend/api_requests/api_calls.dart';
-import '/flutter_flow/flutter_flow_util.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 // Perform actions periodically
-Future<void> processTranscriptContent(BuildContext context, String content, String? audioFileName) async {
-  if (content.isNotEmpty) await memoryCreationBlock(context, content, audioFileName);
+Future<Memory?> processTranscriptContent(
+  BuildContext context,
+  String content,
+  String? recordingFilePath, {
+  bool retrievedFromCache = false,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+}) async {
+  if (content.isNotEmpty) {
+    Memory? memory = await memoryCreationBlock(
+      context,
+      content,
+      recordingFilePath,
+      retrievedFromCache,
+      startedAt,
+      finishedAt,
+    );
+    devModeWebhookCall(memory);
+    return memory;
+  }
+  return null;
+}
+
+Future<MemoryStructured?> _retrieveStructure(
+  BuildContext context,
+  String transcript,
+  bool retrievedFromCache, {
+  bool ignoreCache = false,
+}) async {
+  MemoryStructured structuredMemory;
+  try {
+    structuredMemory = await generateTitleAndSummaryForMemory(transcript, [], ignoreCache: ignoreCache);
+  } catch (e, stacktrace) {
+    debugPrint('Error: $e');
+    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
+      'transcript_length': transcript.length.toString(),
+      'transcript_words': transcript.split(' ').length.toString(),
+      'language': SharedPreferencesUtil().recordingsLanguage,
+      'developer_mode_enabled': SharedPreferencesUtil().devModeEnabled.toString(),
+      'dev_mode_has_api_key': (SharedPreferencesUtil().openAIApiKey != '').toString(),
+    });
+    return null;
+  }
+  return structuredMemory;
 }
 
 // Process the creation of memory records
-Future<void> memoryCreationBlock(BuildContext context, String rawMemory, String? audioFileName) async {
-  changeAppStateMemoryCreating();
-  List<MemoryRecord> recentMemories = await MemoryStorage.retrieveRecentMemoriesWithinMinutes(minutes: 10);
-  String structuredMemory;
-  try {
-    structuredMemory = await generateTitleAndSummaryForMemory(rawMemory, recentMemories);
-  } catch (e) {
-    debugPrint('Error: $e');
-    changeAppStateMemoryCreating();
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('There was an error creating your memory, please check your open AI API keys.')));
-    return;
+Future<Memory?> memoryCreationBlock(
+  BuildContext context,
+  String transcript,
+  String? recordingFilePath,
+  bool retrievedFromCache,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+) async {
+  MemoryStructured? structuredMemory = await _retrieveStructure(context, transcript, retrievedFromCache);
+  bool failed = false;
+  if (structuredMemory == null) {
+    structuredMemory = await _retrieveStructure(context, transcript, retrievedFromCache, ignoreCache: true);
+    if (structuredMemory == null) {
+      failed = true;
+      structuredMemory = MemoryStructured(actionItems: [], pluginsResponse: [], category: 'failed', emoji: '😢');
+      if (!retrievedFromCache) {
+        InstabugLog.logError('Unable to create memory structure.');
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Unexpected error creating your memory. Please check your discarded memories.',
+            style: TextStyle(color: Colors.white),
+          ),
+          duration: Duration(seconds: 4),
+        ));
+      }
+    }
   }
   debugPrint('Structured Memory: $structuredMemory');
-  if (structuredMemory.contains("N/A")) {
-    await saveFailureMemory(rawMemory, structuredMemory);
-    changeAppStateMemoryCreating();
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text(
-        'Recent Memory Discarded! Nothing useful. 😄',
-        style: TextStyle(color: Colors.white),
-      ),
-      duration: Duration(seconds: 4),
-    ));
+
+  if (structuredMemory.title.isEmpty) {
+    var created = await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
+    if (!retrievedFromCache && !failed) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Memory stored as discarded! Nothing useful. 😄',
+          style: TextStyle(color: Colors.white),
+        ),
+        duration: Duration(seconds: 4),
+      ));
+    }
+    return created;
   } else {
-    await finalizeMemoryRecord(rawMemory, structuredMemory, audioFileName);
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('New Memory Created! 🚀', style: TextStyle(color: Colors.white)),
-      duration: Duration(seconds: 4),
-    ));
+    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
+    debugPrint('Memory created: ${memory.id}');
+    if (!retrievedFromCache) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
+        duration: Duration(seconds: 4),
+      ));
+    }
+    return memory;
   }
 }
 
-// Save failure memory when structured memory contains NA
-Future<void> saveFailureMemory(String rawMemory, String structuredMemory) async {
-  MemoryRecord memory = MemoryRecord(
-      id: const Uuid().v4(),
-      date: DateTime.now(),
-      rawMemory: rawMemory,
-      structuredMemory: structuredMemory,
-      isEmpty: rawMemory == '',
-      isUseless: true);
-  MemoryStorage.addMemory(memory);
-}
-
-// Update app state when starting memory processing
-void changeAppStateMemoryCreating() {
-  FFAppState().update(() {
-    FFAppState().memoryCreationProcessing = !FFAppState().memoryCreationProcessing;
-  });
+// Save failure memory when structured memory contains empty string
+Future<Memory> saveFailureMemory(
+  String transcript,
+  MemoryStructured structuredMemory,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+) async {
+  Structured structured = Structured(
+    structuredMemory.title,
+    structuredMemory.overview,
+    emoji: structuredMemory.emoji,
+    category: structuredMemory.category,
+  );
+  Memory memory = Memory(DateTime.now(), transcript, true, startedAt: startedAt, finishedAt: finishedAt);
+  memory.structured.target = structured;
+  MemoryProvider().saveMemory(memory);
+  MixpanelManager().memoryCreated(memory);
+  return memory;
 }
 
 // Finalize memory record after processing feedback
-Future<void> finalizeMemoryRecord(String rawMemory, String structuredMemory, String? audioFilePath) async {
-  MemoryRecord createdMemory = await createMemoryRecord(rawMemory, structuredMemory, audioFilePath);
-  changeAppStateMemoryCreating();
-  List<double> vector = await getEmbeddingsFromInput(structuredMemory);
-  storeMemoryVector(createdMemory, vector);
-  // storeMemoryVector
-}
+Future<Memory> finalizeMemoryRecord(
+  String transcript,
+  MemoryStructured structuredMemory,
+  String? recordingFilePath,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+) async {
+  Structured structured = Structured(
+    structuredMemory.title,
+    structuredMemory.overview,
+    emoji: structuredMemory.emoji,
+    category: structuredMemory.category,
+  );
+  for (var actionItem in structuredMemory.actionItems) {
+    structured.actionItems.add(ActionItem(actionItem));
+  }
+  var memory = Memory(DateTime.now(), transcript, false,
+      recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
+  memory.structured.target = structured;
+  for (var r in structuredMemory.pluginsResponse) {
+    memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
+  }
 
-// Create memory record
-Future<MemoryRecord> createMemoryRecord(String rawMemory, String structuredMemory, String? audioFileName) async {
-  var memory = MemoryRecord(
-      id: const Uuid().v4(),
-      date: DateTime.now(),
-      rawMemory: rawMemory,
-      structuredMemory: structuredMemory,
-      isEmpty: rawMemory == '',
-      isUseless: false,
-      audioFileName: audioFileName);
-  MemoryStorage.addMemory(memory);
-  debugPrint('createMemoryRecord added memory: ${memory.id}');
+  MemoryProvider().saveMemory(memory);
+
+  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
+    createPineconeVector(memory.id.toString(), vector, memory.createdAt);
+  });
   return memory;
 }

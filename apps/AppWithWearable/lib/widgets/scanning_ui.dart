@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class ScanningUI extends StatefulWidget {
   const ScanningUI({super.key, required this.string1, required this.string2});
@@ -22,15 +20,15 @@ class _ScanningUIState extends State<ScanningUI> {
         children: [
           Text(
             widget.string1,
-            style: FlutterFlowTheme.of(context).bodyMedium.override(
-                  fontFamily: 'SF Pro Display',
-                  color: Colors.white,
-                  fontSize: 32.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w700,
-                  useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
-                  lineHeight: 1.2,
-                ),
+            style: const TextStyle(
+              fontFamily: 'SF Pro Display',
+              color: Colors.white,
+              fontSize: 32.0,
+              letterSpacing: 0.0,
+              fontWeight: FontWeight.w700,
+              // useGoogleFonts: GoogleFonts.asMap().containsKey('SF Pro Display'),
+              height: 1.2,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8.0),

@@ -1,16 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 AuthClient? authClient;
 
-void authenticateGCP() async {
-  var credentialsBase64 = SharedPreferencesUtil().gcpCredentials;
+Future<void> authenticateGCP({String? base64}) async {
+  var credentialsBase64 = base64 ?? SharedPreferencesUtil().gcpCredentials;
   if (credentialsBase64.isEmpty) {
     debugPrint('No GCP credentials found');
     return;
@@ -48,7 +48,7 @@ Future<String?> uploadFile(File file) async {
       debugPrint('Upload successful');
       return fileName;
     } else {
-      debugPrint('Failed to upload');
+      debugPrint('Failed to upload: ${response.body}');
     }
   } catch (e) {
     debugPrint('Error uploading file: $e');

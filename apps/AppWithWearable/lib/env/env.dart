@@ -1,15 +1,51 @@
-import 'package:envied/envied.dart';
+import 'package:friend_private/env/dev_env.dart';
 
-part 'env.g.dart';
-
-@Envied(allowOptionalFields: true)
 abstract class Env {
-  @EnviedField(varName: 'SENTRY_DSN_KEY', obfuscate: true)
-  static String? sentryDSNKey = _Env.sentryDSNKey;
+  static late final EnvFields _instance;
 
-  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
-  static String? openAIAPIKey = _Env.openAIAPIKey;
+  static void init([EnvFields? instance]) {
+    _instance = instance ?? DevEnv();
+  }
 
-  @EnviedField(varName: 'DEEPGRAM_API_KEY', obfuscate: true)
-  static String? deepgramApiKey = _Env.deepgramApiKey;
+  static String? get oneSignalAppId => _instance.oneSignalAppId;
+
+  static String? get sentryDSNKey => _instance.sentryDSNKey;
+
+  static String? get openAIAPIKey => _instance.openAIAPIKey;
+
+  static String? get deepgramApiKey => _instance.deepgramApiKey;
+
+  static String? get instabugApiKey => _instance.instabugApiKey;
+
+  static String get pineconeApiKey => _instance.pineconeApiKey;
+
+  static String get pineconeIndexUrl => _instance.pineconeIndexUrl;
+
+  static String get pineconeIndexNamespace => _instance.pineconeIndexNamespace;
+
+  static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
+
+  static String? get apiBaseUrl => _instance.apiBaseUrl;
+}
+
+abstract class EnvFields {
+  String? get oneSignalAppId;
+
+  String? get sentryDSNKey;
+
+  String? get openAIAPIKey;
+
+  String? get deepgramApiKey;
+
+  String? get instabugApiKey;
+
+  String get pineconeApiKey;
+
+  String get pineconeIndexUrl;
+
+  String get pineconeIndexNamespace;
+
+  String? get mixpanelProjectToken;
+
+  String? get apiBaseUrl;
 }

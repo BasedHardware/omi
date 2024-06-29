@@ -1,196 +1,194 @@
-import 'dart:io';
-
-import 'package:audioplayers/audioplayers.dart';
-import 'package:friend_private/backend/api_requests/api_calls.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/flutter_flow/flutter_flow_theme.dart';
-import 'package:friend_private/pages/memories/widgets/summaries_buttons.dart';
-import 'package:friend_private/widgets/blur_bot_widget.dart';
-
-import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
+import 'widgets/add_memory_widget.dart';
 import 'widgets/empty_memories.dart';
-import 'widgets/header_buttons.dart';
 import 'widgets/memory_list_item.dart';
-import 'widgets/memory_processing.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key});
+  final List<Memory> memories;
+  final Function refreshMemories;
+  final FocusNode textFieldFocusNode;
+
+  const MemoriesPage({
+    super.key,
+    required this.memories,
+    required this.refreshMemories,
+    required this.textFieldFocusNode,
+  });
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
 }
 
-class _MemoriesPageState extends State<MemoriesPage> {
-  String? dailySummary;
-  String? weeklySummary;
-  String? monthlySummary;
-  late AudioPlayer _audioPlayer;
+class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+  TextEditingController textController = TextEditingController();
+  FocusNode textFieldFocusNode = FocusNode();
+  bool loading = false;
+  bool displayDiscardMemories = false;
 
-  final scaffoldKey = GlobalKey<ScaffoldState>();
-  final unFocusNode = FocusNode();
-
-  _dailySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesByDay(DateTime.now());
-    dailySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
-
-  _weeklySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastWeek();
-    weeklySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
-
-  _monthlySummary() async {
-    List<MemoryRecord> memories = await MemoryStorage.getMemoriesOfLastMonth();
-    monthlySummary = memories.isNotEmpty ? (await requestSummary(memories)) : null;
-  }
-
-  void _resetMemoriesState(String? memoryId) {
-    var memories = FFAppState().memories;
-    for (var m in memories) {
-      if (memoryId != null && m.id == memoryId) {
-        m.playerState = PlayerState.playing;
-      } else {
-        m.playerState = PlayerState.stopped;
-      }
-    }
-    FFAppState().update(() {
-      FFAppState().memories = memories;
-    });
-  }
-
-  void _playAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    String fileName = memory.audioFileName!;
-    File? gcpFile = await downloadFile(fileName, fileName);
-    if (gcpFile == null) {
-      // show dialog
-      showDialog(
-          context: context,
-          builder: (_) => const AlertDialog(
-                title: Text('Error'),
-                content: Text(
-                    'Failed to retrieve the audio file, please check your credentials and GCP bucket settings are set.'),
-              ));
-      return;
-    }
-    _audioPlayer.play(DeviceFileSource(gcpFile.path ?? ''));
-    debugPrint('Duration: ${(await _audioPlayer.getDuration())?.inSeconds} seconds');
-    _resetMemoriesState(memory.id);
-  }
-
-  void _pauseAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.pause();
+  changeLoadingState() {
     setState(() {
-      memory.playerState = PlayerState.paused;
+      loading = !loading;
     });
   }
 
-  void _resumeAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.resume();
-    setState(() {
-      memory.playerState = PlayerState.playing;
-    });
-  }
-
-  void _stopAudio(MemoryRecord memory) async {
-    if (memory.audioFileName == null) return;
-    await _audioPlayer.stop();
-    setState(() {
-      memory.playerState = PlayerState.stopped;
-    });
+  _toggleDiscardMemories() async {
+    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
+    setState(() => displayDiscardMemories = !displayDiscardMemories);
   }
 
   @override
-  void initState() {
-    super.initState();
-    _dailySummary();
-    _weeklySummary();
-    _monthlySummary();
-    _audioPlayer = AudioPlayer();
-    _audioPlayer.onPlayerComplete.listen((event) {
-      _resetMemoriesState(null);
-    });
-  }
+  bool get wantKeepAlive => true;
 
-  @override
-  void dispose() {
-    _audioPlayer.stop();
-    _audioPlayer.dispose();
-    unFocusNode.dispose();
-    super.dispose();
+  void _onAddButtonPressed() {
+    MixpanelManager().addManualMemoryClicked();
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AddMemoryDialog(
+          onMemoryAdded: (Memory memory) {
+            widget.memories.insert(0, memory);
+            setState(() {});
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<FFAppState>();
+    var memories =
+        displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
+    memories = textController.text.isEmpty
+        ? memories
+        : memories
+            .where(
+              (memory) => (memory.transcript + memory.structured.target!.title + memory.structured.target!.overview)
+                  .toLowerCase()
+                  .contains(textController.text.toLowerCase()),
+            )
+            .toList();
 
-    return Builder(
-      builder: (context) => GestureDetector(
-        onTap: () => unFocusNode.canRequestFocus
-            ? FocusScope.of(context).requestFocus(unFocusNode)
-            : FocusScope.of(context).unfocus(),
-        child: Scaffold(
-          key: scaffoldKey,
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: FlutterFlowTheme.of(context).primary,
-            title: const HomePageHeaderButtons(),
-            centerTitle: true,
-          ),
-          body: Stack(
-            children: [
-              const BlurBotWidget(),
-              ListView(
-                children: [
-                  const SizedBox(height: 16),
-                  HomePageSummariesButtons(
-                    unFocusNode: unFocusNode,
-                    dailySummary: dailySummary,
-                    weeklySummary: weeklySummary,
-                    monthlySummary: monthlySummary,
-                  ),
-                  const SizedBox(height: 8),
-                  if (FFAppState().memoryCreationProcessing) const MemoryProcessing(),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: (FFAppState().memories.isEmpty && !FFAppState().memoryCreationProcessing)
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.only(top: 32.0),
-                              child: EmptyMemoriesWidget(),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: EdgeInsets.zero,
-                            primary: false,
-                            shrinkWrap: true,
-                            scrollDirection: Axis.vertical,
-                            itemCount: FFAppState().memories.length,
-                            itemBuilder: (context, index) {
-                              return MemoryListItem(
-                                memory: FFAppState().memories[index],
-                                unFocusNode: unFocusNode,
-                                playAudio: _playAudio,
-                                pauseAudio: _pauseAudio,
-                                resumeAudio: _resumeAudio,
-                                stopAudio: _stopAudio,
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              )
-            ],
+    return CustomScrollView(
+      slivers: [
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        SliverToBoxAdapter(
+          child: Container(
+            width: double.maxFinite,
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+              border: GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 1,
+              ),
+              shape: BoxShape.rectangle,
+            ),
+            child: TextField(
+              enabled: true,
+              controller: textController,
+              onChanged: (s) {
+                setState(() {});
+              },
+              obscureText: false,
+              autofocus: false,
+              focusNode: widget.textFieldFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Search for memories...',
+                hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                suffixIcon: textController.text.isEmpty
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        icon: const Icon(
+                          Icons.cancel,
+                          color: Color(0xFFF7F4F4),
+                          size: 28.0,
+                        ),
+                        onPressed: () {
+                          textController.clear();
+                          setState(() {});
+                        },
+                      ),
+              ),
+              style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+            ),
           ),
         ),
-      ),
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                    onPressed: _onAddButtonPressed,
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                      size: 24,
+                      color: Colors.white,
+                    )),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        _toggleDiscardMemories();
+                      },
+                      icon: Icon(
+                        displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        ),
+        memories.isEmpty
+            ? const SliverToBoxAdapter(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 32.0),
+                    child: EmptyMemoriesWidget(),
+                  ),
+                ),
+              )
+            : SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    return MemoryListItem(
+                      memoryIdx: index,
+                      memory: memories[index],
+                      loadMemories: widget.refreshMemories,
+                    );
+                  },
+                  childCount: memories.length,
+                ),
+              ),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 80),
+        ),
+      ],
     );
   }
 }

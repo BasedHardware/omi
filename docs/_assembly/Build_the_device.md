@@ -1,40 +1,83 @@
 ---
 layout: default
-title: Build the device
+title: Building the Device
 nav_order: 2
 ---
 
-# Build the device
+# Building the device
 
-If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
+If you received an unassembled Friend or want to build one yourself, follow the steps below:
 
-{: .note }
-Important: If you purchased an assembled device please skip this step
+**Step 0.** Components
 
+Ensure you've purchased all required components from the [buying guide] (https://docs.basedhardware.com/assembly/Buying_Guide/).
 
-**Step 0:** Make sure you have bought everything from the buying guide above
+<img src="/images/latest_assembly/components.png" alt="components" width="300">
 
-<img src="https://basedhardware.github.io/Friend/images/build_device_snapshot_1.jpeg" alt="Components" width="300">
+Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs/Latest%20design).
 
-**Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
-
-**Step 2:**
-Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
-
-<img src="https://basedhardware.github.io/Friend/images/build_device_snapshot_2.png" alt="Soldering" width="400">
-
-<img src="https://basedhardware.github.io/Friend/images/build_device_snapshot_3.jpeg" alt="Soldered" width="300">
-
-**Step 3:**
-Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch, however it's not an ideal design. If you will figure out a better solution, please contribute!
-
-<img src="https://basedhardware.github.io/Friend/images/build_device_snapshot_4.jpeg" alt="Assembled" width="300">
-
-**Step 4:** Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the USB-port side, you'll find 2 small round holes. This is where the thread should go through.
-
-<img src="https://basedhardware.github.io/Friend/images/build_device_snapshot_5.jpeg" alt="Lid" width="200">
-
-Congratulations! you now have a fully working and assembled device!
+If you don't have access to a 3D printer, send the file to a 3D printing service or check https://makerspace.com/ for 3D printing spaces.
 
 
-[Next Step: Install Firmware →](https://basedhardware.github.io/Friend/assembly/Install_firmware/){: .btn .btn-purple }
+**Step 1.** Cut the *black wire* approximately 2/3" from the base.
+
+<img src="/images/latest_assembly/1.png" alt="battery" width="300">
+
+**Step 2.** Carefully remove *just a little bit* of insulation from both ends of the cut wire.
+
+<img src="/images/latest_assembly/2.png" alt="wire" width="300">
+
+The wire stripper should have multiple notches labelled with AWG sizes. For this project, we recommend using *28 AWG*.
+
+**Step 3.** Follow the soldering diagram to connect the battery and board.
+
+<img src="/images/latest_assembly/3.png" alt="soldering" width="300">
+
+
+**Step 4.** Ensure the switch is inserted securely into the battery connector.
+
+<img src="/images/latest_assembly/4.png" alt="battery" width="300">
+
+<img src="/images/latest_assembly/electronics.png" alt="status" width="300">
+
+<img src="/images/latest_assembly/case.png" alt="status" width="300">
+
+**Step 5.** Assemble the battery and board in the 3D printed case.
+
+<img src="/images/latest_assembly/5.png" alt="case" width="300">
+
+**Step 6.** Place the switch in the notch next to the USB-C notch
+
+<img src="/images/latest_assembly/6.png" alt="notch" width="300">
+
+**Step 7.** Gather the longer red wire and gently twist it.
+
+<img src="/images/latest_assembly/7.png" alt="twist" width="300">
+
+This will help manage the wires when putting on the lid.
+
+**Step 8.** Curl the wire and place it off to the side.
+
+<img src="/images/latest_assembly/8.png" alt="twist" width="300">
+
+**Step 9.** Attach the lid to the case.
+
+Attaching the lid may take a few tries; make sure to use the ridges as a guide to find the best placement.
+
+<img src="/images/latest_assembly/9.png" alt="lid" width="300">
+
+**Step 10.** Apply even pressure around the perimeter of the case until the seams snap in place.
+
+<img src="/images/latest_assembly/10.png" alt="seams" width="300">
+
+**Step 11.** Put the necklace rope
+[This is how we do it ](https://share.icloud.com/photos/049bKAmOH-S0ZxowT32durF3Q)
+
+Charging:
+Friend can only be charged when it’s powered on. It will not be charged when powered off
+
+
+### Congratulations! you now have a fully working and assembled device!
+
+
+[Next Step: Install Firmware →](/assembly/Install_firmware/){: .btn .btn-purple }

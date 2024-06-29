@@ -1,118 +1,116 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:friend_private/backend/database/box.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/utils/notifications.dart';
-import 'package:provider/provider.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:sentry_logging/sentry_logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:opus_dart/opus_dart.dart';
+import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
-import 'flutter_flow/flutter_flow_util.dart';
-import 'flutter_flow/internationalization.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  usePathUrlStrategy();
-
-  final appState = FFAppState(); // Initialize FFAppState
-  await appState.initializePersistedState();
+  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
-  if (Env.sentryDSNKey?.isNotEmpty ?? false) {
-    debugPrint('Sentry key: ${Env.sentryDSNKey}');
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = Env.sentryDSNKey;
-        options.tracesSampleRate = 1.0;
-        options.profilesSampleRate = 1.0;
-        options.attachScreenshot = false;
-        options.debug = false;
-        options.addIntegration(LoggingIntegration());
-        options.enableAutoPerformanceTracing = true;
-        // options.environment = Env.environment ?? 'development';
-      },
-      appRunner: () => runApp(ChangeNotifierProvider(
-        create: (context) => appState,
-        child: MyApp(
-          entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
-        ),
-      )),
-    );
-    // Sentry.configureScope((scope) => scope.level = SentryLevel.info);
-  } else {
-    runApp(ChangeNotifierProvider(
-      create: (context) => appState,
-      child: MyApp(
-        entryPage: SharedPreferencesUtil().onboardingCompleted ? const HomePage(btDevice: null) : null,
-      ),
-    ));
+  await MixpanelManager.init();
+  await ObjectBoxUtil.init();
+  initOpus(await opus_flutter.load());
+
+  if (Env.oneSignalAppId != null) {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    OneSignal.initialize(Env.oneSignalAppId!);
+    OneSignal.login(SharedPreferencesUtil().uid);
   }
 
-  // bool userOnboarded = false;
+  if (Env.instabugApiKey != null) {
+    runZonedGuarded(
+      () {
+        Instabug.init(
+          token: Env.instabugApiKey!,
+          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+        );
+        FlutterError.onError = (FlutterErrorDetails details) {
+          Zone.current.handleUncaughtError(details.exception, details.stack!);
+        };
+        Instabug.setColorTheme(ColorTheme.dark);
+        _getRunApp();
+      },
+      CrashReporting.reportCrash,
+    );
+  } else {
+    _getRunApp();
+  }
+}
+
+_getRunApp() {
+  return runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.entryPage});
+  const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
-
-  final Widget? entryPage;
 }
 
 class _MyAppState extends State<MyApp> {
-  Locale? _locale;
-  ThemeMode _themeMode = ThemeMode.system;
-
-  late AppStateNotifier _appStateNotifier;
-  late GoRouter _router;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _appStateNotifier = AppStateNotifier.instance;
-    _router = createRouter(_appStateNotifier, widget.entryPage);
-
-    Future.delayed(
-        const Duration(milliseconds: 1000), () => setState(() => _appStateNotifier.stopShowingSplashImage()));
-  }
-
-  void setLocale(String language) {
-    setState(() => _locale = createLocale(language));
-  }
-
-  void setThemeMode(ThemeMode mode) => setState(() {
-        _themeMode = mode;
-      });
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      debugShowCheckedModeBanner: false,
-      title: 'Friend',
+    return MaterialApp(
+      navigatorObservers: [InstabugNavigatorObserver()],
+      debugShowCheckedModeBanner: F.env == Environment.dev,
+      title: F.title,
       localizationsDelegates: const [
-        FFLocalizationsDelegate(),
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      locale: _locale,
-      supportedLocales: const [
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('en')],
       theme: ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: false,
-      ),
-      themeMode: _themeMode,
-      routerConfig: _router,
+          useMaterial3: false,
+          colorScheme: const ColorScheme.dark(
+            primary: Colors.black,
+            secondary: Colors.deepPurple,
+            surface: Colors.black38,
+          ),
+          // dialogTheme: const DialogTheme(
+          //   backgroundColor: Colors.black,
+          //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
+          //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
+          // ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: Colors.grey.shade900,
+            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+          ),
+          textTheme: TextTheme(
+            titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+            titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+            bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+            labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+          ),
+          textSelectionTheme: const TextSelectionThemeData(
+            cursorColor: Colors.white,
+            selectionColor: Colors.deepPurple,
+          )),
+      themeMode: ThemeMode.dark,
+      // home: const HasBackupPage(),
+      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
+          ? const HomePageWrapper()
+          : const OnboardingWrapper(),
     );
   }
 }
+
+// Do not run me directly, instead use main_dev.dart

@@ -1,5 +1,10 @@
+import 'dart:convert';
+
+import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -13,7 +18,20 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    // _instance.chatMessages = [];
+    if (!_preferences!.containsKey('uid')) {
+      _preferences!.setString('uid', const Uuid().v4());
+    }
   }
+
+  String get uid => getString('uid') ?? '';
+
+  // DO NOT USE BESIDES BACKUP IMPORT
+  // set uid(String value) => saveString('uid', value);
+
+  set deviceId(String value) => saveString('deviceId', value);
+
+  String get deviceId => getString('deviceId') ?? '';
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
@@ -30,6 +48,13 @@ class SharedPreferencesUtil {
   String get gcpBucketName => getString('gcpBucketName') ?? '';
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
+
+  String get webhookUrl => getString('webhookUrl') ?? '';
+
+  set webhookUrl(String value) => saveString('webhookUrl', value);
+  String get transcriptServerUrl => getString('transcriptServerUrl') ?? '';
+
+  set transcriptServerUrl(String value) => saveString('transcriptServerUrl', value);
 
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
@@ -50,6 +75,95 @@ class SharedPreferencesUtil {
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key') ?? '';
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
+
+  bool get optInAnalytics => getBool('optInAnalytics') ?? true;
+
+  set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
+
+  bool get devModeEnabled => getBool('devModeEnabled') ?? false;
+
+  set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
+
+  bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
+
+  set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
+
+  bool get postMemoryNotificationIsChecked => getBool('postMemoryNotificationIsChecked') ?? true;
+
+  set postMemoryNotificationIsChecked(bool value) => saveBool('postMemoryNotificationIsChecked', value);
+
+  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
+
+  set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
+
+  // List<Message> get chatMessages {
+  //   final List<String> messages = getStringList('messages') ?? [];
+  //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
+  // }
+  //
+  // set chatMessages(List<Message> value) {
+  //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
+  //   saveStringList('messages', messages);
+  // }
+
+  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  bool get hasSpeakerProfile => true;
+
+  set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
+
+  List<Plugin> get pluginsList {
+    final List<String> plugins = getStringList('pluginsList') ?? [];
+    return plugins.map((e) => Plugin.fromJson(jsonDecode(e))).toList();
+  }
+
+  set pluginsList(List<Plugin> value) {
+    final List<String> plugins = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('pluginsList', plugins);
+  }
+
+  List<String> get pluginsEnabled => getStringList('pluginsEnabled') ?? [];
+
+  set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
+
+  enablePlugin(String value) {
+    final List<String> plugins = pluginsEnabled;
+    plugins.add(value);
+    pluginsEnabled = plugins;
+  }
+
+  disablePlugin(String value) {
+    final List<String> plugins = pluginsEnabled;
+    plugins.remove(value);
+    pluginsEnabled = plugins;
+  }
+
+  List<TranscriptSegment> get transcriptSegments {
+    final List<String> segments = getStringList('transcriptSegments') ?? [];
+    return segments.map((e) => TranscriptSegment.fromJson(jsonDecode(e))).toList();
+  }
+
+  set transcriptSegments(List<TranscriptSegment> value) {
+    final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('transcriptSegments', segments);
+  }
+
+  bool get backupsEnabled => getBool('backupsEnabled') ?? false;
+
+  set backupsEnabled(bool value) => saveBool('backupsEnabled', value);
+
+  bool get hasBackupPassword => getString('backupPassword') != null && getString('backupPassword')!.isNotEmpty;
+
+  String get backupPassword => getString('backupPassword') ?? '';
+
+  set backupPassword(String value) => saveString('backupPassword', value);
+
+  String get lastBackupDate => getString('lastBackupDate') ?? '';
+
+  set lastBackupDate(String value) => saveString('lastBackupDate', value);
+
+  String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
+
+  set lastDailySummaryDay(String value) => saveString('lastDailySummaryDate', value);
 
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
@@ -98,10 +212,18 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
+
+  set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
+
+  bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
+
+  set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
+
+  bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().useFriendApiKeys ? (Env.openAIAPIKey ?? '') : SharedPreferencesUtil().openAIApiKey;
+    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
 
 String getDeepgramApiKeyForUsage() =>
-    SharedPreferencesUtil().useFriendApiKeys ? (Env.deepgramApiKey ?? '') : SharedPreferencesUtil().deepgramApiKey;
+    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
