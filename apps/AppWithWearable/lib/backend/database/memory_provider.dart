@@ -74,6 +74,17 @@ class MemoryProvider {
     return filtered;
   }
 
+  List<Memory> retrieveMemoriesWithinDates(DateTime start, DateTime end) {
+    var query = _box
+        .query(Memory_.createdAt
+            .between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)
+            .and(Memory_.discarded.equals(false)))
+        .build();
+    List<Memory> filtered = query.find();
+    query.close();
+    return filtered;
+  }
+
   Future<File> exportMemoriesToFile() async {
     String json = getPrettyJSONString(getMemories().map((m) => m.toJson()).toList());
     final directory = await getApplicationDocumentsDirectory();

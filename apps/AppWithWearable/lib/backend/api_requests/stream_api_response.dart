@@ -71,7 +71,7 @@ _listStream(response, callback, onDone) {
           if (processedBlocks < jsonBlocks.length) {
             //we have a partial message
             buffer.write(bufferString);
-            print('Partial message in queue: $bufferString');
+            // print('Partial message in queue: $bufferString');
           }
         }
       },
@@ -113,7 +113,7 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
 
 String qaStreamedBody(String context, List<Message> chatHistory) {
   var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to answer the question. 
     If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
     

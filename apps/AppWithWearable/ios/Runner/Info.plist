@@ -47,9 +47,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Bluetooth permissions is required to connect with a device.</string>
+	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Bluetooth permissions is required to connect with a device.</string>
+	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
