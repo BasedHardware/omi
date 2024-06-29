@@ -164,6 +164,9 @@ class NotificationUtil {
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
     final payload = receivedAction.payload;
+    if (payload?.containsKey('navigateTo') ?? false) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
+    }
     SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
     MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
   }
