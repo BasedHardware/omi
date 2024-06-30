@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -19,7 +20,10 @@ class Memory {
   DateTime? finishedAt;
 
   String transcript;
+  final transcriptSegments = ToMany<TranscriptSegment>();
+
   String? recordingFilePath;
+
   final structured = ToOne<Structured>();
 
   @Backlink('memory')
@@ -28,8 +32,15 @@ class Memory {
   @Index()
   bool discarded;
 
-  Memory(this.createdAt, this.transcript, this.discarded,
-      {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
+  Memory(
+    this.createdAt,
+    this.transcript,
+    this.discarded, {
+    this.id = 0,
+    this.recordingFilePath,
+    this.startedAt,
+    this.finishedAt,
+  });
 
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
@@ -50,7 +61,6 @@ class Memory {
       DateTime.parse(json['createdAt']),
       json['transcript'],
       json['discarded'],
-      // id: json['id'],
       recordingFilePath: json['recordingFilePath'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
@@ -62,6 +72,14 @@ class Memory {
         memory.pluginsResponse.add(PluginResponse(response));
       }
     }
+
+    if (json['transcriptSegments'] != null) {
+      for (dynamic segment in json['transcriptSegments']) {
+        if (segment.isEmpty) continue;
+        memory.transcriptSegments.add(TranscriptSegment.fromJson(segment));
+      }
+    }
+
     return memory;
   }
 
