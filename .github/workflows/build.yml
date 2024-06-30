@@ -21,6 +21,7 @@ jobs:
     env:
       KEYSTORE_PATH: apps/AppWithWearable/android/app/upload-keystore.jks
       ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
+      FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD : ${{ secrets.APPLE_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v3
