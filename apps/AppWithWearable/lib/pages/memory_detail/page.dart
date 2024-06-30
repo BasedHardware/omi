@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,9 +8,12 @@ import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
@@ -24,6 +29,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
+  final pluginsList = SharedPreferencesUtil().pluginsList;
 
   late Structured structured;
   TextEditingController titleController = TextEditingController();
@@ -37,6 +43,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   void initState() {
+    // devModeWebhookCall(widget.memory);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -55,7 +62,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(structured.actionItems.toString());
+    // TODO: include a way to trigger specific plugins
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -63,7 +70,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           title: Row(
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -190,11 +197,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   : const SizedBox.shrink(),
               ...structured.actionItems.map<Widget>((item) {
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
+                  padding: const EdgeInsets.only(top: 10),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child:Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
@@ -216,23 +226,68 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                 ),
                 const SizedBox(height: 24),
-                ...widget.memory.pluginsResponse.mapIndexed((i, response) => Container(
-                      margin: const EdgeInsets.only(bottom: 32),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: ExpandableTextWidget(
-                        text: response.content.trim(),
-                        isExpanded: pluginResponseExpanded[i],
-                        toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                        maxLines: 6,
-                        // Change this to 6 if you want the initial max lines to be 6
-                        linkColor: Colors.white,
-                      ),
-                    )),
+                ...widget.memory.pluginsResponse.mapIndexed((i, pluginResponse) {
+                  if (pluginResponse.content.length < 5) return const SizedBox.shrink();
+                  Plugin? plugin = pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 40),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        plugin != null
+                            ? ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.white,
+                                  maxRadius: 16,
+                                  backgroundImage: NetworkImage(
+                                      'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
+                                ),
+                                title: Text(
+                                  plugin.name,
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    plugin.description,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                        ClipboardData(text: utf8.decode(pluginResponse.content.trim().codeUnits)));
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                      content: Text('Plugin response copied to clipboard'),
+                                    ));
+                                    MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Plugin Response');
+                                  },
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                        ExpandableTextWidget(
+                          text: utf8.decode(pluginResponse.content.trim().codeUnits),
+                          isExpanded: pluginResponseExpanded[i],
+                          toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
+                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                          maxLines: 6,
+                          // Change this to 6 if you want the initial max lines to be 6
+                          linkColor: Colors.white,
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ],
               const SizedBox(height: 8),
               Row(
@@ -293,10 +348,26 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   }
 
   _reProcessMemory(StateSetter setModalState) async {
+    debugPrint('_reProcessMemory');
     setModalState(() => loadingReprocessMemory = true);
-    MemoryStructured structured =
-        await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
+    MemoryStructured structured;
+    try {
+      structured = await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
+    } catch (err, stacktrace) {
+      var memoryReporting = MixpanelManager().getMemoryEventProperties(widget.memory);
+      CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
+        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+        'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error while processing memory. Please try again later.'),
+        ),
+      );
+      setModalState(() => loadingReprocessMemory = false);
+      return;
+    }
     Structured current = widget.memory.structured.target!;
     current.title = structured.title;
     current.overview = structured.overview;
@@ -304,14 +375,19 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     current.category = structured.category;
     current.actionItems.clear();
     current.actionItems.addAll(structured.actionItems.map<ActionItem>((e) => ActionItem(e)).toList());
-    debugPrint('widget.memory.structured: ${widget.memory.structured.target!.toJson()}');
     widget.memory.structured.target = current;
+
+    widget.memory.pluginsResponse.clear();
+    widget.memory.pluginsResponse.addAll(
+      structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
+    );
+
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
-
+    debugPrint('MemoryProvider().updateMemory');
     getEmbeddingsFromInput(structured.toString()).then((vector) {
-      createPineconeVector(widget.memory.id.toString(), vector);
+      createPineconeVector(widget.memory.id.toString(), vector, widget.memory.createdAt);
     });
 
     overviewController.text = current.overview;
@@ -324,13 +400,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
         content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
       ),
     );
+    debugPrint('Snackbar');
     setModalState(() => loadingReprocessMemory = false);
-    setState(() {});
-    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 
-  void _showOptionsBottomSheet() {
-    showModalBottomSheet(
+  void _showOptionsBottomSheet() async {
+    var result = await showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
@@ -409,6 +485,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 ),
               );
             }));
+    if (result == true) setState(() {});
+    debugPrint('showBottomSheet result: $result');
   }
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -37,8 +38,10 @@ class _PluginsPageState extends State<PluginsPage> {
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
       prefs.enablePlugin(pluginId);
+      MixpanelManager().pluginEnabled(pluginId);
     } else {
       prefs.disablePlugin(pluginId);
+      MixpanelManager().pluginDisabled(pluginId);
     }
     _fetchPlugins();
   }

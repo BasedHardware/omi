@@ -268,7 +268,7 @@ class _BackupsPageState extends State<BackupsPage> {
                           var memory = memories[i];
                           if (memory.structured.target == null || memory.discarded) continue;
                           var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
-                            createPineconeVector(memory.id.toString(), vector);
+                            createPineconeVector(memory.id.toString(), vector, memory.createdAt);
                           });
                           if (i % 10 == 0) {
                             await f; // "wait" for previous 10 requests to finish

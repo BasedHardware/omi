@@ -29,19 +29,25 @@ The main service has UUID of `19B10000-E8F2-537E-4F6C-D104768A1214` and has two 
 
 The possible values for the codec type are:
 - 0: PCM 16-bit, 16kHz, mono
-- 1: PCM 8-bit, 16kHz, mono
-- 10: Mu-law 16-bit, 16kHz, mono
-- 11: Mu-law 8-bit, 16kHz, mono
+- 1: PCM 16-bit, 8kHz, mono
+- 10: Mu-law 8-bit, 16kHz, mono
+- 11: Mu-law 8-bit, 8kHz, mono
 - 20: Opus 16-bit, 16kHz, mono
 
-The device default is PCM 8-bit, 16kHz, mono.
+The device default is PCM 16-bit, 8kHz, mono.
 
 ### Audio Data
 
-The audio data is sent as updates to the audio characteristic. The format of the data depends on the codec type.
-The data is split into packets, with each packet containing 160 samples.
-Each packet also has a three byte header:
-- The first two bytes are the overall packet number, starting from 0.
-- The third byte is the index of packet in the current batch of packets.
+The audio data is sent as notifications on the audio characteristic. The format of the data depends on the codec type.  
+The data is split into audio packets, with each packet containing 160 samples.  
+A packet could be sent in multiple value updates if it is larger than (negotiated BLE MTU - 3 bytes).  
+Each value update has a three byte header:
+- The first two bytes are the overall packet number, starting from 0, incremented for each value sent and looped over to 0 after 65535.
+- The third byte is the index of value in the current packet, starting at 0.  
+
+For instance, 160 samples with a codec 0 (16-bit, 16kHz PCM) results in a packet size of 320 bytes.  
+On current iOS devices, this results in 2 value notifications:
+- packet number n, index 0, 251 bytes
+- packet number n + 1, index 1, 75 bytes
 
 The data is sent in little-endian format.

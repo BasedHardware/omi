@@ -55,6 +55,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
                         // TODO: if connected already, stop animation and display battery
+
                         WelcomePage(
                           goNext: _goNext,
                           skipDevice: () => _controller!.animateTo(2),

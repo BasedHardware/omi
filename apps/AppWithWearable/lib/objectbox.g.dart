@@ -151,7 +151,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(4, 8944838570398231806),
       name: 'PluginResponse',
-      lastPropertyId: const obx_int.IdUid(5, 2860027525438426963),
+      lastPropertyId: const obx_int.IdUid(6, 4389894679139533208),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -169,6 +169,11 @@ final _entities = <obx_int.ModelEntity>[
         obx_int.ModelProperty(
             id: const obx_int.IdUid(5, 2860027525438426963),
             name: 'content',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(6, 4389894679139533208),
+            name: 'pluginId',
             type: 9,
             flags: 0)
       ],
@@ -430,10 +435,14 @@ obx_int.ModelDefinition getObjectBoxModel() {
         },
         objectToFB: (PluginResponse object, fb.Builder fbb) {
           final contentOffset = fbb.writeString(object.content);
-          fbb.startTable(6);
+          final pluginIdOffset = object.pluginId == null
+              ? null
+              : fbb.writeString(object.pluginId!);
+          fbb.startTable(7);
           fbb.addInt64(0, object.id);
           fbb.addInt64(3, object.memory.targetId);
           fbb.addOffset(4, contentOffset);
+          fbb.addOffset(5, pluginIdOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -442,8 +451,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final rootOffset = buffer.derefObject(0);
           final contentParam = const fb.StringReader(asciiOptimization: true)
               .vTableGet(buffer, rootOffset, 12, '');
-          final object = PluginResponse(contentParam)
-            ..id = const fb.Int64Reader().vTableGet(buffer, rootOffset, 4, 0);
+          final idParam =
+              const fb.Int64Reader().vTableGet(buffer, rootOffset, 4, 0);
+          final pluginIdParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGetNullable(buffer, rootOffset, 14);
+          final object = PluginResponse(contentParam,
+              id: idParam, pluginId: pluginIdParam);
           object.memory.targetId =
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 10, 0);
           object.memory.attach(store);
@@ -593,6 +606,10 @@ class PluginResponse_ {
   /// See [PluginResponse.content].
   static final content =
       obx.QueryStringProperty<PluginResponse>(_entities[3].properties[2]);
+
+  /// See [PluginResponse.pluginId].
+  static final pluginId =
+      obx.QueryStringProperty<PluginResponse>(_entities[3].properties[3]);
 }
 
 /// [Message] entity fields to define ObjectBox queries.

@@ -6,30 +6,33 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/utils/string_utils.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:tuple/tuple.dart';
 
 Future<MemoryStructured> generateTitleAndSummaryForMemory(
   String transcript,
   List<Memory> previousMemories, {
   bool forceProcess = false,
+  bool ignoreCache = false,
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
   }
+  if (transcript.split(' ').length > 100) {
+    // TODO: try lower count?
+    forceProcess = true;
+  }
 
-  final languageCode = SharedPreferencesUtil().recordingsLanguage;
-  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
-  // final plugin = SharedPreferencesUtil().pluginsList.firstWhereOrNull((e) => pluginsEnabled.contains(e.id));
-  final pluginsList = SharedPreferencesUtil().pluginsList;
-  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
-  // ${_getPrevMemoriesStr(previousMemories)}
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
   // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
+
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
-    The conversation language is $languageCode. Make sure to use English for your response.
+    The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Make sure to use English for your response.
 
     ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
     
@@ -54,17 +57,61 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .replaceAll('    ', '')
           .trim();
   debugPrint(prompt);
-  List<Future<String>> pluginPrompts = enabledPlugins.map((plugin) async {
-    String response = await executeGptPrompt(
-        '''Your are ${plugin.name}, ${plugin.prompt}, Conversation: ```${transcript.trim()}```, you must start your output with heading as ${plugin.name}, you must only use valid english alphabets and words for your response, use pain text without markdown```. ''');
-    return response;
+  var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
+  var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
+  if (structured.title.isEmpty) return structured;
+  structured.pluginsResponse = await executePlugins(transcript);
+  return structured;
+}
+
+Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
+  final pluginsList = SharedPreferencesUtil().pluginsList;
+  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
+  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+  // TODO: include memory details parsed already as extra context?
+  // TODO: improve plugin result, include result + id to map it to.
+  List<Future<Tuple2<Plugin, String>>> pluginPrompts = enabledPlugins.map((plugin) async {
+    try {
+      String response = await executeGptPrompt('''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Note: It is possible that the conversation you are given, has nothing to do with your task, \
+        in that case, output just an empty string. (For example, you are given a business conversation, but your task is medical analysis)
+        
+        Conversation: ```${transcript.trim()}```,
+       
+        Output your response in plain text, without markdown.
+        Make sure to be concise and clear.
+        '''
+          .replaceAll('     ', '')
+          .replaceAll('    ', '')
+          .trim());
+      return Tuple2(plugin, response);
+    } catch (e, stacktrace) {
+      CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+        'plugin': plugin.id,
+        'plugins_count': pluginsEnabled.length.toString(),
+        'transcript_length': transcript.length.toString(),
+      });
+      debugPrint('Error executing plugin ${plugin.id}');
+      return Tuple2(plugin, '');
+    }
   }).toList();
 
-  Future<List<String>> allPluginResponses = Future.wait(pluginPrompts);
-  var structuredResponse = extractJson(await executeGptPrompt(prompt));
-  List<String> responses = await allPluginResponses;
-  var json = jsonDecode(structuredResponse);
-  return MemoryStructured.fromJson(json..['pluginsResponse'] = responses);
+  Future<List<Tuple2<Plugin, String>>> allPluginResponses = Future.wait(pluginPrompts);
+  try {
+    var responses = await allPluginResponses;
+    return responses.where((e) => e.item2.length > 5).toList();
+  } catch (e, stacktrace) {
+    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+      'plugins_count': pluginsEnabled.length.toString(),
+      'transcript_length': transcript.length.toString(),
+    });
+    return [];
+  }
 }
 
 Future<String> postMemoryCreationNotification(Memory memory) async {
@@ -115,24 +162,27 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 // ------
 
-Future<String?> determineRequiresContext(List<Message> messages) async {
+Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
         Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
-        - If it does, provide the topic (1 or 2 words, e.g. "Startups" "Funding" "Business Meetings") that is going to be used to retrieve more context, in the field "query". Leave empty if not context is needed.
+        - Context could be 2 different things:
+          - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+          - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is ${DateTime.now().toIso8601String()}.
         
         Conversation:
-        ${messages.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
+        ${messages.reversed.map((e) => '${e.createdAt.toIso8601String()} ${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
+        
         As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
         the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
-
+        
         Here is the output schema:
         ```
-        {"properties": {"requires_context": {"title": "Requires context", \"description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "bool"}, "query": {"title": "Query", "description": "If context is required, the main topic to retrieve context from", "default": "", "type": "string"}, }}
+        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}, "dates_range": {"title": "Dates Range", "description": "The dates range to retrieve context from", "default": [], "type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date-time"}]}}}
         ```
         '''
       .replaceAll('        ', '');
@@ -141,9 +191,22 @@ Future<String?> determineRequiresContext(List<Message> messages) async {
     {"role": "user", "content": message}
   ]);
   debugPrint('determineRequiresContext response: $response');
+  var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
-    return jsonDecode(response.toString().replaceAll('```', '').replaceAll('json', '').trim())['query'];
+    var data = jsonDecode(cleanedResponse);
+    debugPrint(data.toString());
+    List<String> topics = data['topics'].map<String>((e) => e.toString()).toList();
+    List<String> datesRange = data['dates_range'].map<String>((e) => e.toString()).toList();
+    List<DateTime> dates = datesRange.map((e) => DateTime.parse(e)).toList();
+    debugPrint('topics: $topics, dates: $dates');
+    return Tuple2<List<String>, List<DateTime>>(topics, dates);
   } catch (e) {
+    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.critical, userAttributes: {
+      'response': cleanedResponse,
+      'message_length': message.length.toString(),
+      'message_words': message.split(' ').length.toString(),
+    });
+    debugPrint('Error determining requires context: $e');
     return null;
   }
 }
