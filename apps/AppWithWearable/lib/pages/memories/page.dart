@@ -3,7 +3,6 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
-import 'widgets/add_memory_widget.dart';
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
@@ -43,20 +42,20 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
-  void _onAddButtonPressed() {
-    MixpanelManager().addManualMemoryClicked();
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AddMemoryDialog(
-          onMemoryAdded: (Memory memory) {
-            widget.memories.insert(0, memory);
-            setState(() {});
-          },
-        );
-      },
-    );
-  }
+  // void _onAddButtonPressed() {
+  //   MixpanelManager().addManualMemoryClicked();
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AddMemoryDialog(
+  //         onMemoryAdded: (Memory memory) {
+  //           widget.memories.insert(0, memory);
+  //           setState(() {});
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -133,13 +132,14 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                    onPressed: _onAddButtonPressed,
-                    icon: const Icon(
-                      Icons.add_circle_outline,
-                      size: 24,
-                      color: Colors.white,
-                    )),
+                // IconButton(
+                //     onPressed: _onAddButtonPressed,
+                //     icon: const Icon(
+                //       Icons.add_circle_outline,
+                //       size: 24,
+                //       color: Colors.white,
+                //     )),
+                const SizedBox(width: 1),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisAlignment: MainAxisAlignment.end,

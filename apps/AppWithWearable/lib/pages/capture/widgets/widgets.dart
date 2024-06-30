@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -124,7 +124,7 @@ _getNoFriendConnectedYet(BuildContext context) {
             onPressed: () async {
               Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
               MixpanelManager().connectFriendClicked();
-              },
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shape: RoundedRectangleBorder(

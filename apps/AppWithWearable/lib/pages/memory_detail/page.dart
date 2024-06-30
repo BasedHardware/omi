@@ -63,6 +63,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   @override
   Widget build(BuildContext context) {
     // TODO: include a way to trigger specific plugins
+    debugPrint('widget.memory.transcriptSegments: ${widget.memory.transcriptSegments[0]}');
     return PopScope(
       canPop: false,
       child: Scaffold(
