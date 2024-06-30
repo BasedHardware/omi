@@ -62,12 +62,12 @@ jobs:
         run: bundle install
 
       # Cache pub packages
-      - name: Cache pub packages
-        uses: actions/cache@v2
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: ${{ runner.os }}-pub-
+#      - name: Cache pub packages
+#        uses: actions/cache@v2
+#        with:
+#          path: ~/.pub-cache
+#          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+#          restore-keys: ${{ runner.os }}-pub-
 
       # Setup the env
       - name: Setup Env
