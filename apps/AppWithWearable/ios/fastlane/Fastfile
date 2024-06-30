@@ -16,10 +16,6 @@
 default_platform(:ios)
 
 platform :ios do
-  before_all do
-      sh "sudo xcode-select -s /Applications/Xcode_15.0.1.app"
-    end
-
   desc "Push a new beta build to TestFlight"
   lane :beta do
     setup_ci if ENV['CI']
@@ -28,9 +24,4 @@ platform :ios do
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true)
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
   end
-#
-#  def bump_build_number()
-#      latest_build_number = latest_testflight_build_number(initial_build_number:0)
-#      return (latest_build_number + 1)
-#  end
 end
