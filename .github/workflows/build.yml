@@ -113,7 +113,8 @@ jobs:
       - name: Setup app store connect
         run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
       - name: Install Pod
-        run: cd apps/AppWithWearable/ios && pod install
+        run: pod install
+        working-directory: apps/AppWithWearable/ios
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta
         working-directory: apps/AppWithWearable/ios
