@@ -2,7 +2,7 @@ git_url("https://github.com/vinayshankardubey/friends_keys_fastlane.git")
 
 storage_mode("git")
 
-type("appstore") # The default type, can be: appstore, adhoc, enterprise or development
+type("appstore")
 
 # app_identifier(["com.friend-app-with-wearable.ios12"])
 # username("vinaydevs00@gmail.com") # Your Apple Developer Portal username
