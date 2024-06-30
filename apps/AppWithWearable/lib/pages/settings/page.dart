@@ -1,17 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -22,11 +18,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final TextEditingController gcpCredentialsController = TextEditingController();
-  final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController deepgramAPIKeyController = TextEditingController();
-  final TextEditingController openAIKeyController = TextEditingController();
-  bool openaiApiIsVisible = false;
   late String _selectedLanguage;
   late bool optInAnalytics;
   late bool devModeEnabled;
@@ -37,12 +28,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void initState() {
-    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
-    deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
-
-    gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
-    gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
@@ -76,20 +61,6 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
             elevation: 0,
-            actions: [
-              MaterialButton(
-                onPressed: _saveSettings,
-                color: Colors.transparent,
-                elevation: 0,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Text(
-                    'Save',
-                    style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                ),
-              )
-            ],
           ),
           body: Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 8, right: 8),
@@ -124,6 +95,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         setState(() {
                           _selectedLanguage = newValue!;
                         });
+                        SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
+                        MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                       },
                       dropdownColor: Colors.black,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -158,8 +131,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         if (postMemoryNotificationIsChecked) {
                           postMemoryNotificationIsChecked = false;
+                          SharedPreferencesUtil().postMemoryNotificationIsChecked = false;
                         } else {
                           postMemoryNotificationIsChecked = true;
+                          SharedPreferencesUtil().postMemoryNotificationIsChecked = true;
                         }
                       });
                     },
@@ -257,13 +232,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: InkWell(
                       onTap: () {
                         setState(() {
-                          if (optInAnalytics) {
-                            optInAnalytics = false;
-                            SharedPreferencesUtil().optInAnalytics = false;
-                          } else {
-                            optInAnalytics = true;
-                            SharedPreferencesUtil().optInAnalytics = true;
-                          }
+                          optInAnalytics = false;
+                          SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
                         });
                       },
                       child: Padding(
@@ -377,6 +348,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().supportContacted();
                     },
                   ),
+                  ListTile(
+                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                    title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('2300+ members and counting.'),
+                    trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
+                    onTap: () {
+                      launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+                      MixpanelManager().joinDiscordClicked();
+                    },
+                  ),
                   const SizedBox(height: 36.0),
                   const Align(
                     alignment: Alignment.centerLeft,
@@ -486,6 +467,41 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
+                  Visibility(
+                    visible: devModeEnabled,
+                    child: GestureDetector(
+                      onTap: () {
+                        MixpanelManager().devModePageOpened();
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeveloperSettingsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Developer Mode',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: Color.fromARGB(255, 255, 255, 255),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -506,168 +522,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  ..._getDeveloperOnlyFields(),
                 ],
               ),
             ),
           ),
         ));
-  }
-
-  _getDeveloperOnlyFields() {
-    if (!devModeEnabled) return [const SizedBox.shrink()];
-    return [
-      const SizedBox(height: 24.0),
-      Container(
-        height: 0.2,
-        color: Colors.grey[400],
-        width: double.infinity,
-      ),
-      const SizedBox(height: 40),
-      _getText('Set your own keys', underline: false),
-      const SizedBox(height: 16.0),
-      TextField(
-        controller: openAIKeyController,
-        obscureText: false,
-        autocorrect: false,
-        enabled: true,
-        enableSuggestions: false,
-        decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
-        style: const TextStyle(color: Colors.white),
-      ),
-      const SizedBox(height: 24.0),
-      TextField(
-        controller: deepgramAPIKeyController,
-        obscureText: false,
-        autocorrect: false,
-        enabled: true,
-        enableSuggestions: false,
-        decoration: _getTextFieldDecoration('Deepgram API Key', hintText: ''),
-        style: const TextStyle(color: Colors.white),
-      ),
-      const SizedBox(height: 40),
-      _getText('[Optional] Store your recordings in Google Cloud', underline: false),
-      const SizedBox(height: 16.0),
-      TextField(
-        controller: gcpCredentialsController,
-        obscureText: false,
-        autocorrect: false,
-        enableSuggestions: false,
-        enabled: true,
-        decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-        style: const TextStyle(color: Colors.white),
-      ),
-      const SizedBox(height: 16.0),
-      TextField(
-        controller: gcpBucketNameController,
-        obscureText: false,
-        autocorrect: false,
-        enabled: true,
-        enableSuggestions: false,
-        decoration: _getTextFieldDecoration('GCP Bucket Name'),
-        style: const TextStyle(color: Colors.white),
-      ),
-      const SizedBox(height: 24),
-      // ListTile(
-      //   title: const Text('Export Memories'),
-      //   subtitle: const Text('Export all your memories to a JSON file.'),
-      //   trailing: loadingExportMemories
-      //       ? const SizedBox(
-      //           height: 16,
-      //           width: 16,
-      //           child: CircularProgressIndicator(
-      //             color: Colors.white,
-      //             strokeWidth: 2,
-      //           ),
-      //         )
-      //       : const Icon(Icons.upload),
-      //   onTap: () async {
-      //     if (loadingExportMemories) return;
-      //     setState(() => loadingExportMemories = true);
-      //     File file = await MemoryProvider().exportMemoriesToFile();
-      //     final result = await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-      //     if (result.status == ShareResultStatus.success) {
-      //       print('Thank you for sharing the picture!');
-      //     }
-      //     setState(() => loadingExportMemories = false);
-      //   },
-      // ),
-      ListTile(
-        title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-        subtitle: const Text('2300+ members and counting.'),
-        trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
-        onTap: () {
-          launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
-          MixpanelManager().joinDiscordClicked();
-        },
-      ),
-      const SizedBox(height: 64),
-    ];
-  }
-
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
-    return InputDecoration(
-      labelText: label,
-      enabled: true && canBeDisabled,
-      hintText: hintText,
-      labelStyle: const TextStyle(color: Colors.white),
-      border: const OutlineInputBorder(),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white),
-        borderRadius: BorderRadius.all(Radius.circular(20.0)),
-      ),
-      disabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white),
-        borderRadius: BorderRadius.all(Radius.circular(20.0)),
-      ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white),
-      ),
-      suffixIcon: suffixIcon,
-    );
-  }
-
-  _getText(String text, {bool canBeDisabled = false, bool underline = false}) {
-    return Center(
-      child: Text(
-        text,
-        style: TextStyle(
-          color: true && canBeDisabled ? Colors.white.withOpacity(0.2) : Colors.white,
-          decoration: underline ? TextDecoration.underline : TextDecoration.none,
-          fontSize: 16,
-        ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  _saveSettings() {
-    saveSettings();
-    Navigator.pop(context);
-  }
-
-  void saveSettings() async {
-    final prefs = SharedPreferencesUtil();
-    prefs.gcpCredentials = gcpCredentialsController.text.trim();
-    prefs.gcpBucketName = gcpBucketNameController.text.trim();
-    prefs.optInAnalytics = optInAnalytics;
-    prefs.devModeEnabled = devModeEnabled;
-    prefs.postMemoryNotificationIsChecked = postMemoryNotificationIsChecked;
-    prefs.reconnectNotificationIsChecked = reconnectNotificationIsChecked;
-    prefs.openAIApiKey = openAIKeyController.text.trim();
-    prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
-
-    optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-
-    if (_selectedLanguage != prefs.recordingsLanguage) {
-      prefs.recordingsLanguage = _selectedLanguage;
-      MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-    }
-
-    if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
-      authenticateGCP();
-    }
-
-    MixpanelManager().settingsSaved();
   }
 }

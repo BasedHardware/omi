@@ -8,6 +8,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:tuple/tuple.dart';
 
 class RecordSampleTab extends StatefulWidget {
   final BTDeviceStruct? btDevice;
@@ -57,13 +58,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
     StreamSubscription? stream =
         await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
-      value.removeRange(0, 3);
-      for (int i = 0; i < value.length; i += 2) {
-        int byte1 = value[i];
-        int byte2 = value[i + 1];
-        int int16Value = (byte2 << 8) | byte1;
-        wavBytesUtil.addAudioBytes([int16Value]);
-      }
+      wavBytesUtil.storeFramePacket(value);
     });
 
     audioBytesStream = stream;
@@ -75,8 +70,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   }
 
   Future<void> confirmRecording() async {
-    if ((audioStorage?.audioBytes ?? []).isEmpty) return;
-    var bytes = audioStorage!.audioBytes;
+    if (!(audioStorage?.hasFrames() ?? false)) return;
     setState(() {
       recording = false;
       speechRecorded = true;
@@ -85,8 +79,8 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
 
     await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
     audioBytesStream?.cancel();
-    File file = await WavBytesUtil.createWavFile(bytes, filename: '${widget.sample.id}.wav');
-    await uploadSample(file, SharedPreferencesUtil().uid); // optimistic request
+    Tuple2<File, List<List<int>>> file = await audioStorage!.createWavFile(filename: '${widget.sample.id}.wav');
+    await uploadSample(file.item1, SharedPreferencesUtil().uid); // optimistic request
     // TODO: handle failures + url: null, retry sample
   }
 
