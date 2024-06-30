@@ -20,6 +20,7 @@ jobs:
 
     env:
       KEYSTORE_PATH: apps/AppWithWearable/android/app/upload-keystore.jks
+      ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
 
     steps:
       - uses: actions/checkout@v3
@@ -108,21 +109,21 @@ jobs:
 #          zip -r app.ipa Payload
           
 
+      - name: Setup app store connect
+        run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta
         working-directory: apps/AppWithWearable/ios
         env:
-          FLUTTER_BUILD_DIR: build
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          FASTLANE_USER: ${{ secrets.APPLE_ID }}
-          FASTLANE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          MATCH_PASSWORD : ${{ secrets.MATCH_PASSWORD }}
+          ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
 
-      #Creating bundles of output
-      - name: Push to Releases
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "apps/AppWithWearable/build/app/outputs/apk/release/*,apps/AppWithWearable/build/ios/iphoneos/app.ipa"
-          tag: v1.0.${{ github.run_number }}
-          token: ${{ secrets.TOKEN }}
+#      #Creating bundles of output
+#      - name: Push to Releases
+#        uses: ncipollo/release-action@v1
+#        with:
+#          artifacts: "apps/AppWithWearable/build/app/outputs/apk/release/*,apps/AppWithWearable/build/ios/iphoneos/app.ipa"
+#          tag: v1.0.${{ github.run_number }}
+#          token: ${{ secrets.TOKEN }}
 

@@ -18,13 +18,14 @@ default_platform(:ios)
 platform :ios do
   desc "Push a new beta build to TestFlight"
   lane :beta do
+    match(app_identifier:"com.friend-app-with-wearable.ios12", type:"appstore", readonly:true)
     increment_build_number(xcodeproj: "Runner.xcodeproj")
-    build_ios_app(
-      workspace: "Runner.xcworkspace",
-      scheme: "Runner",
-      clean: true,
-      export_method: "app-store",
-    )
-    upload_to_testflight
+    build_app(scheme: "Runner", clean:true, export_method: "app-store")
+    pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
   end
+#
+#  def bump_build_number()
+#      latest_build_number = latest_testflight_build_number(initial_build_number:0)
+#      return (latest_build_number + 1)
+#  end
 end
