@@ -25,12 +25,7 @@ platform :ios do
     setup_ci if ENV['CI']
     match(app_identifier:"com.friend-app-with-wearable.ios12", type:"appstore", readonly:true)
     increment_build_number(xcodeproj: "Runner.xcodeproj")
-    build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true,export_options: {
-                                                                                   provisioningProfiles: {
-                                                                                     "com.friend-app-with-wearable.ios12" => "match AppStore com.friend-app-with-wearable.ios12"
-                                                                                   }
-                                                                                 },
-                                                                                 allowProvisioningUpdates: true)
+    build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true)
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
   end
 #
