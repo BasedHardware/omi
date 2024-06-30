@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -8,6 +9,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
   var deviceId = SharedPreferencesUtil().deviceId;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
+      debugPrint('-----> Device already connected: $deviceId');
       return BTDeviceStruct(
         id: device.remoteId.str,
         name: device.platformName,
@@ -18,13 +20,15 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
   while (true) {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
-      if (deviceId == '' && device.name == 'Friend') {
+      if (deviceId == '' &&
+          (device.name == 'Friend' || device.name == 'OpenGlass')) {
         deviceId = device.id;
         SharedPreferencesUtil().deviceId = deviceId;
       }
 
       if (device.id == deviceId) {
         try {
+          debugPrint('-----> Connecting to device: $deviceId');
           await bleConnectDevice(device.id, autoConnect: autoConnect);
           return device;
         } catch (e) {
@@ -39,6 +43,8 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
 
 Future<List<BTDeviceStruct?>> scanDevices() async {
   List<BTDeviceStruct> foundDevices = await bleFindDevices();
-  var filteredDevices = foundDevices.where((device) => device.name == "Friend").toList();
+  var filteredDevices = foundDevices
+      .where((device) => device.name == 'Friend' || device.name == 'OpenGlass')
+      .toList();
   return filteredDevices;
 }

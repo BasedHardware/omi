@@ -5,6 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
 Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async {
+  debugPrint('bleConnectDevice: $deviceId, autoConnect: $autoConnect');
   final device = BluetoothDevice.fromId(deviceId);
   try {
     if (!autoConnect) return await device.connect(autoConnect: false, mtu: null);
