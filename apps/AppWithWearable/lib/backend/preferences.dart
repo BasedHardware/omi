@@ -52,6 +52,7 @@ class SharedPreferencesUtil {
   String get webhookUrl => getString('webhookUrl') ?? '';
 
   set webhookUrl(String value) => saveString('webhookUrl', value);
+
   String get transcriptServerUrl => getString('transcriptServerUrl') ?? '';
 
   set transcriptServerUrl(String value) => saveString('transcriptServerUrl', value);
@@ -220,10 +221,13 @@ class SharedPreferencesUtil {
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
+
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
+
   int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
 
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
+
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
 }
 
