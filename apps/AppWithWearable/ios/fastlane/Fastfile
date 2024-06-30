@@ -16,12 +16,21 @@
 default_platform(:ios)
 
 platform :ios do
+  before_all do
+      sh "sudo xcode-select -s /Applications/Xcode_15.0.1.app"
+    end
+
   desc "Push a new beta build to TestFlight"
   lane :beta do
     setup_ci if ENV['CI']
     match(app_identifier:"com.friend-app-with-wearable.ios12", type:"appstore", readonly:true)
     increment_build_number(xcodeproj: "Runner.xcodeproj")
-    build_app(scheme: "Runner", clean:true, workspace:"Runner.xcworkspace")
+    build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true,export_options: {
+                                                                                   provisioningProfiles: {
+                                                                                     "com.friend-app-with-wearable.ios12" => "match AppStore com.friend-app-with-wearable.ios12"
+                                                                                   }
+                                                                                 },
+                                                                                 allowProvisioningUpdates: true)
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
   end
 #
