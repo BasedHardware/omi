@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/notifications.dart';
@@ -33,6 +34,7 @@ Future<void> initializeBackgroundService() async {
       onStart: onStart,
       isForegroundMode: true,
       autoStartOnBoot: true,
+      notificationChannelId: 'channel',
     ),
   );
 }
@@ -41,8 +43,10 @@ Future<void> initializeBackgroundService() async {
 void onStart(ServiceInstance service) async {
   if (service is AndroidServiceInstance) {
     if (await service.isForegroundService()) {
-      print("foreground service is running");
-      service.setForegroundNotificationInfo(title: 'foreground update', content: 'idk what to put here');
+      service.setForegroundNotificationInfo(
+        title: 'Friend is running in background',
+        content: 'Friend is listening and transcribing your conversations in the background',
+      );
     }
   }
   var record = AudioRecorder();
@@ -54,7 +58,7 @@ void onStart(ServiceInstance service) async {
     await record.stop();
     await record.dispose();
     await service.stopSelf();
-    print("background process is now stopped");
+    debugPrint("background process is now stopped");
   });
 }
 
@@ -68,7 +72,7 @@ Future<void> recordingOnIOS(ServiceInstance service) async {
     await record.stop();
     await record.dispose();
     await service.stopSelf();
-    print("background process is now stopped");
+    debugPrint("background process is now stopped");
   });
 }
 
@@ -89,7 +93,7 @@ Future<void> recordingOnAndroid(ServiceInstance service) async {
   service.invoke("stateUpdate", {"state": 'recording'});
   await record.start(const RecordConfig(), path: filePath);
   SharedPreferencesUtil().recordingPath = filePath;
-  print("last recording path: ${SharedPreferencesUtil().recordingPath}");
+  debugPrint("last recording path: ${SharedPreferencesUtil().recordingPath}");
   service.on("stop").listen((event) async {
     var res = await record.stop();
     var f = File(res!);
@@ -97,6 +101,6 @@ Future<void> recordingOnAndroid(ServiceInstance service) async {
     service.invoke("update", {"path": f.path});
     await record.dispose();
     service.stopSelf();
-    print("background process is now stopped");
+    debugPrint("background process is now stopped");
   });
 }
