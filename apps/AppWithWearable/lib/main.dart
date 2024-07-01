@@ -40,7 +40,7 @@ void main() async {
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
         );
         FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack!);
+          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
         _getRunApp();
@@ -63,6 +63,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+
   // The navigator key is necessary to navigate using static methods
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
