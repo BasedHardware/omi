@@ -4,7 +4,6 @@ import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -28,6 +27,7 @@ Future<Memory?> processTranscriptContent(
       finishedAt,
     );
     devModeWebhookCall(memory);
+    MemoryProvider().saveMemory(memory);
     return memory;
   }
   return null;
@@ -57,7 +57,7 @@ Future<MemoryStructured?> _retrieveStructure(
 }
 
 // Process the creation of memory records
-Future<Memory?> memoryCreationBlock(
+Future<Memory> memoryCreationBlock(
   BuildContext context,
   String transcript,
   String? recordingFilePath,
@@ -87,50 +87,33 @@ Future<Memory?> memoryCreationBlock(
   }
   debugPrint('Structured Memory: $structuredMemory');
 
-  if (structuredMemory.title.isEmpty) {
-    var created = await saveFailureMemory(transcript, structuredMemory, startedAt, finishedAt);
-    if (!retrievedFromCache && !failed) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Memory stored as discarded! Nothing useful. 😄',
-          style: TextStyle(color: Colors.white),
-        ),
-        duration: Duration(seconds: 4),
-      ));
-    }
-    return created;
-  } else {
-    Memory memory = await finalizeMemoryRecord(transcript, structuredMemory, recordingFilePath, startedAt, finishedAt);
-    debugPrint('Memory created: ${memory.id}');
-    if (!retrievedFromCache) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
-        duration: Duration(seconds: 4),
-      ));
-    }
-    return memory;
+  if (structuredMemory.title.isEmpty && !retrievedFromCache && !failed) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text(
+        'Memory stored as discarded! Nothing useful. 😄',
+        style: TextStyle(color: Colors.white),
+      ),
+      duration: Duration(seconds: 4),
+    ));
   }
-}
 
-// Save failure memory when structured memory contains empty string
-Future<Memory> saveFailureMemory(
-  String transcript,
-  MemoryStructured structuredMemory,
-  DateTime? startedAt,
-  DateTime? finishedAt,
-) async {
-  Structured structured = Structured(
-    structuredMemory.title,
-    structuredMemory.overview,
-    emoji: structuredMemory.emoji,
-    category: structuredMemory.category,
+  Memory memory = await finalizeMemoryRecord(
+    transcript,
+    structuredMemory,
+    recordingFilePath,
+    startedAt,
+    finishedAt,
+    structuredMemory.title.isEmpty,
   );
-  Memory memory = Memory(DateTime.now(), transcript, true, startedAt: startedAt, finishedAt: finishedAt);
-  memory.structured.target = structured;
-  MemoryProvider().saveMemory(memory);
-  MixpanelManager().memoryCreated(memory);
+  debugPrint('Memory created: ${memory.id}');
+  if (!retrievedFromCache) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
+      duration: Duration(seconds: 4),
+    ));
+  }
   return memory;
 }
 
@@ -141,6 +124,7 @@ Future<Memory> finalizeMemoryRecord(
   String? recordingFilePath,
   DateTime? startedAt,
   DateTime? finishedAt,
+  bool discarded,
 ) async {
   Structured structured = Structured(
     structuredMemory.title,
@@ -151,7 +135,7 @@ Future<Memory> finalizeMemoryRecord(
   for (var actionItem in structuredMemory.actionItems) {
     structured.actionItems.add(ActionItem(actionItem));
   }
-  var memory = Memory(DateTime.now(), transcript, false,
+  var memory = Memory(DateTime.now(), transcript, discarded,
       recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
   memory.structured.target = structured;
   for (var r in structuredMemory.pluginsResponse) {
@@ -159,9 +143,10 @@ Future<Memory> finalizeMemoryRecord(
   }
 
   MemoryProvider().saveMemory(memory);
-
-  getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
-    createPineconeVector(memory.id.toString(), vector, memory.createdAt);
-  });
+  if (!discarded) {
+    getEmbeddingsFromInput(structuredMemory.toString()).then((vector) {
+      createPineconeVector(memory.id.toString(), vector, memory.createdAt);
+    });
+  }
   return memory;
 }
