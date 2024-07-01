@@ -68,7 +68,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
-    // TODO: include a way to trigger specific plugins
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -133,7 +132,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               tabs: const [
                 Tab(text: 'Transcript'),
                 Tab(text: 'Summary'),
-                Tab(text: 'Plugins'),
+                // Tab(text: 'Plugins'),
               ],
               indicator: BoxDecoration(
                 color: Colors.transparent,
@@ -148,8 +147,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     ListView(shrinkWrap: true, children: _getTranscriptWidgets()),
-                    ListView(shrinkWrap: true, children: _getSummaryWidgets()),
-                    ListView(shrinkWrap: true, children: _getPluginsWidgets()),
+                    ListView(shrinkWrap: true, children: _getSummaryWidgets() + _getPluginsWidgets()),
+                    // ListView(shrinkWrap: true, children: _getPluginsWidgets()),
                     // ListView(shrinkWrap: true, children: _getSummaryWidgets()),
                     // ListView(shrinkWrap: true, children: _getPluginsWidgets()),
                   ],
@@ -257,7 +256,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   List<Widget> _getPluginsWidgets() {
     if (widget.memory.pluginsResponse.isEmpty) {
       return [
-        const SizedBox(height: 80),
+        const SizedBox(height: 32),
         Text(
           'No plugins were triggered\nfor this memory.',
           style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
@@ -291,16 +290,18 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
             ),
           ],
-        )
+        ),
+        const SizedBox(height: 32),
       ];
     }
     return [
+      // TODO: include a way to trigger specific plugins
       if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
         structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-        // Text(
-        //   'Plugins 🧑‍💻',
-        //   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-        // ),
+        Text(
+          'Plugins 🧑‍💻',
+          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+        ),
         const SizedBox(height: 24),
         ...widget.memory.pluginsResponse.mapIndexed((i, pluginResponse) {
           if (pluginResponse.content.length < 5) return const SizedBox.shrink();
