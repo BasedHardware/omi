@@ -13,6 +13,7 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:friend_private/widgets/transcript.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -63,7 +64,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
   @override
   Widget build(BuildContext context) {
     // TODO: include a way to trigger specific plugins
-    debugPrint('widget.memory.transcriptSegments: ${widget.memory.transcriptSegments[0]}');
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -203,9 +203,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child:Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)
-                      ),
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)),
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
@@ -292,32 +291,39 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
               ],
               const SizedBox(height: 8),
               Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Raw Transcript  💬',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                    ),
-                    IconButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
-                          MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
-                        },
-                        // TODO: improve UI of this copy buttons
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
-                  ]),
-              const SizedBox(height: 16),
-              ExpandableTextWidget(
-                text: widget.memory.getTranscript(),
-                maxLines: 6,
-                linkColor: Colors.grey.shade300,
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                isExpanded: isTranscriptExpanded,
-                toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.memory.transcriptSegments.isEmpty ? 'Raw Transcript 💬' : 'Transcript 💬',
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                  ),
+                  IconButton(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
+                        MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
+                      },
+                      // TODO: improve UI of this copy buttons
+                      icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
+                ],
               ),
+              SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
+              widget.memory.transcriptSegments.isEmpty
+                  ? ExpandableTextWidget(
+                      text: widget.memory.getTranscript(),
+                      maxLines: 6,
+                      linkColor: Colors.grey.shade300,
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                      isExpanded: isTranscriptExpanded,
+                      toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
+                    )
+                  : TranscriptWidget(
+                      segments: widget.memory.transcriptSegments,
+                      horizontalMargin: false,
+                      topMargin: false,
+                    ),
               const SizedBox(height: 32),
             ],
           ),
