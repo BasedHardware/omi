@@ -4,7 +4,7 @@ abstract class Env {
   static late final EnvFields _instance;
 
   static void init([EnvFields? instance]) {
-    _instance = instance ?? DevEnv();
+    _instance = instance ?? DevEnv() as EnvFields;
   }
 
   static String? get oneSignalAppId => _instance.oneSignalAppId;
