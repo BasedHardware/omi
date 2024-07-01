@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
@@ -19,12 +19,12 @@ import 'package:friend_private/pages/capture/background_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -42,13 +42,12 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
   bool _hasTranscripts = false;
-  final record = AudioRecorder();
-  RecordState _state = RecordState.stop;
+  RecordingState _state = RecordingState.stop;
 
   /// ----
   BTDeviceStruct? btDevice;
@@ -57,9 +56,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
-  Timer? _processPhoneMicAudioTimer;
+  Timer? _backgroundTranscriptTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
+  bool isTranscribing = false;
 
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
@@ -118,6 +118,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   _processFileToTranscript(File f) async {
+    setState(() => isTranscribing = true);
     List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
     debugPrint('newSegments: $newSegments');
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
@@ -131,6 +132,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       currentTranscriptStartedAt ??= DateTime.now();
       currentTranscriptFinishedAt = DateTime.now();
     }
+    setState(() => isTranscribing = false);
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
@@ -196,11 +198,24 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
       initiateBytesProcessing();
+      FlutterBackgroundService service = FlutterBackgroundService();
+      if (await service.isRunning()) {
+        setState(() {
+          _state = RecordingState.record;
+        });
+      }
+      if (Platform.isAndroid) {
+        final backgroundService = FlutterBackgroundService();
+        if (await backgroundService.isRunning()) {
+          backgroundService.invoke('appState', {'state': 'resumed'});
+        }
+      }
+      await listenToBackgroundService();
     });
-    listenToBackgroundService();
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
     super.initState();
@@ -208,9 +223,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   @override
   void dispose() {
-    record.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     _memoryCreationTimer?.cancel();
+    _backgroundTranscriptTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    super.didChangeAppLifecycleState(state);
   }
 
   @override
@@ -224,30 +245,52 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           getTranscriptWidget(memoryCreating, segments, widget.device),
           const SizedBox(height: 16)
         ]),
+        isTranscribing
+            ? const Padding(
+                padding: EdgeInsets.only(bottom: 176),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        height: 8,
+                        width: 8,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text('Transcribing...', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              )
+            : const SizedBox(),
         getPhoneMicRecordingButton(_recordingToggled, _state)
       ],
     );
   }
 
   _recordingToggled() async {
-    if (_state == RecordState.record) {
-      _stopRecording();
+    if (_state == RecordingState.record) {
+      await _stopRecording();
+    } else if (_state == RecordingState.initialising) {
+      debugPrint('initialising, have to wait');
     } else {
+      setState(() => _state = RecordingState.initialising);
       await _startRecording();
     }
   }
 
-  void listenToBackgroundService() {
+  Future listenToBackgroundService() async {
     final backgroundService = FlutterBackgroundService();
     backgroundService.on('update').listen((event) async {
+      print(event);
       if (event!['path'] != null && File(event['path']).existsSync()) {
+        print("processing file foreground ${event['path']}");
         await _processFileToTranscript(File(event['path']));
-      } else {
-        debugPrint('file does not exist');
-        var path = await getApplicationDocumentsDirectory();
-        var filePath = '${path.path}/recording.aac';
-        File f = await File(filePath).writeAsBytes(event['bytes']);
-        await _processFileToTranscript(f);
       }
       debugPrint('received data message in feed: $event');
     }, onError: (e, s) {
@@ -257,9 +300,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     });
     backgroundService.on('stateUpdate').listen((event) async {
       if (event!['state'] == 'recording') {
-        setState(() => _state = RecordState.record);
+        setState(() => _state = RecordingState.record);
       } else if (event['state'] == 'stopped') {
-        setState(() => _state = RecordState.stop);
+        setState(() => _state = RecordingState.stop);
+      } else if (event['state'] == 'initialising') {
+        setState(() => _state = RecordingState.initialising);
       }
     }, onError: (e, s) {
       debugPrint('error listening for updates: $e, $s');
@@ -270,13 +315,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   _startRecording() async {
     if (Platform.isAndroid) {
-      bool isBatteryOptimizationDisabled = await DisableBatteryOptimization.isBatteryOptimizationDisabled ?? false;
-      if (!isBatteryOptimizationDisabled) {
-        await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       }
     }
+
     await Permission.microphone.request();
-    initializeBackgroundService();
+    await initializeBackgroundService();
   }
 
   _printFileSize(File file) async {
@@ -334,10 +379,21 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   // ----------------------  Here is the code to record to a Stream ------------
 
-  _stopRecording() {
-    stopBackgroundService();
-    setState(() => _state = RecordState.stop);
-    if (segments.isNotEmpty) _createMemory();
+  _stopRecording() async {
+    //  stopBackgroundService();
+    final service = FlutterBackgroundService();
+    service.invoke("stop");
+    Future.delayed(Duration(seconds: 2), () async {
+      var path = await getApplicationDocumentsDirectory();
+      var filePath = '${path.path}/recording.aac';
+      await _processFileToTranscript(File(filePath));
+    });
+
+    setState(() => _state = RecordingState.stop);
+    if (segments.isNotEmpty) {
+      setState(() => memoryCreating = true);
+      _createMemory();
+    }
   }
 
   _start(String filePath) async {
