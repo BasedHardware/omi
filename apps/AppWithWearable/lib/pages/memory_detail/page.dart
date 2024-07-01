@@ -101,25 +101,26 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
             ],
           ),
         ),
-        // floatingActionButton: _controller!.index == 0
-        //     ? FloatingActionButton.extended(
-        //         backgroundColor: Colors.deepPurple,
-        //         elevation: 8,
-        //         // shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(32)),side: BorderSide(color: Colors.grey, width: 1)),
-        //         onPressed: () {
-        //           Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
-        //           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        //             content: Text('Transcript copied to clipboard'),
-        //             duration: Duration(seconds: 1),
-        //           ));
-        //           MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
-        //         },
-        //         label: const Text(
-        //           'Copy',
-        //           style: TextStyle(color: Colors.white),
-        //         ),
-        //       )
-        //     : null,
+        floatingActionButton: _controller!.index == 0
+            ? FloatingActionButton(
+                backgroundColor: Colors.black,
+                elevation: 8,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(32)),side: BorderSide(color: Colors.grey, width: 1)),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Transcript copied to clipboard'),
+                    duration: Duration(seconds: 1),
+                  ));
+                  MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
+                },
+                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                // label: const Text(
+                //   'Copy',
+                //   style: TextStyle(color: Colors.white),
+                // ),
+              )
+            : null,
         body: Column(
           children: [
             TabBar(
