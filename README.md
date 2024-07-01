@@ -143,7 +143,7 @@ Before starting, make sure you have the following installed:
 
 ## More links:
 
-- [Contributing](https://docs.basedhardware.com/info/Contribution/)
+- [Contributing](https://docs.basedhardware.com/developer/Contribution/)
 - [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://docs.basedhardware.com/info/Support/)
 - [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)

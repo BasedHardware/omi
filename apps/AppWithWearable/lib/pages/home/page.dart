@@ -13,6 +13,7 @@ import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
@@ -27,6 +28,7 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -95,9 +97,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateMemories();
   }
 
+  ///Screens with respect to subpage
+  final Map<String, Widget> screensWithRespectToPath = {
+    '/settings': const SettingsPage(),
+  };
+
   @override
   void initState() {
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    _controller = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
+    );
+    SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -126,8 +138,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       body: 'Check out your daily summary to see what you should do tomorrow.',
       notificationId: 5,
       isDailySummaryNotification: true,
+      payload: {'path': '/chat'},
     );
-
+    if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
+      final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        MyApp.navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) => screensWithRespectToPath[subPageRoute] as Widget,
+          ),
+        );
+      });
+      SharedPreferencesUtil().subPageToShowFromNotification = '';
+    }
     super.initState();
   }
 
