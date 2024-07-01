@@ -89,7 +89,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim());
-      return Tuple2(plugin, response);
+      return Tuple2(plugin, response.replaceAll('```', '').replaceAll('""', '').trim());
     } catch (e, stacktrace) {
       CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'plugin': plugin.id,
