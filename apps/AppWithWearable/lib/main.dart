@@ -130,5 +130,3 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
-
-// Do not run me directly, instead use main_dev.dart
