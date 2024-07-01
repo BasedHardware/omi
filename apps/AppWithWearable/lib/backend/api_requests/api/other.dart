@@ -5,9 +5,9 @@ import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/backend/storage/segment.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
