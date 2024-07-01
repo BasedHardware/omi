@@ -52,7 +52,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     titleController.text = structured.title;
     overviewController.text = structured.overview;
     pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    _controller = TabController(length: 2, vsync: this, initialIndex: 1);
     _controller!.addListener(() => setState(() {}));
     super.initState();
   }
@@ -105,7 +105,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
             ? FloatingActionButton(
                 backgroundColor: Colors.black,
                 elevation: 8,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(32)),side: BorderSide(color: Colors.grey, width: 1)),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(32)),
+                    side: BorderSide(color: Colors.grey, width: 1)),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -527,6 +529,18 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                             },
                     ),
                     ListTile(
+                      title: const Text('Re-summarize'),
+                      leading: loadingReprocessMemory
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                              ))
+                          : const Icon(Icons.refresh, color: Colors.deepPurple),
+                      onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
+                    ),
+                    ListTile(
                       title: const Text('Delete'),
                       leading: const Icon(
                         Icons.delete,
@@ -553,18 +567,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                                 },
                               ).then((value) => setState(() {}));
                             },
-                    ),
-                    ListTile(
-                      title: const Text('Re-summarize'),
-                      leading: loadingReprocessMemory
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                              ))
-                          : const Icon(Icons.refresh, color: Colors.deepPurple),
-                      onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
                     )
                   ],
                 ),
