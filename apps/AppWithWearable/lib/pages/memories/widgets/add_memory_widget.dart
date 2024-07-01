@@ -37,16 +37,18 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
     List<String> actionItems = _actionItemControllers.map((controller) => controller.text).toList();
     // TODO: create memory
     Memory created = await finalizeMemoryRecord(
-        '',
-        MemoryStructured(
-          actionItems: actionItems,
-          pluginsResponse: [],
-          title: title,
-          overview: description,
-        ),
-        null,
-        null,
-        null);
+      '',
+      MemoryStructured(
+        actionItems: actionItems,
+        pluginsResponse: [],
+        title: title,
+        overview: description,
+      ),
+      null,
+      null,
+      null,
+      false,
+    );
     widget.onMemoryAdded(created);
     MixpanelManager().manualMemoryCreated(created);
     debugPrint('Memory created: ${created.id}');
