@@ -30,6 +30,8 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
   // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
 
+  // TODO: improve overview with conversation summarizer plugin?
+  // TODO: Generate tags/topics relevant to better query?
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Make sure to use English for your response.
