@@ -12,8 +12,10 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/widgets/transcript.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -100,21 +102,25 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
             ],
           ),
         ),
-        floatingActionButton: _controller!.index == 0
-            ? FloatingActionButton(
-                backgroundColor: Colors.deepPurple,
-                elevation: 8,
-                // shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(32)),side: BorderSide(color: Colors.grey, width: 1)),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Transcript copied to clipboard'),
-                    duration: Duration(seconds: 1),
-                  ));
-                  MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
-                },
-                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
-            : const SizedBox(),
+        // floatingActionButton: _controller!.index == 0
+        //     ? FloatingActionButton.extended(
+        //         backgroundColor: Colors.deepPurple,
+        //         elevation: 8,
+        //         // shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(32)),side: BorderSide(color: Colors.grey, width: 1)),
+        //         onPressed: () {
+        //           Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+        //           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        //             content: Text('Transcript copied to clipboard'),
+        //             duration: Duration(seconds: 1),
+        //           ));
+        //           MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
+        //         },
+        //         label: const Text(
+        //           'Copy',
+        //           style: TextStyle(color: Colors.white),
+        //         ),
+        //       )
+        //     : null,
         body: Column(
           children: [
             TabBar(
@@ -249,6 +255,45 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   List<Widget> _getPluginsWidgets() {
+    if (widget.memory.pluginsResponse.isEmpty) {
+      return [
+        const SizedBox(height: 80),
+        Text(
+          'No plugins were triggered\nfor this memory.',
+          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: MaterialButton(
+                onPressed: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                },
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+              ),
+            ),
+          ],
+        )
+      ];
+    }
     return [
       if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
         structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
@@ -349,7 +394,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       widget.memory.transcriptSegments.isEmpty
           ? ExpandableTextWidget(
               text: widget.memory.getTranscript(),
-              maxLines: 6,
+              maxLines: 10000,
               linkColor: Colors.grey.shade300,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
               isExpanded: isTranscriptExpanded,
@@ -421,6 +466,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
     );
 
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
