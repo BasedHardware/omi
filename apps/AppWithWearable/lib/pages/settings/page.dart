@@ -118,6 +118,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   )),
                   const SizedBox(height: 32.0),
+                  // TODO: remove this settings?
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
