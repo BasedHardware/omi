@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -9,6 +7,7 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
+import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -206,7 +205,9 @@ speechProfileWidget(BuildContext context) {
 getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDeviceStruct? btDevice) {
   if (memoryCreating) {
     return const Padding(
-        padding: EdgeInsets.only(top: 80), child: Center(child: CircularProgressIndicator(color: Colors.white)));
+      padding: EdgeInsets.only(top: 80),
+      child: Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
   }
 
   if (segments.isEmpty) {
@@ -230,53 +231,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
           )
         : const SizedBox.shrink();
   }
-  // Capture messages
-  var needsUtf8 = SharedPreferencesUtil().recordingsLanguage != 'en';
-  return ListView.separated(
-    padding: EdgeInsets.zero,
-    shrinkWrap: true,
-    scrollDirection: Axis.vertical,
-    itemCount: segments.length + 2,
-    physics: const NeverScrollableScrollPhysics(),
-    separatorBuilder: (_, __) => const SizedBox(height: 16.0),
-    itemBuilder: (context, idx) {
-      if (idx == 0) return const SizedBox(height: 32);
-      if (idx == segments.length + 1) return const SizedBox(height: 64);
-      final data = segments[idx - 1];
-      return Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
-                    width: 26, height: 26),
-                const SizedBox(width: 12),
-                Text(
-                  data.isUser ? 'You' : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
-                )
-              ],
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SelectionArea(
-                child: Text(
-                  needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
-                  style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                  textAlign: TextAlign.left,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
+  return TranscriptWidget(segments: segments);
 }
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
