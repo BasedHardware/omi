@@ -96,11 +96,15 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
+  String get recordingPath => getString('lastRecordingPath') ?? '';
+
+  set recordingPath(String value) => saveString('lastRecordingPath', value);
+
   // List<Message> get chatMessages {
   //   final List<String> messages = getStringList('messages') ?? [];
   //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
   // }
-  //
+
   // set chatMessages(List<Message> value) {
   //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
   //   saveStringList('messages', messages);
