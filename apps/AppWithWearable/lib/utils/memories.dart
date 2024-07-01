@@ -4,6 +4,7 @@ import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -11,16 +12,18 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 // Perform actions periodically
 Future<Memory?> processTranscriptContent(
   BuildContext context,
-  String content,
+  String transcript,
+  List<TranscriptSegment> transcriptSegments,
   String? recordingFilePath, {
   bool retrievedFromCache = false,
   DateTime? startedAt,
   DateTime? finishedAt,
 }) async {
-  if (content.isNotEmpty) {
+  if (transcript.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
       context,
-      content,
+      transcript,
+      transcriptSegments,
       recordingFilePath,
       retrievedFromCache,
       startedAt,
@@ -60,6 +63,7 @@ Future<MemoryStructured?> _retrieveStructure(
 Future<Memory> memoryCreationBlock(
   BuildContext context,
   String transcript,
+  List<TranscriptSegment> transcriptSegments,
   String? recordingFilePath,
   bool retrievedFromCache,
   DateTime? startedAt,
@@ -100,6 +104,7 @@ Future<Memory> memoryCreationBlock(
 
   Memory memory = await finalizeMemoryRecord(
     transcript,
+    transcriptSegments,
     structuredMemory,
     recordingFilePath,
     startedAt,
@@ -120,6 +125,7 @@ Future<Memory> memoryCreationBlock(
 // Finalize memory record after processing feedback
 Future<Memory> finalizeMemoryRecord(
   String transcript,
+  List<TranscriptSegment> transcriptSegments,
   MemoryStructured structuredMemory,
   String? recordingFilePath,
   DateTime? startedAt,
@@ -135,9 +141,17 @@ Future<Memory> finalizeMemoryRecord(
   for (var actionItem in structuredMemory.actionItems) {
     structured.actionItems.add(ActionItem(actionItem));
   }
-  var memory = Memory(DateTime.now(), transcript, discarded,
-      recordingFilePath: recordingFilePath, startedAt: startedAt, finishedAt: finishedAt);
+  var memory = Memory(
+    DateTime.now(),
+    transcript,
+    discarded,
+    recordingFilePath: recordingFilePath,
+    startedAt: startedAt,
+    finishedAt: finishedAt,
+  );
+  memory.transcriptSegments.addAll(transcriptSegments);
   memory.structured.target = structured;
+
   for (var r in structuredMemory.pluginsResponse) {
     memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
   }
