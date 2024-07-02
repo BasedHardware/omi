@@ -7,6 +7,7 @@ import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memories/widgets/custom_audio_player.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -116,9 +117,7 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
-          ? const HomePageWrapper()
-          : const OnboardingWrapper(),
+      home: const AudioPlayerTestPage(),
     );
   }
 }

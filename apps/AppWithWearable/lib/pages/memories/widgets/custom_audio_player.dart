@@ -11,8 +11,51 @@ import 'package:upgrader/upgrader.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 
+class AudioPlayerTestPage extends StatefulWidget {
+  const AudioPlayerTestPage({super.key});
+
+  @override
+  State<AudioPlayerTestPage> createState() => _AudioPlayerTestPageState();
+}
+
+class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
+  final files = ['BabyElephantWalk60.wav', 'ImperialMarch60.wav', 'PinkPanther30.wav'];
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Audio Player Test'),
+      ),
+      body: ListView.separated(
+        itemCount: files.length,
+        padding: const EdgeInsets.all(16),
+        separatorBuilder: (ctx, index) => const SizedBox(height: 16),
+        itemBuilder: (ctx, index) {
+          return ListTile(
+            tileColor: Colors.white,
+            title: Text(
+              files[index],
+              style: const TextStyle(color: Colors.black),
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (ctx) => CustomAudioPlayer(
+                    filename: files[index],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class CustomAudioPlayer extends StatefulWidget {
-  const CustomAudioPlayer({super.key});
+  const CustomAudioPlayer({super.key, required this.filename});
+  final String filename;
 
   @override
   State<CustomAudioPlayer> createState() => _CustomAudioPlayerState();
@@ -21,6 +64,7 @@ class CustomAudioPlayer extends StatefulWidget {
 class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindingObserver {
   final _player = AudioPlayer();
   final progressStream = BehaviorSubject<WaveformProgress>();
+  bool loading = true;
   @override
   void initState() {
     super.initState();
@@ -38,21 +82,24 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
       debugPrint('A stream error occurred: $e');
     });
     try {
-      await _player.setAudioSource(AudioSource.asset('assets/audios/PinkPanther30.wav'));
+      await _player.setAudioSource(AudioSource.asset('assets/audios/${widget.filename}'));
     } on PlayerException catch (e) {
       debugPrint('Error loading audio source: $e');
     }
 
     ///read audio file from assets
-    final audioFile = File(p.join((await getTemporaryDirectory()).path, 'PinkPanther30.wav'));
+    final audioFile = File(p.join((await getTemporaryDirectory()).path, widget.filename));
     try {
-      await audioFile.writeAsBytes((await rootBundle.load('assets/audios/PinkPanther30.wav')).buffer.asUint8List());
+      await audioFile.writeAsBytes((await rootBundle.load('assets/audios/${widget.filename}')).buffer.asUint8List());
       final waveFile = File(p.join((await getTemporaryDirectory()).path, 'waveform.wave'));
       JustWaveform.extract(audioInFile: audioFile, waveOutFile: waveFile)
           .listen(progressStream.add, onError: progressStream.addError);
     } catch (e) {
       progressStream.addError(e);
     }
+    setState(() {
+      loading = false;
+    });
   }
 
   @override
@@ -79,64 +126,126 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              alignment: Alignment.center,
-              margin: const EdgeInsets.all(16.0),
-              child: Container(
-                height: 150.0,
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.all(Radius.circular(8.0)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      offset: Offset(0.0, 2.0),
-                      blurRadius: 2.0,
+        child: loading
+            ? const Center(child: const CircularProgressIndicator(color: Colors.white))
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    alignment: Alignment.center,
+                    margin: const EdgeInsets.all(16.0),
+                    child: Container(
+                      height: 150.0,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black26,
+                            offset: Offset(0.0, 2.0),
+                            blurRadius: 2.0,
+                          ),
+                        ],
+                      ),
+                      width: double.maxFinite,
+                      child: StreamBuilder<WaveformProgress>(
+                        stream: progressStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Text(
+                                'Error: ${snapshot.error}',
+                                style: Theme.of(context).textTheme.titleLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          }
+                          final progress = snapshot.data?.progress ?? 0.0;
+                          final waveform = snapshot.data?.waveform;
+                          if (waveform == null) {
+                            return Center(
+                              child: Text(
+                                '${(100 * progress).toInt()}%',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            );
+                          }
+                          return AudioWaveformWidget(
+                            waveform: waveform,
+                            start: Duration.zero,
+                            duration: waveform.duration,
+                            positionDataStream: _positionDataStream,
+                            player: _player,
+                          );
+                        },
+                      ),
                     ),
-                  ],
-                ),
-                width: double.maxFinite,
-                child: StreamBuilder<WaveformProgress>(
-                  stream: progressStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'Error: ${snapshot.error}',
-                          style: Theme.of(context).textTheme.titleLarge,
-                          textAlign: TextAlign.center,
+                  ),
+                  StreamBuilder(
+                    stream: _positionDataStream,
+                    builder: (context, AsyncSnapshot snapshot) {
+                      if (snapshot.hasError) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                                        .firstMatch("${const Duration(seconds: 0)}")
+                                        ?.group(1) ??
+                                    "${_player.position}",
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        );
+                      } else if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                                        .firstMatch("${const Duration(seconds: 0)}")
+                                        ?.group(1) ??
+                                    "${_player.position}",
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                                      .firstMatch("${_player.position}")
+                                      ?.group(1) ??
+                                  "${Duration.zero}",
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Text(
+                              RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                                      .firstMatch("${_player.bufferedPosition - _player.position}")
+                                      ?.group(1) ??
+                                  "${(Duration.zero)}",
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
                       );
-                    }
-                    final progress = snapshot.data?.progress ?? 0.0;
-                    final waveform = snapshot.data?.waveform;
-                    if (waveform == null) {
-                      return Center(
-                        child: Text(
-                          '${(100 * progress).toInt()}%',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      );
-                    }
-                    return AudioWaveformWidget(
-                      waveform: waveform,
-                      start: Duration.zero,
-                      duration: waveform.duration,
-                      positionDataStream: _positionDataStream,
-                      player: _player,
-                    );
-                  },
-                ),
+                    },
+                  ),
+                  ControlButtons(_player),
+                ],
               ),
-            ),
-            ControlButtons(_player),
-          ],
-        ),
       ),
     );
   }
@@ -253,7 +362,6 @@ class AudioWaveformWidget extends StatefulWidget {
 }
 
 class _AudioWaveformState extends State<AudioWaveformWidget> {
-  double _dragValue = 0.0;
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<PositionData>(
@@ -296,9 +404,8 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
               child: Slider(
                 min: 0.0,
                 max: duration.inMilliseconds.toDouble(),
-                value: min(_dragValue, position.inMilliseconds.toDouble()),
+                value: position.inMilliseconds.toDouble(),
                 onChanged: (value) {
-                  _dragValue = value;
                   widget.player.seek(Duration(milliseconds: value.toInt()));
                   setState(() {});
                 },
