@@ -26,6 +26,7 @@ dependencies:
 
   flutter_localizations:
     sdk: flutter
+  archive: ^3.6.1
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
@@ -105,7 +106,8 @@ dependencies:
   firebase_auth: ^5.1.2
   google_sign_in: ^6.2.1
   internet_connection_checker_plus: ^2.5.0
-
+  pdf: ^3.11.0
+  
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
