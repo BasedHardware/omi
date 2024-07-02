@@ -94,6 +94,7 @@ dependencies:
   onesignal_flutter: ^5.1.2
   opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
+  growthbook_sdk_flutter: ^3.9.2
 
 dependency_overrides:
   http: ^1.2.1
