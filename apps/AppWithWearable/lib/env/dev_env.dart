@@ -47,4 +47,8 @@ final class DevEnv implements EnvFields {
   @override 
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
+
+  @override
+  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
+  final String? growthbookApiKey = _DevEnv.growthbookApiKey;
 }
