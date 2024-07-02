@@ -16,21 +16,31 @@ class GrowthbookUtil {
   static Future<void> init() async {
     if (Env.growthbookApiKey == null) return;
     _gb = await GBSDKBuilderApp(
-      apiKey: Env.growthbookApiKey!,
-      attributes: {
-        'uid': SharedPreferencesUtil().uid,
-        'deviceId': SharedPreferencesUtil().deviceId,
-      },
-      growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {},
-      hostURL: 'https://cdn.growthbook.io',
-    ).initialize();
+            apiKey: Env.growthbookApiKey!,
+            backgroundSync: true,
+            enable: true,
+            attributes: {
+              'id': SharedPreferencesUtil().uid,
+            },
+            growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
+              debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
+            },
+            hostURL: 'https://cdn.growthbook.io/',
+            qaMode: true
+            // gbFeatures: {
+            //   'server-transcript': GBFeature(),
+            // },
+            )
+        .initialize();
+    _gb!.setAttributes({'id': SharedPreferencesUtil().uid});
   }
 
   bool hasServerTranscriptFeatureEnabled() {
     if (Env.growthbookApiKey == null) return false;
     // TODO: check first developer mode
-    var enabled = _gb!.feature('server-transcript').on;
-    debugPrint('hasServerTranscriptFeatureEnabled: $enabled');
+    var feature = _gb!.feature('server-transcript');
+    var enabled = feature.on;
+    debugPrint('hasServerTranscriptFeatureEnabled: ${feature.value}');
     return enabled;
   }
 }
