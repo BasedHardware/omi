@@ -10,7 +10,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
+Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   var startTime = DateTime.now();
   // TODO: why there seems to be no punctuation
   Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
@@ -30,7 +30,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  debugPrint('Deepgram took: ${DateTime.now().difference(startTime).inSeconds} seconds');
   var data = jsonDecode(res.json);
   // debugPrint('Response body: ${res.json}');
   var result = data['results']['channels'][0]['alternatives'][0];

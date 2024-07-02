@@ -112,9 +112,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
-          CrashReporting.reportHandledCrash(e, stacktrace,
-              level: NonFatalExceptionLevel.warning,
-              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
+          CrashReporting.reportHandledCrash(
+            e,
+            stacktrace,
+            level: NonFatalExceptionLevel.warning,
+            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+          );
           debugPrint('Error: e.toString() ${e.toString()}');
           toProcessBytes2.insertAudioBytes(data.item2);
         }
@@ -128,9 +131,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   _processFileToTranscript(File f) async {
     List<TranscriptSegment> newSegments;
     if (GrowthbookUtil().hasServerTranscriptFeatureEnabled() == true) {
-      newSegments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
+      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
     } else {
-      newSegments = await transcribeAudioFile2(f); // deepgram
+      newSegments = await deepgramTranscribe(f);
     }
     var initialSegmentsLength = segments.length;
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a

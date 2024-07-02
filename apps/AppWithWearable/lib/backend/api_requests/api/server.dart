@@ -12,12 +12,11 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:path/path.dart';
 
-Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
   final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse(
-        '${Env.apiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
+    Uri.parse('${Env.apiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -25,7 +24,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
     var startTime = DateTime.now();
     var streamedResponse = await client.send(request);
     var response = await http.Response.fromStream(streamedResponse);
-    debugPrint('TranscribeAudioFile took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+    debugPrint('Transcript server took: ${DateTime.now().difference(startTime).inSeconds} seconds');
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('Response body: ${response.body}');
