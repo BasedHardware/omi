@@ -127,7 +127,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   _processFileToTranscript(File f) async {
     List<TranscriptSegment> newSegments;
-    if (GrowthbookUtil().hasServerTranscriptFeatureEnabled()) {
+    if (GrowthbookUtil().hasServerTranscriptFeatureEnabled() == true) {
       newSegments = await transcribeAudioFile(f, SharedPreferencesUtil().uid);
     } else {
       newSegments = await transcribeAudioFile2(f); // deepgram
