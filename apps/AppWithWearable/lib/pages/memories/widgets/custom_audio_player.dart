@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_waveform/just_waveform.dart';
 import 'package:path_provider/path_provider.dart';
@@ -140,7 +141,7 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: const BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                        borderRadius: BorderRadius.all(Radius.circular(4.0)),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black26,
@@ -264,7 +265,10 @@ class ControlButtons extends StatelessWidget {
       children: [
         // Opens volume slider dialog
         IconButton(
-          icon: const Icon(Icons.replay_10),
+          icon: SvgPicture.asset(
+            'assets/images/replay_15.svg',
+            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          ),
           iconSize: 48.0,
           onPressed: () => player.seek(
             Duration(
@@ -308,7 +312,10 @@ class ControlButtons extends StatelessWidget {
           },
         ),
         IconButton(
-          icon: const Icon(Icons.forward_10),
+          icon: SvgPicture.asset(
+            'assets/images/forward_15.svg',
+            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          ),
           iconSize: 48.0,
           onPressed: () => player.seek(
             Duration(
@@ -370,8 +377,9 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
         final positionData = snapshot.data;
         final position = positionData?.position ?? Duration.zero;
         final duration = positionData?.duration ?? Duration.zero;
-        final startEndCalculate =
-            (position.inMilliseconds < 5 || (position.inMilliseconds > (duration.inMilliseconds - 5)));
+
+        final startCalculate = (position.inMilliseconds < 5);
+        final endCalculate = (position.inMilliseconds > duration.inMilliseconds - 5);
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -392,13 +400,19 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 thumbColor: Colors.red,
-                thumbShape: VerticalSliderForAudio(height: startEndCalculate ? 142 : 150),
+                thumbShape: VerticalSliderForAudio(
+                    height: 150,
+                    position: startCalculate
+                        ? 0
+                        : endCalculate
+                            ? 1
+                            : 2),
                 activeTrackColor: Colors.transparent,
                 inactiveTrackColor: Colors.transparent,
                 overlayColor: Colors.red.shade200,
                 overlayShape: SquareThumbShape(
-                  width: startEndCalculate ? 0 : 8,
-                  height: startEndCalculate ? 142 : 150,
+                  width: startCalculate || endCalculate ? 0 : 8,
+                  height: 150,
                 ),
               ),
               child: Slider(
@@ -462,7 +476,8 @@ class SquareThumbShape extends SliderComponentShape {
 
 class VerticalSliderForAudio extends SliderComponentShape {
   final double height;
-  VerticalSliderForAudio({required this.height});
+  final int position;
+  VerticalSliderForAudio({required this.height, this.position = 0});
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.zero;
 
@@ -484,9 +499,12 @@ class VerticalSliderForAudio extends SliderComponentShape {
     final canvas = context.canvas;
     final paint = Paint()..color = Colors.red;
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
+      RRect.fromRectAndCorners(
         Rect.fromCenter(center: center, width: 4, height: height),
-        const Radius.circular(4),
+        topLeft: Radius.circular(position == 0 ? 16 : 4),
+        topRight: Radius.circular(position == 1 ? 16 : 4),
+        bottomLeft: Radius.circular(position == 0 ? 16 : 4),
+        bottomRight: Radius.circular(position == 1 ? 16 : 4),
       ),
       paint,
     );
