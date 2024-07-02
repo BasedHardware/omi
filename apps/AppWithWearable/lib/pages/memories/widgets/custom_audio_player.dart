@@ -77,79 +77,65 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              StreamBuilder<PositionData>(
-                stream: _positionDataStream,
-                builder: (context, snapshot) {
-                  final positionData = snapshot.data;
-                  return SeekBar(
-                    duration: positionData?.duration ?? Duration.zero,
-                    position: positionData?.position ?? Duration.zero,
-                    bufferedPosition: positionData?.bufferedPosition ?? Duration.zero,
-                    onChangeEnd: _player.seek,
-                  );
-                },
-              ),
-              Container(
-                alignment: Alignment.center,
-                padding: const EdgeInsets.all(16.0),
-                child: Container(
-                  height: 150.0,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.all(Radius.circular(16.0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        offset: Offset(0.0, 2.0),
-                        blurRadius: 2.0,
-                      ),
-                    ],
-                  ),
-                  width: double.maxFinite,
-                  child: StreamBuilder<WaveformProgress>(
-                    stream: progressStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            'Error: ${snapshot.error}',
-                            style: Theme.of(context).textTheme.titleLarge,
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-                      final progress = snapshot.data?.progress ?? 0.0;
-                      final waveform = snapshot.data?.waveform;
-                      if (waveform == null) {
-                        return Center(
-                          child: Text(
-                            '${(100 * progress).toInt()}%',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        );
-                      }
-                      return AudioWaveformWidget(
-                        waveform: waveform,
-                        start: Duration.zero,
-                        duration: waveform.duration,
-                        positionDataStream: _positionDataStream,
-                        player: _player,
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              alignment: Alignment.center,
+              margin: const EdgeInsets.all(16.0),
+              child: Container(
+                height: 150.0,
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      offset: Offset(0.0, 2.0),
+                      blurRadius: 2.0,
+                    ),
+                  ],
+                ),
+                width: double.maxFinite,
+                child: StreamBuilder<WaveformProgress>(
+                  stream: progressStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error: ${snapshot.error}',
+                          style: Theme.of(context).textTheme.titleLarge,
+                          textAlign: TextAlign.center,
+                        ),
                       );
-                    },
-                  ),
+                    }
+                    final progress = snapshot.data?.progress ?? 0.0;
+                    final waveform = snapshot.data?.waveform;
+                    if (waveform == null) {
+                      return Center(
+                        child: Text(
+                          '${(100 * progress).toInt()}%',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      );
+                    }
+                    return AudioWaveformWidget(
+                      waveform: waveform,
+                      start: Duration.zero,
+                      duration: waveform.duration,
+                      positionDataStream: _positionDataStream,
+                      player: _player,
+                    );
+                  },
                 ),
               ),
-              ControlButtons(_player),
-            ],
-          ),
+            ),
+            ControlButtons(_player),
+          ],
         ),
       ),
     );
@@ -238,134 +224,6 @@ class PositionData {
 
 T? ambiguate<T>(T? value) => value;
 
-class SeekBar extends StatefulWidget {
-  final Duration duration;
-  final Duration position;
-  final Duration bufferedPosition;
-  final ValueChanged<Duration>? onChanged;
-  final ValueChanged<Duration>? onChangeEnd;
-
-  const SeekBar({
-    Key? key,
-    required this.duration,
-    required this.position,
-    required this.bufferedPosition,
-    this.onChanged,
-    this.onChangeEnd,
-  }) : super(key: key);
-
-  @override
-  SeekBarState createState() => SeekBarState();
-}
-
-class SeekBarState extends State<SeekBar> {
-  double? _dragValue;
-  late SliderThemeData _sliderThemeData;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    _sliderThemeData = SliderTheme.of(context).copyWith(
-      trackHeight: 2.0,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        SliderTheme(
-          data: _sliderThemeData.copyWith(
-            thumbShape: HiddenThumbComponentShape(),
-            activeTrackColor: Colors.transparent,
-            inactiveTrackColor: Colors.transparent,
-            thumbColor: Colors.red,
-          ),
-          child: ExcludeSemantics(
-            child: Slider(
-              min: 0.0,
-              max: widget.duration.inMilliseconds.toDouble(),
-              value: min(widget.bufferedPosition.inMilliseconds.toDouble(), widget.duration.inMilliseconds.toDouble()),
-              onChanged: (value) {
-                setState(() {
-                  _dragValue = value;
-                });
-                if (widget.onChanged != null) {
-                  widget.onChanged!(Duration(milliseconds: value.round()));
-                }
-              },
-              onChangeEnd: (value) {
-                if (widget.onChangeEnd != null) {
-                  widget.onChangeEnd!(Duration(milliseconds: value.round()));
-                }
-                _dragValue = null;
-              },
-            ),
-          ),
-        ),
-        SliderTheme(
-          data: _sliderThemeData.copyWith(
-            thumbColor: Colors.red,
-            activeTrackColor: Colors.transparent,
-            inactiveTrackColor: Colors.transparent,
-          ),
-          child: Slider(
-            min: 0.0,
-            max: widget.duration.inMilliseconds.toDouble(),
-            value:
-                min(_dragValue ?? widget.position.inMilliseconds.toDouble(), widget.duration.inMilliseconds.toDouble()),
-            onChanged: (value) {
-              setState(() {
-                _dragValue = value;
-              });
-              if (widget.onChanged != null) {
-                widget.onChanged!(Duration(milliseconds: value.round()));
-              }
-            },
-            onChangeEnd: (value) {
-              if (widget.onChangeEnd != null) {
-                widget.onChangeEnd!(Duration(milliseconds: value.round()));
-              }
-              _dragValue = null;
-            },
-          ),
-        ),
-        Positioned(
-          right: 16.0,
-          bottom: 0.0,
-          child: Text(
-              RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$').firstMatch("$_remaining")?.group(1) ?? '$_remaining',
-              style: Theme.of(context).textTheme.bodySmall),
-        ),
-      ],
-    );
-  }
-
-  Duration get _remaining => widget.duration - widget.position;
-}
-
-class HiddenThumbComponentShape extends SliderComponentShape {
-  @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.zero;
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double value,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-  }) {}
-}
-
 class AudioWaveformWidget extends StatefulWidget {
   final Color waveColor;
   final double scale;
@@ -395,37 +253,135 @@ class AudioWaveformWidget extends StatefulWidget {
 }
 
 class _AudioWaveformState extends State<AudioWaveformWidget> {
+  double _dragValue = 0.0;
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ClipRect(
-          child: CustomPaint(
-            painter: AudioWaveformPainter(
-              waveColor: widget.waveColor,
-              waveform: widget.waveform,
-              start: widget.start,
-              duration: widget.duration,
-              scale: widget.scale,
-              strokeWidth: widget.strokeWidth,
-              pixelsPerStep: widget.pixelsPerStep,
+    return StreamBuilder<PositionData>(
+      stream: widget.positionDataStream,
+      builder: (context, snapshot) {
+        final positionData = snapshot.data;
+        final position = positionData?.position ?? Duration.zero;
+        final duration = positionData?.duration ?? Duration.zero;
+        final startEndCalculate =
+            (position.inMilliseconds < 5 || (position.inMilliseconds > (duration.inMilliseconds - 5)));
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(
+              child: CustomPaint(
+                painter: AudioWaveformPainter(
+                  waveColor: widget.waveColor,
+                  waveform: widget.waveform,
+                  start: widget.start,
+                  duration: widget.duration,
+                  scale: widget.scale,
+                  strokeWidth: widget.strokeWidth,
+                  pixelsPerStep: widget.pixelsPerStep,
+                  currentPoint: position,
+                ),
+              ),
             ),
-          ),
-        ),
-        StreamBuilder<PositionData>(
-          stream: widget.positionDataStream,
-          builder: (context, snapshot) {
-            final positionData = snapshot.data;
-            return SeekBar(
-              duration: positionData?.duration ?? Duration.zero,
-              position: positionData?.position ?? Duration.zero,
-              bufferedPosition: positionData?.bufferedPosition ?? Duration.zero,
-              onChangeEnd: widget.player.seek,
-            );
-          },
-        ),
-      ],
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                thumbColor: Colors.red,
+                thumbShape: VerticalSliderForAudio(height: startEndCalculate ? 142 : 150),
+                activeTrackColor: Colors.transparent,
+                inactiveTrackColor: Colors.transparent,
+                overlayColor: Colors.red.shade200,
+                overlayShape: SquareThumbShape(
+                  width: startEndCalculate ? 0 : 8,
+                  height: startEndCalculate ? 142 : 150,
+                ),
+              ),
+              child: Slider(
+                min: 0.0,
+                max: duration.inMilliseconds.toDouble(),
+                value: min(_dragValue, position.inMilliseconds.toDouble()),
+                onChanged: (value) {
+                  _dragValue = value;
+                  widget.player.seek(Duration(milliseconds: value.toInt()));
+                  setState(() {});
+                },
+                onChangeEnd: (value) => widget.player.seek,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class SquareThumbShape extends SliderComponentShape {
+  final double width;
+  final double height;
+
+  SquareThumbShape({this.width = 12.0, this.height = 8.0});
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size(width, height);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+
+    final Paint paint = Paint()
+      ..color = Colors.red.shade100
+      ..style = PaintingStyle.fill;
+
+    final RRect thumbRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: width, height: height),
+      const Radius.circular(8),
+    );
+
+    canvas.drawRRect(thumbRect, paint);
+  }
+}
+
+class VerticalSliderForAudio extends SliderComponentShape {
+  final double height;
+  VerticalSliderForAudio({required this.height});
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.zero;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final paint = Paint()..color = Colors.red;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: center, width: 4, height: height),
+        const Radius.circular(4),
+      ),
+      paint,
     );
   }
 }
@@ -438,6 +394,7 @@ class AudioWaveformPainter extends CustomPainter {
   final Waveform waveform;
   final Duration start;
   final Duration duration;
+  final Duration currentPoint;
 
   AudioWaveformPainter({
     required this.waveform,
@@ -447,6 +404,7 @@ class AudioWaveformPainter extends CustomPainter {
     required this.scale,
     required this.strokeWidth,
     required this.pixelsPerStep,
+    required this.currentPoint,
   }) : wavePaint = Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = strokeWidth
@@ -466,6 +424,7 @@ class AudioWaveformPainter extends CustomPainter {
     final sampleOffset = waveform.positionToPixel(start);
     final sampleStart = -sampleOffset % waveformPixelsPerStep;
     for (var i = sampleStart.toDouble(); i <= waveformPixelsPerWindow + 1.0; i += waveformPixelsPerStep) {
+      wavePaint.color = i < currentPoint.inSeconds * 100 ? Colors.red : Colors.black;
       final sampleIdx = (sampleOffset + i).toInt();
       final x = i / waveformPixelsPerDevicePixel;
       final minY = normalise(waveform.getPixelMin(sampleIdx), height);
