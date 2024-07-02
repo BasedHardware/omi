@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -11,6 +10,8 @@ import 'package:friend_private/widgets/exapandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
+
+
 
 class MemoryDetailPage extends StatefulWidget {
   final Memory memory;
@@ -94,6 +95,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               Expanded(child: Text(" ${structured.getEmoji()}")),
               const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  showShareBottomSheet(context, widget.memory, setState);
+                },
+                icon: const Icon(Icons.more_horiz),
+              ),
               IconButton(
                 onPressed: () {
                   showOptionsBottomSheet(
