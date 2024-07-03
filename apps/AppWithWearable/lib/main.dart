@@ -121,7 +121,9 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: const AudioPlayerTestPage(),
+      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
+          ? const HomePageWrapper()
+          : const OnboardingWrapper(),
     );
   }
 }

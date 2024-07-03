@@ -8,9 +8,14 @@ import 'package:flutter_svg/svg.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_waveform/just_waveform.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:upgrader/upgrader.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
+
+enum PlayerLoadingState {
+  loading,
+  loaded,
+  error,
+}
 
 class AudioPlayerTestPage extends StatefulWidget {
   const AudioPlayerTestPage({super.key});
@@ -20,7 +25,7 @@ class AudioPlayerTestPage extends StatefulWidget {
 }
 
 class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
-  final files = ['BabyElephantWalk60.wav', 'ImperialMarch60.wav', 'PinkPanther30.wav'];
+  final files = ['BabyElephantWalk60.wav', 'ImperialMarch60.wav', 'PinkPanther30.wav', 'Player.mp3'];
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,7 +47,7 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (ctx) => CustomAudioPlayer(
-                    filename: files[index],
+                    audioFilePath: 'assets/audios/${files[index]}',
                   ),
                 ),
               );
@@ -55,8 +60,9 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
 }
 
 class CustomAudioPlayer extends StatefulWidget {
-  const CustomAudioPlayer({super.key, required this.filename});
-  final String filename;
+  const CustomAudioPlayer({super.key, required this.audioFilePath, this.isNetworkFile = false});
+  final String audioFilePath;
+  final bool isNetworkFile;
 
   @override
   State<CustomAudioPlayer> createState() => _CustomAudioPlayerState();
@@ -65,7 +71,9 @@ class CustomAudioPlayer extends StatefulWidget {
 class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindingObserver {
   final _player = AudioPlayer();
   final progressStream = BehaviorSubject<WaveformProgress>();
-  bool loading = true;
+  var _playerLoadingState = PlayerLoadingState.loading;
+  final navigatorKey = GlobalKey<NavigatorState>();
+  String errorMessage = '';
   @override
   void initState() {
     super.initState();
@@ -77,29 +85,58 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
   }
 
   Future<void> _init() async {
+    debugPrint('Audio File Path: ${widget.audioFilePath}');
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     _player.playbackEventStream.listen((event) {}, onError: (Object e, StackTrace stackTrace) {
       debugPrint('A stream error occurred: $e');
     });
     try {
-      await _player.setAudioSource(AudioSource.asset('assets/audios/${widget.filename}'));
+      await _player.setAudioSource(widget.isNetworkFile
+          ? AudioSource.uri(Uri.parse(widget.audioFilePath))
+          : AudioSource.asset(widget.audioFilePath));
     } on PlayerException catch (e) {
+      debugPrint('PlayerException: ${e}');
+      setState(() {
+        _playerLoadingState = PlayerLoadingState.error;
+      });
+      errorMessage = "PlayerException: ${e}";
+      ScaffoldMessenger.of(navigatorKey.currentContext ?? context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      Navigator.of(navigatorKey.currentContext ?? context).pop();
+      return;
+    } catch (e) {
       debugPrint('Error loading audio source: $e');
+      setState(() {
+        _playerLoadingState = PlayerLoadingState.error;
+      });
+      errorMessage = "Error loading audio source: $e";
+      ScaffoldMessenger.of(navigatorKey.currentContext ?? context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      Navigator.of(navigatorKey.currentContext ?? context).pop();
+      return;
     }
 
     ///read audio file from assets
-    final audioFile = File(p.join((await getTemporaryDirectory()).path, widget.filename));
+    final audioFile = File(p.join((await getTemporaryDirectory()).path, widget.audioFilePath.split('/').last));
     try {
-      await audioFile.writeAsBytes((await rootBundle.load('assets/audios/${widget.filename}')).buffer.asUint8List());
-      final waveFile = File(p.join((await getTemporaryDirectory()).path, 'waveform.wave'));
+      Future<ByteData> tempFile = widget.isNetworkFile
+          ? NetworkAssetBundle(Uri.parse(widget.audioFilePath)).load(widget.audioFilePath)
+          : rootBundle.load(widget.audioFilePath);
+      await audioFile.writeAsBytes((await tempFile).buffer.asUint8List());
+      final waveFile = File(p.join((await getTemporaryDirectory()).path, 'waveform.wav'));
       JustWaveform.extract(audioInFile: audioFile, waveOutFile: waveFile)
           .listen(progressStream.add, onError: progressStream.addError);
     } catch (e) {
+      setState(() {
+        _playerLoadingState = PlayerLoadingState.error;
+      });
+      errorMessage = "Audio File Reading Error: $e";
+      ScaffoldMessenger.of(navigatorKey.currentContext ?? context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      Navigator.of(navigatorKey.currentContext ?? context).pop();
       progressStream.addError(e);
+      return;
     }
     setState(() {
-      loading = false;
+      _playerLoadingState = PlayerLoadingState.loaded;
     });
   }
 
@@ -125,129 +162,133 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: loading
-            ? const Center(child: const CircularProgressIndicator(color: Colors.white))
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    alignment: Alignment.center,
-                    margin: const EdgeInsets.all(16.0),
-                    child: Container(
-                      height: 150.0,
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.all(Radius.circular(4.0)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black26,
-                            offset: Offset(0.0, 2.0),
-                            blurRadius: 2.0,
-                          ),
-                        ],
-                      ),
-                      width: double.maxFinite,
-                      child: StreamBuilder<WaveformProgress>(
-                        stream: progressStream,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return Center(
-                              child: Text(
-                                'Error: ${snapshot.error}',
-                                style: Theme.of(context).textTheme.titleLarge,
-                                textAlign: TextAlign.center,
-                              ),
-                            );
-                          }
-                          final progress = snapshot.data?.progress ?? 0.0;
-                          final waveform = snapshot.data?.waveform;
-                          if (waveform == null) {
-                            return Center(
-                              child: Text(
-                                '${(100 * progress).toInt()}%',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            );
-                          }
-                          return AudioWaveformWidget(
-                            waveform: waveform,
-                            start: Duration.zero,
-                            duration: waveform.duration,
-                            positionDataStream: _positionDataStream,
-                            player: _player,
-                          );
-                        },
-                      ),
+    return Material(
+      key: navigatorKey,
+      child: SafeArea(
+        child: _showProperView(context),
+      ),
+    );
+  }
+
+  Widget _showProperView(BuildContext context) {
+    if (PlayerLoadingState.loading == _playerLoadingState) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    } else if (PlayerLoadingState.error == _playerLoadingState) {
+      return Text(errorMessage);
+    }
+    return Column(
+      children: [
+        Container(
+          alignment: Alignment.center,
+          margin: const EdgeInsets.all(16.0),
+          child: Container(
+            height: 150.0,
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.all(Radius.circular(4.0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  offset: Offset(0.0, 2.0),
+                  blurRadius: 2.0,
+                ),
+              ],
+            ),
+            width: double.maxFinite,
+            child: StreamBuilder<WaveformProgress>(
+              stream: progressStream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error: ${snapshot.error}',
+                      style: Theme.of(context).textTheme.titleLarge,
+                      textAlign: TextAlign.center,
                     ),
+                  );
+                }
+                final progress = snapshot.data?.progress ?? 0.0;
+                final waveform = snapshot.data?.waveform;
+                if (waveform == null) {
+                  return Center(
+                    child: Text(
+                      '${(100 * progress).toInt()}%',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  );
+                }
+                return AudioWaveformWidget(
+                  waveform: waveform,
+                  start: Duration.zero,
+                  duration: waveform.duration,
+                  positionDataStream: _positionDataStream,
+                  player: _player,
+                );
+              },
+            ),
+          ),
+        ),
+        StreamBuilder(
+          stream: _positionDataStream,
+          builder: (context, AsyncSnapshot snapshot) {
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                              .firstMatch("${const Duration(seconds: 0)}")
+                              ?.group(1) ??
+                          "${_player.position}",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              );
+            } else if (snapshot.connectionState == ConnectionState.waiting) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                              .firstMatch("${const Duration(seconds: 0)}")
+                              ?.group(1) ??
+                          "${_player.position}",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$').firstMatch("${_player.position}")?.group(1) ??
+                        "${Duration.zero}",
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  StreamBuilder(
-                    stream: _positionDataStream,
-                    builder: (context, AsyncSnapshot snapshot) {
-                      if (snapshot.hasError) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
-                                        .firstMatch("${const Duration(seconds: 0)}")
-                                        ?.group(1) ??
-                                    "${_player.position}",
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        );
-                      } else if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
-                                        .firstMatch("${const Duration(seconds: 0)}")
-                                        ?.group(1) ??
-                                    "${_player.position}",
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
-                                      .firstMatch("${_player.position}")
-                                      ?.group(1) ??
-                                  "${Duration.zero}",
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            Text(
-                              RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
-                                      .firstMatch("${_player.bufferedPosition - _player.position}")
-                                      ?.group(1) ??
-                                  "${(Duration.zero)}",
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  Text(
+                    RegExp(r'((^0*[1-9]\d*:)?\d{2}:\d{2})\.\d+$')
+                            .firstMatch("${_player.bufferedPosition - _player.position}")
+                            ?.group(1) ??
+                        "${(Duration.zero)}",
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  ControlButtons(_player),
                 ],
               ),
-      ),
+            );
+          },
+        ),
+        ControlButtons(_player),
+      ],
     );
   }
 }
@@ -256,7 +297,7 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
 class ControlButtons extends StatelessWidget {
   final AudioPlayer player;
 
-  const ControlButtons(this.player, {Key? key}) : super(key: key);
+  const ControlButtons(this.player, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +308,7 @@ class ControlButtons extends StatelessWidget {
         IconButton(
           icon: SvgPicture.asset(
             'assets/images/replay_15.svg',
-            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           ),
           iconSize: 48.0,
           onPressed: () => player.seek(
@@ -283,14 +324,7 @@ class ControlButtons extends StatelessWidget {
             final playerState = snapshot.data;
             final processingState = playerState?.processingState;
             final playing = playerState?.playing;
-            if (processingState == ProcessingState.loading || processingState == ProcessingState.buffering) {
-              return Container(
-                margin: const EdgeInsets.all(8.0),
-                width: 64.0,
-                height: 64.0,
-                child: const CircularProgressIndicator(),
-              );
-            } else if (playing != true) {
+            if (playing != true) {
               return IconButton(
                 icon: const Icon(Icons.play_arrow),
                 iconSize: 64.0,
@@ -314,7 +348,7 @@ class ControlButtons extends StatelessWidget {
         IconButton(
           icon: SvgPicture.asset(
             'assets/images/forward_15.svg',
-            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           ),
           iconSize: 48.0,
           onPressed: () => player.seek(
@@ -418,7 +452,7 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
               child: Slider(
                 min: 0.0,
                 max: duration.inMilliseconds.toDouble(),
-                value: position.inMilliseconds.toDouble(),
+                value: min(position.inMilliseconds.toDouble(), duration.inMilliseconds.toDouble()),
                 onChanged: (value) {
                   widget.player.seek(Duration(milliseconds: value.toInt()));
                   setState(() {});
