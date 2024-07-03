@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
@@ -15,13 +17,15 @@ class GrowthbookUtil {
 
   static Future<void> init() async {
     if (Env.growthbookApiKey == null) return;
+    var attr = {
+      'id': SharedPreferencesUtil().uid,
+      'device': Platform.isAndroid ? 'android' : 'ios',
+    };
     _gb = await GBSDKBuilderApp(
             apiKey: Env.growthbookApiKey!,
             backgroundSync: true,
             enable: true,
-            attributes: {
-              'id': SharedPreferencesUtil().uid,
-            },
+            attributes: attr,
             growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
               debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
             },
@@ -32,7 +36,7 @@ class GrowthbookUtil {
             // },
             )
         .initialize();
-    _gb!.setAttributes({'id': SharedPreferencesUtil().uid});
+    _gb!.setAttributes(attr);
   }
 
   bool hasTranscriptServerFeatureOn() {
