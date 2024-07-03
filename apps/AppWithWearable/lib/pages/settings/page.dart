@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -24,6 +26,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
+  late bool allowReminderAndCalendar;
+  late dynamic selectedCalendar;
+
   String? version;
   String? buildVersion;
 
@@ -32,6 +37,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
+    allowReminderAndCalendar = SharedPreferencesUtil().allowReminderAndCalendar;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
@@ -39,6 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
     });
+    selectedCalendar = SharedPreferencesUtil().selectedCalendar;
     super.initState();
   }
 
@@ -209,18 +216,130 @@ class _SettingsPageState extends State<SettingsPage> {
                             width: 22,
                             height: 22,
                             child: reconnectNotificationIsChecked // Show the icon only when checked
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white, // Tick color
-                                    size: 18,
-                                  )
-                                : null, // No icon when unchecked
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.white, // Tick color
+                                        size: 18,
+                                      )
+                                    : null, // No icon when unchecked
                           ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 32),
+                    const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'CALENDAR & REMINDERS',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (allowReminderAndCalendar) {
+                          allowReminderAndCalendar = false;
+                          SharedPreferencesUtil().allowReminderAndCalendar = false;
+                        } else {
+                          allowReminderAndCalendar = true;
+                          SharedPreferencesUtil().allowReminderAndCalendar = true;
+                        }
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Enable reminders and calendar',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: allowReminderAndCalendar
+                                  ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent, // Fill color when checked
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: allowReminderAndCalendar // Show the icon only when checked
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.white, // Tick color
+                                        size: 18,
+                                      )
+                                    : null, // No icon when unchecked
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Visibility(
+                    visible: allowReminderAndCalendar,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Select calendar for reminders',
+                            style: TextStyle(
+                              color: Color.fromARGB(255, 150, 150, 150),
+                              fontSize: 16,
+                            ),
+                          ),
+                          DropdownButton<String>(
+                            value: selectedCalendar,
+                            onChanged: (String? newValue) {
+                              setState(() {
+                                selectedCalendar = newValue!;
+                              });
+                              SharedPreferencesUtil().selectedCalendar = selectedCalendar;
+                            },
+                            dropdownColor: Colors.black,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            underline: Container(
+                              height: 0,
+                              color: Colors.white,
+                            ),
+                            items: [
+                              if (Platform.isIOS)
+                                const DropdownMenuItem<String>(
+                                  value: 'apple',
+                                  child: Text(
+                                    'Apple Reminders',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              const DropdownMenuItem<String>(
+                                value: 'google',
+                                child:  Text(
+                                  'Google Calendar',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -277,12 +396,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               width: 22,
                               height: 22,
                               child: optInAnalytics // Show the icon only when checked
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white, // Tick color
-                                      size: 18,
-                                    )
-                                  : null, // No icon when unchecked
+                                      ? const Icon(
+                                          Icons.check,
+                                          color: Colors.white, // Tick color
+                                          size: 18,
+                                        )
+                                      : null, // No icon when unchecked
                             ),
                           ],
                         ),
@@ -328,12 +447,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               width: 22,
                               height: 22,
                               child: devModeEnabled // Show the icon only when checked
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white, // Tick color
-                                      size: 18,
-                                    )
-                                  : null, // No icon when unchecked
+                                      ? const Icon(
+                                          Icons.check,
+                                          color: Colors.white, // Tick color
+                                          size: 18,
+                                        )
+                                      : null, // No icon when unchecked
                             ),
                           ],
                         ),

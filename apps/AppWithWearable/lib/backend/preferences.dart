@@ -88,6 +88,10 @@ class SharedPreferencesUtil {
   bool get devModeEnabled => getBool('devModeEnabled') ?? false;
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
+  
+  bool get allowReminderAndCalendar => getBool('allowReminderAndCalendar') ?? false;
+
+  set allowReminderAndCalendar(bool value) => saveBool('allowReminderAndCalendar', value);
 
   bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
 
@@ -101,6 +105,10 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
+  dynamic get selectedCalendar => getString('selectedCalendar') ?? '';
+
+  set selectedCalendar(dynamic value) => saveString('selectedCalendar', value);
+  
   // List<Message> get chatMessages {
   //   final List<String> messages = getStringList('messages') ?? [];
   //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();

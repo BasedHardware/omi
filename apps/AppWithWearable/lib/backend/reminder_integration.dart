@@ -1,6 +1,3 @@
-import 'package:googleapis/calendar/v3.dart' as google_calendar;
-import 'package:apple_reminders/apple_reminders.dart' as apple_reminders;
-
 class ReminderIntegration {
   Future<void> processTranscriptForKeywords(String transcript) async {
     // TODO: Implement NLP to identify reminder-related phrases in the transcript
