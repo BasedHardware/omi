@@ -5,7 +5,6 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -25,34 +24,6 @@ getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStr
               string1: 'Looking for Friend wearable',
               string2: 'Locating your Friend device. Keep it near your phone for pairing',
             ),
-      SharedPreferencesUtil().deviceId.isNotEmpty
-          ? TextButton(
-              onPressed: () async {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (c) => const ConnectedDevice(
-                    device: null,
-                    batteryLevel: 0,
-                  ),
-                ));
-                MixpanelManager().connectFriendClicked();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'My Paired Friend',
-                style: TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 18,
-                  color: Colors.white,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            )
-          : const SizedBox()
     ];
   }
   return [

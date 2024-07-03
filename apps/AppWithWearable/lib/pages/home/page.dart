@@ -156,6 +156,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
+    // TODO: when disconnected manually need to remove this connection state listener
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
@@ -166,7 +167,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
-                title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+              title: 'Friend Device Disconnected',
+              body: 'Please reconnect to continue using your Friend.',
+            );
           }
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
@@ -331,7 +334,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _device != null
+              _device != null && batteryLevel != -1
                   ? GestureDetector(
                       onTap: _device == null
                           ? null
@@ -380,8 +383,35 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ],
                           )),
                     )
-                  : const SizedBox.shrink(),
-              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+                  : SharedPreferencesUtil().deviceId.isNotEmpty
+                      ? TextButton(
+                          onPressed: () async {
+                            await Navigator.of(context).push(MaterialPageRoute(
+                              builder: (c) => const ConnectedDevice(
+                                device: null,
+                                batteryLevel: 0,
+                              ),
+                            ));
+                            MixpanelManager().connectFriendClicked();
+                            setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Paired Device',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 18,
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
