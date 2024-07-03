@@ -91,17 +91,6 @@ Future<Memory> memoryCreationBlock(
   }
   debugPrint('Structured Memory: $structuredMemory');
 
-  if (structuredMemory.title.isEmpty && !retrievedFromCache && !failed) {
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text(
-        'Memory stored as discarded! Nothing useful. 😄',
-        style: TextStyle(color: Colors.white),
-      ),
-      duration: Duration(seconds: 4),
-    ));
-  }
-
   Memory memory = await finalizeMemoryRecord(
     transcript,
     transcriptSegments,
@@ -113,11 +102,22 @@ Future<Memory> memoryCreationBlock(
   );
   debugPrint('Memory created: ${memory.id}');
   if (!retrievedFromCache) {
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
-      duration: Duration(seconds: 4),
-    ));
+    if (structuredMemory.title.isEmpty && !failed) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Memory stored as discarded! Nothing useful. 😄',
+          style: TextStyle(color: Colors.white),
+        ),
+        duration: Duration(seconds: 4),
+      ));
+    } else if (structuredMemory.title.isNotEmpty) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
+        duration: Duration(seconds: 4),
+      ));
+    }
   }
   return memory;
 }
