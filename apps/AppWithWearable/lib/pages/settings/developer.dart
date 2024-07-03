@@ -143,7 +143,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       },
                       'Disabling Transcript Server',
                       'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
-                          'This also means, that some features will not be available.',
+                          'This also means that some features will not be available.',
                     );
                     showDialog(
                       context: context,
@@ -156,7 +156,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         },
                         'Disabling Transcript Server',
                         'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
-                            'This also means, that some features will not be available.',
+                            'This also means that some features will not be available.',
                       ),
                     );
                   } else {
@@ -202,7 +202,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              _getText('Webhooks: Every time a new memory get\'s created, send the details to your own server.'),
+              _getText('Webhooks: Every time a new memory gets created, send the details to your own server.'),
               TextField(
                 controller: webhookUrlController,
                 obscureText: false,
