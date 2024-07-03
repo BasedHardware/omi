@@ -7,6 +7,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
+import 'package:friend_private/backend/reminder_integration.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 // Perform actions periodically
@@ -20,6 +21,12 @@ Future<Memory?> processTranscriptContent(
   DateTime? finishedAt,
 }) async {
   if (transcript.isNotEmpty) {
+    // Integrate reminder extraction during memory creation
+    var reminderDetails = await ReminderIntegration().extractReminderDetails(transcript);
+    if (reminderDetails.isNotEmpty) {
+      await ReminderIntegration().scheduleReminderOnConfiguredPlatform(reminderDetails);
+    }
+
     Memory? memory = await memoryCreationBlock(
       context,
       transcript,

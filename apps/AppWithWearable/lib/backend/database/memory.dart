@@ -32,6 +32,12 @@ class Memory {
   @Index()
   bool discarded;
 
+  // Fields to store reminder details and platform used
+  String? reminderTitle;
+  String? reminderDescription;
+  DateTime? reminderTime;
+  String? reminderPlatform;
+
   Memory(
     this.createdAt,
     this.transcript,
@@ -40,6 +46,10 @@ class Memory {
     this.recordingFilePath,
     this.startedAt,
     this.finishedAt,
+    this.reminderTitle,
+    this.reminderDescription,
+    this.reminderTime,
+    this.reminderPlatform,
   });
 
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
@@ -102,6 +112,10 @@ class Memory {
       'structured': structured.target!.toJson(),
       'pluginsResponse': pluginsResponse.map<String>((response) => response.content).toList(),
       'discarded': discarded,
+      'reminderTitle': reminderTitle,
+      'reminderDescription': reminderDescription,
+      'reminderTime': reminderTime?.toIso8601String(),
+      'reminderPlatform': reminderPlatform,
     };
   }
 }
