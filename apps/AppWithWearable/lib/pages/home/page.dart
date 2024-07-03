@@ -29,7 +29,6 @@ import 'package:friend_private/utils/sentry_log.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -185,15 +184,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
     if (connectedDevice == null) return;
     clearNotification(1);
-    setState(() {
-      _device = connectedDevice;
-    });
+    _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     _startForeground();
+    setState(() {});
   }
 
   _initiateBleBatteryListener() async {

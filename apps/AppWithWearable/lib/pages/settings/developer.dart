@@ -151,7 +151,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         context,
                         () => Navigator.of(context).pop(),
                         () {
-                          setState(() => useTranscriptServer = true);
+                          setState(() => useTranscriptServer = false);
                           Navigator.of(context).pop();
                         },
                         'Disabling Transcript Server',
