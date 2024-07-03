@@ -3,6 +3,7 @@ import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/page.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
@@ -21,10 +22,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   final TextEditingController transcriptServerUrlController = TextEditingController();
 
   bool savingSettingsLoading = false;
+  bool useTranscriptServer = false;
 
   @override
   void initState() {
     openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    useTranscriptServer = SharedPreferencesUtil().useTranscriptServer;
     deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
@@ -73,6 +76,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
                 style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(height: 16.0),
+              // CheckboxListTile(
+              //   contentPadding: EdgeInsets.zero,
+              //   value: useDeepgram,
+              //   onChanged: (s) {
+              //     setState(() {
+              //       useDeepgram = s!;
+              //     });
+              //   },
+              //   title: const Text('Enable Deepgram'),
+              //   checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              // ),
               TextField(
                 controller: deepgramAPIKeyController,
                 obscureText: false,
@@ -111,6 +126,45 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 onTap: () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (context) => const BackupsPage()));
                 },
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: useTranscriptServer,
+                onChanged: (s) {
+                  if (s == null) return;
+                  if (!s) {
+                    getDialog(
+                      context,
+                      () => Navigator.of(context).pop(),
+                      () {
+                        setState(() => useTranscriptServer = true);
+                        Navigator.of(context).pop();
+                      },
+                      'Disabling Transcript Server',
+                      'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
+                          'This also means, that some features will not be available.',
+                    );
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.of(context).pop(),
+                        () {
+                          setState(() => useTranscriptServer = true);
+                          Navigator.of(context).pop();
+                        },
+                        'Disabling Transcript Server',
+                        'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
+                            'This also means, that some features will not be available.',
+                      ),
+                    );
+                  } else {
+                    setState(() => useTranscriptServer = s);
+                  }
+                },
+                title: const Text('Transcript Server Enabled'),
+                checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               const SizedBox(height: 20),
               Container(
@@ -234,6 +288,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
     prefs.webhookUrl = webhookUrlController.text.trim();
     prefs.transcriptServerUrl = transcriptServerUrlController.text.trim();
+    prefs.useTranscriptServer = useTranscriptServer;
 
     MixpanelManager().settingsSaved();
     setState(() => savingSettingsLoading = false);
