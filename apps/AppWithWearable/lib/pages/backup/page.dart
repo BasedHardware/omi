@@ -179,7 +179,7 @@ class _BackupsPageState extends State<BackupsPage> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Store your User ID and Password in a safe place, this is what you will need later when trying to recover your memories in another device or when you had to reinstall the app.',
+                'Store your User ID and Password in a safe place, this is what you will need later when trying to recover your memories on another device or when you have to reinstall the app.',
                 style: TextStyle(color: Colors.white),
               ),
             ),
