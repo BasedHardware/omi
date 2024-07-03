@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
@@ -27,6 +28,8 @@ void main() async {
   await ObjectBoxUtil.init();
   initOpus(await opus_flutter.load());
 
+  await GrowthbookUtil.init();
+
   if (Env.oneSignalAppId != null) {
     OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
     OneSignal.initialize(Env.oneSignalAppId!);
@@ -41,7 +44,7 @@ void main() async {
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
         );
         FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack!);
+          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
         _getRunApp();
@@ -64,6 +67,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+
   // The navigator key is necessary to navigate using static methods
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }

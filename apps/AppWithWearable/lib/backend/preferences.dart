@@ -1,7 +1,7 @@
 import 'dart:convert';
 
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -40,6 +40,10 @@ class SharedPreferencesUtil {
   String get deepgramApiKey => getString('deepgramApiKey') ?? '';
 
   set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
+
+  bool get useTranscriptServer => getBool('useTranscriptServer') ?? true;
+
+  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -107,8 +111,8 @@ class SharedPreferencesUtil {
   //   saveStringList('messages', messages);
   // }
 
-  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-  bool get hasSpeakerProfile => true;
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  // bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 

@@ -6,13 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -67,7 +69,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
+    processTranscriptContent(
+      context,
+      transcript,
+      SharedPreferencesUtil().transcriptSegments,
+      null,
+      retrievedFromCache: true,
+    ).then((m) {
       if (m != null && !m.discarded) executeBackup();
     });
     SharedPreferencesUtil().transcriptSegments = [];
@@ -103,9 +111,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           }
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
-          CrashReporting.reportHandledCrash(e, stacktrace,
-              level: NonFatalExceptionLevel.warning,
-              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
+          // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
+          CrashReporting.reportHandledCrash(
+            e,
+            stacktrace,
+            level: NonFatalExceptionLevel.warning,
+            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+          );
           debugPrint('Error: e.toString() ${e.toString()}');
           toProcessBytes2.insertAudioBytes(data.item2);
         }
@@ -117,10 +129,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   _processFileToTranscript(File f) async {
-    List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
-    debugPrint('newSegments: $newSegments');
+    List<TranscriptSegment> newSegments;
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
+      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+    } else {
+      newSegments = await deepgramTranscribe(f);
+    }
+    var initialSegmentsLength = segments.length;
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-    if (newSegments.isNotEmpty) {
+    if (segments.length > initialSegmentsLength) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -154,6 +171,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
+      segments,
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,

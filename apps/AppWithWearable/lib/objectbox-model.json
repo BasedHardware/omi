@@ -57,7 +57,13 @@
           "type": 10
         }
       ],
-      "relations": []
+      "relations": [
+        {
+          "id": "2:4703245221378113920",
+          "name": "transcriptSegments",
+          "targetId": "6:4187059965573492189"
+        }
+      ]
     },
     {
       "id": "2:6427539297124375252",
@@ -198,11 +204,55 @@
           "targetId": "1:1521024926543535"
         }
       ]
+    },
+    {
+      "id": "6:4187059965573492189",
+      "lastPropertyId": "7:4627200910621033983",
+      "name": "TranscriptSegment",
+      "properties": [
+        {
+          "id": "1:4980495793887661277",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9071133227098548567",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "3:9196505048325675409",
+          "name": "speaker",
+          "type": 9
+        },
+        {
+          "id": "4:407443881337783951",
+          "name": "speakerId",
+          "type": 6
+        },
+        {
+          "id": "5:5971131167901661375",
+          "name": "isUser",
+          "type": 1
+        },
+        {
+          "id": "6:4843588352934686711",
+          "name": "start",
+          "type": 8
+        },
+        {
+          "id": "7:4627200910621033983",
+          "name": "end",
+          "type": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "5:3905873968765933532",
+  "lastEntityId": "6:4187059965573492189",
   "lastIndexId": "7:296619579137476887",
-  "lastRelationId": "1:7091380547659316419",
+  "lastRelationId": "2:4703245221378113920",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,

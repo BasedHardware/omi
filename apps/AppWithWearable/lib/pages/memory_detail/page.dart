@@ -12,7 +12,10 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/utils/temp.dart';
+import 'package:friend_private/widgets/transcript.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -25,7 +28,7 @@ class MemoryDetailPage extends StatefulWidget {
   State<MemoryDetailPage> createState() => _MemoryDetailPageState();
 }
 
-class _MemoryDetailPageState extends State<MemoryDetailPage> {
+class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -40,6 +43,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   List<bool> pluginResponseExpanded = [];
   bool isTranscriptExpanded = false;
+  TabController? _controller;
 
   @override
   void initState() {
@@ -48,6 +52,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
     titleController.text = structured.title;
     overviewController.text = structured.overview;
     pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
+    _controller = TabController(length: 2, vsync: this, initialIndex: 1);
+    _controller!.addListener(() => setState(() {}));
     super.initState();
   }
 
@@ -62,7 +68,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: include a way to trigger specific plugins
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -86,8 +91,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                 ),
               ),
               Expanded(
-                child: Text(
-                    " ${structured.getEmoji()} ${widget.memory.discarded ? 'Discarded Memory' : structured.title}"),
+                child: Text(" ${structured.getEmoji()}"),
               ),
               const SizedBox(width: 8),
               IconButton(
@@ -97,232 +101,316 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
             ],
           ),
         ),
-        body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: ListView(
-            children: [
-              const SizedBox(height: 24),
-              Text(structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 16),
-              Text(
-                widget.memory.discarded ? 'Discarded Memory' : structured.title,
-                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
-              ),
-              const SizedBox(height: 16),
-              Table(
-                border: TableBorder.all(color: Colors.black),
-                columnWidths: const {
-                  0: FlexColumnWidth(1),
-                  1: FlexColumnWidth(2),
+        floatingActionButton: _controller!.index == 0
+            ? FloatingActionButton(
+                backgroundColor: Colors.black,
+                elevation: 8,
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(32)),
+                    side: BorderSide(color: Colors.grey, width: 1)),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Transcript copied to clipboard'),
+                    duration: Duration(seconds: 1),
+                  ));
+                  MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
                 },
-                children: [
-                  TableRow(
-                    children: [
-                      Text(
-                        'Created at',
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
-                      ),
-                      Text(
-                        dateTimeFormat('MMM d,  yyyy', widget.memory.createdAt),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                  const TableRow(children: [SizedBox(height: 16), SizedBox(height: 16)]),
-                  TableRow(children: [
-                    Text(
-                      widget.memory.startedAt == null ? 'At time' : 'Between',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
-                    ),
-                    Text(
-                      widget.memory.startedAt == null
-                          ? dateTimeFormat('h:mm a', widget.memory.createdAt)
-                          : '${dateTimeFormat('h:mm', widget.memory.startedAt)} to ${dateTimeFormat('h:mm a', widget.memory.finishedAt)}',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ]),
-                  TableRow(children: [
-                    SizedBox(height: structured.category.isNotEmpty ? 16 : 0),
-                    SizedBox(height: structured.category.isNotEmpty ? 16 : 0),
-                  ]),
-                  structured.category.isNotEmpty
-                      ? TableRow(children: [
-                          Text(
-                            'Category',
-                            style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.grey.shade400),
-                          ),
-                          Text(
-                            structured.category[0].toUpperCase() + structured.category.substring(1),
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ])
-                      : const TableRow(children: [SizedBox(height: 0), SizedBox(height: 0)]),
-                ],
-              ),
-              const SizedBox(height: 40),
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : Text(
-                      'Overview',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                    ),
-              widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : _getEditTextField(overviewController, editingOverview, focusOverviewField),
-              widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-              structured.actionItems.isNotEmpty
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Action Items',
-                          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                        ),
-                        IconButton(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(
-                                  text: '- ${structured.actionItems.map((e) => e.description).join('\n- ')}'));
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                content: Text('Action items copied to clipboard'),
-                                duration: Duration(seconds: 2),
-                              ));
-                              MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Action Items');
-                            },
-                            icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-              ...structured.actionItems.map<Widget>((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child:Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SelectionArea(
-                          child: Text(
-                            item.description,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-              if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
-                structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-                Text(
-                  'Plugins 🧑‍💻',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                ),
-                const SizedBox(height: 24),
-                ...widget.memory.pluginsResponse.mapIndexed((i, pluginResponse) {
-                  if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                  Plugin? plugin = pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        plugin != null
-                            ? ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.white,
-                                  maxRadius: 16,
-                                  backgroundImage: NetworkImage(
-                                      'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
-                                ),
-                                title: Text(
-                                  plugin.name,
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Text(
-                                    plugin.description,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                                  ),
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                  onPressed: () {
-                                    Clipboard.setData(
-                                        ClipboardData(text: utf8.decode(pluginResponse.content.trim().codeUnits)));
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                      content: Text('Plugin response copied to clipboard'),
-                                    ));
-                                    MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Plugin Response');
-                                  },
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                        ExpandableTextWidget(
-                          text: utf8.decode(pluginResponse.content.trim().codeUnits),
-                          isExpanded: pluginResponseExpanded[i],
-                          toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
-                          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                          maxLines: 6,
-                          // Change this to 6 if you want the initial max lines to be 6
-                          linkColor: Colors.white,
-                        ),
-                      ],
-                    ),
-                  );
-                }),
+                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                // label: const Text(
+                //   'Copy',
+                //   style: TextStyle(color: Colors.white),
+                // ),
+              )
+            : null,
+        body: Column(
+          children: [
+            TabBar(
+              indicatorSize: TabBarIndicatorSize.label,
+              isScrollable: false,
+              padding: EdgeInsets.zero,
+              indicatorPadding: EdgeInsets.zero,
+              controller: _controller,
+              labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+              tabs: const [
+                Tab(text: 'Transcript'),
+                Tab(text: 'Summary'),
+                // Tab(text: 'Plugins'),
               ],
-              const SizedBox(height: 8),
-              Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Raw Transcript  💬',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                    ),
-                    IconButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
-                          MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
-                        },
-                        // TODO: improve UI of this copy buttons
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
-                  ]),
-              const SizedBox(height: 16),
-              ExpandableTextWidget(
-                text: widget.memory.getTranscript(),
-                maxLines: 6,
-                linkColor: Colors.grey.shade300,
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                isExpanded: isTranscriptExpanded,
-                toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
+              indicator: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 32),
-            ],
-          ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TabBarView(
+                  controller: _controller,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    ListView(shrinkWrap: true, children: _getTranscriptWidgets()),
+                    ListView(shrinkWrap: true, children: _getSummaryWidgets() + _getPluginsWidgets()),
+                    // ListView(shrinkWrap: true, children: _getPluginsWidgets()),
+                    // ListView(shrinkWrap: true, children: _getSummaryWidgets()),
+                    // ListView(shrinkWrap: true, children: _getPluginsWidgets()),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  List<Widget> _getSummaryWidgets() {
+    String time = widget.memory.startedAt == null
+        ? dateTimeFormat('h:mm a', widget.memory.createdAt)
+        : '${dateTimeFormat('h:mm a', widget.memory.startedAt)} to ${dateTimeFormat('h:mm a', widget.memory.finishedAt)}';
+    return [
+      const SizedBox(height: 24),
+      Text(
+        widget.memory.discarded ? 'Discarded Memory' : structured.title,
+        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
+      ),
+      const SizedBox(height: 16),
+      Text(
+        '${dateTimeFormat('MMM d,  yyyy', widget.memory.createdAt)} ${widget.memory.startedAt == null ? 'at' : 'from'} $time',
+        style: const TextStyle(color: Colors.grey, fontSize: 16),
+      ),
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              structured.category[0].toUpperCase() + structured.category.substring(1),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          )
+        ],
+      ),
+      const SizedBox(height: 40),
+      widget.memory.discarded
+          ? const SizedBox.shrink()
+          : Text(
+              'Overview',
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+            ),
+      widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+      widget.memory.discarded
+          ? const SizedBox.shrink()
+          : _getEditTextField(overviewController, editingOverview, focusOverviewField),
+      widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
+      structured.actionItems.isNotEmpty
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Action Items',
+                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                ),
+                IconButton(
+                    onPressed: () {
+                      Clipboard.setData(
+                          ClipboardData(text: '- ${structured.actionItems.map((e) => e.description).join('\n- ')}'));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Action items copied to clipboard'),
+                        duration: Duration(seconds: 2),
+                      ));
+                      MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Action Items');
+                    },
+                    icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
+              ],
+            )
+          : const SizedBox.shrink(),
+      ...structured.actionItems.map<Widget>((item) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SelectionArea(
+                  child: Text(
+                    item.description,
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+      structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+    ];
+  }
+
+  List<Widget> _getPluginsWidgets() {
+    if (widget.memory.pluginsResponse.isEmpty) {
+      return [
+        const SizedBox(height: 32),
+        Text(
+          'No plugins were triggered\nfor this memory.',
+          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: MaterialButton(
+                onPressed: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                },
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+      ];
+    }
+    return [
+      // TODO: include a way to trigger specific plugins
+      if (widget.memory.pluginsResponse.isNotEmpty && !widget.memory.discarded) ...[
+        structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+        Text(
+          'Plugins 🧑‍💻',
+          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+        ),
+        const SizedBox(height: 24),
+        ...widget.memory.pluginsResponse.mapIndexed((i, pluginResponse) {
+          if (pluginResponse.content.length < 5) return const SizedBox.shrink();
+          Plugin? plugin = pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                plugin != null
+                    ? ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.white,
+                          maxRadius: 16,
+                          backgroundImage: NetworkImage(
+                              'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
+                        ),
+                        title: Text(
+                          plugin.name,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            plugin.description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(
+                                ClipboardData(text: utf8.decode(pluginResponse.content.trim().codeUnits)));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Plugin response copied to clipboard'),
+                            ));
+                            MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Plugin Response');
+                          },
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+                ExpandableTextWidget(
+                  text: utf8.decode(pluginResponse.content.trim().codeUnits),
+                  isExpanded: pluginResponseExpanded[i],
+                  toggleExpand: () => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                  maxLines: 6,
+                  // Change this to 6 if you want the initial max lines to be 6
+                  linkColor: Colors.white,
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+      const SizedBox(height: 8)
+    ];
+  }
+
+  List<Widget> _getTranscriptWidgets() {
+    return [
+      const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Text(
+          //   widget.memory.transcriptSegments.isEmpty ? 'Raw Transcript 💬' : 'Transcript 💬',
+          //   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+          // ),
+          // IconButton(
+          //     onPressed: () {
+          //       Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+          //       ScaffoldMessenger.of(context)
+          //           .showSnackBar(const SnackBar(content: Text('Transcript copied to clipboard')));
+          //       MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
+          //     },
+          //     // TODO: improve UI of this copy buttons
+          //     icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
+        ],
+      ),
+      SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
+      widget.memory.transcriptSegments.isEmpty
+          ? ExpandableTextWidget(
+              text: widget.memory.getTranscript(),
+              maxLines: 10000,
+              linkColor: Colors.grey.shade300,
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+              isExpanded: isTranscriptExpanded,
+              toggleExpand: () => setState(() => isTranscriptExpanded = !isTranscriptExpanded),
+            )
+          : TranscriptWidget(
+              segments: widget.memory.transcriptSegments,
+              horizontalMargin: false,
+              topMargin: false,
+            ),
+      const SizedBox(height: 32)
+    ];
   }
 
   _getEditTextField(TextEditingController controller, bool enabled, FocusNode focusNode) {
@@ -382,6 +470,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
       structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
     );
 
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);
     MemoryProvider().updateMemory(widget.memory);
@@ -440,6 +529,18 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                             },
                     ),
                     ListTile(
+                      title: const Text('Re-summarize'),
+                      leading: loadingReprocessMemory
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                              ))
+                          : const Icon(Icons.refresh, color: Colors.deepPurple),
+                      onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
+                    ),
+                    ListTile(
                       title: const Text('Delete'),
                       leading: const Icon(
                         Icons.delete,
@@ -466,21 +567,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> {
                                 },
                               ).then((value) => setState(() {}));
                             },
-                    ),
-                    widget.memory.discarded
-                        ? ListTile(
-                            title: const Text('Process again and ignore discard.'),
-                            leading: loadingReprocessMemory
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                    ))
-                                : const Icon(Icons.refresh, color: Colors.deepPurple),
-                            onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
-                          )
-                        : const SizedBox()
+                    )
                   ],
                 ),
               );
