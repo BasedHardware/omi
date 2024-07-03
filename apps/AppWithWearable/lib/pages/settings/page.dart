@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
@@ -403,7 +404,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   Visibility(
-                    visible: false,
+                    visible: GrowthbookUtil().hasTranscriptServerFeatureOn(),
                     child: InkWell(
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
@@ -420,9 +421,15 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'Speech Profile Set Up',
-                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Speech Profile',
+                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                    ),
+                                    // SizedBox(width: 16),
+                                    // Icon(Icons.multitrack_audio, color: Colors.white, size: 16),
+                                  ],
                                 ),
                                 Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                               ],

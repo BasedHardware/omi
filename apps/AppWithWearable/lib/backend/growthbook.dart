@@ -35,12 +35,13 @@ class GrowthbookUtil {
     _gb!.setAttributes({'id': SharedPreferencesUtil().uid});
   }
 
-  bool hasServerTranscriptFeatureEnabled() {
+  bool hasTranscriptServerFeatureOn() {
     if (Env.growthbookApiKey == null) return false;
-    // TODO: check first developer mode
+    if (!SharedPreferencesUtil().useTranscriptServer) return false;
+
     var feature = _gb!.feature('server-transcript');
     var enabled = feature.on;
-    debugPrint('hasServerTranscriptFeatureEnabled: ${feature.value}');
+    debugPrint('hasTranscriptServerFeatureOn: ${feature.value}');
     return enabled;
   }
 }

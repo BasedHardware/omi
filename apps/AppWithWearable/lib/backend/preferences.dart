@@ -41,6 +41,10 @@ class SharedPreferencesUtil {
 
   set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
 
+  bool get useTranscriptServer => getBool('useTranscriptServer') ?? true;
+
+  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -107,8 +111,8 @@ class SharedPreferencesUtil {
   //   saveStringList('messages', messages);
   // }
 
-  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-  bool get hasSpeakerProfile => true;
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  // bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
