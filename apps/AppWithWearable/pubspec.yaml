@@ -57,13 +57,13 @@ dependencies:
   instabug_http_client: ^2.4.0
   #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-  #  flutter_silero_vad:
-  #    git:
-  #      url: https://github.com/char5742/flutter_silero_vad.git\
-  fonnx:
+  flutter_silero_vad:
     git:
-      url: https://github.com/Telosnex/fonnx.git
-      ref: main
+      url: https://github.com/char5742/flutter_silero_vad.git
+#  fonnx:
+#    git:
+#      url: https://github.com/Telosnex/fonnx.git
+#      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1

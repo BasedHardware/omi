@@ -124,7 +124,6 @@ Future<bool> deleteBackupApi() async {
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
       url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
-  debugPrint('retrievePlugins: ${response?.body}');
   if (response?.statusCode == 200) {
     try {
       return Plugin.fromJsonList(jsonDecode(response!.body));
