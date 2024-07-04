@@ -242,6 +242,10 @@ class SharedPreferencesUtil {
   set calendarId(String value) => saveString('calendarId', value);
 
   String get calendarId => getString('calendarId') ?? '';
+
+  set calendarType(String value) => saveString('calendarType', value); // auto, manual
+
+  String get calendarType => getString('calendarType') ?? 'auto';
 }
 
 String getOpenAIApiKeyForUsage() =>
