@@ -1,14 +1,13 @@
-import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -29,7 +28,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
-  late DeviceCalendarPlugin _deviceCalendarPlugin;
 
   @override
   void initState() {
@@ -43,7 +41,6 @@ class _SettingsPageState extends State<SettingsPage> {
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
     });
-    _deviceCalendarPlugin = DeviceCalendarPlugin();
     super.initState();
   }
 
@@ -75,229 +72,30 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 children: [
                   const SizedBox(height: 32.0),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'RECORDING SETTINGS',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                      child: Container(
-                    height: 60,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                    child: DropdownButton<String>(
-                      menuMaxHeight: 350,
-                      value: _selectedLanguage,
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedLanguage = newValue!;
-                        });
-                        SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
-                        MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-                      },
-                      dropdownColor: Colors.black,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      underline: Container(
-                        height: 0,
-                        color: Colors.white,
-                      ),
-                      isExpanded: true,
-                      itemHeight: 48,
-                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
-                        return DropdownMenuItem<String>(
-                          value: availableLanguages[key],
-                          child: Text(
-                            '$key (${availableLanguages[key]})',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  )),
-                  const SizedBox(height: 32.0),
-                  // TODO: remove this settings?
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'NOTIFICATIONS',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (postMemoryNotificationIsChecked) {
-                          postMemoryNotificationIsChecked = false;
-                          SharedPreferencesUtil().postMemoryNotificationIsChecked = false;
-                        } else {
-                          postMemoryNotificationIsChecked = true;
-                          SharedPreferencesUtil().postMemoryNotificationIsChecked = true;
-                        }
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Post memory analysis',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: postMemoryNotificationIsChecked
-                                  ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors.transparent, // Fill color when checked
-                              border: Border.all(
-                                color: const Color.fromARGB(255, 150, 150, 150),
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            width: 22,
-                            height: 22,
-                            child: postMemoryNotificationIsChecked // Show the icon only when checked
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white, // Tick color
-                                    size: 18,
-                                  )
-                                : null, // No icon when unchecked
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (reconnectNotificationIsChecked) {
-                          reconnectNotificationIsChecked = false;
-                          SharedPreferencesUtil().reconnectNotificationIsChecked = false;
-                        } else {
-                          reconnectNotificationIsChecked = true;
-                          SharedPreferencesUtil().reconnectNotificationIsChecked = true;
-                        }
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Reminder to reconnect',
-                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: reconnectNotificationIsChecked
-                                  ? const Color.fromARGB(255, 150, 150, 150)
-                                  : Colors.transparent, // Fill color when checked
-                              border: Border.all(
-                                color: const Color.fromARGB(255, 150, 150, 150),
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            width: 22,
-                            height: 22,
-                            child: reconnectNotificationIsChecked // Show the icon only when checked
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white, // Tick color
-                                    size: 18,
-                                  )
-                                : null, // No icon when unchecked
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'PREFERENCES',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-                    child: InkWell(
-                      onTap: () {
+                  ...getRecordingSettings((String? newValue) {
+                    setState(() {
+                      _selectedLanguage = newValue!;
+                    });
+                    SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
+                    MixpanelManager().recordingLanguageChanged(_selectedLanguage);
+                  }, _selectedLanguage),
+                  // TODO: do not works like this, fix if reusing
+                  // ...getNotificationsWidgets(setState, postMemoryNotificationIsChecked, reconnectNotificationIsChecked),
+                  ...getPreferencesWidgets(
+                      onOptInAnalytics: () {
                         setState(() {
                           optInAnalytics = false;
                           SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
                           optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
                         });
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                child: const Text(
-                                  'Help improve Friend by sharing anonymized analytics data',
-                                  style: TextStyle(
-                                      color: Color.fromARGB(255, 150, 150, 150),
-                                      fontSize: 16,
-                                      decoration: TextDecoration.underline),
-                                ),
-                                onTap: () {
-                                  Navigator.of(context)
-                                      .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                                  MixpanelManager().privacyDetailsPageOpened();
-                                },
-                              ),
-                            ),
-                            const SizedBox(
-                              width: 8,
-                            ),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: optInAnalytics
-                                    ? const Color.fromARGB(255, 150, 150, 150)
-                                    : Colors.transparent, // Fill color when checked
-                                border: Border.all(
-                                  color: const Color.fromARGB(255, 150, 150, 150),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              width: 22,
-                              height: 22,
-                              child: optInAnalytics // Show the icon only when checked
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white, // Tick color
-                                      size: 18,
-                                    )
-                                  : null, // No icon when unchecked
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-                    child: InkWell(
-                      onTap: () {
+                      viewPrivacyDetails: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                        MixpanelManager().privacyDetailsPageOpened();
+                      },
+                      optInAnalytics: optInAnalytics,
+                      devModeEnabled: devModeEnabled,
+                      onDevModeClicked: () {
                         setState(() {
                           if (devModeEnabled) {
                             devModeEnabled = false;
@@ -309,42 +107,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             SharedPreferencesUtil().devModeEnabled = true;
                           }
                         });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Developer Mode',
-                              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                            ),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: devModeEnabled
-                                    ? const Color.fromARGB(255, 150, 150, 150)
-                                    : Colors.transparent, // Fill color when checked
-                                border: Border.all(
-                                  color: const Color.fromARGB(255, 150, 150, 150),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              width: 22,
-                              height: 22,
-                              child: devModeEnabled // Show the icon only when checked
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white, // Tick color
-                                      size: 18,
-                                    )
-                                  : null, // No icon when unchecked
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                      }),
+                  const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
                     subtitle: const Text('team@basedhardware.com'),
@@ -365,7 +129,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().joinDiscordClicked();
                     },
                   ),
-                  const SizedBox(height: 36.0),
+                  const SizedBox(height: 32.0),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -376,20 +140,20 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  _getItemAddOn('Plugins', () {
+                  getItemAddOn('Plugins', () {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  _getItemAddOn('Speech Profile', () {
+                  getItemAddOn('Speech Profile', () {
                     routeToPage(context, const SpeakerIdPage());
                   }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn()),
-                  _getItemAddOn('Calendar Integration', () {
+                  getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  _getItemAddOn('Backups', () {
+                  getItemAddOn('Backups', () {
                     routeToPage(context, const BackupsPage());
                   }, icon: Icons.backup),
-                  _getItemAddOn('Developer Mode', () {
+                  getItemAddOn('Developer Mode', () {
                     MixpanelManager().devModePageOpened();
                     routeToPage(context, const DeveloperSettingsPage());
                   }, icon: Icons.code, visibility: devModeEnabled),
@@ -413,47 +177,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
           ),
         ));
-  }
-
-  _getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool visibility = true}) {
-    return Visibility(
-      visible: visibility,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-              borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                      ),
-                      const SizedBox(width: 16),
-                      Icon(icon, color: Colors.white, size: 16),
-                    ],
-                  ),
-                  const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
