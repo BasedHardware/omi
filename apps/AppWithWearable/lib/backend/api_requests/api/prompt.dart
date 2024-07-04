@@ -16,6 +16,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
   List<Memory> previousMemories, {
   bool forceProcess = false,
   bool ignoreCache = false,
+  DateTime? conversationDate,
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
@@ -42,7 +43,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     For the overview, use a brief overview of the conversation.
     For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.
     For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, today is ${DateTime.now().toIso8601String()}.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
         
     Here is the transcript ```${transcript.trim()}```.
     
