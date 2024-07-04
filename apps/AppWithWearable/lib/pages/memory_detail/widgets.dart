@@ -306,9 +306,9 @@ showOptionsBottomSheet(
   BuildContext context,
   StateSetter setState,
   Memory memory,
-  bool loadingReprocessMemory,
-  Function(BuildContext, StateSetter, Memory) reprocessMemory,
+  Function(BuildContext, StateSetter, Memory, Function) reprocessMemory,
 ) async {
+  bool loadingReprocessMemory = false;
   var result = await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -352,7 +352,13 @@ showOptionsBottomSheet(
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
                             ))
                         : const Icon(Icons.refresh, color: Colors.deepPurple),
-                    onTap: loadingReprocessMemory ? null : () => reprocessMemory(context, setModalState, memory),
+                    onTap: loadingReprocessMemory
+                        ? null
+                        : () => reprocessMemory(context, setModalState, memory, () {
+                              setModalState(() {
+                                loadingReprocessMemory = !loadingReprocessMemory;
+                              });
+                            }),
                   ),
                   ListTile(
                     title: const Text('Delete'),

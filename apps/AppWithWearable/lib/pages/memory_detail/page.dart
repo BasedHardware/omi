@@ -28,7 +28,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   TextEditingController overviewController = TextEditingController();
   bool editingTitle = false;
   bool editingOverview = false;
-  bool loadingReprocessMemory = false;
 
   List<bool> pluginResponseExpanded = [];
   bool isTranscriptExpanded = false;
@@ -81,7 +80,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     context,
                     setState,
                     widget.memory,
-                    loadingReprocessMemory,
                     _reProcessMemory,
                   );
                 },
@@ -175,14 +173,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     ];
   }
 
-  _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory) async {
+  _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {
     Memory? newMemory = await reProcessMemory(
       context,
-      setModalState,
       memory,
       () => ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
-      () => setModalState(() => loadingReprocessMemory = !loadingReprocessMemory),
+      changeLoadingState,
     );
 
     pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);

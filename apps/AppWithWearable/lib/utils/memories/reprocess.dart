@@ -9,7 +9,6 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<Memory?> reProcessMemory(
   BuildContext context,
-  StateSetter setModalState,
   Memory memory,
   Function onFailedProcessing,
   Function changeLoadingState,
@@ -18,7 +17,12 @@ Future<Memory?> reProcessMemory(
   changeLoadingState();
   MemoryStructured structured;
   try {
-    structured = await generateTitleAndSummaryForMemory(memory.transcript, [], forceProcess: true);
+    structured = await generateTitleAndSummaryForMemory(
+      memory.transcript,
+      [],
+      forceProcess: true,
+      conversationDate: memory.createdAt,
+    );
   } catch (err, stacktrace) {
     print(err);
     var memoryReporting = MixpanelManager().getMemoryEventProperties(memory);
