@@ -15,16 +15,10 @@ You can get rewards by submitting approved PRs (significant contribution):
 * 5 PRs - $500 of transcription credits to use the app
 * 10 PRs - we will fly you out to San Francisco to hangout with Based Hardware team
 
-
-What is a significant contribution and what will be merged?
+### What is a significant contribution and what will be merged?
 * Something you spent 5h+ on. Can be multiple contributions with smaller time spent
 * Either a new feature or a major bug
 * Quality code with explanation
-
-What is NOT a significant contribution or what won't be merged?
-* 500+ line PRs: clean it up, break it up into smaller PRs, or both
-* PRs without a clear goal: every PR must have a singular and clear goal
-* UI design changes: we do not have a good review process for this yet
 
 To receive the reward, please send an email to team@basedhardware.com with a list of your contributions, address, email and phone number
 
@@ -39,6 +33,7 @@ Some of the tickets are paid bounties! You can check which ones, but filtering w
 * bounty eligibility is solely at our discretion
 * you can "lock" the bounty task, but only after your first pull request is merged. 
 * send an email to team@basedhardware.com with a link to your bounty + paypal account to claim.
+
 
 
 
