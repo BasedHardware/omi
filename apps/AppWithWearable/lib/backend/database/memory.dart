@@ -120,7 +120,7 @@ class Structured {
   final actionItems = ToMany<ActionItem>();
 
   @Backlink('structured')
-  final events = ToMany<CalendarEvent>();
+  final events = ToMany<Event>();
 
   Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
@@ -144,6 +144,18 @@ class Structured {
       for (String item in json['actionItems']) {
         if (item.isEmpty) continue;
         structured.actionItems.add(ActionItem(item));
+      }
+    }
+
+    if (json['events'] != null) {
+      for (dynamic event in json['events']) {
+        if (event.isEmpty) continue;
+        structured.events.add(Event(
+          title: event['title'],
+          description: event['description'] ?? '',
+          startsAt: DateTime.parse(event['startsAt']),
+          duration: event['duration'],
+        ));
       }
     }
     return structured;
@@ -199,21 +211,24 @@ class PluginResponse {
 }
 
 @Entity()
-class CalendarEvent {
+class Event {
   @Id()
   int id = 0;
 
   String title;
-  String? description;
   DateTime startsAt;
   int duration;
 
+  String description;
+  bool created = false;
+
   final structured = ToOne<Structured>();
 
-  CalendarEvent({
+  Event({
     required this.title,
-    this.description,
     required this.startsAt,
-    this.duration = 30,
+    required this.duration,
+    this.description = '',
+    this.created = false,
   });
 }

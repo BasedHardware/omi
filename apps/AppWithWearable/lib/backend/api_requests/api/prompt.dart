@@ -5,13 +5,19 @@ import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-Future<MemoryStructured> generateTitleAndSummaryForMemory(
+class SummaryResult {
+  final Structured structured;
+  final List<Tuple2<Plugin, String>> pluginsResponse;
+
+  SummaryResult(this.structured, this.pluginsResponse);
+}
+
+Future<SummaryResult> summarizeMemory(
   String transcript,
   List<Memory> previousMemories, {
   bool forceProcess = false,
@@ -20,7 +26,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
-    return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
+    return SummaryResult(Structured('', ''), []);
   }
   if (transcript.split(' ').length > 100) {
     // TODO: try lower count?
@@ -62,10 +68,10 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .trim();
   debugPrint(prompt);
   var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
-  var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
-  if (structured.title.isEmpty) return structured;
-  structured.pluginsResponse = await executePlugins(transcript);
-  return structured;
+  var structured = Structured.fromJson(jsonDecode(structuredResponse));
+  if (structured.title.isEmpty) return SummaryResult(structured, []);
+  var pluginsResponse = await executePlugins(transcript);
+  return SummaryResult(structured, pluginsResponse);
 }
 
 Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {

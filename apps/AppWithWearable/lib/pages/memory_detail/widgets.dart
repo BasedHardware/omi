@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/utils/features/calendar.dart';
