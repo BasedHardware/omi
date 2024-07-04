@@ -22,9 +22,8 @@ import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/foreground.dart';
-import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -81,13 +80,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    String event = '';
     if (state == AppLifecycleState.paused) {
-      addEventToContext('App is paused');
+      event = 'App is paused';
     } else if (state == AppLifecycleState.resumed) {
-      addEventToContext('App is resumed');
+      event = 'App is resumed';
     } else if (state == AppLifecycleState.hidden) {
-      addEventToContext('App is hidden');
+      event = 'App is hidden';
+    } else if (state == AppLifecycleState.detached) {
+      event = 'App is detached';
     }
+    debugPrint(event);
+    InstabugLog.logInfo(event);
   }
 
   _migrationScripts() async {

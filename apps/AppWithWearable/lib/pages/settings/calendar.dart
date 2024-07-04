@@ -1,7 +1,7 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/calendar.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class CalendarPage extends StatefulWidget {

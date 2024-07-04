@@ -1,18 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/pinecone.dart';
-import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
 import 'package:friend_private/widgets/transcript.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final Memory memory;
@@ -42,7 +36,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   @override
   void initState() {
-    // devModeWebhookCall(widget.memory);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -82,7 +75,18 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               Expanded(child: Text(" ${structured.getEmoji()}")),
               const SizedBox(width: 8),
-              IconButton(onPressed: _showOptionsBottomSheet, icon: const Icon(Icons.more_horiz)),
+              IconButton(
+                onPressed: () {
+                  showOptionsBottomSheet(
+                    context,
+                    setState,
+                    widget.memory,
+                    loadingReprocessMemory,
+                    _reProcessMemory,
+                  );
+                },
+                icon: const Icon(Icons.more_horiz),
+              ),
             ],
           ),
         ),
@@ -171,153 +175,23 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     ];
   }
 
-  _reProcessMemory(StateSetter setModalState) async {
-    debugPrint('_reProcessMemory');
-    setModalState(() => loadingReprocessMemory = true);
-    MemoryStructured structured;
-    try {
-      structured = await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
-    } catch (err, stacktrace) {
-      print(err);
-      var memoryReporting = MixpanelManager().getMemoryEventProperties(widget.memory);
-      CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
-        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
-        // 'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error while processing memory. Please try again later.'),
-        ),
-      );
-      setModalState(() => loadingReprocessMemory = false);
-      return;
-    }
-    Structured current = widget.memory.structured.target!;
-    current.title = structured.title;
-    current.overview = structured.overview;
-    current.emoji = structured.emoji;
-    current.category = structured.category;
-    current.actionItems.clear();
-    current.actionItems.addAll(structured.actionItems.map<ActionItem>((e) => ActionItem(e)).toList());
-    widget.memory.structured.target = current;
-
-    widget.memory.pluginsResponse.clear();
-    widget.memory.pluginsResponse.addAll(
-      structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
+  _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory) async {
+    Memory? newMemory = await reProcessMemory(
+      context,
+      setModalState,
+      memory,
+      () => ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
+      () => setModalState(() => loadingReprocessMemory = !loadingReprocessMemory),
     );
 
-    for (var event in structured.events) {
-      current.events.add(CalendarEvent(
-        title: event.title,
-        description: event.description,
-        startsAt: event.startsAt,
-        duration: event.duration,
-      ));
-    }
-    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
-    widget.memory.discarded = false;
-    MemoryProvider().updateMemoryStructured(current);
-    MemoryProvider().updateMemory(widget.memory);
-    debugPrint('MemoryProvider().updateMemory');
-    getEmbeddingsFromInput(structured.toString()).then((vector) {
-      createPineconeVector(widget.memory.id.toString(), vector, widget.memory.createdAt);
-    });
-
-    overviewController.text = current.overview;
-    titleController.text = current.title;
-
-    MixpanelManager().reProcessMemory(widget.memory);
+    pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);
+    overviewController.text = newMemory!.structured.target!.overview;
+    titleController.text = newMemory.structured.target!.title;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white)),
-      ),
+      const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
     );
-    debugPrint('Snackbar');
-    setModalState(() => loadingReprocessMemory = false);
     Navigator.pop(context, true);
-  }
-
-  void _showOptionsBottomSheet() async {
-    var result = await showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-          ),
-        ),
-        builder: (context) => StatefulBuilder(builder: (context, setModalState) {
-              return Container(
-                height: 216,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Column(
-                  children: [
-                    ListTile(
-                      title: const Text('Share memory'),
-                      leading: const Icon(Icons.send),
-                      onTap: loadingReprocessMemory
-                          ? null
-                          : () {
-                              // share loading
-                              MixpanelManager().memoryShareButtonClick(widget.memory);
-                              Share.share(structured.toString());
-                              HapticFeedback.lightImpact();
-                            },
-                    ),
-                    ListTile(
-                      title: const Text('Re-summarize'),
-                      leading: loadingReprocessMemory
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                              ))
-                          : const Icon(Icons.refresh, color: Colors.deepPurple),
-                      onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
-                    ),
-                    ListTile(
-                      title: const Text('Delete'),
-                      leading: const Icon(
-                        Icons.delete,
-                        color: Colors.red,
-                      ),
-                      onTap: loadingReprocessMemory
-                          ? null
-                          : () {
-                              showDialog(
-                                context: context,
-                                builder: (dialogContext) {
-                                  return Dialog(
-                                    elevation: 0,
-                                    insetPadding: EdgeInsets.zero,
-                                    backgroundColor: Colors.transparent,
-                                    alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                    child: ConfirmDeletionWidget(
-                                        memory: widget.memory,
-                                        onDelete: () {
-                                          Navigator.pop(context, true);
-                                          Navigator.pop(context, true);
-                                        }),
-                                  );
-                                },
-                              ).then((value) => setState(() {}));
-                            },
-                    )
-                  ],
-                ),
-              );
-            }));
-    if (result == true) setState(() {});
-    debugPrint('showBottomSheet result: $result');
   }
 }
