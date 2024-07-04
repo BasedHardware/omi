@@ -10,7 +10,7 @@ We welcome contributions from the community! If you are interested in improving 
 
 # Rewards
 You can get rewards by submitting approved PRs (significant contribution):
-* 1 PR - free DEV KIT device (necklace/glasses, depending on where you contribute) + Based Hardware T-Shirt 
+* 1 PR - free DEV KIT device (necklace/glasses, depending on where you contribute)
 * 2 PRs - $100 of transcription credits to use the app
 * 5 PRs - $500 of transcription credits to use the app + giving special Contributor role in Discord
 * 10 PRs - we will fly you out to San Francisco to hangout with Based Hardware team
