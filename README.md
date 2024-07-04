@@ -12,7 +12,7 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://docs.basedhardware.com/) | [Buy Assembled Device](https://www.kickstarter.com/projects/kodjima333/friend-open-source-ai-wearable-recording-device?ref=7wc2iz)
+[Homepage](https://basedhardware.com/) | [Documentation](https://docs.basedhardware.com/) | [Buy Assembled Device](https://basedhardware.com)
 
 </h3>
 
@@ -35,9 +35,9 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 
 ## Contribution:
 
-We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Friend/issues)
+We welcome contributions from the community! If you are interested in improving Friend, check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/) and [current tasks](https://github.com/BasedHardware/Friend/issues)
 
-We also want to give back to the community - and therefore, some of the tasks are paid bounties 💰! You can check which ones by the "Paid Bounty" label, [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+Some of the tasks are paid bounties 💰! You can check which ones by the "Paid Bounty" label, [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
 
 
 ## How it works
