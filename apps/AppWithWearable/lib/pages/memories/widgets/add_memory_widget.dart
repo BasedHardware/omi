@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 

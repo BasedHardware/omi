@@ -6,7 +6,7 @@ import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 
-import '../../backend/storage/plugin.dart';
+import '../../backend/schema/plugin.dart';
 
 class PluginDetailPage extends StatefulWidget {
   final Plugin plugin;

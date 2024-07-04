@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';

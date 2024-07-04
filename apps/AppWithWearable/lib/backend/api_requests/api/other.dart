@@ -7,7 +7,7 @@ import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
