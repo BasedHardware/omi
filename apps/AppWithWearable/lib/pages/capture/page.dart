@@ -99,9 +99,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
       audioStorage!.storeFramePacket(value);
 
-      if (toProcessBytes2.frames.length % 100 == 0) {
-        debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
-      }
+      // if (toProcessBytes2.frames.length % 100 == 0) {
+      //   debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
+      // }
       // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
       if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
