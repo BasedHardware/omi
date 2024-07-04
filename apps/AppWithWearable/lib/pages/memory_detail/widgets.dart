@@ -8,8 +8,8 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/plugins/page.dart';
-import 'package:friend_private/utils/calendar.dart';
-import 'package:friend_private/utils/temp.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
@@ -302,86 +302,90 @@ List<Widget> getPluginsWidgets(
   ];
 }
 
-showOptionsBottomSheet(BuildContext context, StateSetter setState, Memory memory, bool loadingReprocessMemory) {
-  void _showOptionsBottomSheet() async {
-    var result = await showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-          ),
+showOptionsBottomSheet(
+  BuildContext context,
+  StateSetter setState,
+  Memory memory,
+  bool loadingReprocessMemory,
+  Function(BuildContext, StateSetter, Memory) reprocessMemory,
+) async {
+  var result = await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
         ),
-        builder: (context) => StatefulBuilder(builder: (context, setModalState) {
-              return Container(
-                height: 216,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+      ),
+      builder: (context) => StatefulBuilder(builder: (context, setModalState) {
+            return Container(
+              height: 216,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text('Share memory'),
+                    leading: const Icon(Icons.send),
+                    onTap: loadingReprocessMemory
+                        ? null
+                        : () {
+                            // share loading
+                            MixpanelManager().memoryShareButtonClick(memory);
+                            Share.share(memory.structured.target!.toString());
+                            HapticFeedback.lightImpact();
+                          },
                   ),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Column(
-                  children: [
-                    ListTile(
-                      title: const Text('Share memory'),
-                      leading: const Icon(Icons.send),
-                      onTap: loadingReprocessMemory
-                          ? null
-                          : () {
-                              // share loading
-                              MixpanelManager().memoryShareButtonClick(widget.memory);
-                              Share.share(structured.toString());
-                              HapticFeedback.lightImpact();
-                            },
+                  ListTile(
+                    title: const Text('Re-summarize'),
+                    leading: loadingReprocessMemory
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                            ))
+                        : const Icon(Icons.refresh, color: Colors.deepPurple),
+                    onTap: loadingReprocessMemory ? null : () => reprocessMemory(context, setModalState, memory),
+                  ),
+                  ListTile(
+                    title: const Text('Delete'),
+                    leading: const Icon(
+                      Icons.delete,
+                      color: Colors.red,
                     ),
-                    ListTile(
-                      title: const Text('Re-summarize'),
-                      leading: loadingReprocessMemory
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                              ))
-                          : const Icon(Icons.refresh, color: Colors.deepPurple),
-                      onTap: loadingReprocessMemory ? null : () => _reProcessMemory(setModalState),
-                    ),
-                    ListTile(
-                      title: const Text('Delete'),
-                      leading: const Icon(
-                        Icons.delete,
-                        color: Colors.red,
-                      ),
-                      onTap: loadingReprocessMemory
-                          ? null
-                          : () {
-                              showDialog(
-                                context: context,
-                                builder: (dialogContext) {
-                                  return Dialog(
-                                    elevation: 0,
-                                    insetPadding: EdgeInsets.zero,
-                                    backgroundColor: Colors.transparent,
-                                    alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                    child: ConfirmDeletionWidget(
-                                        memory: memory,
-                                        onDelete: () {
-                                          Navigator.pop(context, true);
-                                          Navigator.pop(context, true);
-                                        }),
-                                  );
-                                },
-                              );
-                            },
-                    )
-                  ],
-                ),
-              );
-            }));
-    if (result == true) setState(() {});
-    debugPrint('showBottomSheet result: $result');
-  }
+                    onTap: loadingReprocessMemory
+                        ? null
+                        : () {
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) {
+                                return Dialog(
+                                  elevation: 0,
+                                  insetPadding: EdgeInsets.zero,
+                                  backgroundColor: Colors.transparent,
+                                  alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                  child: ConfirmDeletionWidget(
+                                      memory: memory,
+                                      onDelete: () {
+                                        Navigator.pop(context, true);
+                                        Navigator.pop(context, true);
+                                      }),
+                                );
+                              },
+                            );
+                          },
+                  )
+                ],
+              ),
+            );
+          }));
+  if (result == true) setState(() {});
+  debugPrint('showBottomSheet result: $result');
 }

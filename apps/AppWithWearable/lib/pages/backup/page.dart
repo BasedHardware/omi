@@ -11,7 +11,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/password.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:share_plus/share_plus.dart';
 

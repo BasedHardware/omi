@@ -9,7 +9,7 @@ import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/temp.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class ImportBackupPage extends StatefulWidget {
