@@ -159,10 +159,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
+          debugPrint('onDisconnected');
           capturePageKey.currentState?.resetState(restartBytesProcessing: false);
-          setState(() {
-            _device = null;
-          });
+          setState(() => _device = null);
           InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
@@ -184,6 +183,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+    debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     clearNotification(1);
     _device = connectedDevice;
@@ -419,13 +419,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
-                  var language = SharedPreferencesUtil().recordingsLanguage;
-                  var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-                  if (language != SharedPreferencesUtil().recordingsLanguage ||
-                      useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    capturePageKey.currentState?.resetState();
-                  }
                 },
               )
             ],
