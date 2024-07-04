@@ -99,10 +99,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       toProcessBytes2.storeFramePacket(value);
       if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
 
-      // if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
+      // if (toProcessBytes2.frames.length % 100 == 0) {
+      //   debugPrint('Frames length: ${toProcessBytes2.frames[1].length}');
+      // }
 
       if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+        // vad.containsVoice(data.item1);
         try {
           var segmentsEmpty = segments.isEmpty;
           await _processFileToTranscript(data.item1);
