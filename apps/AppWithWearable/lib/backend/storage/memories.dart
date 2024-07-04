@@ -4,6 +4,36 @@ import 'dart:math';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:tuple/tuple.dart';
 
+class MemoryCalendarEvent {
+  String title;
+  String? description;
+  DateTime startsAt;
+  int duration;
+
+  MemoryCalendarEvent({
+    required this.title,
+    this.description,
+    required this.startsAt,
+    this.duration = 30,
+  });
+
+  factory MemoryCalendarEvent.fromJson(Map<String, dynamic> json) => MemoryCalendarEvent(
+        title: json['title'] ?? '',
+        startsAt: DateTime.parse(json['startsAt']),
+        description: json['description'],
+        duration: json['duration'] ?? 30,
+      );
+
+  static fromJsonList(List<dynamic> json) => json.map((e) => MemoryCalendarEvent.fromJson(e)).toList();
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'startsAt': startsAt,
+        'description': description,
+        'duration': duration,
+      };
+}
+
 class MemoryStructured {
   String title;
   String overview;
@@ -11,6 +41,7 @@ class MemoryStructured {
   List<Tuple2<Plugin, String>> pluginsResponse;
   String emoji;
   String category;
+  List<MemoryCalendarEvent> events;
 
   MemoryStructured({
     this.title = "",
@@ -19,15 +50,18 @@ class MemoryStructured {
     required this.pluginsResponse,
     this.emoji = '',
     this.category = '',
+    this.events = const [],
   });
 
   factory MemoryStructured.fromJson(Map<String, dynamic> json) => MemoryStructured(
-      title: json['title'] ?? '',
-      overview: json['overview'] ?? '',
-      actionItems: List<String>.from(json['action_items'] ?? []),
-      pluginsResponse: List<Tuple2<Plugin, String>>.from(json['pluginsResponse'] ?? []),
-      category: json['category'] ?? '',
-      emoji: json['emoji'] ?? '');
+        title: json['title'] ?? '',
+        overview: json['overview'] ?? '',
+        actionItems: List<String>.from(json['action_items'] ?? []),
+        pluginsResponse: List<Tuple2<Plugin, String>>.from(json['pluginsResponse'] ?? []),
+        category: json['category'] ?? '',
+        emoji: json['emoji'] ?? '',
+        events: MemoryCalendarEvent.fromJsonList(json['events'] ?? []),
+      );
 
   Map<String, dynamic> toJson() => {
         'title': title,

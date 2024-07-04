@@ -119,6 +119,9 @@ class Structured {
   @Backlink('structured')
   final actionItems = ToMany<ActionItem>();
 
+  @Backlink('structured')
+  final events = ToMany<CalendarEvent>();
+
   Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
   getEmoji() {
@@ -193,4 +196,24 @@ class PluginResponse {
   final memory = ToOne<Memory>();
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
+}
+
+@Entity()
+class CalendarEvent {
+  @Id()
+  int id = 0;
+
+  String title;
+  String? description;
+  DateTime startsAt;
+  int duration;
+
+  final structured = ToOne<Structured>();
+
+  CalendarEvent({
+    required this.title,
+    this.description,
+    required this.startsAt,
+    this.duration = 30,
+  });
 }
