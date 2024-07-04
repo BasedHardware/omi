@@ -90,19 +90,18 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
-    StreamSubscription? stream =
-        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
+    audioStorage = WavBytesUtil(codec: codec);
+    audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
       toProcessBytes2.storeFramePacket(value);
       // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
-      wavBytesUtil2.storeFramePacket(value);
+      audioStorage!.storeFramePacket(value);
 
-      // if (toProcessBytes2.frames.length % 100 == 0) {
-      //   debugPrint('Frames length: ${toProcessBytes2.frames[1].length}');
-      // }
+      if (toProcessBytes2.frames.length % 100 == 0) {
+        debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
+      }
       // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
       if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
@@ -129,9 +128,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       }
     });
-
-    audioBytesStream = stream;
-    audioStorage = wavBytesUtil2;
   }
 
   _processFileToTranscript(File f) async {
@@ -156,6 +152,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+    debugPrint('resetState: $restartBytesProcessing');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);

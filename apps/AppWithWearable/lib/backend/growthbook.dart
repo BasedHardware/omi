@@ -45,7 +45,6 @@ class GrowthbookUtil {
 
     var feature = _gb!.feature('server-transcript');
     var enabled = feature.on;
-    debugPrint('hasTranscriptServerFeatureOn: ${feature.value}');
     return enabled;
   }
 }

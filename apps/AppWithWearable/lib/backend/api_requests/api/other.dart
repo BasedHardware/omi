@@ -11,6 +11,7 @@ import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
+  debugPrint('deepgramTranscribe');
   var startTime = DateTime.now();
   // TODO: why there seems to be no punctuation
   Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
