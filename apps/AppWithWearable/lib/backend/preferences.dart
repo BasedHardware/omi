@@ -112,6 +112,7 @@ class SharedPreferencesUtil {
   // }
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+
   // bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
@@ -233,6 +234,14 @@ class SharedPreferencesUtil {
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
+
+  bool get calendarEnabled => getBool('calendarEnabled') ?? false;
+
+  set calendarId(String value) => saveString('calendarId', value);
+
+  String get calendarId => getString('calendarId') ?? '';
 }
 
 String getOpenAIApiKeyForUsage() =>

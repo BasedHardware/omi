@@ -1,3 +1,4 @@
+import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -5,9 +6,11 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/utils.dart';
 import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/temp.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -26,6 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
+  late DeviceCalendarPlugin _deviceCalendarPlugin;
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
       buildVersion = packageInfo.buildNumber.toString();
       setState(() {});
     });
+    _deviceCalendarPlugin = DeviceCalendarPlugin();
     super.initState();
   }
 
@@ -470,6 +475,40 @@ class _SettingsPageState extends State<SettingsPage> {
                                 Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                               ],
                             ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () async {
+                      routeToPage(context, const CalendarPage());
+                      // _deviceCalendarPlugin.
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                          borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Set-up calendar',
+                                    style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                  ),
+                                  // SizedBox(width: 16),
+                                  // Icon(Icons.multitrack_audio, color: Colors.white, size: 16),
+                                ],
+                              ),
+                              Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            ],
                           ),
                         ),
                       ),

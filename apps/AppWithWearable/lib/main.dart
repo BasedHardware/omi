@@ -9,6 +9,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/utils/calendar.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
@@ -28,6 +29,7 @@ void main() async {
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
+  CalendarUtil.init();
 
   if (Env.oneSignalAppId != null) {
     OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
