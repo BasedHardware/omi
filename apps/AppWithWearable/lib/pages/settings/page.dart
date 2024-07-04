@@ -376,179 +376,23 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      MixpanelManager().pluginsOpened();
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29, 29),
-                          borderRadius: BorderRadius.circular(10.0),
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Plugins',
-                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                              ),
-                              Icon(
-                                Icons.arrow_forward_ios,
-                                color: Color.fromARGB(255, 255, 255, 255),
-                                size: 16,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Visibility(
-                    visible: GrowthbookUtil().hasTranscriptServerFeatureOn(),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Speech Profile',
-                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                                    ),
-                                    // SizedBox(width: 16),
-                                    // Icon(Icons.multitrack_audio, color: Colors.white, size: 16),
-                                  ],
-                                ),
-                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Visibility(
-                    visible: true,
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Backups',
-                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                                    ),
-                                    SizedBox(width: 16),
-                                    Icon(Icons.backup, color: Colors.white, size: 16),
-                                  ],
-                                ),
-                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () async {
-                      routeToPage(context, const CalendarPage());
-                      // _deviceCalendarPlugin.
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
-                          borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Set-up calendar',
-                                    style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                                  ),
-                                  // SizedBox(width: 16),
-                                  // Icon(Icons.multitrack_audio, color: Colors.white, size: 16),
-                                ],
-                              ),
-                              Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Visibility(
-                    visible: devModeEnabled,
-                    child: GestureDetector(
-                      onTap: () {
-                        MixpanelManager().devModePageOpened();
-                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeveloperSettingsPage()));
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 29, 29, 29),
-                            borderRadius: BorderRadius.circular(10.0),
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Developer Mode',
-                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                                ),
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Color.fromARGB(255, 255, 255, 255),
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  _getItemAddOn('Plugins', () {
+                    MixpanelManager().pluginsOpened();
+                    routeToPage(context, const PluginsPage());
+                  }, icon: Icons.integration_instructions),
+                  _getItemAddOn('Speech Profile', () {
+                    routeToPage(context, const SpeakerIdPage());
+                  }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn()),
+                  _getItemAddOn('Calendar Integration', () {
+                    routeToPage(context, const CalendarPage());
+                  }, icon: Icons.calendar_month),
+                  _getItemAddOn('Backups', () {
+                    routeToPage(context, const BackupsPage());
+                  }, icon: Icons.backup),
+                  _getItemAddOn('Developer Mode', () {
+                    MixpanelManager().devModePageOpened();
+                    routeToPage(context, const DeveloperSettingsPage());
+                  }, icon: Icons.code, visibility: devModeEnabled),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -574,5 +418,42 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ));
+  }
+
+  _getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool visibility = true}) {
+    return Visibility(
+      visible: visibility,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+              borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      ),
+                      const SizedBox(width: 16),
+                      Icon(icon, color: Colors.white, size: 16),
+                    ],
+                  ),
+                  const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
