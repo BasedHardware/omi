@@ -1,3 +1,39 @@
+class PluginReview {
+  String uid;
+  DateTime ratedAt;
+  double score;
+  String review;
+
+  PluginReview({
+    required this.uid,
+    required this.ratedAt,
+    required this.score,
+    required this.review,
+  });
+
+  factory PluginReview.fromJson(Map<String, dynamic> json) {
+    return PluginReview(
+      uid: json['uid'],
+      ratedAt: DateTime.parse(json['rated_at']),
+      score: json['score'],
+      review: json['review'],
+    );
+  }
+
+  toJson() {
+    return {
+      'uid': uid,
+      'rated_at': ratedAt.toIso8601String(),
+      'score': score,
+      'review': review,
+    };
+  }
+
+  static List<PluginReview> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => PluginReview.fromJson(e)).toList();
+  }
+}
+
 class Plugin {
   String id;
   String name;
@@ -7,6 +43,11 @@ class Plugin {
   bool isEnabled = false;
   String image;
 
+  List<PluginReview> reviews;
+  PluginReview? userReview;
+  double? ratingAvg;
+  int ratingCount;
+
   Plugin({
     required this.id,
     required this.name,
@@ -14,9 +55,12 @@ class Plugin {
     required this.description,
     required this.prompt,
     required this.image,
+    this.reviews = const [],
+    this.userReview,
+    this.ratingAvg,
+    required this.ratingCount,
   });
 
-  // Factory constructor to create a new Message instance from a map
   factory Plugin.fromJson(Map<String, dynamic> json) {
     return Plugin(
       id: json['id'],
@@ -25,10 +69,13 @@ class Plugin {
       description: json['description'],
       prompt: json['prompt'],
       image: json['image'],
+      reviews: PluginReview.fromJsonList(json['reviews'] ?? []),
+      userReview: json['user_review'] != null ? PluginReview.fromJson(json['user_review']) : null,
+      ratingAvg: json['rating_avg'],
+      ratingCount: json['rating_count'] ?? 0,
     );
   }
 
-  // Method to convert a Message instance into a map
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -37,6 +84,10 @@ class Plugin {
       'description': description,
       'prompt': prompt,
       'image': image,
+      'reviews': reviews.map((e) => e.toJson()).toList(),
+      'rating_avg': ratingAvg,
+      'user_review': userReview?.toJson(),
+      'rating_count': ratingCount,
     };
   }
 

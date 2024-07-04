@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/pages/plugins/plugin_detail.dart';
+import 'package:friend_private/utils/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -183,6 +186,11 @@ class _PluginsPageState extends State<PluginsPage> {
                     ),
                     margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
                     child: ListTile(
+                      onTap: () async {
+                        await routeToPage(context, PluginDetailPage(plugin: plugin));
+                        _fetchPlugins();
+                        // refresh plugins
+                      },
                       leading: CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 28,
@@ -194,13 +202,44 @@ class _PluginsPageState extends State<PluginsPage> {
                         maxLines: 1,
                         style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                       ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          plugin.description,
-                          maxLines: 2,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
+                      subtitle: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              plugin.description,
+                              maxLines: 2,
+                              style: const TextStyle(color: Colors.grey, fontSize: 14),
+                            ),
+                          ),
+                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                          plugin.ratingAvg != null
+                              ? Row(
+                                  children: [
+                                    Text(plugin.ratingAvg!.toString()),
+                                    const SizedBox(width: 4),
+                                    RatingBar.builder(
+                                      initialRating: plugin.ratingAvg!,
+                                      minRating: 1,
+                                      direction: Axis.horizontal,
+                                      allowHalfRating: true,
+                                      itemCount: 5,
+                                      itemSize: 16,
+                                      ignoreGestures: true,
+                                      itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                                      itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.amber),
+                                      maxRating: 5.0,
+                                      onRatingUpdate: (rating) {},
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text('(${plugin.ratingCount})'),
+                                  ],
+                                )
+                              : Container(),
+                        ],
                       ),
                       trailing: IconButton(
                         icon: Icon(

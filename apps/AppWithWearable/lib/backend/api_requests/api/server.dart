@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
@@ -118,4 +119,30 @@ Future<bool> deleteBackupApi() async {
   if (response == null) return false;
   debugPrint('deleteBackup: ${response.body}');
   return response.statusCode == 200;
+}
+
+Future<List<Plugin>> retrievePlugins() async {
+  var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
+  debugPrint('retrievePlugins: ${response?.body}');
+  if (response?.statusCode == 200) {
+    try {
+      return Plugin.fromJsonList(jsonDecode(response!.body));
+    } catch (e, stackTrace) {
+      debugPrint(e.toString());
+      CrashReporting.reportHandledCrash(e, stackTrace);
+      return [];
+    }
+  }
+  return [];
+}
+
+Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}plugins/review?uid=${SharedPreferencesUtil().uid}&plugin_id=$pluginId',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'score': score, review: review}),
+  );
+  debugPrint('reviewPlugin: ${response?.body}');
 }
