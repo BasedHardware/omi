@@ -183,7 +183,6 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
           margin: const EdgeInsets.all(16.0),
           child: Container(
             height: 150.0,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.all(Radius.circular(4.0)),
@@ -294,15 +293,20 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
 }
 
 /// Displays the play/pause button and volume/speed sliders.
-class ControlButtons extends StatelessWidget {
+class ControlButtons extends StatefulWidget {
   final AudioPlayer player;
 
   const ControlButtons(this.player, {super.key});
 
   @override
+  State<ControlButtons> createState() => _ControlButtonsState();
+}
+
+class _ControlButtonsState extends State<ControlButtons> {
+  @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
         // Opens volume slider dialog
         IconButton(
@@ -310,16 +314,16 @@ class ControlButtons extends StatelessWidget {
             'assets/images/replay_15.svg',
             colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           ),
-          iconSize: 48.0,
-          onPressed: () => player.seek(
+          iconSize: 32.0,
+          onPressed: () => widget.player.seek(
             Duration(
-              seconds: player.position.inSeconds <= 15 ? 0 : player.position.inSeconds - 15,
+              seconds: widget.player.position.inSeconds <= 15 ? 0 : widget.player.position.inSeconds - 15,
             ),
           ),
         ),
 
         StreamBuilder<PlayerState>(
-          stream: player.playerStateStream,
+          stream: widget.player.playerStateStream,
           builder: (context, snapshot) {
             final playerState = snapshot.data;
             final processingState = playerState?.processingState;
@@ -327,20 +331,20 @@ class ControlButtons extends StatelessWidget {
             if (playing != true) {
               return IconButton(
                 icon: const Icon(Icons.play_arrow),
-                iconSize: 64.0,
-                onPressed: player.play,
+                iconSize: 40.0,
+                onPressed: widget.player.play,
               );
             } else if (processingState != ProcessingState.completed) {
               return IconButton(
                 icon: const Icon(Icons.pause),
-                iconSize: 64.0,
-                onPressed: player.pause,
+                iconSize: 40.0,
+                onPressed: widget.player.pause,
               );
             } else {
               return IconButton(
                 icon: const Icon(Icons.replay),
-                iconSize: 64.0,
-                onPressed: () => player.seek(Duration.zero),
+                iconSize: 40.0,
+                onPressed: () => widget.player.seek(Duration.zero),
               );
             }
           },
@@ -350,16 +354,155 @@ class ControlButtons extends StatelessWidget {
             'assets/images/forward_15.svg',
             colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           ),
-          iconSize: 48.0,
-          onPressed: () => player.seek(
+          iconSize: 32.0,
+          onPressed: () => widget.player.seek(
             Duration(
-              seconds: player.position.inSeconds >= player.duration!.inSeconds - 15
-                  ? player.bufferedPosition.inSeconds
-                  : player.position.inSeconds + 15,
+              seconds: widget.player.position.inSeconds >= widget.player.duration!.inSeconds - 15
+                  ? widget.player.bufferedPosition.inSeconds
+                  : widget.player.position.inSeconds + 15,
             ),
           ),
         ),
+        //speed controling button
+        IconButton(
+          icon: Text(
+            '${widget.player.speed}x',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+          ),
+          iconSize: 40.0,
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+              ),
+              builder: (context) => PlaybackSpeedBottomSheet(
+                onSpeedChange: (speed) async {
+                  await widget.player.setSpeed(speed);
+                  setState(() {});
+                },
+                currentValue: widget.player.speed,
+              ),
+            );
+          },
+        ),
       ],
+    );
+  }
+}
+
+class PlaybackSpeedBottomSheet extends StatefulWidget {
+  const PlaybackSpeedBottomSheet({
+    super.key,
+    required this.onSpeedChange,
+    required this.currentValue,
+  });
+  final Future<void> Function(double) onSpeedChange;
+  final double currentValue;
+
+  @override
+  State<PlaybackSpeedBottomSheet> createState() => _PlaybackSpeedBottomSheetState();
+}
+
+class _PlaybackSpeedBottomSheetState extends State<PlaybackSpeedBottomSheet> {
+  double dragValue = 0.5;
+
+  @override
+  void initState() {
+    super.initState();
+    dragValue = widget.currentValue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomSheet(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.0),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Options',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  CircleAvatar(
+                    backgroundColor: Colors.black26,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      color: Colors.white,
+                      icon: const Icon(Icons.close),
+                    ),
+                  )
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 32),
+              Text(
+                'Playback Speed',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Container(
+                margin: EdgeInsets.only(top: 16.0),
+                padding: EdgeInsets.only(top: 16.0, bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: const SliderThemeData(
+                        activeTrackColor: Colors.grey,
+                        activeTickMarkColor: Colors.transparent,
+                        inactiveTrackColor: Colors.grey,
+                        inactiveTickMarkColor: Colors.grey,
+                      ),
+                      child: Slider(
+                        value: dragValue,
+                        min: 0.5,
+                        max: 2,
+                        divisions: 3,
+                        label: '${dragValue}x',
+                        onChanged: (val) {
+                          dragValue = val;
+                          widget.onSpeedChange.call(dragValue);
+                          setState(() {});
+                        },
+                        onChangeEnd: (val) {
+                          dragValue = val;
+                          widget.onSpeedChange.call(dragValue);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(
+                          4,
+                          (index) => Text('${(index + 1) * 0.5}x'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      onClosing: () {},
     );
   }
 }
@@ -391,7 +534,7 @@ class AudioWaveformWidget extends StatefulWidget {
     required this.start,
     required this.duration,
     this.waveColor = Colors.black,
-    this.scale = 4.0,
+    this.scale = 0.8,
     this.strokeWidth = 1.0,
     this.pixelsPerStep = 3.0,
     required this.positionDataStream,
@@ -412,8 +555,8 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
         final position = positionData?.position ?? Duration.zero;
         final duration = positionData?.duration ?? Duration.zero;
 
-        final startCalculate = (position.inMilliseconds < 5);
-        final endCalculate = (position.inMilliseconds > duration.inMilliseconds - 5);
+        final startCalculate = (position.inMilliseconds < 10);
+        final endCalculate = (position.inMilliseconds > duration.inMilliseconds - 10);
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -435,12 +578,7 @@ class _AudioWaveformState extends State<AudioWaveformWidget> {
               data: SliderTheme.of(context).copyWith(
                 thumbColor: Colors.red,
                 thumbShape: VerticalSliderForAudio(
-                    height: 150,
-                    position: startCalculate
-                        ? 0
-                        : endCalculate
-                            ? 1
-                            : 2),
+                    height: position.inMilliseconds < 10 ? 144 : 150, width: position.inMilliseconds < 10 ? 2 : 4),
                 activeTrackColor: Colors.transparent,
                 inactiveTrackColor: Colors.transparent,
                 overlayColor: Colors.red.shade200,
@@ -499,19 +637,14 @@ class SquareThumbShape extends SliderComponentShape {
       ..color = Colors.red.shade100
       ..style = PaintingStyle.fill;
 
-    final RRect thumbRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center, width: width, height: height),
-      const Radius.circular(8),
-    );
-
-    canvas.drawRRect(thumbRect, paint);
+    canvas.drawRect(Rect.fromCenter(center: center, width: width, height: height), paint);
   }
 }
 
 class VerticalSliderForAudio extends SliderComponentShape {
   final double height;
-  final int position;
-  VerticalSliderForAudio({required this.height, this.position = 0});
+  final double width;
+  VerticalSliderForAudio({required this.height, this.width = 4});
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.zero;
 
@@ -532,14 +665,8 @@ class VerticalSliderForAudio extends SliderComponentShape {
   }) {
     final canvas = context.canvas;
     final paint = Paint()..color = Colors.red;
-    canvas.drawRRect(
-      RRect.fromRectAndCorners(
-        Rect.fromCenter(center: center, width: 4, height: height),
-        topLeft: Radius.circular(position == 0 ? 16 : 4),
-        topRight: Radius.circular(position == 1 ? 16 : 4),
-        bottomLeft: Radius.circular(position == 0 ? 16 : 4),
-        bottomRight: Radius.circular(position == 1 ? 16 : 4),
-      ),
+    canvas.drawRect(
+      Rect.fromCenter(center: center, width: width, height: height),
       paint,
     );
   }
