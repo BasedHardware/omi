@@ -78,19 +78,19 @@ class WavBytesUtil {
   bool hasFrames() => frames.isNotEmpty;
 
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
-    File file = await createWavByCodec(filename: filename);
     var framesCopy = List<List<int>>.from(frames);
     if (removeLastNSeconds > 0) {
       removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
     } else {
       clearAudioBytes();
     }
+    File file = await createWavByCodec(framesCopy, filename: filename);
     return Tuple2(file, framesCopy);
   }
 
   /// OPUS
 
-  Future<File> createWavByCodec({String? filename}) async {
+  Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
     if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
       Int16List samples = getPcmSamples(frames);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -91,14 +92,16 @@ Future<StreamSubscription?> getBleAudioBytesListener(
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
 
   if (bytesService != null) {
-    var canNotify = bytesService.characteristics.firstWhereOrNull(
+    var streamCharacteristic = bytesService.characteristics.firstWhereOrNull(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
     var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
         (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
-    if (canNotify != null && codecCharacteristic != null) {
-      await canNotify.setNotifyValue(true);
-      debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
-      var listener = canNotify.lastValueStream.listen((value) {
+    if (streamCharacteristic != null && codecCharacteristic != null) {
+      await streamCharacteristic.setNotifyValue(true);
+      if (Platform.isAndroid) await device.requestMtu(512); // FORCING REQUEST AGAIN OF MTU
+      debugPrint('Subscribed to audioBytes stream from Friend Device');
+      var listener = streamCharacteristic.lastValueStream.listen((value) {
+        // debugPrint('lastValueStream: ${value.length} ~ mtu: ${device.mtuNow}');
         if (value.isNotEmpty) onAudioBytesReceived(value);
       });
       device.cancelWhenDisconnected(listener);
