@@ -13,6 +13,7 @@ import 'package:friend_private/backend/storage/memories.dart';
 import 'package:friend_private/backend/storage/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/utils/calendar.dart';
 import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -253,6 +254,51 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
         );
       }),
       structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+      structured.events.isNotEmpty
+          ? Text(
+              'Events',
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+            )
+          : const SizedBox.shrink(),
+      ...structured.events.map<Widget>((event) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: GestureDetector(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Icon(Icons.calendar_today_rounded, color: Colors.grey.shade300, size: 20)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.title,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                      ),
+                      Text(
+                        '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)}',
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      Text(
+                        '${event.duration} minutes',
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            onTap: () {
+              CalendarUtil().createEvent(event.title, event.startsAt, event.duration, description: event.description);
+            },
+          ),
+        );
+      }),
+      structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
     ];
   }
 
@@ -442,11 +488,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     try {
       structured = await generateTitleAndSummaryForMemory(widget.memory.transcript, [], forceProcess: true);
     } catch (err, stacktrace) {
+      print(err);
       var memoryReporting = MixpanelManager().getMemoryEventProperties(widget.memory);
       CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'memory_transcript_length': memoryReporting['transcript_length'].toString(),
         'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
-        'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
+        // 'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -470,6 +517,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       structured.pluginsResponse.map<PluginResponse>((e) => PluginResponse(e.item2, pluginId: e.item1.id)).toList(),
     );
 
+    for (var event in structured.events) {
+      current.events.add(CalendarEvent(
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt,
+        duration: event.duration,
+      ));
+    }
     pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
     widget.memory.discarded = false;
     MemoryProvider().updateMemoryStructured(current);

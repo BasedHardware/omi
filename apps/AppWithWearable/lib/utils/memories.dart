@@ -141,6 +141,14 @@ Future<Memory> finalizeMemoryRecord(
   for (var actionItem in structuredMemory.actionItems) {
     structured.actionItems.add(ActionItem(actionItem));
   }
+  for (var event in structuredMemory.events) {
+    structured.events.add(CalendarEvent(
+      title: event.title,
+      description: event.description,
+      startsAt: event.startsAt,
+      duration: event.duration,
+    ));
+  }
   var memory = Memory(
     DateTime.now(),
     transcript,

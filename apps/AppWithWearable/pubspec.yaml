@@ -97,7 +97,7 @@ dependencies:
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1
   device_calendar: ^4.3.2
-  flutter_native_timezone: ^2.0.0
+  flutter_timezone: ^2.0.0
 
 dependency_overrides:
   http: ^1.2.1

@@ -1,5 +1,5 @@
 import 'package:device_calendar/device_calendar.dart';
-import 'package:flutter_native_timezone/flutter_native_timezone.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
 
 class CalendarUtil {
@@ -15,8 +15,6 @@ class CalendarUtil {
   static void init() {
     _calendarPlugin = DeviceCalendarPlugin();
   }
-
-  _getTimezone() => FlutterNativeTimezone.getLocalTimezone();
 
   enableCalendarAccess() async {
     var permissionsGranted = await _calendarPlugin!.hasPermissions();
@@ -40,17 +38,18 @@ class CalendarUtil {
     return [];
   }
 
-  Future createEvent(String title, String startsAt, {String? description}) async {
+  Future createEvent(String title, DateTime startsAt, int durationMinutes, {String? description}) async {
     bool hasAccess = await enableCalendarAccess();
     if (!hasAccess) return;
-    final currentLocation = timeZoneDatabase.locations[_getTimezone()];
+    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    final currentLocation = timeZoneDatabase.locations[currentTimeZone];
     String calendarId = SharedPreferencesUtil().calendarId;
     var event = Event(
       calendarId,
       title: title,
       description: description,
-      start: TZDateTime.from(DateTime.parse(startsAt), currentLocation!),
-      end: TZDateTime.from(DateTime.parse(startsAt).add(const Duration(minutes: 30)), currentLocation),
+      start: TZDateTime.from(startsAt, currentLocation!),
+      end: TZDateTime.from(startsAt.add(Duration(minutes: durationMinutes)), currentLocation),
       availability: Availability.Tentative,
     );
     final createResult = await _calendarPlugin!.createOrUpdateEvent(event);
