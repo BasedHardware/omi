@@ -90,28 +90,30 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
-    StreamSubscription? stream =
-        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
+    audioStorage = WavBytesUtil(codec: codec);
+    audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
       toProcessBytes2.storeFramePacket(value);
-      if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
+      // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
+      audioStorage!.storeFramePacket(value);
 
       // if (toProcessBytes2.frames.length % 100 == 0) {
-      //   debugPrint('Frames length: ${toProcessBytes2.frames[1].length}');
+      //   debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
       // }
-
-      if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
+      // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
+      if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
         // vad.containsVoice(data.item1);
         try {
-          var segmentsEmpty = segments.isEmpty;
+          // var segmentsEmpty = segments.isEmpty;
           await _processFileToTranscript(data.item1);
-          if (segmentsEmpty && segments.isNotEmpty) {
-            wavBytesUtil2.insertAudioBytes(data.item2);
-          }
+          // TODO: restore optimization for audio files
+          // if (segmentsEmpty && segments.isNotEmpty) {
+          // first 30 audio seconds get added here
+          // wavBytesUtil2.insertAudioBytes(data.item2);
+          // }
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
@@ -126,9 +128,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       }
     });
-
-    audioBytesStream = stream;
-    audioStorage = wavBytesUtil2;
   }
 
   _processFileToTranscript(File f) async {
@@ -153,6 +152,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+    debugPrint('resetState: $restartBytesProcessing');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
