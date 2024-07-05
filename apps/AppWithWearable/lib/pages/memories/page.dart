@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:intl/intl.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
@@ -42,21 +43,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
-  // void _onAddButtonPressed() {
-  //   MixpanelManager().addManualMemoryClicked();
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AddMemoryDialog(
-  //         onMemoryAdded: (Memory memory) {
-  //           widget.memories.insert(0, memory);
-  //           setState(() {});
-  //         },
-  //       );
-  //     },
-  //   );
-  // }
-
   @override
   Widget build(BuildContext context) {
     var memories =
@@ -70,6 +56,15 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   .contains(textController.text.toLowerCase()),
             )
             .toList();
+
+    Map<String, List<Memory>> groupedMemories = {};
+    for (var memory in memories) {
+      String formattedDate = DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt);
+      if (!groupedMemories.containsKey(formattedDate)) {
+        groupedMemories[formattedDate] = [];
+      }
+      groupedMemories[formattedDate]!.add(memory);
+    }
 
     return CustomScrollView(
       slivers: [
@@ -132,13 +127,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // IconButton(
-                //     onPressed: _onAddButtonPressed,
-                //     icon: const Icon(
-                //       Icons.add_circle_outline,
-                //       size: 24,
-                //       color: Colors.white,
-                //     )),
                 const SizedBox(width: 1),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -176,13 +164,27 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             : SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    return MemoryListItem(
-                      memoryIdx: index,
-                      memory: memories[index],
-                      loadMemories: widget.refreshMemories,
+                    String date = groupedMemories.keys.elementAt(index);
+                    List<Memory> dateMemories = groupedMemories[date]!;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                          child: Text(
+                            date,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        ...dateMemories.map((memory) => MemoryListItem(
+                              memoryIdx: memories.indexOf(memory),
+                              memory: memory,
+                              loadMemories: widget.refreshMemories,
+                            )),
+                      ],
                     );
                   },
-                  childCount: memories.length,
+                  childCount: groupedMemories.keys.length,
                 ),
               ),
         const SliverToBoxAdapter(
