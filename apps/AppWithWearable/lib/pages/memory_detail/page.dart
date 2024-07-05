@@ -134,6 +134,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                               overviewController,
                               editingOverview,
                               focusOverviewField,
+                              setState,
                             ) +
                             getPluginsWidgets(
                               context,
