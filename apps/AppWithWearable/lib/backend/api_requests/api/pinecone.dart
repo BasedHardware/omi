@@ -50,7 +50,12 @@ Future<bool> createPineconeVector(String memoryId, List<double> vectorList, Date
 /// Queries Pinecone vectors and optionally filters results based on a date range.
 /// The startTimestamp and endTimestamp should be provided as UNIX epoch timestamps in seconds.
 /// For example: 1622520000 represents Jun 01 2021 10:00:00 UTC.
-Future<List<String>> queryPineconeVectors(List<double> vectorList, {int? startTimestamp, int? endTimestamp}) async {
+Future<List<String>> queryPineconeVectors(
+  List<double> vectorList, {
+  int? startTimestamp,
+  int? endTimestamp,
+  int count = 5,
+}) async {
   // Constructing the filter condition based on optional timestamp parameters
   // 2024-06-01 00:00:00.000, 2024-06-28 16:41:05.456149
   Map<String, dynamic> filter = {
@@ -75,7 +80,7 @@ Future<List<String>> queryPineconeVectors(List<double> vectorList, {int? startTi
   var body = jsonEncode({
     'namespace': Env.pineconeIndexNamespace,
     'vector': vectorList,
-    'topK': 5,
+    'topK': count,
     'includeValues': false,
     'includeMetadata': true,
     'filter': filter,
