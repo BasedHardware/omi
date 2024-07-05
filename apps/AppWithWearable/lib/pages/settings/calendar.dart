@@ -15,14 +15,16 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Calendar> calendars = [];
   bool calendarEnabled = false;
 
+  _getCalendars() {
+    CalendarUtil().getCalendars().then((value) {
+      setState(() => calendars = value);
+    });
+  }
+
   @override
   void initState() {
     calendarEnabled = SharedPreferencesUtil().calendarEnabled;
-    if (calendarEnabled) {
-      CalendarUtil().getCalendars().then((value) {
-        setState(() => calendars = value);
-      });
-    }
+    if (calendarEnabled) _getCalendars();
     super.initState();
   }
 
@@ -163,17 +165,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   _onSwitchChanged(s) async {
     if (calendarEnabled) {
-      calendars = await CalendarUtil().getCalendars();
-      calendars = [
-        ...calendars,
-        Calendar(
-          id: '123',
-          name: 'joan@basedhardware.com',
-          accountName: 'Gmail',
-          isReadOnly: true,
-          isDefault: false,
-        )
-      ];
+      _getCalendars();
       debugPrint('Calendars: ${calendars.length}');
       SharedPreferencesUtil().calendarEnabled = s;
     } else {

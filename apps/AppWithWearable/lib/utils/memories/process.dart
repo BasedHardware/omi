@@ -7,6 +7,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
@@ -92,6 +93,15 @@ Future<Memory> memoryCreationBlock(
   }
   Structured structured = summarizeResult.structured;
 
+  if (SharedPreferencesUtil().calendarEnabled &&
+      SharedPreferencesUtil().deviceId.isNotEmpty &&
+      SharedPreferencesUtil().calendarType == 'auto') {
+    for (var event in structured.events) {
+      event.created =
+          await CalendarUtil().createEvent(event.title, event.startsAt, event.duration, description: event.description);
+    }
+  }
+
   Memory memory = await finalizeMemoryRecord(
     transcript,
     transcriptSegments,
@@ -103,8 +113,6 @@ Future<Memory> memoryCreationBlock(
     structured.title.isEmpty,
   );
   debugPrint('Memory created: ${memory.id}');
-  debugPrint('Events: ${memory.structured.target!.events.length}');
-  debugPrint('Events source: ${MemoryProvider().getMemoryById(memory.id)?.structured.target?.events.length}');
 
   if (!retrievedFromCache) {
     if (structured.title.isEmpty && !failed) {
