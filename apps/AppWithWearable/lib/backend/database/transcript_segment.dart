@@ -73,6 +73,9 @@ class TranscriptSegment {
   }
 
   static combineSegments(List<TranscriptSegment> segments, List<TranscriptSegment> data) {
+    // TODO: combine keeping the time at which each segment was created?
+    // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
+    // what if they are 1 minute or more
     if (data.isEmpty) return;
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var value in data) {
