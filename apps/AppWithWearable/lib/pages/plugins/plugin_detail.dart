@@ -53,7 +53,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   widget.plugin.ratingAvg != null
                       ? Row(
                           children: [
-                            Text(widget.plugin.ratingAvg!.toString()),
+                            Text(widget.plugin.getRatingAvg()!),
                             const SizedBox(width: 4),
                             RatingBar.builder(
                               initialRating: widget.plugin.ratingAvg!,

@@ -209,7 +209,7 @@ class _PluginsPageState extends State<PluginsPage> {
                           plugin.ratingAvg != null
                               ? Row(
                                   children: [
-                                    Text(plugin.ratingAvg!.toString()),
+                                    Text(plugin.getRatingAvg()!),
                                     const SizedBox(width: 4),
                                     const Icon(Icons.star, color: Colors.deepPurple, size: 16),
                                     const SizedBox(width: 4),
