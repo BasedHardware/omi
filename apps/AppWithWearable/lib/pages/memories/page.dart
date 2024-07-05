@@ -161,10 +161,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     int memoryIndex = index;
                     for (int i = 0; i < dates.length; i++) {
                       int count = memories.where((memory) => DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt) == dates[i]).length;
-                      if (memoryIndex == 0) {
-                        dateIndex = i;
-                        break;
-                      } else if (memoryIndex < count + 1) {
+                      if (memoryIndex <= count) {
                         dateIndex = i;
                         break;
                       } else {
@@ -175,8 +172,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     if (memoryIndex == 0) {
                       return Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0).copyWith(
-                                                   top: index == 0 ? 0 : 24.0,
-                          bottom: 0
+                          top: index == 0 ? 0 : 24.0,
+                          bottom: 0,
                         ),
                         child: Text(
                           dates[dateIndex],
