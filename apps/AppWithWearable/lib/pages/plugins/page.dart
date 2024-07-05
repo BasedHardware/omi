@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/plugins/plugin_detail.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -37,8 +40,10 @@ class _PluginsPageState extends State<PluginsPage> {
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
       prefs.enablePlugin(pluginId);
+      MixpanelManager().pluginEnabled(pluginId);
     } else {
       prefs.disablePlugin(pluginId);
+      MixpanelManager().pluginDisabled(pluginId);
     }
     _fetchPlugins();
   }
@@ -180,6 +185,11 @@ class _PluginsPageState extends State<PluginsPage> {
                     ),
                     margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
                     child: ListTile(
+                      onTap: () async {
+                        await routeToPage(context, PluginDetailPage(plugin: plugin));
+                        _fetchPlugins();
+                        // refresh plugins
+                      },
                       leading: CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 28,
@@ -191,13 +201,31 @@ class _PluginsPageState extends State<PluginsPage> {
                         maxLines: 1,
                         style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                       ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          plugin.description,
-                          maxLines: 2,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
+                      subtitle: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                          plugin.ratingAvg != null
+                              ? Row(
+                                  children: [
+                                    Text(plugin.ratingAvg!.toString()),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text('(${plugin.ratingCount})'),
+                                  ],
+                                )
+                              : Container(),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              plugin.description,
+                              maxLines: 2,
+                              style: const TextStyle(color: Colors.grey, fontSize: 14),
+                            ),
+                          ),
+                        ],
                       ),
                       trailing: IconButton(
                         icon: Icon(

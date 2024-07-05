@@ -5,28 +5,40 @@ import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/utils/string_utils.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-Future<MemoryStructured> generateTitleAndSummaryForMemory(
+class SummaryResult {
+  final Structured structured;
+  final List<Tuple2<Plugin, String>> pluginsResponse;
+
+  SummaryResult(this.structured, this.pluginsResponse);
+}
+
+Future<SummaryResult> summarizeMemory(
   String transcript,
   List<Memory> previousMemories, {
   bool forceProcess = false,
   bool ignoreCache = false,
+  DateTime? conversationDate,
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
-    return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
+    return SummaryResult(Structured('', ''), []);
   }
-  // TODO: if conversation words > 1000 or smth, should never discard?
+  if (transcript.split(' ').length > 100) {
+    // TODO: try lower count?
+    forceProcess = true;
+  }
 
   // TODO: try later with temperature 0
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
   // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
 
+  // TODO: improve overview with conversation summarizer plugin?
+  // TODO: Generate tags/topics relevant to better query?
   var prompt =
       '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
     The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Make sure to use English for your response.
@@ -37,6 +49,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     For the overview, use a brief overview of the conversation.
     For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.
     For the category, classify the conversation into one of the available categories.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
         
     Here is the transcript ```${transcript.trim()}```.
     
@@ -47,7 +60,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "List of commitments, scheduled events, specific tasks or actionable steps.", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "philosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}, "events": {"title": "Events", "description": "A list of events extracted from the conversation, that the user must have on his calendar.", "default": [], "type": "array", "items": {"\$ref": "#/definitions/CalendarEvent"}}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "CalendarEvent": {"title": "CalendarEvent", "type": "object", "properties": {"title": {"title": "Title", "description": "The title of the event", "type": "string"}, "description": {"title": "Description", "description": "A brief description of the event", "default": "", "type": "string"}, "startsAt": {"title": "Starts At", "description": "The start date and time of the event", "type": "string", "format": "date-time"}, "duration": {"title": "Duration", "description": "The duration of the event in minutes", "default": 30, "type": "integer"}}, "required": ["title", "startsAt"]}}}
     ```
     '''
           .replaceAll('     ', '')
@@ -55,10 +68,10 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .trim();
   debugPrint(prompt);
   var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
-  var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
-  if (structured.title.isEmpty) return structured;
-  structured.pluginsResponse = await executePlugins(transcript);
-  return structured;
+  var structured = Structured.fromJson(jsonDecode(structuredResponse));
+  if (structured.title.isEmpty) return SummaryResult(structured, []);
+  var pluginsResponse = await executePlugins(transcript);
+  return SummaryResult(structured, pluginsResponse);
 }
 
 Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
@@ -86,7 +99,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
           .replaceAll('     ', '')
           .replaceAll('    ', '')
           .trim());
-      return Tuple2(plugin, response);
+      return Tuple2(plugin, response.replaceAll('```', '').replaceAll('""', '').trim());
     } catch (e, stacktrace) {
       CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'plugin': plugin.id,
@@ -159,25 +172,27 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 // ------
 
-Future<List<String>?> determineRequiresContext(List<Message> messages) async {
+Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
         Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
-        - If it does, provide a list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+        - Context could be 2 different things:
+          - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+          - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is ${DateTime.now().toIso8601String()}.
         
         Conversation:
-        ${messages.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
+        ${messages.reversed.map((e) => '${e.createdAt.toIso8601String()} ${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
-
+        
         As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
         the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
         
         Here is the output schema:
         ```
-        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}}}
+        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}, "dates_range": {"title": "Dates Range", "description": "The dates range to retrieve context from", "default": [], "type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date-time"}]}}}
         ```
         '''
       .replaceAll('        ', '');
@@ -189,7 +204,12 @@ Future<List<String>?> determineRequiresContext(List<Message> messages) async {
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
     var data = jsonDecode(cleanedResponse);
-    return data['topics'].map<String>((e) => e.toString()).toList();
+    debugPrint(data.toString());
+    List<String> topics = data['topics'].map<String>((e) => e.toString()).toList();
+    List<String> datesRange = data['dates_range'].map<String>((e) => e.toString()).toList();
+    List<DateTime> dates = datesRange.map((e) => DateTime.parse(e)).toList();
+    debugPrint('topics: $topics, dates: $dates');
+    return Tuple2<List<String>, List<DateTime>>(topics, dates);
   } catch (e) {
     CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.critical, userAttributes: {
       'response': cleanedResponse,

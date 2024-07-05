@@ -8,7 +8,7 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
-  final BTDeviceStruct device;
+  final BTDeviceStruct? device;
   final int batteryLevel;
 
   const ConnectedDevice({super.key, required this.device, required this.batteryLevel});
@@ -22,7 +22,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connected Device'),
+        title: Text(widget.device == null ? 'Paired Device' : 'Connected Device'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -35,7 +35,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                'DEVICE-${widget.device.id.split('-').last.substring(0, 6)}',
+                'DEVICE-${widget.device?.id.split('-').last.substring(0, 6) ?? SharedPreferencesUtil().deviceId.substring(0, 6)}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16.0,
@@ -45,37 +45,39 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 12),
-              Container(
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: widget.batteryLevel > 75
-                              ? const Color.fromARGB(255, 0, 255, 8)
-                              : widget.batteryLevel > 20
-                                  ? Colors.yellow.shade700
-                                  : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
+              widget.device != null
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: 8.0),
-                      Text(
-                        '${widget.batteryLevel.toString()}% Battery',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ))
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: widget.batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : widget.batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Text(
+                            '${widget.batteryLevel.toString()}% Battery',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ))
+                  : const SizedBox.shrink()
             ],
           ),
           const SizedBox(height: 32),
@@ -95,17 +97,17 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               child: TextButton(
                   onPressed: () {
-                    bleDisconnectDevice(widget.device);
+                    if (widget.device != null) bleDisconnectDevice(widget.device!);
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().deviceId = '';
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Your Friend is disconnected   😔'),
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Your Friend is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
                     ));
                     MixpanelManager().disconnectFriendClicked();
                   },
-                  child: const Text(
-                    'Disconnect',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  child: Text(
+                    widget.device == null ? "Unpair" : "Disconnect",
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   )))
         ],
       ),

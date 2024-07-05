@@ -4,6 +4,9 @@ import 'dart:ui';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/notify_on_kill.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/home/page.dart';
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -91,6 +94,8 @@ void createNotification({
     isMorningNotification: isMorningNotification,
     isDailySummaryNotification: isDailySummaryNotification,
   );
+  if (interval == null && (isMorningNotification || isDailySummaryNotification)) return;
+
   AwesomeNotifications().createNotification(
     content: NotificationContent(
       id: notificationId,
@@ -145,26 +150,22 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
+    final Map<String, int> screensWithRespectToPath = {
+      '/chat': 2,
+      '/capture': 1,
+      '/memories': 0,
+    };
     var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
-    print(message);
-    print(receivedAction.toMap().toString());
+    debugPrint(message);
+    debugPrint(receivedAction.toMap().toString());
+
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
-
-    bool isSilentAction = receivedAction.actionType == ActionType.SilentAction ||
-        receivedAction.actionType == ActionType.SilentBackgroundAction;
-
-    // SilentBackgroundAction runs on background thread and cannot show
-    // UI/visual elements
-
-    if (isSilentAction) {
-      debugPrint('isSilentAction: $isSilentAction');
-      return;
+    final payload = receivedAction.payload;
+    if (payload?.containsKey('navigateTo') ?? false) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
     }
-    if (!AwesomeStringUtils.isNullOrEmpty(receivedAction.buttonKeyInput)) {
-      // receiveButtonInputText(receivedAction);
-    } else {
-      // receiveStandardNotificationAction(receivedAction);
-    }
+    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
+    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
   }
 }

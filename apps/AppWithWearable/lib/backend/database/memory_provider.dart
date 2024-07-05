@@ -10,6 +10,7 @@ class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
   static final Box<Memory> _box = ObjectBoxUtil().box!.store.box<Memory>();
   static final Box<Structured> _boxStructured = ObjectBoxUtil().box!.store.box<Structured>();
+  static final Box<Event> _boxEvent = ObjectBoxUtil().box!.store.box<Event>();
 
   factory MemoryProvider() {
     return _instance;
@@ -30,6 +31,11 @@ class MemoryProvider {
           .build()
           .find();
     }
+  }
+
+  setEventCreated(Event event) {
+    event.created = true;
+    _boxEvent.put(event);
   }
 
   int saveMemory(Memory memory) => _box.put(memory);
@@ -64,6 +70,17 @@ class MemoryProvider {
   List<Memory> retrieveDayMemories(DateTime day) {
     DateTime start = DateTime(day.year, day.month, day.day);
     DateTime end = DateTime(day.year, day.month, day.day, 23, 59, 59);
+    var query = _box
+        .query(Memory_.createdAt
+            .between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)
+            .and(Memory_.discarded.equals(false)))
+        .build();
+    List<Memory> filtered = query.find();
+    query.close();
+    return filtered;
+  }
+
+  List<Memory> retrieveMemoriesWithinDates(DateTime start, DateTime end) {
     var query = _box
         .query(Memory_.createdAt
             .between(start.millisecondsSinceEpoch, end.millisecondsSinceEpoch)

@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:opus_dart/opus_dart.dart';
+import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
 import 'backend/preferences.dart';
 import 'env/env.dart';
@@ -22,6 +26,11 @@ void main() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   await ObjectBoxUtil.init();
+  initOpus(await opus_flutter.load());
+
+  await GrowthbookUtil.init();
+  CalendarUtil.init();
+
   if (Env.oneSignalAppId != null) {
     OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
     OneSignal.initialize(Env.oneSignalAppId!);
@@ -36,7 +45,7 @@ void main() async {
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
         );
         FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack!);
+          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
         _getRunApp();
@@ -59,15 +68,26 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+
+  // The navigator key is necessary to navigate using static methods
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
 class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    NotificationUtil.initializeNotificationsEventListeners();
+    NotificationUtil.initializeIsolateReceivePort();
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorObservers: [InstabugNavigatorObserver()],
       debugShowCheckedModeBanner: F.env == Environment.dev,
       title: F.title,
+      navigatorKey: MyApp.navigatorKey,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
