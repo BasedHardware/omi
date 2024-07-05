@@ -164,6 +164,7 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   _onSwitchChanged(s) async {
+    // TODO: what if user didn't enable permissions?
     if (s) {
       _getCalendars();
       SharedPreferencesUtil().calendarEnabled = s;
