@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
 
+// TODO: handle this cases
+// - Process reminders during the transcription? if they include smth like "Hey Friend..."
+// - If there's a event to be created that was in 10 minutes, but the conversation was 20 minutes
+//    - we shouldn't create the event, but that edge cases still happens.
 class CalendarUtil {
   static final CalendarUtil _instance = CalendarUtil._internal();
   static DeviceCalendarPlugin? _calendarPlugin;
