@@ -8,16 +8,19 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/pages/capture/background_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories.dart';
@@ -25,6 +28,13 @@ import 'package:friend_private/utils/notifications.dart';
 import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:friend_private/utils/memories/process.dart';
+import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:record/record.dart';
+import 'package:tuple/tuple.dart';
+
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -47,7 +57,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   bool get wantKeepAlive => true;
 
   bool _hasTranscripts = false;
-  RecordingState _state = RecordingState.stop;
+  final record = AudioRecorder();
+  RecordState _state = RecordState.stop;
+  static const quietSecondsForMemoryCreation = 120;
+
 
   /// ----
   BTDeviceStruct? btDevice;
@@ -75,7 +88,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
+    processTranscriptContent(
+      context,
+      transcript,
+      SharedPreferencesUtil().transcriptSegments,
+      null,
+      retrievedFromCache: true,
+    ).then((m) {
       if (m != null && !m.discarded) executeBackup();
     });
     SharedPreferencesUtil().transcriptSegments = [];
@@ -85,56 +104,69 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-    WavBytesUtil wavBytesUtil = WavBytesUtil();
-    WavBytesUtil toProcessBytes = WavBytesUtil();
     // VadUtil vad = VadUtil();
     // await vad.init();
+    // Variables to maintain state
+    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    StreamSubscription? stream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) {
+    WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
+    audioStorage = WavBytesUtil(codec: codec);
+    audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
-      value.removeRange(0, 3);
-      // ~ losing because of pipe precision, voltage on device is 0.912391923, it sends 1,
-      // so we are losing lots of resolution, and bit depth
-      for (int i = 0; i < value.length; i += 2) {
-        int byte1 = value[i];
-        int byte2 = value[i + 1];
-        int int16Value = (byte2 << 8) | byte1;
-        wavBytesUtil.addAudioBytes([int16Value]);
-        toProcessBytes.addAudioBytes([int16Value]);
-      }
-      if (toProcessBytes.audioBytes.length % 240000 == 0) {
-        var bytesCopy = List<int>.from(toProcessBytes.audioBytes);
-        // SharedPreferencesUtil().temporalAudioBytes = wavBytesUtil.audioBytes;
-        toProcessBytes.clearAudioBytesSegment(remainingSeconds: 1);
-        WavBytesUtil.createWavFile(bytesCopy, filename: 'temp.wav').then((f) async {
-          // var containsAudio = await vad.predict(f.readAsBytesSync());
-          // debugPrint('Processing audio bytes: ${f.toString()}');
-          try {
-            _processFileToTranscript(f);
-          } catch (e) {
-            debugPrint(e.toString());
-            toProcessBytes.insertAudioBytes(bytesCopy.sublist(0, 232000)); // remove last 1 sec to avoid duplicate
-          }
-        });
+
+      toProcessBytes2.storeFramePacket(value);
+      // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
+      audioStorage!.storeFramePacket(value);
+
+      // if (toProcessBytes2.frames.length % 100 == 0) {
+      //   debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
+      // }
+      // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
+      if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
+        Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+        // vad.containsVoice(data.item1);
+        try {
+          // var segmentsEmpty = segments.isEmpty;
+          await _processFileToTranscript(data.item1);
+          // TODO: restore optimization for audio files
+          // if (segmentsEmpty && segments.isNotEmpty) {
+          // first 30 audio seconds get added here
+          // wavBytesUtil2.insertAudioBytes(data.item2);
+          // }
+          // uploadFile(data.item1);
+        } catch (e, stacktrace) {
+          // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
+          CrashReporting.reportHandledCrash(
+            e,
+            stacktrace,
+            level: NonFatalExceptionLevel.warning,
+            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+          );
+          debugPrint('Error: e.toString() ${e.toString()}');
+          toProcessBytes2.insertAudioBytes(data.item2);
+        }
       }
     });
-
-    audioBytesStream = stream;
-    audioStorage = wavBytesUtil;
   }
 
   _processFileToTranscript(File f) async {
     setState(() => isTranscribing = true);
-    List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
-    debugPrint('newSegments: $newSegments');
+    List<TranscriptSegment> newSegments;
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
+      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+    } else {
+      newSegments = await deepgramTranscribe(f);
+    }
+    var initialSegmentsLength = segments.length;
+
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-    if (newSegments.isNotEmpty) {
+    if (segments.length > initialSegmentsLength) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
       debugPrint('Memory creation timer restarted');
       _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(seconds: 120), () => _createMemory());
+      _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
       currentTranscriptStartedAt ??= DateTime.now();
       currentTranscriptFinishedAt = DateTime.now();
     }
@@ -142,25 +174,29 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+    debugPrint('resetState: $restartBytesProcessing');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory();
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) initiateBytesProcessing();
   }
 
-  _createMemory() async {
+  _createMemory({bool forcedCreation = false}) async {
     setState(() => memoryCreating = true);
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
-      file = await WavBytesUtil.createWavFile(audioStorage!.audioBytes);
+      // USE VAD HERE
+      // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
+      file = (await audioStorage!.createWavFile()).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
+      segments,
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,

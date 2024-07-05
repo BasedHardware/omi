@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -19,7 +20,10 @@ class Memory {
   DateTime? finishedAt;
 
   String transcript;
+  final transcriptSegments = ToMany<TranscriptSegment>();
+
   String? recordingFilePath;
+
   final structured = ToOne<Structured>();
 
   @Backlink('memory')
@@ -28,8 +32,15 @@ class Memory {
   @Index()
   bool discarded;
 
-  Memory(this.createdAt, this.transcript, this.discarded,
-      {this.id = 0, this.recordingFilePath, this.startedAt, this.finishedAt});
+  Memory(
+    this.createdAt,
+    this.transcript,
+    this.discarded, {
+    this.id = 0,
+    this.recordingFilePath,
+    this.startedAt,
+    this.finishedAt,
+  });
 
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
@@ -50,7 +61,6 @@ class Memory {
       DateTime.parse(json['createdAt']),
       json['transcript'],
       json['discarded'],
-      // id: json['id'],
       recordingFilePath: json['recordingFilePath'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
@@ -62,6 +72,14 @@ class Memory {
         memory.pluginsResponse.add(PluginResponse(response));
       }
     }
+
+    if (json['transcriptSegments'] != null) {
+      for (dynamic segment in json['transcriptSegments']) {
+        if (segment.isEmpty) continue;
+        memory.transcriptSegments.add(TranscriptSegment.fromJson(segment));
+      }
+    }
+
     return memory;
   }
 
@@ -101,6 +119,9 @@ class Structured {
   @Backlink('structured')
   final actionItems = ToMany<ActionItem>();
 
+  @Backlink('structured')
+  final events = ToMany<Event>();
+
   Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
   getEmoji() {
@@ -123,6 +144,19 @@ class Structured {
       for (String item in json['actionItems']) {
         if (item.isEmpty) continue;
         structured.actionItems.add(ActionItem(item));
+      }
+    }
+
+    if (json['events'] != null) {
+      for (dynamic event in json['events']) {
+        if (event.isEmpty) continue;
+        structured.events.add(Event(
+          event['title'],
+          DateTime.parse(event['startsAt']),
+          event['duration'],
+          description: event['description'] ?? '',
+          created: false,
+        ));
       }
     }
     return structured;
@@ -148,6 +182,7 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'actionItems': actionItems.map((item) => item.description).toList(),
+      'events': events.map((event) => event.toJson()).toList(),
     };
   }
 }
@@ -175,4 +210,31 @@ class PluginResponse {
   final memory = ToOne<Memory>();
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
+}
+
+@Entity()
+class Event {
+  @Id()
+  int id = 0;
+
+  String title;
+  DateTime startsAt;
+  int duration;
+
+  String description;
+  bool created = false;
+
+  final structured = ToOne<Structured>();
+
+  Event(this.title, this.startsAt, this.duration, {this.description = '', this.created = false, this.id = 0});
+
+  toJson() {
+    return {
+      'title': title,
+      'startsAt': startsAt.toIso8601String(),
+      'duration': duration,
+      'description': description,
+      'created': created,
+    };
+  }
 }

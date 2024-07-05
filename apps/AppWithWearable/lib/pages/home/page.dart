@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
@@ -13,6 +13,7 @@ import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
@@ -21,9 +22,8 @@ import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/foreground.dart';
-import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -69,7 +69,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _setupHasSpeakerProfile() async {
-    // SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
   }
 
   Future<void> _initiatePlugins() async {
@@ -80,13 +80,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    String event = '';
     if (state == AppLifecycleState.paused) {
-      addEventToContext('App is paused');
+      event = 'App is paused';
     } else if (state == AppLifecycleState.resumed) {
-      addEventToContext('App is resumed');
+      event = 'App is resumed';
     } else if (state == AppLifecycleState.hidden) {
-      addEventToContext('App is hidden');
+      event = 'App is hidden';
+    } else if (state == AppLifecycleState.detached) {
+      event = 'App is detached';
     }
+    debugPrint(event);
+    InstabugLog.logInfo(event);
   }
 
   _migrationScripts() async {
@@ -95,9 +100,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateMemories();
   }
 
+  ///Screens with respect to subpage
+  final Map<String, Widget> screensWithRespectToPath = {
+    '/settings': const SettingsPage(),
+  };
+
   @override
   void initState() {
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1);
+    _controller = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
+    );
+    SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -126,24 +141,37 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       body: 'Check out your daily summary to see what you should do tomorrow.',
       notificationId: 5,
       isDailySummaryNotification: true,
+      payload: {'path': '/chat'},
     );
-
+    if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
+      final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        MyApp.navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) => screensWithRespectToPath[subPageRoute] as Widget,
+          ),
+        );
+      });
+      SharedPreferencesUtil().subPageToShowFromNotification = '';
+    }
     super.initState();
   }
 
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
+    // TODO: when disconnected manually need to remove this connection state listener
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
+          debugPrint('onDisconnected');
           capturePageKey.currentState?.resetState(restartBytesProcessing: false);
-          setState(() {
-            _device = null;
-          });
+          setState(() => _device = null);
           InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
-                title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+              title: 'Friend Device Disconnected',
+              body: 'Please reconnect to continue using your Friend.',
+            );
           }
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
@@ -159,17 +187,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+    debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     clearNotification(1);
-    setState(() {
-      _device = connectedDevice;
-    });
+    _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     _startForeground();
+    setState(() {});
   }
 
   _initiateBleBatteryListener() async {
@@ -309,7 +337,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _device != null
+              _device != null && batteryLevel != -1
                   ? GestureDetector(
                       onTap: _device == null
                           ? null
@@ -358,8 +386,35 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ],
                           )),
                     )
-                  : const SizedBox.shrink(),
-              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+                  : SharedPreferencesUtil().deviceId.isNotEmpty
+                      ? TextButton(
+                          onPressed: () async {
+                            await Navigator.of(context).push(MaterialPageRoute(
+                              builder: (c) => const ConnectedDevice(
+                                device: null,
+                                batteryLevel: 0,
+                              ),
+                            ));
+                            MixpanelManager().connectFriendClicked();
+                            setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Paired Device',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 18,
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
@@ -368,13 +423,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
-                  var language = SharedPreferencesUtil().recordingsLanguage;
-                  var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
                   Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-                  if (language != SharedPreferencesUtil().recordingsLanguage ||
-                      useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    capturePageKey.currentState?.resetState();
-                  }
                 },
               )
             ],

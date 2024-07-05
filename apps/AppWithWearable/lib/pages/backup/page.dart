@@ -11,7 +11,8 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/backup/password.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BackupsPage extends StatefulWidget {
@@ -57,28 +58,22 @@ class _BackupsPageState extends State<BackupsPage> {
         title: const Text('Backups configuration'),
         actions: [
           IconButton(
-              onPressed: () {
-                showDialog(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                          title: const Text('How it works?'),
-                          content: const Text(
-                            'We take all your memories and encrypt them with a password you set, then we upload them to a secure server. '
-                            '\n\nLater, whenever you want to recover your memories, you will need to provide the same password and the UID to decrypt your data and import it.',
-                          ),
-                          actions: [
-                            TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: const Text(
-                                  'Close',
-                                  style: TextStyle(color: Colors.white),
-                                ))
-                          ],
-                        ));
-              },
-              icon: const Icon(color: Colors.white, Icons.info_outline))
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () => Navigator.of(context).pop(),
+                  () => {},
+                  'How it works?',
+                  'We take all your memories and encrypt them with a password you set, then we upload them to a secure server. '
+                      '\n\nLater, whenever you want to recover your memories, you will need to provide the same password and the UID to decrypt your data and import it.',
+                  singleButton: true,
+                ),
+              );
+            },
+            icon: const Icon(color: Colors.white, Icons.info_outline),
+          )
         ],
       ),
       body: Padding(
@@ -184,7 +179,7 @@ class _BackupsPageState extends State<BackupsPage> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Store your User ID and Password in a safe place, this is what you will need later when trying to recover your memories in another device or when you had to reinstall the app.',
+                'Store your User ID and Password in a safe place, this is what you will need later when trying to recover your memories on another device or when you have to reinstall the app.',
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -268,7 +263,7 @@ class _BackupsPageState extends State<BackupsPage> {
                           var memory = memories[i];
                           if (memory.structured.target == null || memory.discarded) continue;
                           var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
-                            createPineconeVector(memory.id.toString(), vector);
+                            createPineconeVector(memory.id.toString(), vector, memory.createdAt);
                           });
                           if (i % 10 == 0) {
                             await f; // "wait" for previous 10 requests to finish

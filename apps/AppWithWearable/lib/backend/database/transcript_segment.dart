@@ -1,4 +1,10 @@
+import 'package:objectbox/objectbox.dart';
+
+@Entity()
 class TranscriptSegment {
+  @Id()
+  int id = 0;
+
   String text;
   String? speaker;
   late int speakerId;
@@ -18,7 +24,7 @@ class TranscriptSegment {
 
   @override
   String toString() {
-    return 'TranscriptSegment: {text: $text, speaker: $speaker, isUser: $isUser, start: $start, end: $end}';
+    return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
   }
 
   // Factory constructor to create a new Message instance from a map
@@ -26,7 +32,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
-      isUser: json['is_user'] as bool,
+      isUser: (json['is_user'] ?? false) as bool,
       start: json['start'] as double,
       end: json['end'] as double,
     );

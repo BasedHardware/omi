@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class ImportBackupPage extends StatefulWidget {
@@ -140,7 +140,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
         var memory = nonDiscarded[i];
         if (memory.structured.target == null || memory.discarded) continue;
         var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
-          createPineconeVector(memory.id.toString(), vector);
+          createPineconeVector(memory.id.toString(), vector, memory.createdAt);
         });
         if (i % 10 == 0) {
           await f; // "wait" for previous 10 requests to finish
