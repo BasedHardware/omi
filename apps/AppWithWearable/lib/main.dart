@@ -8,7 +8,6 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memories/widgets/custom_audio_player.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
