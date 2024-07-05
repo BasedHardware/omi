@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
@@ -20,6 +21,7 @@ List<Widget> getSummaryWidgets(
   TextEditingController overviewController,
   bool editingOverview,
   FocusNode focusOverviewField,
+  StateSetter setState,
 ) {
   var structured = memory.structured.target!;
   String time = memory.startedAt == null
@@ -111,47 +113,42 @@ List<Widget> getSummaryWidgets(
     }),
     structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
     structured.events.isNotEmpty
-        ? Text(
-            'Events',
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+        ? Row(
+            children: [
+              Icon(Icons.event, color: Colors.grey.shade300),
+              const SizedBox(width: 8),
+              Text(
+                'Events',
+                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+              )
+            ],
           )
         : const SizedBox.shrink(),
     ...structured.events.map<Widget>((event) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: GestureDetector(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Icon(Icons.calendar_today_rounded, color: Colors.grey.shade300, size: 20)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      event.title,
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                    ),
-                    Text(
-                      '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                    Text(
-                      '${event.duration} minutes',
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-              event.created ? Icon(Icons.check) : const SizedBox.shrink(),
-            ],
-          ),
-          onTap: () {
-            CalendarUtil().createEvent(event.title, event.startsAt, event.duration, description: event.description);
-          },
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(
+          event.title,
+          style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+        ),
+        subtitle: Text(
+          '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)}',
+          style: const TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+        trailing: IconButton(
+          onPressed: event.created
+              ? null
+              : () {
+                  MemoryProvider().setEventCreated(event);
+                  setState(() => event.created = true);
+                  CalendarUtil().createEvent(
+                    event.title,
+                    event.startsAt,
+                    event.duration,
+                    description: event.description,
+                  );
+                },
+          icon: Icon(event.created ? Icons.check : Icons.add),
         ),
       );
     }),
