@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
@@ -207,6 +206,17 @@ class _PluginsPageState extends State<PluginsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                          plugin.ratingAvg != null
+                              ? Row(
+                                  children: [
+                                    Text(plugin.ratingAvg!.toString()),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text('(${plugin.ratingCount})'),
+                                  ],
+                                )
+                              : Container(),
                           Padding(
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Text(
@@ -215,30 +225,6 @@ class _PluginsPageState extends State<PluginsPage> {
                               style: const TextStyle(color: Colors.grey, fontSize: 14),
                             ),
                           ),
-                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
-                          plugin.ratingAvg != null
-                              ? Row(
-                                  children: [
-                                    Text(plugin.ratingAvg!.toString()),
-                                    const SizedBox(width: 4),
-                                    RatingBar.builder(
-                                      initialRating: plugin.ratingAvg!,
-                                      minRating: 1,
-                                      direction: Axis.horizontal,
-                                      allowHalfRating: true,
-                                      itemCount: 5,
-                                      itemSize: 16,
-                                      ignoreGestures: true,
-                                      itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                      itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.amber),
-                                      maxRating: 5.0,
-                                      onRatingUpdate: (rating) {},
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text('(${plugin.ratingCount})'),
-                                  ],
-                                )
-                              : Container(),
                         ],
                       ),
                       trailing: IconButton(

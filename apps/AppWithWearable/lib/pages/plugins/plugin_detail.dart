@@ -65,7 +65,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                               itemSize: 16,
                               tapOnlyMode: false,
                               itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.amber),
+                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
                               maxRating: 5.0,
                               onRatingUpdate: (rating) {},
                             ),
@@ -101,6 +101,21 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
               ),
             ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18.0),
+              child: RichText(
+                  text: TextSpan(children: [
+                const TextSpan(
+                  text: 'By: ',
+                  style: TextStyle(fontSize: 16),
+                ),
+                TextSpan(
+                  text: '${widget.plugin.author}.',
+                  style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
+                ),
+              ])),
+            ),
             const SizedBox(height: 32),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -120,7 +135,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 itemCount: 5,
                 itemSize: 24,
                 itemPadding: const EdgeInsets.symmetric(horizontal: 2),
-                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.amber),
+                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
                 maxRating: 5.0,
                 onRatingUpdate: (rating) {
                   reviewPlugin(widget.plugin.id, rating);
@@ -142,6 +157,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 },
               ),
             ),
+            const SizedBox(height: 24),
           ],
         ));
   }
