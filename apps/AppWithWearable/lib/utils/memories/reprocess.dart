@@ -47,9 +47,7 @@ Future<Memory?> reProcessMemory(
 
   structured.events.clear();
   for (var event in newStructured.events) {
-    structured.events.add(
-      Event(title: event.title, description: event.description, startsAt: event.startsAt, duration: event.duration),
-    );
+    structured.events.add(Event(event.title, event.startsAt, event.duration, description: event.description));
   }
 
   memory.structured.target = structured;
