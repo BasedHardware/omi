@@ -164,9 +164,8 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   _onSwitchChanged(s) async {
-    if (calendarEnabled) {
+    if (s) {
       _getCalendars();
-      debugPrint('Calendars: ${calendars.length}');
       SharedPreferencesUtil().calendarEnabled = s;
     } else {
       SharedPreferencesUtil().calendarEnabled = s;
