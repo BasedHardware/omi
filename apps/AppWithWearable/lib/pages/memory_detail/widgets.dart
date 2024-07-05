@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
@@ -112,6 +114,8 @@ List<Widget> getSummaryWidgets(
       );
     }),
     structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+    // TODO: UI when calendar not enabled so people activate it, but in the mean time only from settings,
+    // so less people try it and feedback is clearer
     structured.events.isNotEmpty
         ? Row(
             children: [
@@ -129,16 +133,30 @@ List<Widget> getSummaryWidgets(
         contentPadding: EdgeInsets.zero,
         title: Text(
           event.title,
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        subtitle: Text(
-          '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)}',
-          style: const TextStyle(color: Colors.grey, fontSize: 14),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(
+            '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${event.duration} minutes.',
+            style: const TextStyle(color: Colors.grey, fontSize: 15),
+          ),
         ),
         trailing: IconButton(
           onPressed: event.created
               ? null
               : () {
+                  var calEnabled = SharedPreferencesUtil().calendarEnabled;
+                  var calSelected = SharedPreferencesUtil().calendarId.isNotEmpty;
+                  if (!calEnabled || !calSelected) {
+                    routeToPage(context, const CalendarPage());
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(!calEnabled
+                          ? 'Enable calendar integration to add events'
+                          : 'Select a calendar to add events to'),
+                    ));
+                    return;
+                  }
                   MemoryProvider().setEventCreated(event);
                   setState(() => event.created = true);
                   CalendarUtil().createEvent(
@@ -147,8 +165,11 @@ List<Widget> getSummaryWidgets(
                     event.duration,
                     description: event.description,
                   );
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Event added to calendar'),
+                  ));
                 },
-          icon: Icon(event.created ? Icons.check : Icons.add),
+          icon: Icon(event.created ? Icons.check : Icons.add, color: Colors.white),
         ),
       );
     }),
