@@ -57,14 +57,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             )
             .toList();
 
-    Map<String, List<Memory>> groupedMemories = {};
-    for (var memory in memories) {
-      String formattedDate = DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt);
-      if (!groupedMemories.containsKey(formattedDate)) {
-        groupedMemories[formattedDate] = [];
-      }
-      groupedMemories[formattedDate]!.add(memory);
-    }
+    List<String> dates = memories.map((memory) => DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt)).toSet().toList();
 
     return CustomScrollView(
       slivers: [
@@ -164,30 +157,42 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             : SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    String date = groupedMemories.keys.elementAt(index);
-                    List<Memory> dateMemories = groupedMemories[date]!;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0).copyWith(
-                            top: index == 0 ? 0 : 24.0,
-                            bottom: 0
-                          ),
-                          child: Text(
-                            date,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
+                    int dateIndex = 0;
+                    int memoryIndex = index;
+                    for (int i = 0; i < dates.length; i++) {
+                      int count = memories.where((memory) => DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt) == dates[i]).length;
+                      if (memoryIndex == 0) {
+                        dateIndex = i;
+                        break;
+                      } else if (memoryIndex < count + 1) {
+                        dateIndex = i;
+                        break;
+                      } else {
+                        memoryIndex -= (count + 1);
+                      }
+                    }
+
+                    if (memoryIndex == 0) {
+                      return Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0).copyWith(
+                                                   top: index == 0 ? 0 : 24.0,
+                          bottom: 0
                         ),
-                        ...dateMemories.map((memory) => MemoryListItem(
-                              memoryIdx: memories.indexOf(memory),
-                              memory: memory,
-                              loadMemories: widget.refreshMemories,
-                            )),
-                      ],
-                    );
+                        child: Text(
+                          dates[dateIndex],
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      );
+                    } else {
+                      Memory memory = memories.where((memory) => DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(memory.createdAt) == dates[dateIndex]).elementAt(memoryIndex - 1);
+                      return MemoryListItem(
+                        memoryIdx: memories.indexOf(memory),
+                        memory: memory,
+                        loadMemories: widget.refreshMemories,
+                      );
+                    }
                   },
-                  childCount: groupedMemories.keys.length,
+                  childCount: memories.length + dates.length,
                 ),
               ),
         const SliverToBoxAdapter(
