@@ -137,9 +137,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     } else {
       newSegments = await deepgramTranscribe(f);
     }
-    var initialSegmentsLength = segments.length;
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-    if (segments.length > initialSegmentsLength) {
+    if (newSegments.isNotEmpty) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
