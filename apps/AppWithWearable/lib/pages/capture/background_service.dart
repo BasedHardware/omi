@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -49,58 +50,58 @@ void onStart(ServiceInstance service) async {
       );
     }
   }
-  var record = AudioRecorder();
-  var path = await getApplicationDocumentsDirectory();
-  var filePath = '${path.path}/recording.aac';
-  service.invoke("stateUpdate", {"state": 'recording'});
-  await record.start(const RecordConfig(), path: filePath);
-  service.on("stop").listen((event) async {
-    await record.stop();
-    await record.dispose();
-    await service.stopSelf();
-    debugPrint("background process is now stopped");
-  });
-}
-
-Future<void> recordingOnIOS(ServiceInstance service) async {
-  var record = AudioRecorder();
-  var path = await getApplicationDocumentsDirectory();
-  var filePath = '${path.path}/recording.aac';
-  service.invoke("stateUpdate", {"state": 'recording'});
-  await record.start(const RecordConfig(), path: filePath);
-  service.on("stop").listen((event) async {
-    await record.stop();
-    await record.dispose();
-    await service.stopSelf();
-    debugPrint("background process is now stopped");
-  });
-}
-
-Future<void> recordingOnAndroid(ServiceInstance service) async {
+  int count = 0;
   await SharedPreferencesUtil.init();
   var record = AudioRecorder();
   var path = await getApplicationDocumentsDirectory();
-  var filePath = '${path.path}/recording.aac';
-  var dir = Directory(path.path);
-  var files = dir.listSync();
-  for (var file in files) {
-    if (file is File) {
-      if (file.path.contains('recording')) {
-        file.delete();
-      }
-    }
-  }
+  var filePath = '${path.path}/recording_$count.aac';
   service.invoke("stateUpdate", {"state": 'recording'});
   await record.start(const RecordConfig(), path: filePath);
-  SharedPreferencesUtil().recordingPath = filePath;
-  debugPrint("last recording path: ${SharedPreferencesUtil().recordingPath}");
+  // timerUpdate is only invoked on Android
+  service.on("timerUpdate").listen((event) async {
+    if (event!["time"] == '0') {
+      await record.stop();
+      await record.dispose();
+      debugPrint("recording stopped");
+    }
+    if (event["time"] == '30') {
+      var paths = SharedPreferencesUtil().recordingPaths;
+      SharedPreferencesUtil().recordingPaths = [...paths, filePath];
+      count++;
+      filePath = '${path.path}/recording_$count.aac';
+      record = AudioRecorder();
+      await record.start(const RecordConfig(), path: filePath);
+      debugPrint("recording started again file: $filePath");
+    }
+  });
   service.on("stop").listen((event) async {
-    var res = await record.stop();
-    var f = File(res!);
-    service.invoke("stateUpdate", {"state": 'stopped'});
-    service.invoke("update", {"path": f.path});
+    await record.stop();
     await record.dispose();
-    service.stopSelf();
+    await service.stopSelf();
+    debugPrint("background process is now stopped");
+  });
+}
+
+Future streamRecording(ServiceInstance service) async {
+  var record = AudioRecorder();
+  var path = await getApplicationDocumentsDirectory();
+  int count = 0;
+  var filePath = '${path.path}/recording_$count.m4a';
+  service.invoke("stateUpdate", {"state": 'recording'});
+  var stream = await record.startStream(const RecordConfig(encoder: AudioEncoder.pcm16bits));
+  var audioData = <int>[];
+  var file = File(filePath);
+  stream.listen((data) async {
+    audioData.addAll(data);
+    print(
+      record.convertBytesToInt16(Uint8List.fromList(data)),
+    );
+    file.writeAsBytesSync(data, mode: FileMode.append);
+  });
+  service.on("stop").listen((event) async {
+    await record.stop();
+    await record.dispose();
+    await service.stopSelf();
     debugPrint("background process is now stopped");
   });
 }
