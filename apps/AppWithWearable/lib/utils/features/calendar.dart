@@ -1,4 +1,5 @@
 import 'package:device_calendar/device_calendar.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
 
@@ -38,9 +39,9 @@ class CalendarUtil {
     return [];
   }
 
-  Future createEvent(String title, DateTime startsAt, int durationMinutes, {String? description}) async {
+  Future<bool> createEvent(String title, DateTime startsAt, int durationMinutes, {String? description}) async {
     bool hasAccess = await enableCalendarAccess();
-    if (!hasAccess) return;
+    if (!hasAccess) return false;
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
     final currentLocation = timeZoneDatabase.locations[currentTimeZone];
     String calendarId = SharedPreferencesUtil().calendarId;
@@ -54,9 +55,11 @@ class CalendarUtil {
     );
     final createResult = await _calendarPlugin!.createOrUpdateEvent(event);
     if (createResult?.isSuccess == true) {
-      print('Event created successfully ${createResult!.data}');
+      debugPrint('Event created successfully ${createResult!.data}');
+      return true;
     } else {
-      print('Failed to create event: ${createResult!.errors}');
+      debugPrint('Failed to create event: ${createResult!.errors}');
     }
+    return false;
   }
 }
