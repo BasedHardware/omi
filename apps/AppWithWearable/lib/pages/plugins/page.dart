@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -26,7 +27,7 @@ class _PluginsPageState extends State<PluginsPage> {
     for (var plugin in pluginsList) {
       plugin.isEnabled = pluginsId.contains(plugin.id);
     }
-    plugins = pluginsList;
+    plugins = pluginsList.sortedBy((plugin) => plugin.ratingCount * (plugin.ratingAvg ?? 0)).reversed.toList();
     setState(() => isLoading = false);
   }
 
@@ -91,9 +92,8 @@ class _PluginsPageState extends State<PluginsPage> {
               height: 32,
             ),
             Container(
-              width: double.maxFinite,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+              margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
               decoration: const BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -116,53 +116,24 @@ class _PluginsPageState extends State<PluginsPage> {
                   });
                 },
                 obscureText: false,
-                decoration: const InputDecoration(
-                  hintText: 'Find your plugin',
-                  hintStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  errorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  focusedErrorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
+                decoration: InputDecoration(
+                  hintText: 'Find your plugin...',
+                  hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  suffixIcon: searchQuery.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          icon: const Icon(
+                            Icons.cancel,
+                            color: Color(0xFFF7F4F4),
+                            size: 28.0,
+                          ),
+                          onPressed: () {
+                            searchQuery = '';
+                            setState(() {});
+                          },
+                        ),
                 ),
                 style: const TextStyle(
                   // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
