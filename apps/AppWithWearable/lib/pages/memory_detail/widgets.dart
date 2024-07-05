@@ -22,6 +22,7 @@ List<Widget> getSummaryWidgets(
   FocusNode focusOverviewField,
 ) {
   var structured = memory.structured.target!;
+  debugPrint('structured.events: ${structured.events}');
   String time = memory.startedAt == null
       ? dateTimeFormat('h:mm a', memory.createdAt)
       : '${dateTimeFormat('h:mm a', memory.startedAt)} to ${dateTimeFormat('h:mm a', memory.finishedAt)}';

@@ -151,10 +151,11 @@ class Structured {
       for (dynamic event in json['events']) {
         if (event.isEmpty) continue;
         structured.events.add(Event(
-          title: event['title'],
+          event['title'],
+          DateTime.parse(event['startsAt']),
+          event['duration'],
           description: event['description'] ?? '',
-          startsAt: DateTime.parse(event['startsAt']),
-          duration: event['duration'],
+          created: false,
         ));
       }
     }
@@ -181,6 +182,7 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'actionItems': actionItems.map((item) => item.description).toList(),
+      'events': events.map((event) => event.toJson()).toList(),
     };
   }
 }
@@ -224,11 +226,15 @@ class Event {
 
   final structured = ToOne<Structured>();
 
-  Event({
-    required this.title,
-    required this.startsAt,
-    required this.duration,
-    this.description = '',
-    this.created = false,
-  });
+  Event(this.title, this.startsAt, this.duration, {this.description = '', this.created = false, this.id = 0});
+
+  toJson() {
+    return {
+      'title': title,
+      'startsAt': startsAt.toIso8601String(),
+      'duration': duration,
+      'description': description,
+      'created': created,
+    };
+  }
 }

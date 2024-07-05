@@ -90,7 +90,6 @@ Future<Memory> memoryCreationBlock(
       }
     }
   }
-  debugPrint('Summary Result Memory: $summarizeResult');
   Structured structured = summarizeResult.structured;
 
   Memory memory = await finalizeMemoryRecord(
@@ -104,6 +103,9 @@ Future<Memory> memoryCreationBlock(
     structured.title.isEmpty,
   );
   debugPrint('Memory created: ${memory.id}');
+  debugPrint('Events: ${memory.structured.target!.events.length}');
+  debugPrint('Events source: ${MemoryProvider().getMemoryById(memory.id)?.structured.target?.events.length}');
+
   if (!retrievedFromCache) {
     if (structured.title.isEmpty && !failed) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
