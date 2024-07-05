@@ -114,8 +114,6 @@ List<Widget> getSummaryWidgets(
       );
     }),
     structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-    // TODO: UI when calendar not enabled so people activate it, but in the mean time only from settings,
-    // so less people try it and feedback is clearer
     structured.events.isNotEmpty
         ? Row(
             children: [
