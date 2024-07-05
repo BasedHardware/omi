@@ -170,7 +170,10 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0).copyWith(
+                            top: index == 0 ? 0 : 24.0,
+                            bottom: 0
+                          ),
                           child: Text(
                             date,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
