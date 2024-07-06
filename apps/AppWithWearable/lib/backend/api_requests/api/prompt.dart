@@ -24,7 +24,7 @@ Future<SummaryResult> summarizeMemory(
   bool ignoreCache = false,
   DateTime? conversationDate,
 }) async {
-  debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
+  debugPrint('summarizeMemory transcript length: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
     return SummaryResult(Structured('', ''), []);
   }

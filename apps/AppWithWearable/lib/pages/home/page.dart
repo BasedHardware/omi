@@ -399,20 +399,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             MixpanelManager().connectFriendClicked();
                             setState(() {});
                           },
-                          style: ElevatedButton.styleFrom(
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
                             backgroundColor: Colors.transparent,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(10),
+                              side: const BorderSide(color: Colors.white, width: 1),
                             ),
                           ),
-                          child: const Text(
-                            'Paired Device',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w400,
-                              fontSize: 18,
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
-                            ),
+                          child: Image.asset(
+                            'assets/images/logo_transparent.png',
+                            width: 25,
+                            height: 25,
                           ),
                         )
                       : const SizedBox(),
