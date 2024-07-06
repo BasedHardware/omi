@@ -5,12 +5,13 @@ import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
+Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
+  debugPrint('deepgramTranscribe');
   var startTime = DateTime.now();
   // TODO: why there seems to be no punctuation
   Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
@@ -30,7 +31,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile2(File file) async {
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint('transcribeAudioFile2 took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  debugPrint('Deepgram took: ${DateTime.now().difference(startTime).inSeconds} seconds');
   var data = jsonDecode(res.json);
   // debugPrint('Response body: ${res.json}');
   var result = data['results']['channels'][0]['alternatives'][0];

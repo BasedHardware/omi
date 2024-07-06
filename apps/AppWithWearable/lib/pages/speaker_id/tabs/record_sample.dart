@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/sample.dart';
+import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:tuple/tuple.dart';
 
 class RecordSampleTab extends StatefulWidget {

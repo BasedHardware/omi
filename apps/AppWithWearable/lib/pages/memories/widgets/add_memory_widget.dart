@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/utils/memories.dart';
+import 'package:friend_private/utils/memories/process.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class AddMemoryDialog extends StatefulWidget {
@@ -31,27 +30,29 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
     });
   }
 
-  void _onSaveButtonPressed() async {
-    String title = _titleController.text;
-    String description = _descriptionController.text;
-    List<String> actionItems = _actionItemControllers.map((controller) => controller.text).toList();
-    // TODO: create memory
-    Memory created = await finalizeMemoryRecord(
-        '',
-        MemoryStructured(
-          actionItems: actionItems,
-          pluginsResponse: [],
-          title: title,
-          overview: description,
-        ),
-        null,
-        null,
-        null);
-    widget.onMemoryAdded(created);
-    MixpanelManager().manualMemoryCreated(created);
-    debugPrint('Memory created: ${created.id}');
-    Navigator.of(context).pop();
-  }
+  // void _onSaveButtonPressed() async {
+  //   String title = _titleController.text;
+  //   String description = _descriptionController.text;
+  //   List<String> actionItems = _actionItemControllers.map((controller) => controller.text).toList();
+  //   // TODO: create memory
+  //   Memory created = await finalizeMemoryRecord(
+  //     '',
+  //     MemoryStructured(
+  //       actionItems: actionItems,
+  //       pluginsResponse: [],
+  //       title: title,
+  //       overview: description,
+  //     ),
+  //     null,
+  //     null,
+  //     null,
+  //     false,
+  //   );
+  //   widget.onMemoryAdded(created);
+  //   MixpanelManager().manualMemoryCreated(created);
+  //   debugPrint('Memory created: ${created.id}');
+  //   Navigator.of(context).pop();
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +235,8 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton(
-                    onPressed: _onSaveButtonPressed,
+                    onPressed: (){},
+                    // onPressed: _onSaveButtonPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
                       foregroundColor: const Color.fromARGB(255, 0, 0, 0),
