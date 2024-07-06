@@ -6,19 +6,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/utils/backups.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/memories.dart';
-import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:friend_private/utils/memories/process.dart';
+import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
@@ -88,45 +90,56 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
 
-    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
-    StreamSubscription? stream =
-        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
+    audioStorage = WavBytesUtil(codec: codec);
+    audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
       toProcessBytes2.storeFramePacket(value);
-      if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
+      // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
+      audioStorage!.storeFramePacket(value);
 
-      // if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
-
-      if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
+      // if (toProcessBytes2.frames.length % 100 == 0) {
+      //   debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
+      // }
+      // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
+      if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+        // vad.containsVoice(data.item1);
         try {
-          var segmentsEmpty = segments.isEmpty;
+          // var segmentsEmpty = segments.isEmpty;
           await _processFileToTranscript(data.item1);
-          if (segmentsEmpty && segments.isNotEmpty) {
-            wavBytesUtil2.insertAudioBytes(data.item2);
-          }
+          // TODO: restore optimization for audio files
+          // if (segmentsEmpty && segments.isNotEmpty) {
+          // first 30 audio seconds get added here
+          // wavBytesUtil2.insertAudioBytes(data.item2);
+          // }
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
-          CrashReporting.reportHandledCrash(e, stacktrace,
-              level: NonFatalExceptionLevel.warning,
-              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
+          // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
+          CrashReporting.reportHandledCrash(
+            e,
+            stacktrace,
+            level: NonFatalExceptionLevel.warning,
+            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+          );
           debugPrint('Error: e.toString() ${e.toString()}');
           toProcessBytes2.insertAudioBytes(data.item2);
         }
       }
     });
-
-    audioBytesStream = stream;
-    audioStorage = wavBytesUtil2;
   }
 
   _processFileToTranscript(File f) async {
-    List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
-    debugPrint('newSegments: $newSegments');
+    List<TranscriptSegment> newSegments;
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
+      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+    } else {
+      newSegments = await deepgramTranscribe(f);
+    }
+    var initialSegmentsLength = segments.length;
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-    if (newSegments.isNotEmpty) {
+    if (segments.length > initialSegmentsLength) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -139,6 +152,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+    debugPrint('resetState: $restartBytesProcessing');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
