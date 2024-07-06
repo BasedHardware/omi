@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -9,6 +10,9 @@ class TranscriptSegment {
   String? speaker;
   late int speakerId;
   bool isUser;
+
+  // @Property(type: PropertyType.date)
+  // DateTime? createdAt;
   double start;
   double end;
 
@@ -18,8 +22,10 @@ class TranscriptSegment {
     required this.isUser,
     required this.start,
     required this.end,
+    // this.createdAt,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+    // createdAt ??= DateTime.now(); // TODO: -30 seconds + start time ? max(now, (now-30)
   }
 
   @override
@@ -35,6 +41,7 @@ class TranscriptSegment {
       isUser: (json['is_user'] ?? false) as bool,
       start: json['start'] as double,
       end: json['end'] as double,
+      // createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
     );
   }
 
@@ -45,6 +52,7 @@ class TranscriptSegment {
       'speaker': speaker,
       'speaker_id': speakerId,
       'is_user': isUser,
+      // 'created_at': createdAt?.toIso8601String(),
       'start': start,
       'end': end,
     };
@@ -72,23 +80,31 @@ class TranscriptSegment {
     segments.removeWhere((element) => element.text.isEmpty);
   }
 
-  static combineSegments(List<TranscriptSegment> segments, List<TranscriptSegment> data) {
-    if (data.isEmpty) return;
+  static combineSegments(List<TranscriptSegment> segments, List<TranscriptSegment> newSegments) {
+    // TODO: combine keeping the time at which each segment was created?
+    // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
+    // what if they are 1 minute or more
+    if (newSegments.isEmpty) return;
+
+    // var lastSegmentSecondsElapsed = segments.isNotEmpty ? DateTime.now().difference(segments.last.createdAt!) : 0;
+    // debugPrint('lastSegmentSecondsElapsed: $lastSegmentSecondsElapsed');
+
     var joinedSimilarSegments = <TranscriptSegment>[];
-    for (var value in data) {
+    for (var newSegment in newSegments) {
       if (joinedSimilarSegments.isNotEmpty &&
-          (joinedSimilarSegments.last.speaker == value.speaker ||
-              (joinedSimilarSegments.last.isUser && value.isUser))) {
-        joinedSimilarSegments.last.text += ' ${value.text}';
+          (joinedSimilarSegments.last.speaker == newSegment.speaker ||
+              (joinedSimilarSegments.last.isUser && newSegment.isUser))) {
+        joinedSimilarSegments.last.text += ' ${newSegment.text}';
+        joinedSimilarSegments.last.end = newSegment.end;
       } else {
-        joinedSimilarSegments.add(value);
+        joinedSimilarSegments.add(newSegment);
       }
     }
 
     if (segments.isNotEmpty &&
         (segments.last.speaker == joinedSimilarSegments[0].speaker ||
             (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
-        segments.last.text.split(' ').length < 200) {
+        segments.last.text.split(' ').length < 200) { // TODO: better split transcript segments
       // for better UI included last line segments.last.text.split(' ').length < 200
       // so even if speaker 0 then speaker 0 again (same thing), it will look better
       segments.last.text += ' ${joinedSimilarSegments[0].text}';

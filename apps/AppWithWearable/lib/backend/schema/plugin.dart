@@ -61,6 +61,8 @@ class Plugin {
     required this.ratingCount,
   });
 
+  String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
+
   factory Plugin.fromJson(Map<String, dynamic> json) {
     return Plugin(
       id: json['id'],
