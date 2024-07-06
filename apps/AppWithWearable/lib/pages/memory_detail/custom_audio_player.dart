@@ -82,15 +82,15 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
 /// This [class] is used to play the audio file with waveform
 /// The constructor requires two values:
 /// 1. [audioFilePath] - The path of the audio file
-/// 2. [isNetworkFile] - [Boolean] value to check if the [AudioFile] is from [Network]
+/// 2. [type] - The type of the file [NETWORK], [LOCAL], [ASSET]
 class CustomAudioPlayer extends StatefulWidget {
-  /// Constructor for [CustomAudioPlayer] for initializing the [audioFilePath] and [isNetworkFile]
+  /// Constructor for [CustomAudioPlayer] for initializing the [audioFilePath] and [FileType]
   const CustomAudioPlayer({super.key, required this.audioFilePath, this.type = FileType.ASSET});
 
-  /// The yrl/path of the audio file
+  /// The url/path of the audio file
   final String audioFilePath;
 
-  /// [Boolean] value to check if the [AudioFile] is from [Network] or local [File]
+  /// [Boolean] value to check if the [AudioFile] is from [Network] or [Asset] or [File]
   /// Default value is [ASSET]
   final FileType type;
 
