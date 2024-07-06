@@ -15,11 +15,10 @@ String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
   return DateFormat(format, locale).format(dateTime);
 }
 
-routeToPage(BuildContext context, Widget page, {bool replace = false}) {
+Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   var route = Platform.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
   if (replace) {
-    Navigator.of(context).pushReplacement(route);
-    return;
+    return Navigator.of(context).pushReplacement(route);
   }
-  Navigator.of(context).push(route);
+  return Navigator.of(context).push(route);
 }

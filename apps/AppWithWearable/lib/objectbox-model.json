@@ -248,10 +248,57 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:265133176252396324",
+      "lastPropertyId": "7:7098116187702997412",
+      "name": "Event",
+      "properties": [
+        {
+          "id": "1:1288962548328890994",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4790234918480393406",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:2151476491244407949",
+          "name": "startsAt",
+          "type": 10
+        },
+        {
+          "id": "4:7841939327187751919",
+          "name": "duration",
+          "type": 6
+        },
+        {
+          "id": "5:6399120598852890710",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "6:8016636007871233432",
+          "name": "created",
+          "type": 1
+        },
+        {
+          "id": "7:7098116187702997412",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "8:5225160858485949527",
+          "relationTarget": "Structured"
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:4187059965573492189",
-  "lastIndexId": "7:296619579137476887",
+  "lastEntityId": "7:265133176252396324",
+  "lastIndexId": "8:5225160858485949527",
   "lastRelationId": "2:4703245221378113920",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
