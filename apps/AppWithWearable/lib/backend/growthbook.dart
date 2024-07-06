@@ -40,6 +40,7 @@ class GrowthbookUtil {
   }
 
   bool hasTranscriptServerFeatureOn() {
+    // return true;
     if (Env.growthbookApiKey == null) return false;
     if (!SharedPreferencesUtil().useTranscriptServer) return false;
 
