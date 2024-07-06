@@ -32,7 +32,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
-      isUser: json['is_user'] as bool,
+      isUser: (json['is_user'] ?? false) as bool,
       start: json['start'] as double,
       end: json['end'] as double,
     );

@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.12+35
+version: 1.0.13+39
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -57,13 +57,13 @@ dependencies:
   instabug_http_client: ^2.4.0
   #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-  #  flutter_silero_vad:
-  #    git:
-  #      url: https://github.com/char5742/flutter_silero_vad.git\
-  fonnx:
+  flutter_silero_vad:
     git:
-      url: https://github.com/Telosnex/fonnx.git
-      ref: main
+      url: https://github.com/char5742/flutter_silero_vad.git
+#  fonnx:
+#    git:
+#      url: https://github.com/Telosnex/fonnx.git
+#      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
@@ -94,6 +94,10 @@ dependencies:
   onesignal_flutter: ^5.1.2
   opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
+  growthbook_sdk_flutter: ^3.9.2
+  flutter_rating_bar: ^4.0.1
+  device_calendar: ^4.3.2
+  flutter_timezone: ^2.0.0
 
 dependency_overrides:
   http: ^1.2.1

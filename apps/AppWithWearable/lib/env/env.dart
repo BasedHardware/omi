@@ -26,6 +26,8 @@ abstract class Env {
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   static String? get apiBaseUrl => _instance.apiBaseUrl;
+
+  static String? get growthbookApiKey => _instance.growthbookApiKey;
 }
 
 abstract class EnvFields {
@@ -48,4 +50,6 @@ abstract class EnvFields {
   String? get mixpanelProjectToken;
 
   String? get apiBaseUrl;
+
+  String? get growthbookApiKey;
 }

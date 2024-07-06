@@ -7,10 +7,6 @@ import 'package:friend_private/backend/notify_on_kill.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memories/page.dart';
-import 'package:path/path.dart';
-
-import '../pages/capture/page.dart';
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -98,6 +94,8 @@ void createNotification({
     isMorningNotification: isMorningNotification,
     isDailySummaryNotification: isDailySummaryNotification,
   );
+  if (interval == null && (isMorningNotification || isDailySummaryNotification)) return;
+
   AwesomeNotifications().createNotification(
     content: NotificationContent(
       id: notificationId,

@@ -119,6 +119,9 @@ class Structured {
   @Backlink('structured')
   final actionItems = ToMany<ActionItem>();
 
+  @Backlink('structured')
+  final events = ToMany<Event>();
+
   Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
   getEmoji() {
@@ -141,6 +144,19 @@ class Structured {
       for (String item in json['actionItems']) {
         if (item.isEmpty) continue;
         structured.actionItems.add(ActionItem(item));
+      }
+    }
+
+    if (json['events'] != null) {
+      for (dynamic event in json['events']) {
+        if (event.isEmpty) continue;
+        structured.events.add(Event(
+          event['title'],
+          DateTime.parse(event['startsAt']),
+          event['duration'],
+          description: event['description'] ?? '',
+          created: false,
+        ));
       }
     }
     return structured;
@@ -166,6 +182,7 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'actionItems': actionItems.map((item) => item.description).toList(),
+      'events': events.map((event) => event.toJson()).toList(),
     };
   }
 }
@@ -193,4 +210,31 @@ class PluginResponse {
   final memory = ToOne<Memory>();
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
+}
+
+@Entity()
+class Event {
+  @Id()
+  int id = 0;
+
+  String title;
+  DateTime startsAt;
+  int duration;
+
+  String description;
+  bool created = false;
+
+  final structured = ToOne<Structured>();
+
+  Event(this.title, this.startsAt, this.duration, {this.description = '', this.created = false, this.id = 0});
+
+  toJson() {
+    return {
+      'title': title,
+      'startsAt': startsAt.toIso8601String(),
+      'duration': duration,
+      'description': description,
+      'created': created,
+    };
+  }
 }

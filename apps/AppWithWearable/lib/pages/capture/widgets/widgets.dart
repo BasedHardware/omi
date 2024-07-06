@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -153,9 +154,8 @@ _getNoFriendConnectedYet(BuildContext context) {
 }
 
 speechProfileWidget(BuildContext context) {
-  return SharedPreferencesUtil().hasSpeakerProfile
-      ? const SizedBox(height: 16)
-      : Stack(
+  return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
+      ? Stack(
           children: [
             GestureDetector(
               onTap: () {
@@ -199,7 +199,8 @@ speechProfileWidget(BuildContext context) {
               ),
             ),
           ],
-        );
+        )
+      : const SizedBox(height: 16);
 }
 
 getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDeviceStruct? btDevice) {
