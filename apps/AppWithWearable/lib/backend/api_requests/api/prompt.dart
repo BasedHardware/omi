@@ -5,21 +5,28 @@ import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/utils/string_utils.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-Future<MemoryStructured> generateTitleAndSummaryForMemory(
+class SummaryResult {
+  final Structured structured;
+  final List<Tuple2<Plugin, String>> pluginsResponse;
+
+  SummaryResult(this.structured, this.pluginsResponse);
+}
+
+Future<SummaryResult> summarizeMemory(
   String transcript,
   List<Memory> previousMemories, {
   bool forceProcess = false,
   bool ignoreCache = false,
+  DateTime? conversationDate,
 }) async {
   debugPrint('generateTitleAndSummaryForMemory: ${transcript.length}');
   if (transcript.isEmpty || transcript.split(' ').length < 7) {
-    return MemoryStructured(actionItems: [], pluginsResponse: [], category: '');
+    return SummaryResult(Structured('', ''), []);
   }
   if (transcript.split(' ').length > 100) {
     // TODO: try lower count?
@@ -42,6 +49,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     For the overview, use a brief overview of the conversation.
     For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.
     For the category, classify the conversation into one of the available categories.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
         
     Here is the transcript ```${transcript.trim()}```.
     
@@ -52,7 +60,7 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
     
     Here is the output schema:
     ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "List of commitments, scheduled events, specific tasks or actionable steps.", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "philosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief overview of the conversation", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}, "events": {"title": "Events", "description": "A list of events extracted from the conversation, that the user must have on his calendar.", "default": [], "type": "array", "items": {"\$ref": "#/definitions/CalendarEvent"}}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "CalendarEvent": {"title": "CalendarEvent", "type": "object", "properties": {"title": {"title": "Title", "description": "The title of the event", "type": "string"}, "description": {"title": "Description", "description": "A brief description of the event", "default": "", "type": "string"}, "startsAt": {"title": "Starts At", "description": "The start date and time of the event", "type": "string", "format": "date-time"}, "duration": {"title": "Duration", "description": "The duration of the event in minutes", "default": 30, "type": "integer"}}, "required": ["title", "startsAt"]}}}
     ```
     '''
           .replaceAll('     ', '')
@@ -60,10 +68,10 @@ Future<MemoryStructured> generateTitleAndSummaryForMemory(
           .trim();
   debugPrint(prompt);
   var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
-  var structured = MemoryStructured.fromJson(jsonDecode(structuredResponse));
-  if (structured.title.isEmpty) return structured;
-  structured.pluginsResponse = await executePlugins(transcript);
-  return structured;
+  var structured = Structured.fromJson(jsonDecode(structuredResponse));
+  if (structured.title.isEmpty) return SummaryResult(structured, []);
+  var pluginsResponse = await executePlugins(transcript);
+  return SummaryResult(structured, pluginsResponse);
 }
 
 Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {

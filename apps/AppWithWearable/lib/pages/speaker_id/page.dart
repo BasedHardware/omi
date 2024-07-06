@@ -7,13 +7,14 @@ import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/sample.dart';
+import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/widgets/dialog.dart';
 
 class SpeakerIdPage extends StatefulWidget {
   final bool onbording;
@@ -97,30 +98,15 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                     if (_currentIdx > 0 && _currentIdx < (_controller?.length ?? 0) - 1) {
                       showDialog(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Are you sure?'),
-                          content: const Text('You will lose all the samples you have recorded so far.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.pop(context);
-                              },
-                              child: const Text(
-                                'Yes',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ],
+                        builder: (context) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          },
+                          'Are you sure?',
+                          'You will lose all the samples you have recorded so far.',
                         ),
                       );
                       return;

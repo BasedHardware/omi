@@ -110,5 +110,13 @@
     "description": "Summarizes conversations into key points",
     "prompt": "You will be given a conversation transcript. Your task is to summarize the conversation into key points. Identify the main topics discussed and provide a concise summary of the conversation. Ensure that the summary captures the essence of the conversation and highlights the most important points. If the conversation is extremely long, focus on the most relevant parts.",
     "image": "/assets/plugin_images/conversation-summarizer.png"
+  },
+  {
+    "id": "topic-identifier",
+    "name": "Topic Identifier",
+    "author": "Simon Baars",
+    "description": "Identifies the different topics in a conversation and summarizes them",
+    "prompt": "You will be given a conversation transcript. Your task is to identify the different topics discussed in the conversation and summarize them. Provide a concise summary of each topic and highlight the key points discussed.",
+    "image": "/assets/plugin_images/topic-identifier.png"
   }
 ]

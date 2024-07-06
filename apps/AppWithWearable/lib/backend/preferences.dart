@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -40,6 +40,10 @@ class SharedPreferencesUtil {
   String get deepgramApiKey => getString('deepgramApiKey') ?? '';
 
   set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
+
+  bool get useTranscriptServer => getBool('useTranscriptServer') ?? true;
+
+  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -107,8 +111,9 @@ class SharedPreferencesUtil {
   //   saveStringList('messages', messages);
   // }
 
-  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-  bool get hasSpeakerProfile => true;
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+
+  // bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
@@ -229,6 +234,18 @@ class SharedPreferencesUtil {
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
+
+  bool get calendarEnabled => getBool('calendarEnabled') ?? false;
+
+  set calendarId(String value) => saveString('calendarId', value);
+
+  String get calendarId => getString('calendarId') ?? '';
+
+  set calendarType(String value) => saveString('calendarType', value); // auto, manual
+
+  String get calendarType => getString('calendarType') ?? 'auto';
 }
 
 String getOpenAIApiKeyForUsage() =>

@@ -5,7 +5,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/utils/temp.dart';
+import 'package:friend_private/utils/other/temp.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
