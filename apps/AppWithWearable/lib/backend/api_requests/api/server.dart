@@ -3,21 +3,21 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/sample.dart';
-import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:path/path.dart';
 
-Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async {
+Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
   final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse(
-        '${Env.apiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
+    Uri.parse('${Env.apiBaseUrl}transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=$uid'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -25,7 +25,7 @@ Future<List<TranscriptSegment>> transcribeAudioFile(File file, String uid) async
     var startTime = DateTime.now();
     var streamedResponse = await client.send(request);
     var response = await http.Response.fromStream(streamedResponse);
-    debugPrint('TranscribeAudioFile took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+    debugPrint('Transcript server took: ${DateTime.now().difference(startTime).inSeconds} seconds');
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('Response body: ${response.body}');
@@ -119,4 +119,29 @@ Future<bool> deleteBackupApi() async {
   if (response == null) return false;
   debugPrint('deleteBackup: ${response.body}');
   return response.statusCode == 200;
+}
+
+Future<List<Plugin>> retrievePlugins() async {
+  var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
+  if (response?.statusCode == 200) {
+    try {
+      return Plugin.fromJsonList(jsonDecode(response!.body));
+    } catch (e, stackTrace) {
+      debugPrint(e.toString());
+      CrashReporting.reportHandledCrash(e, stackTrace);
+      return [];
+    }
+  }
+  return [];
+}
+
+Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}plugins/review?uid=${SharedPreferencesUtil().uid}&plugin_id=$pluginId',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'score': score, review: review}),
+  );
+  debugPrint('reviewPlugin: ${response?.body}');
 }

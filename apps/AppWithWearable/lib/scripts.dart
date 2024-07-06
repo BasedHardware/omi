@@ -1,14 +1,13 @@
-import 'dart:convert';
-
-import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/llm.dart';
-import 'package:friend_private/backend/api_requests/api/pinecone.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-
-import 'backend/database/memory.dart';
-
+// import 'dart:convert';
+//
+// import 'package:flutter/material.dart';
+// import 'package:friend_private/backend/api_requests/api/llm.dart';
+// import 'package:friend_private/backend/api_requests/api/pinecone.dart';
+// import 'package:friend_private/backend/database/memory_provider.dart';
+// import 'package:friend_private/backend/preferences.dart';
+//
+// import 'backend/database/memory.dart';
+//
 // migrateMemoriesCategoriesAndEmojis() async {
 //   if (SharedPreferencesUtil().scriptCategoriesAndEmojisExecuted) return;
 //   debugPrint('migrateMemoriesCategoriesAndEmojis');

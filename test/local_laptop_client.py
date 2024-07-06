@@ -17,7 +17,7 @@ CODEC = "pcm"  # "pcm" or "mulaw"
 SAMPLE_RATE = 8000  # Sample rate for the audio
 SAMPLE_WIDTH = 2  # 16-bit audio
 CHANNELS = 1  # Mono audio
-CAPTURE_TIME = 10  # Time to capture audio in seconds
+CAPTURE_TIME = 30  # Time to capture audio in seconds
 
 def ulaw2linear(ulaw_byte):
     """Convert a µ-law byte to a 16-bit linear PCM value."""
