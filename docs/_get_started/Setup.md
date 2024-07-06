@@ -6,7 +6,7 @@ nav_order: 1
 
 # Getting Started
 
-Follow these steps to get started with your Friend.
+Follow these steps to get started with your Friend. Don't want to bother with code? Use our official version on [Apple/Google](https://coda.io/@kodjima33/get-started-with-friend) store 
 
 ### Install the app
 
