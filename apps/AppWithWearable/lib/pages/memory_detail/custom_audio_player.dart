@@ -17,6 +17,12 @@ enum PlayerLoadingState {
   error,
 }
 
+enum FileType {
+  NETWORK,
+  LOCAL,
+  ASSET,
+}
+
 class AudioPlayerTestPage extends StatefulWidget {
   const AudioPlayerTestPage({super.key});
 
@@ -31,6 +37,7 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
     'assets/audios/PinkPanther30.wav',
     'assets/audios/Player.mp3',
     'https://file-examples.com/storage/fed61f387f6686cd19d49b1/2017/11/file_example_MP3_700KB.mp3',
+    'result_waveform2.wav'
   ];
   @override
   Widget build(BuildContext context) {
@@ -54,7 +61,11 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
                 MaterialPageRoute(
                   builder: (ctx) => CustomAudioPlayer(
                     audioFilePath: files[index],
-                    isNetworkFile: files[index].contains('http'),
+                    type: files[index].contains('http')
+                        ? FileType.NETWORK
+                        : files[index].contains('assets')
+                            ? FileType.ASSET
+                            : FileType.LOCAL,
                   ),
                 ),
               );
@@ -67,15 +78,21 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
 }
 
 /// Custom [class] for [AudioPlayer]
+///
+/// This [class] is used to play the audio file with waveform
+/// The constructor requires two values:
+/// 1. [audioFilePath] - The path of the audio file
+/// 2. [isNetworkFile] - [Boolean] value to check if the [AudioFile] is from [Network]
 class CustomAudioPlayer extends StatefulWidget {
   /// Constructor for [CustomAudioPlayer] for initializing the [audioFilePath] and [isNetworkFile]
-  const CustomAudioPlayer({super.key, required this.audioFilePath, this.isNetworkFile = false});
+  const CustomAudioPlayer({super.key, required this.audioFilePath, this.type = FileType.ASSET});
 
   /// The yrl/path of the audio file
   final String audioFilePath;
 
-  /// Boolean value to check if the file is from network
-  final bool isNetworkFile;
+  /// [Boolean] value to check if the [AudioFile] is from [Network] or local [File]
+  /// Default value is [ASSET]
+  final FileType type;
 
   @override
   State<CustomAudioPlayer> createState() => _CustomAudioPlayerState();
@@ -99,15 +116,24 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
 
   Future<void> _init() async {
     debugPrint('Audio File Path: ${widget.audioFilePath}');
+    debugPrint('FileType: ${widget.type}');
+    debugPrint('FilePath: ${p.join((await getTemporaryDirectory()).path, widget.audioFilePath)}');
+    debugPrint(
+        'Temp Files: ${Directory((await getTemporaryDirectory()).path).listSync().where((e) => e.path.contains('result')).last}');
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     _player.playbackEventStream.listen((event) {}, onError: (Object e, StackTrace stackTrace) {
       debugPrint('A stream error occurred: $e');
     });
+
     try {
-      await _player.setAudioSource(widget.isNetworkFile
-          ? AudioSource.uri(Uri.parse(widget.audioFilePath))
-          : AudioSource.asset(widget.audioFilePath));
+      await _player.setAudioSource(
+        widget.type == FileType.NETWORK
+            ? AudioSource.uri(Uri.parse(widget.audioFilePath))
+            : widget.type == FileType.LOCAL
+                ? AudioSource.file(p.join((await getTemporaryDirectory()).path, widget.audioFilePath))
+                : AudioSource.asset(widget.audioFilePath),
+      );
     } on PlayerException catch (e) {
       debugPrint('PlayerException: ${e}');
       setState(() {
@@ -131,11 +157,18 @@ class _CustomAudioPlayerState extends State<CustomAudioPlayer> with WidgetsBindi
     ///read audio file from assets
     final audioFile = File(p.join((await getTemporaryDirectory()).path, widget.audioFilePath.split('/').last));
     try {
-      Future<ByteData> tempFile = widget.isNetworkFile
+      Future<ByteData> tempFile = widget.type == FileType.NETWORK
           ? NetworkAssetBundle(Uri.parse(widget.audioFilePath)).load(widget.audioFilePath)
-          : rootBundle.load(widget.audioFilePath);
+          : widget.type == FileType.LOCAL
+              ? File(p.join((await getTemporaryDirectory()).path, widget.audioFilePath))
+                  .readAsBytes()
+                  .then((value) => ByteData.view(value.buffer))
+              : rootBundle.load(widget.audioFilePath);
       await audioFile.writeAsBytes((await tempFile).buffer.asUint8List());
-      final waveFile = File(p.join((await getTemporaryDirectory()).path, 'waveform.wav'));
+      final waveFile = File(p.join((await getTemporaryDirectory()).path, 'result_waveform.wav'));
+      final wave2File = File(p.join((await getTemporaryDirectory()).path, 'result_waveform2.wav'));
+      final resultFile = await wave2File.writeAsBytes((await tempFile).buffer.asUint8List());
+      debugPrint('Result File: ${resultFile.path}');
       JustWaveform.extract(audioInFile: audioFile, waveOutFile: waveFile)
           .listen(progressStream.add, onError: progressStream.addError);
     } catch (e) {
