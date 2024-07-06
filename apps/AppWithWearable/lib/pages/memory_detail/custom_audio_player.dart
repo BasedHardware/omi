@@ -25,7 +25,13 @@ class AudioPlayerTestPage extends StatefulWidget {
 }
 
 class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
-  final files = ['BabyElephantWalk60.wav', 'ImperialMarch60.wav', 'PinkPanther30.wav', 'Player.mp3'];
+  final files = [
+    'assets/audios/BabyElephantWalk60.wav',
+    'assets/audios/ImperialMarch60.wav',
+    'assets/audios/PinkPanther30.wav',
+    'assets/audios/Player.mp3',
+    'https://file-examples.com/storage/fed61f387f6686cd19d49b1/2017/11/file_example_MP3_700KB.mp3',
+  ];
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,7 +53,8 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (ctx) => CustomAudioPlayer(
-                    audioFilePath: 'assets/audios/${files[index]}',
+                    audioFilePath: files[index],
+                    isNetworkFile: files[index].contains('http'),
                   ),
                 ),
               );
@@ -59,9 +66,15 @@ class _AudioPlayerTestPageState extends State<AudioPlayerTestPage> {
   }
 }
 
+/// Custom [class] for [AudioPlayer]
 class CustomAudioPlayer extends StatefulWidget {
+  /// Constructor for [CustomAudioPlayer] for initializing the [audioFilePath] and [isNetworkFile]
   const CustomAudioPlayer({super.key, required this.audioFilePath, this.isNetworkFile = false});
+
+  /// The yrl/path of the audio file
   final String audioFilePath;
+
+  /// Boolean value to check if the file is from network
   final bool isNetworkFile;
 
   @override
@@ -452,8 +465,8 @@ class _PlaybackSpeedBottomSheetState extends State<PlaybackSpeedBottomSheet> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               Container(
-                margin: EdgeInsets.only(top: 16.0),
-                padding: EdgeInsets.only(top: 16.0, bottom: 24),
+                margin: const EdgeInsets.only(top: 16.0),
+                padding: const EdgeInsets.only(top: 16.0, bottom: 24),
                 decoration: BoxDecoration(
                   color: Colors.black12,
                   borderRadius: BorderRadius.circular(16),
