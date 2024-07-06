@@ -47,9 +47,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               children: [
                 DeviceAnimationWidget(animatedBackground: _controller!.index != 0),
                 SizedBox(
-                  height: max(MediaQuery.of(context).size.height - 400 - 64, 300),
+                  height: max(MediaQuery.of(context).size.height - 400 - 64, 305),
                   child: Padding(
-                    padding: const EdgeInsets.only(bottom: 64),
+                    padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                     child: TabBarView(
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
