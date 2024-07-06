@@ -37,7 +37,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 400 * widget.sizeMultiplier,
+      height: MediaQuery.sizeOf(context).height <= 700 ? 280 * widget.sizeMultiplier : 400 * widget.sizeMultiplier,
       child: Center(
         child: Stack(
           alignment: Alignment.center,
@@ -51,8 +51,12 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                     builder: (context, child) {
                       return Image.asset(
                         "assets/images/blob.png",
-                        height: 390 * widget.sizeMultiplier * _animation.value,
-                        width: 390 * widget.sizeMultiplier * _animation.value,
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
                       );
                     },
                   )
@@ -60,8 +64,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             // Image.asset("assets/images/blob.png"),
             Image.asset(
               "assets/images/herologo.png",
-              height: 160 * widget.sizeMultiplier,
-              width: 160 * widget.sizeMultiplier,
+              height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
+              width: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
             )
           ],
         ),
