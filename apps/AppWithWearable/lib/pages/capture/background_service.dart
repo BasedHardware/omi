@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
