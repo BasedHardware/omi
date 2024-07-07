@@ -21,7 +21,7 @@ Future streamApiResponse(
     'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
   };
 
-  String body = qaStreamedBody(context, await MessageProvider().retrieveMostRecentMessages(limit: 5));
+  String body = qaStreamedBody(context, await MessageProvider().retrieveMostRecentMessages(limit: 10));
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
@@ -118,7 +118,7 @@ String qaStreamedBody(String context, List<Message> chatHistory) {
     If the message doesn't require context, it will be empty, so answer the question casually.
     
     Conversation History:
-    ${chatHistory.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}
+    ${chatHistory.reversed.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}
 
     Context:
     ``` 
