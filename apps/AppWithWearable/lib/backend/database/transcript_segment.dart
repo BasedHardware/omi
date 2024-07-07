@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -80,7 +79,11 @@ class TranscriptSegment {
     segments.removeWhere((element) => element.text.isEmpty);
   }
 
-  static combineSegments(List<TranscriptSegment> segments, List<TranscriptSegment> newSegments) {
+  static combineSegments(
+    List<TranscriptSegment> segments,
+    List<TranscriptSegment> newSegments, {
+    int elapsedSeconds = 0,
+  }) {
     // TODO: combine keeping the time at which each segment was created?
     // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
     // what if they are 1 minute or more
@@ -91,6 +94,9 @@ class TranscriptSegment {
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
+      newSegment.start += elapsedSeconds;
+      newSegment.end += elapsedSeconds;
+
       if (joinedSimilarSegments.isNotEmpty &&
           (joinedSimilarSegments.last.speaker == newSegment.speaker ||
               (joinedSimilarSegments.last.isUser && newSegment.isUser))) {
@@ -100,14 +106,16 @@ class TranscriptSegment {
         joinedSimilarSegments.add(newSegment);
       }
     }
+    // segments is not empty
+    // prev segment speaker is same as first new segment speaker || prev segment is user and first new segment is user
+    // and the difference between the end of the last segment and the start of the first new segment is less than 30 seconds
 
     if (segments.isNotEmpty &&
         (segments.last.speaker == joinedSimilarSegments[0].speaker ||
             (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
-        segments.last.text.split(' ').length < 200) { // TODO: better split transcript segments
-      // for better UI included last line segments.last.text.split(' ').length < 200
-      // so even if speaker 0 then speaker 0 again (same thing), it will look better
+        (joinedSimilarSegments[0].start - segments.last.end < 30)) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
+      segments.last.end = joinedSimilarSegments[0].end;
       joinedSimilarSegments.removeAt(0);
     }
 
