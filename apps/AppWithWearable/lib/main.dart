@@ -6,6 +6,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/dev_env.dart';
+import 'package:friend_private/env/env.dart';
+import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
@@ -16,10 +20,13 @@ import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
-import 'backend/preferences.dart';
-import 'env/env.dart';
-
 void main() async {
+  if (F.env == Environment.prod) {
+    Env.init(ProdEnv());
+  } else {
+    Env.init(DevEnv());
+  }
+
   WidgetsFlutterBinding.ensureInitialized();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
@@ -128,5 +135,3 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
-
-// Do not run me directly, instead use main_dev.dart
