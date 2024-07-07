@@ -112,7 +112,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           await _processFileToTranscript(data.item1);
           if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
           if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
-          // uploadFile(data.item1);
+          // uploadFile(data.item1, prefixTimestamp: true);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
           CrashReporting.reportHandledCrash(
