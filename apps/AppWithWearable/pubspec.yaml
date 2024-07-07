@@ -125,6 +125,7 @@ dev_dependencies:
   build_runner: ^2.4.11
   objectbox_generator: any
   flutter_flavorizr: ^2.2.3
+  pdf: ^3.11.0
 
 flutter_launcher_icons:
   android: true
