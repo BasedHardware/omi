@@ -82,6 +82,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // TODO: include created at and finished at for this cached transcript
   }
 
+  int elapsedSeconds = 0;
+
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
@@ -107,13 +109,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
         // vad.containsVoice(data.item1);
         try {
-          // var segmentsEmpty = segments.isEmpty;
           await _processFileToTranscript(data.item1);
-          // TODO: restore optimization for audio files
-          // if (segmentsEmpty && segments.isNotEmpty) {
-          // first 30 audio seconds get added here
-          // wavBytesUtil2.insertAudioBytes(data.item2);
-          // }
+          if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
+          if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
           // uploadFile(data.item1);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
@@ -137,7 +135,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     } else {
       newSegments = await deepgramTranscribe(f);
     }
-    TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
+    debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
+    TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
@@ -165,9 +164,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
-      // USE VAD HERE
-      // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
-      file = (await audioStorage!.createWavFile()).item1;
+      var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
+      file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
       uploadFile(file);
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
@@ -207,6 +205,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
+    elapsedSeconds = 0;
   }
 
   setHasTranscripts(bool hasTranscripts) {
