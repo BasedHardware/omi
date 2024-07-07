@@ -39,7 +39,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     var segments = widget.memory.transcriptSegments;
     for (var i = 0; i < segments.length; i++) {
       for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end < segments[j].start) {
+        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
           canDisplaySeconds = false;
           break;
         }
