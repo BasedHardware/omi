@@ -23,6 +23,7 @@ enum FileType {
   ASSET,
 }
 
+///An example widget, it is not part of the CustomAudipPlayer UI.
 class AudioPlayerTestPage extends StatefulWidget {
   const AudioPlayerTestPage({super.key});
 
