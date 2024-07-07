@@ -23,13 +23,16 @@ Future<void> authenticateGCP({String? base64}) async {
   debugPrint('Authenticated');
 }
 
-Future<String?> uploadFile(File file) async {
+Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {
   String bucketName = SharedPreferencesUtil().gcpBucketName;
   if (bucketName.isEmpty) {
     debugPrint('No bucket name found');
     return null;
   }
   String fileName = file.path.split('/')[file.path.split('/').length - 1];
+  if (prefixTimestamp) {
+    fileName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+  }
   String url = 'https://storage.googleapis.com/upload/storage/v1/b/$bucketName/o?uploadType=media&name=$fileName';
 
   try {
