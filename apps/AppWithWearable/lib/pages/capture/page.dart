@@ -19,14 +19,14 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/background_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/utils/features/backups.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
@@ -151,17 +151,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     } else {
       newSegments = await deepgramTranscribe(f);
     }
-    var initialSegmentsLength = segments.length;
-
     TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
-    if (segments.length > initialSegmentsLength) {
+    if (newSegments.isNotEmpty) {
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
       debugPrint('Memory creation timer restarted');
       _memoryCreationTimer?.cancel();
       _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
-      currentTranscriptStartedAt ??= DateTime.now();
+      currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
       currentTranscriptFinishedAt = DateTime.now();
     }
     setState(() => isTranscribing = false);

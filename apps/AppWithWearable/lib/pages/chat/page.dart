@@ -241,8 +241,12 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     Future<List<List<String>>> memoriesByTopic = Future.wait(topics.map((topic) async {
       try {
         List<double> vectorizedMessage = await getEmbeddingsFromInput(topic);
-        List<String> memoriesId =
-            await queryPineconeVectors(vectorizedMessage, startTimestamp: startTimestamp, endTimestamp: endTimestamp);
+        List<String> memoriesId = await queryPineconeVectors(
+          vectorizedMessage,
+          startTimestamp: startTimestamp,
+          endTimestamp: endTimestamp,
+          count: 5,
+        );
         debugPrint('queryPineconeVectors memories retrieved for topic $topic: ${memoriesId.length}');
         return memoriesId;
       } catch (e, stacktrace) {
