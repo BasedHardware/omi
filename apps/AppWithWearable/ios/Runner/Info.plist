@@ -89,6 +89,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+    	<string>dev.flutter.background.refresh</string>
+	</array>
 	<key>NSCalendarsUsageDescription</key>
     <string>Access most functions for calendar viewing and editing.</string>
     <key>NSContactsUsageDescription</key>
