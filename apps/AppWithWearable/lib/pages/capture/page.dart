@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
@@ -22,12 +24,13 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/rag.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 
@@ -162,7 +165,48 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
       currentTranscriptFinishedAt = DateTime.now();
     }
+    _doProcessingOfInstructions();
     setState(() => isTranscribing = false);
+  }
+
+  Map<int, int> processedSegments = {};
+
+  _doProcessingOfInstructions() async {
+    for (var element in segments) {
+      var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
+      for (var option in hotWords) {
+        if (element.text.toLowerCase().contains(option)) {
+          debugPrint('Hey Friend detected');
+          var index = element.text.lastIndexOf(option);
+          if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
+
+          var substring = element.text.substring(index + option.length);
+          var words = substring.split(' ');
+          if (words.length >= 5) {
+            debugPrint('Hey Friend detected and 10 words after');
+            String message = await executeGptPrompt('''
+          The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
+          Extract the only the instruction the user is asking in 5 to 10 words.
+          
+          ${element.text.substring(index)}''');
+            debugPrint('Message: $message');
+
+            MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
+            widget.refreshMessages();
+            dynamic ragInfo = await retrieveRAGContext(message);
+            String ragContext = ragInfo[0];
+            List<Memory> memories = ragInfo[1].cast<Memory>();
+            String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
+            var response = await executeGptPrompt(body);
+            var aiMessage = Message(DateTime.now(), response, 'ai');
+            aiMessage.memories.addAll(memories);
+            MessageProvider().saveMessage(aiMessage);
+            widget.refreshMessages();
+            processedSegments[element.id] = index;
+          }
+        }
+      }
+    }
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
