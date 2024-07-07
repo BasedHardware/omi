@@ -6,6 +6,7 @@
 	<array>
 		<string>daily-summary</string>
 		<string>com.friend-app-with-wearable.ios12.daily-summary</string>
+		<string>dev.flutter.background.refresh</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -50,6 +51,12 @@
 	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Access contacts for event attendee editing.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -60,6 +67,7 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>bluetooth-central</string>
 		<string>fetch</string>
 		<string>processing</string>
@@ -89,15 +97,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-    	<string>dev.flutter.background.refresh</string>
-	</array>
-	<key>NSCalendarsUsageDescription</key>
-    <string>Access most functions for calendar viewing and editing.</string>
-    <key>NSContactsUsageDescription</key>
-    <string>Access contacts for event attendee editing.</string>
-    <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>Access most functions for calendar viewing and editing.</string>
 </dict>
 </plist>
