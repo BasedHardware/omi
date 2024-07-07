@@ -226,8 +226,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     try {
       // USE VAD HERE
       // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
-      file = (await audioStorage!.createWavFile()).item1;
-      uploadFile(file);
+      if (audioStorage != null) {
+        file = (await audioStorage!.createWavFile()).item1;
+        uploadFile(file);
+      }
     } catch (e) {} // in case was a local recording and not a BLE recording
     Memory? memory = await processTranscriptContent(
       context,
@@ -283,11 +285,19 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       FlutterBackgroundService service = FlutterBackgroundService();
       if (await service.isRunning()) {
         setState(() {
-          _state = RecordingState.record;
-        });
-        setState(() {
           iosDuration = 5;
           androidDuration = 15;
+        });
+        if (Platform.isAndroid) {
+          await androidBgTranscribing(Duration(seconds: androidDuration), AppLifecycleState.resumed);
+        } else if (Platform.isIOS) {
+          var path = await getApplicationDocumentsDirectory();
+          var filePath = '${path.path}/recording_0.aac';
+
+          await iosBgTranscribing(filePath, Duration(seconds: iosDuration), true);
+        }
+        setState(() {
+          _state = RecordingState.record;
         });
       }
       await listenToBackgroundService();
@@ -365,6 +375,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   Future iosBgTranscribing(String filePath, Duration interval, bool shouldTranscribe) async {
     _backgroundTranscriptTimer?.cancel();
     _backgroundTranscriptTimer = Timer.periodic(interval, (timer) async {
+      debugPrint('timer triggered at ${DateTime.now()}');
       try {
         final file = File(filePath);
 
@@ -395,7 +406,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             setState(() {
               lastOffset = currentLength;
               partNumber++;
-              iosDuration = 15;
+              iosDuration = 10;
             });
           }
         } else {
@@ -506,11 +517,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   _stopRecording() async {
     final service = FlutterBackgroundService();
     service.invoke("stop");
+    setState(() {
+      _state = RecordingState.stop;
+      isTranscribing = true;
+    });
     if (Platform.isIOS) {
       var path = await getApplicationDocumentsDirectory();
       var filePath = '${path.path}/recording_0.aac';
       setState(() {
-        iosDuration = 2;
+        iosDuration = 1;
       });
       await iosBgTranscribing(filePath, Duration(seconds: iosDuration), true);
       _backgroundTranscriptTimer?.cancel();
@@ -568,12 +583,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           }
         }
       }
+    }).then((value) async {
+      setState(() => isTranscribing = false);
+      if (segments.isNotEmpty) {
+        setState(() => memoryCreating = true);
+        await _createMemory();
+      }
     });
-
-    setState(() => _state = RecordingState.stop);
-    if (segments.isNotEmpty) {
-      setState(() => memoryCreating = true);
-      _createMemory();
-    }
   }
 }

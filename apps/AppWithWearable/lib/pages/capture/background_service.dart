@@ -38,6 +38,7 @@ Future<void> initializeBackgroundService() async {
       notificationChannelId: 'channel',
     ),
   );
+  await service.startService();
 }
 
 @pragma('vm:entry-point')
