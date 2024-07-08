@@ -72,7 +72,7 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-//        multiDexEnabled true
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -89,6 +89,9 @@ android {
             productFlavors.dev.signingConfig signingConfigs.debug
             productFlavors.prod.signingConfig signingConfigs.release
         }
+        debug{
+            minifyEnabled true
+        }
     }
 }
 
@@ -100,5 +103,5 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10"
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
-//    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.multidex:multidex:2.0.1'
 }
