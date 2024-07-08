@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.3+7
+version: 1.0.14+40
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -23,6 +23,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   flutter_localizations:
     sdk: flutter
   auto_size_text: 3.0.0
@@ -53,19 +54,51 @@ dependencies:
   awesome_notifications: any
   mime: ^1.0.5
   instabug_flutter: ^13.0.0
+  instabug_http_client: ^2.4.0
   #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-  #  flutter_silero_vad:
-  #    git:
-  #      url: https://github.com/char5742/flutter_silero_vad.git\
-  fonnx:
+  flutter_silero_vad:
     git:
-      url: https://github.com/Telosnex/fonnx.git
-      ref: main
+      url: https://github.com/char5742/flutter_silero_vad.git
+#  fonnx:
+#    git:
+#      url: https://github.com/Telosnex/fonnx.git
+#      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
+  nordic_dfu: ^6.1.4+hotfix
+  package_info_plus: ^8.0.0
+
+  path_provider: any
+  ml_linalg: any
+  objectbox: ^4.0.1
+  objectbox_flutter_libs: any
+  flutter_foreground_task: ^6.5.0
+  deepgram_speech_to_text: ^2.1.1
+  upgrader: ^10.3.0
+  workmanager:
+    git:
+      url: https://github.com/fluttercommunity/flutter_workmanager.git
+      ref: b783000
+  crypto: ^3.0.3
+  encrypt: ^5.0.3
+  flutter_markdown: ^0.7.2+1
+  file_picker: ^8.0.5
+  record: ^5.1.1
+  record_android: ^1.2.2
+  record_platform_interface: ^1.1.0
+  record_darwin: ^1.1.0
+  flutter_sound: ^9.6.0
+  audio_session: ^0.1.19
+  onesignal_flutter: ^5.1.2
+  opus_flutter: ^3.0.2
+  opus_dart: ^3.0.1
+  growthbook_sdk_flutter: ^3.9.2
+  flutter_rating_bar: ^4.0.1
+  device_calendar: ^4.3.2
+  flutter_timezone: ^2.0.0
 
 dependency_overrides:
   http: ^1.2.1
@@ -82,7 +115,8 @@ dev_dependencies:
     sdk: flutter
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
-
+  objectbox_generator: any
+  flutter_flavorizr: ^2.2.3
 
 flutter_launcher_icons:
   android: true
@@ -141,7 +175,6 @@ flutter:
           weight: 900
           style: italic
 
-  
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 
@@ -167,4 +200,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
-

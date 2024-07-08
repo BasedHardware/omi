@@ -4,22 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
-Future<void> bleConnectDevice(String deviceId) async {
+Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
+    // TODO: for android seems like the reconnect or resetState is not working
+    if (!autoConnect) return await device.connect(autoConnect: false, mtu: null);
+
     // Step 1: Connect with autoConnect
-    // await device.connect(autoConnect: false);
-    // return;
     await device.connect(autoConnect: true, mtu: null);
-    // TODO: compare this with the connection state listener, both doing same thing? what's better?
     // Step 2: Listen to the connection state to ensure the device is connected
     await device.connectionState.where((state) => state == BluetoothConnectionState.connected).first;
 
     // Step 3: Request the desired MTU size if the platform is Android
-    if (Platform.isAndroid) {
-      int desiredMtu = 512; // Example MTU size
-      await device.requestMtu(desiredMtu);
-    }
+    if (Platform.isAndroid) await device.requestMtu(512);
   } catch (e) {
     debugPrint('bleConnectDevice failed: $e');
   }

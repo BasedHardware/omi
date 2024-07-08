@@ -1,129 +1,160 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
   final List<BTDeviceStruct?> deviceList;
+  final VoidCallback goNext;
 
   const FoundDevices({
-    Key? key,
+    super.key,
     required this.deviceList,
-  }) : super(key: key);
+    required this.goNext,
+  });
 
   @override
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> {
+class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+  bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
+  String? _connectingToDeviceId;
 
-  Future<void> getBatteryPercentage(BTDeviceStruct deviceId) async {
-    StreamSubscription<List<int>>? batteryLevelListener;
+  Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
-      batteryLevelListener = await getBleBatteryLevelListener(deviceId,
-          onBatteryLevelChange: (int value) {
-        debugPrint("Battery Level: $value%");
-        setState(() {
-          deviceName = deviceId.id;
-          _isConnected = true;
-          batteryPercentage = value;
-        });
-        // We cancel the listener, as we only needed the value once.
-        batteryLevelListener?.cancel();
+      var battery = await retrieveBatteryLevel(btDevice);
+      setState(() {
+        batteryPercentage = battery;
+        _isConnected = true;
+        _isClicked = false; // Allow clicks again after finishing the operation
+        _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().deviceId = btDevice.id;
       MixpanelManager().onboardingCompleted();
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (c) => HomePageWrapper(btDevice: deviceId.toJson())));
+      debugPrint("Onboarding completed");
+      widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
-      batteryLevelListener?.cancel();
+      setState(() {
+        _isClicked = false; // Allow clicks again if an error occurs
+        _connectingToDeviceId = null; // Reset the connecting device
+      });
     }
+  }
+
+  // Method to handle taps on devices
+  Future<void> handleTap(BTDeviceStruct device) async {
+    if (_isClicked) return; // if any item is clicked, don't do anything
+    setState(() {
+      _isClicked = true; // Prevent further clicks
+      _connectingToDeviceId = device.id; // Mark this device as being connected to
+    });
+    await bleConnectDevice(device.id);
+    deviceName = device.id;
+    setBatteryPercentage(device);
   }
 
   @override
   Widget build(BuildContext context) {
-    var screenSize = MediaQuery.of(context).size;
-    return Expanded(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset(
-                  "assets/images/stars.png",
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        !_isConnected
+            ? Text(
+                widget.deviceList.isEmpty
+                    ? 'Searching for devices...'
+                    : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                  color: Color(0x66FFFFFF),
                 ),
-                Image.asset("assets/images/blob.png"),
-                Image.asset("assets/images/herologo.png")
-              ],
+              )
+            : const Text(
+                'PAIRING SUCCESSFUL',
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 12,
+                  color: Color(0x66FFFFFF),
+                ),
+              ),
+        if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
+        if (!_isConnected) ..._devicesList(),
+        if (_isConnected)
+          Text(
+            deviceName.split('-').last.substring(0, 6),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 18,
+              color: Color(0xCCFFFFFF),
             ),
           ),
-          !_isConnected
-              ? Container(
-                  margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
-                  child: Text(
-                    '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: Color(0x66FFFFFF),
-                    ),
-                  ),
-                )
-              : Container(
-                  margin: const EdgeInsets.fromLTRB(0, 0, 4, 12),
-                  child: const Text(
-                    'PAIRING SUCCESSFUL',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: Color(0x66FFFFFF),
-                    ),
-                  ),
+        if (_isConnected)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                '🔋 ${batteryPercentage.toString()}%',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: batteryPercentage <= 25
+                      ? Colors.red
+                      : batteryPercentage > 25 && batteryPercentage <= 50
+                          ? Colors.orange
+                          : Colors.green,
                 ),
-          !_isConnected
-              ? Expanded(
-                  // Create a scrollable list of devices
-                  child: ListView.builder(
-                    itemCount: widget.deviceList.length,
-                    itemBuilder: (context, index) {
-                      final device = widget.deviceList[index];
-                      if (device == null)
-                        return Container(); // If device is null, return an empty container
+              ))
+      ],
+    );
+  }
 
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        padding: EdgeInsets.symmetric(
-                            horizontal: screenSize.width * 0, vertical: 0),
-                        decoration: BoxDecoration(
-                          border: const GradientBoxBorder(
-                            gradient: LinearGradient(colors: [
-                              Color.fromARGB(127, 208, 208, 208),
-                              Color.fromARGB(127, 188, 99, 121),
-                              Color.fromARGB(127, 86, 101, 182),
-                              Color.fromARGB(127, 126, 190, 236)
-                            ]),
-                            width: 1,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          color: const Color.fromARGB(0, 0, 0, 0),
-                        ),
-                        child: ListTile(
-                          title: Text(
-                            device.id.substring(device.id.length - 6),
+  _devicesList() {
+    return (widget.deviceList.mapIndexed((index, d) {
+      final device = widget.deviceList[index];
+      if (device == null) return Container();
+      bool isConnecting = _connectingToDeviceId == device.id;
+
+      return GestureDetector(
+        onTap: !_isClicked ? () => handleTap(device) : null,
+        child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              border: const GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            device.id.split('-').last.substring(0, 6),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
@@ -131,39 +162,27 @@ class _FoundDevicesState extends State<FoundDevices> {
                               color: Color(0xCCFFFFFF),
                             ),
                           ),
-                          onTap: () async {
-                            await bleConnectDevice(device.id);
-                            await getBatteryPercentage(device);
-                          },
                         ),
-                      );
-                    },
-                  ),
-                )
-              : Text(
-                  deviceName.substring(deviceName.length - 6),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                    color: Color(0xCCFFFFFF),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: isConnecting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const SizedBox.shrink(), // Show loading indicator if connecting
+                        )
+                      ],
+                    ),
                   ),
                 ),
-          if (_isConnected)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(
-                  // TODO: Replace battery asset
-                  '🔋 ${batteryPercentage.toString()}%',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                    color: Color(0xCCFFFFFF),
-                  ),
-                ))
-        ],
-      ),
-    );
+              ],
+            )),
+      );
+    }).toList());
   }
 }

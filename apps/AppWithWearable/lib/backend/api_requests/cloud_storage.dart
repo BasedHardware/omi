@@ -1,16 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 AuthClient? authClient;
 
-void authenticateGCP() async {
-  var credentialsBase64 = SharedPreferencesUtil().gcpCredentials;
+Future<void> authenticateGCP({String? base64}) async {
+  var credentialsBase64 = base64 ?? SharedPreferencesUtil().gcpCredentials;
   if (credentialsBase64.isEmpty) {
     debugPrint('No GCP credentials found');
     return;
@@ -23,13 +23,16 @@ void authenticateGCP() async {
   debugPrint('Authenticated');
 }
 
-Future<String?> uploadFile(File file) async {
+Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {
   String bucketName = SharedPreferencesUtil().gcpBucketName;
   if (bucketName.isEmpty) {
     debugPrint('No bucket name found');
     return null;
   }
   String fileName = file.path.split('/')[file.path.split('/').length - 1];
+  if (prefixTimestamp) {
+    fileName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+  }
   String url = 'https://storage.googleapis.com/upload/storage/v1/b/$bucketName/o?uploadType=media&name=$fileName';
 
   try {

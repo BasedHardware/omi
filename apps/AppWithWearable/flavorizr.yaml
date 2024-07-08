@@ -1,0 +1,21 @@
+flavors:
+  prod:
+    app:
+      name: "Friend"
+      icon: "assets/images/app_launcher_icon.png"
+    android:
+      applicationId: "com.friend.ios"
+      icon: "assets/images/app_launcher_icon.png"
+    ios:
+      bundleId: "com.friend-app-with-wearable.ios12"
+      icon: "assets/images/app_launcher_icon.png"
+  dev:
+    app:
+      name: "Friend Dev"
+      icon: "assets/images/app_launcher_icon.png"
+    android:
+      icon: "assets/images/app_launcher_icon.png"
+      applicationId: "com.friend.ios.dev"
+    ios:
+      bundleId: "com.friend-app-with-wearable.ios12.develop"
+      icon: "assets/images/app_launcher_icon.png"
