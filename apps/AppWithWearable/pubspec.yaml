@@ -98,6 +98,7 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   device_calendar: ^4.3.2
   flutter_timezone: ^2.0.0
+  location: ^7.0.0
 
 dependency_overrides:
   http: ^1.2.1
