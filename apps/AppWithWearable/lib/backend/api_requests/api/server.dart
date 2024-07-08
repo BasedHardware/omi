@@ -64,6 +64,7 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
 }
 
 Future<bool> uploadSample(File file, String uid) async {
+  debugPrint('uploadSample ${file.path} for uid: $uid');
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}samples/upload?uid=$uid'),

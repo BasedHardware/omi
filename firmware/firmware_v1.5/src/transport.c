@@ -29,6 +29,9 @@ static void ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t
 static void battery_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static void mute_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 
+static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+
 //
 // Audio Service
 //
@@ -75,6 +78,24 @@ static struct bt_gatt_attr bas_attrs[] = {
 static struct bt_gatt_service bas_service = BT_GATT_SERVICE(bas_attrs);
 
 //
+// DFU Service
+//
+
+// Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
+// exposes following characteristics:
+// - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
+static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+
+// DFU Service
+static struct bt_gatt_attr dfu_attrs[] = {
+    BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
+    BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
+    BT_GATT_CCC(dfu_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+};
+static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_attrs);
+
+//
 // Advertisement data
 //
 
@@ -89,6 +110,7 @@ static const struct bt_data bt_ad[] = {
 
 static const struct bt_data bt_sd[] = {
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
+    BT_DATA(BT_DATA_UUID128_ALL, dfu_service_uuid.val, sizeof(dfu_service_uuid.val)),
 };
 
 //
@@ -177,6 +199,45 @@ static void mute_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uin
     else if (value == 0)
     {
         printk("Client unsubscribed from mute updates\n");
+    }
+    else
+    {
+        printk("Invalid CCC value: %u\n", value);
+    }
+}
+
+//
+// DFU Service handlers
+//
+
+static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    printk("dfu_control_point_write_handler\n");
+    if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
+    {
+        NRF_POWER->GPREGRET = 0xA8;
+        NVIC_SystemReset();
+    }
+    else if (len == 2 && ((uint8_t *)buf)[0] == 0x01)
+    {
+        uint8_t notification_value = 0x10;
+        bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
+
+        NRF_POWER->GPREGRET = 0xA8;
+        NVIC_SystemReset();
+    }
+    return len;
+}
+
+static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    if (value == BT_GATT_CCC_NOTIFY)
+    {
+        printk("Client subscribed for DFU control point notifications\n");
+    }
+    else if (value == 0)
+    {
+        printk("Client unsubscribed from DFU control point notifications\n");
     }
     else
     {
@@ -490,6 +551,7 @@ int transport_start()
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&bas_service);
+    bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
