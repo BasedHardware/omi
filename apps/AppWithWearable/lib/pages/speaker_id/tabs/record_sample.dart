@@ -6,8 +6,8 @@ import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/sample.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:tuple/tuple.dart';
 
 class RecordSampleTab extends StatefulWidget {
@@ -53,16 +53,13 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   Future<void> startRecording() async {
     audioBytesStream?.cancel();
     if (widget.btDevice == null) return;
-    WavBytesUtil wavBytesUtil = WavBytesUtil();
+    audioStorage = WavBytesUtil(codec: await getDeviceCodec(widget.btDevice!.id));
 
-    StreamSubscription? stream =
-        await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
+    audioBytesStream = await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
-      wavBytesUtil.storeFramePacket(value);
+      audioStorage!.storeFramePacket(value);
     });
 
-    audioBytesStream = stream;
-    audioStorage = wavBytesUtil;
     setState(() {
       recording = true;
       speechRecorded = false;
