@@ -9,7 +9,6 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
   var deviceId = SharedPreferencesUtil().deviceId;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      debugPrint('-----> Device already connected: $deviceId');
       return BTDeviceStruct(
         id: device.remoteId.str,
         name: device.platformName,
@@ -20,15 +19,15 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
   while (true) {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
-      if (deviceId == '' &&
-          (device.name == 'Friend' || device.name == 'OpenGlass')) {
+      // Remember the first connected device.
+      // Technically, there should be only one
+      if (deviceId == '') {
         deviceId = device.id;
         SharedPreferencesUtil().deviceId = deviceId;
       }
 
       if (device.id == deviceId) {
         try {
-          debugPrint('-----> Connecting to device: $deviceId');
           await bleConnectDevice(device.id, autoConnect: autoConnect);
           return device;
         } catch (e) {
@@ -39,12 +38,4 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
     // If the device is not found, wait for a bit before retrying.
     await Future.delayed(const Duration(seconds: 2));
   }
-}
-
-Future<List<BTDeviceStruct?>> scanDevices() async {
-  List<BTDeviceStruct> foundDevices = await bleFindDevices();
-  var filteredDevices = foundDevices
-      .where((device) => device.name == 'Friend' || device.name == 'OpenGlass')
-      .toList();
-  return filteredDevices;
 }
