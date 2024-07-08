@@ -1,15 +1,17 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/message.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/utils/other/temp.dart';
 
 class AIMessage extends StatelessWidget {
   final Message message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final List<MemoryRecord> memories;
+  final List<Memory> memories;
 
   const AIMessage({
     super.key,
@@ -53,14 +55,26 @@ class AIMessage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
+              message.typeEnum == MessageType.daySummary
+                  ? Text(
+                      '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade300,
+                        decoration: TextDecoration.underline,
+                      ),
+                    )
+                  : const SizedBox(),
+              message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n'),
+                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              if (message.id != '1') _getCopyButton(context),
-              if (message.id == '1' && displayOptions) const SizedBox(height: 8),
-              if (message.id == '1' && displayOptions) ..._getInitialOptions(context),
+              if (message.id != 1) _getCopyButton(context),
+              if (message.id == 1 && displayOptions) const SizedBox(height: 8),
+              if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
               if (memories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var memory in (memories.length > 3 ? memories.sublist(0, 3) : memories)) ...[
@@ -68,6 +82,7 @@ class AIMessage extends StatelessWidget {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
+                        MixpanelManager().chatMessageMemoryClicked(memory);
                         await Navigator.of(context)
                             .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
                         // TODO: maybe refresh memories here too
@@ -83,7 +98,7 @@ class AIMessage extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                memory.structured.title,
+                                memory.structured.target!.title,
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

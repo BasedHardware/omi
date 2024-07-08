@@ -1,0 +1,171 @@
+import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:tuple/tuple.dart';
+
+// Perform actions periodically
+Future<Memory?> processTranscriptContent(
+  BuildContext context,
+  String transcript,
+  List<TranscriptSegment> transcriptSegments,
+  String? recordingFilePath, {
+  bool retrievedFromCache = false,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+}) async {
+  if (transcript.isNotEmpty) {
+    Memory? memory = await memoryCreationBlock(
+      context,
+      transcript,
+      transcriptSegments,
+      recordingFilePath,
+      retrievedFromCache,
+      startedAt,
+      finishedAt,
+    );
+    devModeWebhookCall(memory);
+    MemoryProvider().saveMemory(memory);
+    return memory;
+  }
+  return null;
+}
+
+Future<SummaryResult?> _retrieveStructure(
+  BuildContext context,
+  String transcript,
+  bool retrievedFromCache, {
+  bool ignoreCache = false,
+}) async {
+  SummaryResult summary;
+  try {
+    summary = await summarizeMemory(transcript, [], ignoreCache: ignoreCache);
+  } catch (e, stacktrace) {
+    debugPrint('Error: $e');
+    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
+      'transcript_length': transcript.length.toString(),
+      'transcript_words': transcript.split(' ').length.toString(),
+      'language': SharedPreferencesUtil().recordingsLanguage,
+      'developer_mode_enabled': SharedPreferencesUtil().devModeEnabled.toString(),
+      'dev_mode_has_api_key': (SharedPreferencesUtil().openAIApiKey != '').toString(),
+    });
+    return null;
+  }
+  return summary;
+}
+
+// Process the creation of memory records
+Future<Memory> memoryCreationBlock(
+  BuildContext context,
+  String transcript,
+  List<TranscriptSegment> transcriptSegments,
+  String? recordingFilePath,
+  bool retrievedFromCache,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+) async {
+  SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache);
+  bool failed = false;
+  if (summarizeResult == null) {
+    summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache, ignoreCache: true);
+    if (summarizeResult == null) {
+      failed = true;
+      summarizeResult = SummaryResult(Structured('', '', emoji: '😢', category: 'failed'), []);
+      if (!retrievedFromCache) {
+        InstabugLog.logError('Unable to create memory structure.');
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Unexpected error creating your memory. Please check your discarded memories.',
+            style: TextStyle(color: Colors.white),
+          ),
+          duration: Duration(seconds: 4),
+        ));
+      }
+    }
+  }
+  Structured structured = summarizeResult.structured;
+
+  if (SharedPreferencesUtil().calendarEnabled &&
+      SharedPreferencesUtil().deviceId.isNotEmpty &&
+      SharedPreferencesUtil().calendarType == 'auto') {
+    for (var event in structured.events) {
+      event.created =
+          await CalendarUtil().createEvent(event.title, event.startsAt, event.duration, description: event.description);
+    }
+  }
+
+  Memory memory = await finalizeMemoryRecord(
+    transcript,
+    transcriptSegments,
+    structured,
+    summarizeResult.pluginsResponse,
+    recordingFilePath,
+    startedAt,
+    finishedAt,
+    structured.title.isEmpty,
+  );
+  debugPrint('Memory created: ${memory.id}');
+
+  if (!retrievedFromCache) {
+    if (structured.title.isEmpty && !failed) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Memory stored as discarded! Nothing useful. 😄',
+          style: TextStyle(color: Colors.white),
+        ),
+        duration: Duration(seconds: 4),
+      ));
+    } else if (structured.title.isNotEmpty) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('New memory created! 🚀', style: TextStyle(color: Colors.white)),
+        duration: Duration(seconds: 4),
+      ));
+    }
+  }
+  return memory;
+}
+
+// Finalize memory record after processing feedback
+Future<Memory> finalizeMemoryRecord(
+  String transcript,
+  List<TranscriptSegment> transcriptSegments,
+  Structured structured,
+  List<Tuple2<Plugin, String>> pluginsResponse,
+  String? recordingFilePath,
+  DateTime? startedAt,
+  DateTime? finishedAt,
+  bool discarded,
+) async {
+  var memory = Memory(
+    DateTime.now(),
+    transcript,
+    discarded,
+    recordingFilePath: recordingFilePath,
+    startedAt: startedAt,
+    finishedAt: finishedAt,
+  );
+  memory.transcriptSegments.addAll(transcriptSegments);
+  memory.structured.target = structured;
+
+  for (var r in pluginsResponse) {
+    memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
+  }
+
+  MemoryProvider().saveMemory(memory);
+  if (!discarded) {
+    getEmbeddingsFromInput(structured.toString()).then((vector) {
+      createPineconeVector(memory.id.toString(), vector, memory.createdAt);
+    });
+  }
+  return memory;
+}

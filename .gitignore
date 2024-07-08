@@ -1,4 +1,4 @@
-.env
+*.env
 __pycache__/
 libraries/
 myenv/
@@ -111,3 +111,8 @@ env.g.dart
 
 # Jekyll
 docs/_site/
+.jekyll-metadata
+
+/apps/AppWithWearable/lib/env/dev_env.g.dart
+/apps/AppWithWearable/lib/env/prod_env.g.dart
+*.jks

@@ -1,7 +1,6 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
@@ -17,6 +16,14 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
           id: event.device.remoteId.str,
           name: event.device.platformName,
           rssi: await event.device.readRssi(),
+          fwver: await event.device.discoverServices().then((services) =>
+            services
+              .map((service) => service.characteristics)
+              .expand((element) => element)
+              .firstWhere((characteristic) => characteristic.uuid.str == '00002a26-0000-1000-8000-00805f9b34fb')
+              .read()
+              .then((value) => value.toList()
+          )),
         ));
       }
     }
