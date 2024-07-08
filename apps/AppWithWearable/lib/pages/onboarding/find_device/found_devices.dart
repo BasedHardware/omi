@@ -154,7 +154,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                         Align(
                           alignment: Alignment.center,
                           child: Text(
-                            device.id.split('-').last.substring(0, 6),
+                            '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
