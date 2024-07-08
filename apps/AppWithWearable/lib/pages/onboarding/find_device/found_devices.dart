@@ -10,7 +10,7 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct?> deviceList;
+  final List<BTDeviceStruct> deviceList;
   final VoidCallback goNext;
 
   const FoundDevices({
@@ -28,6 +28,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
+  String deviceId = '';
   String? _connectingToDeviceId;
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
@@ -61,7 +62,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       _connectingToDeviceId = device.id; // Mark this device as being connected to
     });
     await bleConnectDevice(device.id);
-    deviceName = device.id;
+    deviceId = device.id;
+    deviceName = device.name;
     setBatteryPercentage(device);
   }
 
@@ -94,7 +96,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
         if (!_isConnected) ..._devicesList(),
         if (_isConnected)
           Text(
-            deviceName.split('-').last.substring(0, 6),
+            '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w500,
@@ -123,9 +125,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   }
 
   _devicesList() {
-    return (widget.deviceList.mapIndexed((index, d) {
-      final device = widget.deviceList[index];
-      if (device == null) return Container();
+    return (widget.deviceList.mapIndexed((index, device) {
       bool isConnecting = _connectingToDeviceId == device.id;
 
       return GestureDetector(
