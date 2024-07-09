@@ -85,7 +85,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(

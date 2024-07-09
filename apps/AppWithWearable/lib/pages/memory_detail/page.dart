@@ -71,7 +71,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: Theme.of(context).colorScheme.primary,
