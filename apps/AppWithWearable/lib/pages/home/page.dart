@@ -198,6 +198,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().deviceName = _device!.name;
     _startForeground();
     setState(() {});
   }

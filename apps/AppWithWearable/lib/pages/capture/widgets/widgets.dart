@@ -50,7 +50,7 @@ getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStr
               textAlign: TextAlign.center,
             ),
             Text(
-              'DEVICE-${device.id.split('-').last.substring(0, 6)}',
+              '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16.0,

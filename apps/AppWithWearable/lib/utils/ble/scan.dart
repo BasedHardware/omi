@@ -26,7 +26,8 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
       // Technically, there should be only one
       if (deviceId == '') {
         deviceId = device.id;
-        SharedPreferencesUtil().deviceId = deviceId;
+        SharedPreferencesUtil().deviceId = device.id;
+        SharedPreferencesUtil().deviceName = device.name;
       }
 
       if (device.id == deviceId) {

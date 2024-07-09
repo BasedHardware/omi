@@ -43,10 +43,12 @@ Future<int> retrieveBatteryLevel(BTDeviceStruct btDevice) async {
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
   if (batteryService != null) {
     var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
-    var currValue = await canRead?.read();
-    if (currValue != null && currValue.isNotEmpty) {
-      debugPrint('Battery level: ${currValue[0]}');
-      return currValue[0];
+    debugPrint('batteryLevelCharacteristic: ${canRead?.uuid.str128.toLowerCase()} ${canRead?.properties}');
+    debugPrint('batteryLevelCharacteristic value: ${await canRead?.read()}');
+    if (canRead != null) {
+      var currValue = (await canRead.read()).single;
+      debugPrint('Battery level: $currValue');
+      return currValue;
     }
   }
   return -1;
@@ -62,14 +64,13 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
       .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
   if (batteryService != null) {
     var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
-    var currValue = await canRead?.read();
-    if (currValue != null && currValue.isNotEmpty) {
-      debugPrint('Battery level: ${currValue[0]}');
-      onBatteryLevelChange!(currValue[0]);
-    }
     var canNotify =
         batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
+    debugPrint('batteryLevelCharacteristic value: ${await canRead?.read()}');
     if (canRead != null && canNotify != null) {
+      var currValue = (await canRead.read()).single;
+      debugPrint('Battery level: $currValue');
+      onBatteryLevelChange!(currValue);
       await canNotify.setNotifyValue(true);
       return canNotify.lastValueStream.listen((value) {
         // debugPrint('Battery level listener: $value');
