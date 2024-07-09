@@ -5,7 +5,7 @@
   "entities": [
     {
       "id": "1:1521024926543535",
-      "lastPropertyId": "8:970897693726655020",
+      "lastPropertyId": "10:4269258700026239045",
       "name": "Memory",
       "properties": [
         {
@@ -55,6 +55,16 @@
           "id": "8:970897693726655020",
           "name": "finishedAt",
           "type": 10
+        },
+        {
+          "id": "9:6548594222168567641",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "10:4269258700026239045",
+          "name": "longitude",
+          "type": 8
         }
       ],
       "relations": [
