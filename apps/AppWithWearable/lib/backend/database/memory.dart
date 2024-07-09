@@ -140,8 +140,9 @@ class Structured {
       emoji: json['emoji'],
       category: json['category'],
     );
-    if (json['actionItems'] != null) {
-      for (String item in json['actionItems']) {
+    var aItems = json['actionItems'] ?? json['action_items'];
+    if (aItems != null) {
+      for (String item in aItems) {
         if (item.isEmpty) continue;
         structured.actionItems.add(ActionItem(item));
       }
