@@ -14,17 +14,18 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/dfu.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -387,33 +388,30 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ],
                           )),
                     )
-                  : SharedPreferencesUtil().deviceId.isNotEmpty
-                      ? TextButton(
-                          onPressed: () async {
-                            await Navigator.of(context).push(MaterialPageRoute(
-                              builder: (c) => const ConnectedDevice(
-                                device: null,
-                                batteryLevel: 0,
-                              ),
-                            ));
-                            MixpanelManager().connectFriendClicked();
-                            setState(() {});
-                          },
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            backgroundColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              side: const BorderSide(color: Colors.white, width: 1),
-                            ),
-                          ),
-                          child: Image.asset(
-                            'assets/images/logo_transparent.png',
-                            width: 25,
-                            height: 25,
-                          ),
-                        )
-                      : const SizedBox(),
+                  : TextButton(
+                      onPressed: () async {
+                        if (SharedPreferencesUtil().deviceId.isEmpty) {
+                          routeToPage(context, const ConnectDevicePage());
+                          MixpanelManager().connectFriendClicked();
+                        } else {
+                          await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
+                        }
+                        setState(() {});
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: Colors.white, width: 1),
+                        ),
+                      ),
+                      child: Image.asset(
+                        'assets/images/logo_transparent.png',
+                        width: 25,
+                        height: 25,
+                      ),
+                    ),
               // IconButton(
               //   // TODO: Show the button only if a device is connected
               //   // and there's a new firmware available
