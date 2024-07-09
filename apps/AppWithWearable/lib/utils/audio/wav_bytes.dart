@@ -80,6 +80,7 @@ class WavBytesUtil {
   bool hasFrames() => frames.isNotEmpty;
 
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
+    // debugPrint('First frame size: ${frames[0].length} && Last frame size: ${frames.last.length}');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
       removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);

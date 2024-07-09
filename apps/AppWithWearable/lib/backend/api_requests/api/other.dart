@@ -22,7 +22,7 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
     'punctuate': true,
     'diarize': true,
     'smart_format': true,
-    'multichannel': true
+    'multichannel': false
     // 'detect_topics': true,
     // 'topics': true,
     // 'intents': true,

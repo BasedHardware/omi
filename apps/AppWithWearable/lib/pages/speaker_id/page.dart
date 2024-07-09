@@ -34,7 +34,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
 
   _init() async {
-    _device = await scanAndConnectDevice();
+    _device = await getConnectedDevice();
+    _device ??= await scanAndConnectDevice();
     _samples = await getUserSamplesState(SharedPreferencesUtil().uid);
     _controller = TabController(length: 2 + _samples.length, vsync: this);
     _initiateConnectionListener();
