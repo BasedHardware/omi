@@ -71,6 +71,10 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   }
 
   Future<void> confirmRecording() async {
+    // TODO: how to upload nonsense uploads?
+    // - people who say it too fast
+    // - people who spend a lot of time
+    // - people who don't say anything
     if (!(audioStorage?.hasFrames() ?? false)) return;
     changeLoadingState();
     setState(() {
