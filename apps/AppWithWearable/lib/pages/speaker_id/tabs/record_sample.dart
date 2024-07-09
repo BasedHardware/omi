@@ -40,6 +40,10 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   late AnimationController _controller;
   late Animation<double> _animation;
 
+  bool uploadingSample = false;
+
+  changeLoadingState() => setState(() => uploadingSample = !uploadingSample);
+
   @override
   void initState() {
     _controller = AnimationController(
@@ -68,6 +72,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
 
   Future<void> confirmRecording() async {
     if (!(audioStorage?.hasFrames() ?? false)) return;
+    changeLoadingState();
     setState(() {
       recording = false;
       speechRecorded = true;
@@ -77,6 +82,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
     await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
     audioBytesStream?.cancel();
     Tuple2<File, List<List<int>>> file = await audioStorage!.createWavFile(filename: '${widget.sample.id}.wav');
+    changeLoadingState();
     await uploadSample(file.item1, SharedPreferencesUtil().uid); // optimistic request
     // TODO: handle failures + url: null, retry sample
   }
@@ -161,10 +167,20 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
                           onPressed: recording ? confirmRecording : startRecording,
                           icon: const Icon(Icons.mic, color: Colors.white, size: 48),
                         )
-                      : IconButton(
-                          onPressed: widget.goNext,
-                          icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
-                        ),
+                      : uploadingSample
+                          ? const Center(
+                            child: SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              ),
+                          )
+                          : IconButton(
+                              onPressed: widget.goNext,
+                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
+                            ),
                 ),
               ],
             ),
