@@ -2,7 +2,22 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+
+Future<BTDeviceStruct?> getConnectedDevice() async {
+  var deviceId = SharedPreferencesUtil().deviceId;
+  for (var device in FlutterBluePlus.connectedDevices) {
+    if (device.remoteId.str == deviceId) {
+      return BTDeviceStruct(
+        id: device.remoteId.str,
+        name: device.platformName,
+        rssi: await device.readRssi(),
+      );
+    }
+  }
+  return null;
+}
 
 StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener(
     {required String deviceId, required Function onDisconnected, required Function(BTDeviceStruct) onConnected}) {
