@@ -6,7 +6,9 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/find.dart';
 
 Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
+  print('scanAndConnectDevice');
   var deviceId = SharedPreferencesUtil().deviceId;
+  print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
       return BTDeviceStruct(
@@ -19,6 +21,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
   while (true) {
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
+      print('device: ${device.name}');
       // Remember the first connected device.
       // Technically, there should be only one
       if (deviceId == '') {

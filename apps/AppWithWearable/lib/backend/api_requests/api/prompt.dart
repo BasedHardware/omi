@@ -47,7 +47,7 @@ Future<SummaryResult> summarizeMemory(
     
     For the title, use the main topic of the conversation.
     For the overview, use a brief overview of the conversation.
-    For the action items, include a list of commitments, scheduled events, specific tasks or actionable steps.
+    For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation.
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
         

@@ -52,6 +52,7 @@ Future<bool> userHasSpeakerProfile(String uid) async {
 }
 
 Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
+  debugPrint('getUserSamplesState for uid: $uid');
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}samples?uid=$uid',
     headers: {},
