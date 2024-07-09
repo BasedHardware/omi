@@ -435,7 +435,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                  await routeToPage(context, const SettingsPage());
+                  setState(() {});
                 },
               )
             ],

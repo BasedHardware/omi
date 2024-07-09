@@ -1,7 +1,7 @@
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
@@ -16,6 +16,7 @@ Future<BTDeviceStruct?> getConnectedDevice() async {
       );
     }
   }
+  debugPrint('getConnectedDevice: device not found');
   return null;
 }
 
