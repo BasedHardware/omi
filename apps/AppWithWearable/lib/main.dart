@@ -31,8 +31,8 @@ void main() async {
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   await initializeNotifications();
   await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
   await ObjectBoxUtil.init();
+  await MixpanelManager.init();
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
