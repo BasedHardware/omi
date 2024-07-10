@@ -86,19 +86,18 @@ dependencies:
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
-  record: ^5.1.1
-  record_android: ^1.2.2
-  record_platform_interface: ^1.1.0
-  record_darwin: ^1.1.0
+  record: ^5.1.2
   flutter_sound: ^9.6.0
   audio_session: ^0.1.19
   onesignal_flutter: ^5.1.2
+  flutter_background_service: ^5.0.6
   opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1
   device_calendar: ^4.3.2
   flutter_timezone: ^2.0.0
+
 
 dependency_overrides:
   http: ^1.2.1
