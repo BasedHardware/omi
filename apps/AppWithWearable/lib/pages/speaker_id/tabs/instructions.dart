@@ -90,6 +90,24 @@ class _InstructionsTabState extends State<InstructionsTab> {
                       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                       child: MaterialButton(
                         onPressed: () {
+                          // if (SharedPreferencesUtil().recordingsLanguage != 'en') {
+                          //   showDialog(
+                          //     context: context,
+                          //     barrierDismissible: false,
+                          //     builder: (c) => getDialog(
+                          //       context,
+                          //       () {
+                          //         Navigator.of(context).pop();
+                          //       },
+                          //       widget.goNext,
+                          //       'Speech profiles not available',
+                          //       'Speech profiles are only available for English language. You can still set it up,'
+                          //           ' but it will not work with ${getLanguageName(SharedPreferencesUtil().recordingsLanguage)} language.',
+                          //       singleButton: false,
+                          //       okButtonText: 'Continue',
+                          //     ),
+                          //   );
+                          // }
                           widget.goNext();
                         },
                         shape: RoundedRectangleBorder(
