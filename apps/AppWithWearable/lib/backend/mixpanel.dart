@@ -1,4 +1,6 @@
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -15,6 +17,7 @@ class MixpanelManager {
           await Mixpanel.init(Env.mixpanelProjectToken!, optOutTrackingDefault: false, trackAutomaticEvents: true);
       _mixpanel?.setLoggingEnabled(false);
       _instance.identify();
+      _instance.setPeopleValues();
     }
   }
 
@@ -23,6 +26,21 @@ class MixpanelManager {
   }
 
   MixpanelManager._internal();
+
+  setPeopleValues() {
+    setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
+    setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
+    setUserProperty('Backups Enabled', _preferences.backupsEnabled);
+    setUserProperty('Recordings Language', _preferences.recordingsLanguage);
+
+    setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
+    setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
+    setUserProperty('Messages Count', MessageProvider().getMessagesCount());
+  }
+
+  setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
 
   void optInTracking() {
     _mixpanel?.optInTracking();
@@ -51,12 +69,38 @@ class MixpanelManager {
 
   void pluginsOpened() => track('Plugins Opened');
 
-  void pluginEnabled(String pluginId) => track('Plugin Enabled', properties: {'plugin_id': pluginId});
+  void pluginEnabled(String pluginId) {
+    track('Plugin Enabled', properties: {'plugin_id': pluginId});
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+  }
 
-  void pluginDisabled(String pluginId) => track('Plugin Disabled', properties: {'plugin_id': pluginId});
+  void pluginDisabled(String pluginId) {
+    track('Plugin Disabled', properties: {'plugin_id': pluginId});
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+  }
 
-  void recordingLanguageChanged(String language) =>
-      track('Recording Language Changed', properties: {'language': language});
+  void pluginRated(String pluginId, double rating) {
+    track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  }
+
+  void recordingLanguageChanged(String language) {
+    track('Recording Language Changed', properties: {'language': language});
+    setUserProperty('Recordings Language', language);
+  }
+
+  void calendarEnabled() {
+    track('Calendar Enabled');
+    setUserProperty('Calendar Enabled', true);
+  }
+
+  void calendarDisabled() {
+    track('Calendar Disabled');
+    setUserProperty('Calendar Enabled', false);
+  }
+
+  void calendarTypeChanged(String type) => track('Calendar Type Changed', properties: {'type': type});
+
+  void calendarSelected() => track('Calendar Selected');
 
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
@@ -139,20 +183,32 @@ class MixpanelManager {
       track('Manual Memory Created', properties: getMemoryEventProperties(memory));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
-    _mixpanel?.getPeople().setOnce('What the user does', whatDoYouDo);
-    _mixpanel?.getPeople().setOnce('Using Friend At', whereDoYouPlanToUseYourFriend);
-    _mixpanel?.getPeople().setOnce('Age Range', ageRange);
+    setUserProperty('What the user does', whatDoYouDo);
+    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Age Range', ageRange);
   }
 
   void reProcessMemory(Memory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
-  void backupsEnabled() => track('Backups Enabled');
+  void backupsEnabled() {
+    track('Backups Enabled');
+    setUserProperty('Backups Enabled', true);
+  }
 
-  void backupsDisabled() => track('Backups Disabled');
+  void backupsDisabled() {
+    track('Backups Disabled');
+    setUserProperty('Backups Enabled', false);
+  }
 
-  void developerModeEnabled() => track('Developer Mode Enabled');
+  void developerModeEnabled() {
+    track('Developer Mode Enabled');
+    setUserProperty('Dev Mode Enabled', true);
+  }
 
-  void developerModeDisabled() => track('Developer Mode Disabled');
+  void developerModeDisabled() {
+    track('Developer Mode Disabled');
+    setUserProperty('Dev Mode Enabled', false);
+  }
 
   void userIDCopied() => track('User ID Copied');
 
@@ -196,6 +252,8 @@ class MixpanelManager {
   void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
 
   void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
+
+  void firmwareUpdateButtonClick() => track('Firmware Update Clicked');
 
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

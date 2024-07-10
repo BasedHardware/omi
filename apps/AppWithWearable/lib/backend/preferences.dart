@@ -105,19 +105,7 @@ class SharedPreferencesUtil {
 
   set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
 
-  // List<Message> get chatMessages {
-  //   final List<String> messages = getStringList('messages') ?? [];
-  //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
-  // }
-
-  // set chatMessages(List<Message> value) {
-  //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
-  //   saveStringList('messages', messages);
-  // }
-
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-
-  // bool get hasSpeakerProfile => true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
