@@ -101,6 +101,10 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
+  List<String> get recordingPaths => getStringList('recordingPaths') ?? [];
+
+  set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
+
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
