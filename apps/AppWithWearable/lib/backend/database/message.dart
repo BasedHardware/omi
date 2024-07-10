@@ -30,4 +30,11 @@ class Message {
   final memories = ToMany<Memory>();
 
   Message(this.createdAt, this.text, this.sender, {this.id = 0, this.type = 'text'});
+
+  static String getMessagesAsString(List<Message> messages) {
+    var sortedMessages = messages.toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return sortedMessages
+        .map((e) => '(${e.createdAt.toIso8601String().split('.')[0]}) ${e.sender.toString().toUpperCase()}: ${e.text}')
+        .join('\n');
+  }
 }

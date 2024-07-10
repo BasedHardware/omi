@@ -174,7 +174,7 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
-        Based on the current conversation an AI is having with a Human, determine if the AI requires more context to answer to the user.
+        Based on the current conversation an AI is having with a Human, determine if the AI requires context outside the conversation to respond to the user's message.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
@@ -183,7 +183,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
           - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is ${DateTime.now().toIso8601String()}.
         
         Conversation:
-        ${messages.reversed.map((e) => '${e.createdAt.toIso8601String()} ${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}\n
+        ${Message.getMessagesAsString(messages)}
         
         The output should be formatted as a JSON instance that conforms to the JSON schema below.
         
@@ -192,7 +192,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
         
         Here is the output schema:
         ```
-        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to answer", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}, "dates_range": {"title": "Dates Range", "description": "The dates range to retrieve context from", "default": [], "type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date-time"}]}}}
+        {"properties": {"requires_context": {"title": "Requires Context", "description": "Based on the conversation, this tells if context is needed to respond", "default": false, "type": "string"}, "topics": {"title": "Topics", "description": "If context is required, the topics to retrieve context from", "default": [], "type": "array", "items": {"type": "string"}}, "dates_range": {"title": "Dates Range", "description": "The dates range to retrieve context from", "default": [], "type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date-time"}]}}}
         ```
         '''
       .replaceAll('        ', '');
@@ -219,4 +219,24 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
     debugPrint('Error determining requires context: $e');
     return null;
   }
+}
+
+String qaRagPrompt(String context, List<Message> messages) {
+  var prompt = '''
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation. 
+    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    If the message doesn't require context, it will be empty, so answer the question casually.
+    
+    Conversation History:
+    ${Message.getMessagesAsString(messages)}
+
+    Context:
+    ``` 
+    $context
+    ```
+    Answer:
+    '''
+      .replaceAll('    ', '');
+  debugPrint(prompt);
+  return prompt;
 }

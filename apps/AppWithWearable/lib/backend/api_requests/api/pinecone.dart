@@ -50,6 +50,7 @@ Future<bool> createPineconeVector(String memoryId, List<double> vectorList, Date
 /// Queries Pinecone vectors and optionally filters results based on a date range.
 /// The startTimestamp and endTimestamp should be provided as UNIX epoch timestamps in seconds.
 /// For example: 1622520000 represents Jun 01 2021 10:00:00 UTC.
+
 Future<List<String>> queryPineconeVectors(
   List<double> vectorList, {
   int? startTimestamp,
@@ -63,17 +64,9 @@ Future<List<String>> queryPineconeVectors(
   };
 
   // Add date filtering if startTimestamp or endTimestamp is provided
-  if (startTimestamp != null || endTimestamp != null) {
-    filter['created_at'] = {};
-
-    if (startTimestamp != null) {
-      filter['created_at']['\$gte'] = startTimestamp;
-    }
-
-    if (endTimestamp != null) {
-      filter['created_at']['\$lte'] = endTimestamp;
-    }
-  }
+  if (startTimestamp != null || endTimestamp != null) filter['created_at'] = {};
+  if (startTimestamp != null) filter['created_at']['\$gte'] = startTimestamp;
+  if (endTimestamp != null) filter['created_at']['\$lte'] = endTimestamp;
 
   debugPrint('queryPineconeVectors filter: $filter');
 
