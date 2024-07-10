@@ -11,8 +11,6 @@ import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
 
-
-
 class MemoryDetailPage extends StatefulWidget {
   final Memory memory;
 
