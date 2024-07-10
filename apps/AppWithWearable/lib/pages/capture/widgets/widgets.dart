@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -153,14 +154,15 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context) {
+speechProfileWidget(BuildContext context, StateSetter setState) {
   return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
       ? Stack(
           children: [
             GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+              onTap: () async {
                 MixpanelManager().speechProfileCapturePageClicked();
+                await routeToPage(context, const SpeakerIdPage());
+                setState(() {});
               },
               child: Container(
                 decoration: BoxDecoration(

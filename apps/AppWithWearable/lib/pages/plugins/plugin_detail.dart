@@ -151,6 +151,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
                   pluginsList[index] = widget.plugin;
                   SharedPreferencesUtil().pluginsList = pluginsList;
+                  MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
                   debugPrint('Refreshed plugins list.');
                   // TODO: refresh ratings on plugin, simply (rating count * avg) + new rating / rating count + 1
                   setState(() {});

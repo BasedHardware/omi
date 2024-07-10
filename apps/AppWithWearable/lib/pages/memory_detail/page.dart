@@ -33,8 +33,23 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   bool isTranscriptExpanded = false;
   TabController? _controller;
 
+  bool canDisplaySeconds = true;
+
+  _determineCanDisplaySeconds() {
+    var segments = widget.memory.transcriptSegments;
+    for (var i = 0; i < segments.length; i++) {
+      for (var j = i + 1; j < segments.length; j++) {
+        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
+          canDisplaySeconds = false;
+          break;
+        }
+      }
+    }
+  }
+
   @override
   void initState() {
+    _determineCanDisplaySeconds();
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -56,7 +71,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -169,7 +184,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               segments: widget.memory.transcriptSegments,
               horizontalMargin: false,
               topMargin: false,
-            ),
+              canDisplaySeconds: canDisplaySeconds),
       const SizedBox(height: 32)
     ];
   }

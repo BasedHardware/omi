@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 import 'widgets/empty_memories.dart';
@@ -70,6 +71,19 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   .contains(textController.text.toLowerCase()),
             )
             .toList();
+
+    var memoriesWithDates = [];
+    for (var i = 0; i < memories.length; i++) {
+      if (i == 0) {
+        memoriesWithDates.add(memories[i].createdAt);
+        memoriesWithDates.add(memories[i]);
+      } else {
+        if (memories[i].createdAt.day != memories[i - 1].createdAt.day) {
+          memoriesWithDates.add(memories[i].createdAt);
+        }
+        memoriesWithDates.add(memories[i]);
+      }
+    }
 
     return CustomScrollView(
       slivers: [
@@ -164,27 +178,31 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
           ),
         ),
-        memories.isEmpty
-            ? const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyMemoriesWidget(),
-                  ),
-                ),
-              )
-            : SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    return MemoryListItem(
-                      memoryIdx: index,
-                      memory: memories[index],
-                      loadMemories: widget.refreshMemories,
-                    );
-                  },
-                  childCount: memories.length,
-                ),
+        if (memories.isEmpty)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 32.0),
+                child: EmptyMemoriesWidget(),
               ),
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (memoriesWithDates[index].runtimeType == DateTime) {
+                  return DateListItem(date: memoriesWithDates[index] as DateTime, isFirst: index == 0);
+                }
+                return MemoryListItem(
+                  memoryIdx: index,
+                  memory: memoriesWithDates[index] as Memory,
+                  loadMemories: widget.refreshMemories,
+                );
+              },
+              childCount: memoriesWithDates.length,
+            ),
+          ),
         const SliverToBoxAdapter(
           child: SizedBox(height: 80),
         ),

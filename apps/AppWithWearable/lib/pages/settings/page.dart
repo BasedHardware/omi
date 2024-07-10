@@ -10,6 +10,7 @@ import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -49,7 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-        canPop: false,
+        canPop: true,
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
@@ -73,8 +74,24 @@ class _SettingsPageState extends State<SettingsPage> {
                 children: [
                   const SizedBox(height: 32.0),
                   ...getRecordingSettings((String? newValue) {
+                    if (newValue == null) return;
+                    if (newValue == _selectedLanguage) return;
+                    if (newValue != 'en') {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.of(context).pop(),
+                          () => {},
+                          'Language Limitations',
+                          'Speech profiles are only available for English language. We are working on adding support for other languages.',
+                          singleButton: true,
+                        ),
+                      );
+                    }
                     setState(() {
-                      _selectedLanguage = newValue!;
+                      _selectedLanguage = newValue;
                     });
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
@@ -153,9 +170,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Backups', () {
                     routeToPage(context, const BackupsPage());
                   }, icon: Icons.backup),
-                  getItemAddOn('Developer Mode', () {
+                  getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
-                    routeToPage(context, const DeveloperSettingsPage());
+                    await routeToPage(context, const DeveloperSettingsPage());
+                    setState(() {});
                   }, icon: Icons.code, visibility: devModeEnabled),
                   const SizedBox(height: 32),
                   Padding(
