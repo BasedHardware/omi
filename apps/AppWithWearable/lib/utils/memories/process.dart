@@ -5,6 +5,7 @@ import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -167,5 +168,6 @@ Future<Memory> finalizeMemoryRecord(
       upsertPineconeVector(memory.id.toString(), vector, memory.createdAt);
     });
   }
+  MixpanelManager().memoryCreated(memory);
   return memory;
 }

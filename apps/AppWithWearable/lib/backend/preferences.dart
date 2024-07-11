@@ -238,6 +238,10 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType', value); // auto, manual
 
   String get calendarType => getString('calendarType') ?? 'auto';
+
+  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
+
+  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
 }
 
 String getOpenAIApiKeyForUsage() =>

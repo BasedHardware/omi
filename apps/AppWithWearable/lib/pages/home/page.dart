@@ -118,6 +118,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();

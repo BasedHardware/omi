@@ -41,8 +41,6 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().deviceId = btDevice.id;
-      MixpanelManager().onboardingCompleted();
-      debugPrint("Onboarding completed");
       widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");

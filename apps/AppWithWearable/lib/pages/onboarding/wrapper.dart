@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
@@ -56,26 +57,46 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       children: [
                         // TODO: if connected already, stop animation and display battery
 
-                        WelcomePage(
-                          goNext: _goNext,
-                          skipDevice: () => _controller!.animateTo(2),
-                        ),
+                        WelcomePage(goNext: () {
+                          _goNext();
+                          MixpanelManager().onboardingStepICompleted('Welcome');
+                        }, skipDevice: () {
+                          _controller!.animateTo(2);
+                          MixpanelManager().onboardingStepICompleted('Welcome');
+                        }),
                         FindDevicesPage(
-                          goNext: _goNext,
+                          goNext: () {
+                            _goNext();
+                            MixpanelManager().onboardingStepICompleted('Find Devices');
+                          },
                         ),
                         HasBackupPage(
-                          goNext: _goNext,
-                          onSkip: () => _controller!.animateTo(_controller!.index + 2),
+                          goNext: () {
+                            _goNext();
+                            MixpanelManager().onboardingStepICompleted('Has Backup');
+                          },
+                          onSkip: () {
+                            _controller!.animateTo(_controller!.index + 2);
+                            MixpanelManager().onboardingStepICompleted('Has Backup');
+                          },
                         ),
                         ImportBackupPage(
-                          goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),
+                          goNext: () {
+                            routeToPage(context, const HomePageWrapper(), replace: true);
+                            MixpanelManager().onboardingStepICompleted('Import Backup');
+                            MixpanelManager().onboardingCompleted();
+                          },
                           goBack: () {
                             _controller!.animateTo(_controller!.index - 1);
                             FocusScope.of(context).unfocus();
                           },
                         ),
                         CompletePage(
-                          goNext: () => routeToPage(context, const HomePageWrapper(), replace: true),
+                          goNext: () {
+                            routeToPage(context, const HomePageWrapper(), replace: true);
+                            MixpanelManager().onboardingStepICompleted('Finalize');
+                            MixpanelManager().onboardingCompleted();
+                          },
                         ),
                       ],
                     ),
