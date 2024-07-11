@@ -35,7 +35,7 @@ void main() async {
   await MixpanelManager.init();
   initOpus(await opus_flutter.load());
 
-  await GrowthbookUtil.init();
+  GrowthbookUtil.init();
   CalendarUtil.init();
 
   if (Env.oneSignalAppId != null) {
