@@ -134,6 +134,7 @@ class MixpanelManager {
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
     properties['memory_id'] = memory.id;
+    properties['memory_discarded'] = memory.discarded;
     return properties;
   }
 
