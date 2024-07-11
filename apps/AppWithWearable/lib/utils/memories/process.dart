@@ -164,7 +164,7 @@ Future<Memory> finalizeMemoryRecord(
   MemoryProvider().saveMemory(memory);
   if (!discarded) {
     getEmbeddingsFromInput(structured.toString()).then((vector) {
-      createPineconeVector(memory.id.toString(), vector, memory.createdAt);
+      upsertPineconeVector(memory.id.toString(), vector, memory.createdAt);
     });
   }
   return memory;
