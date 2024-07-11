@@ -46,7 +46,7 @@ Future<SummaryResult> summarizeMemory(
     ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
     
     For the title, use the main topic of the conversation.
-    For the overview, condense the conversation into a brief summary with the main topics discussed, make sure to capture the key details from the conversation.
+    For the overview, condense the conversation into a brief summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
     For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation.
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
@@ -122,6 +122,46 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
     });
     return [];
   }
+}
+
+Future<List<String>> getSemanticSummariesForEmbedding(String transcript) async {
+  var prompt = '''
+  Please analyze the following transcript and identify the distinct topics discussed within the conversation. \ 
+  For each identified topic, provide a detailed summary that captures the key points and important details. \
+  Ensure that each summary is comprehensive yet concise, reflecting the main ideas and any relevant subtopics. \
+  Separate each topic summary clearly using '###' as a delimiter. Aim for each summary to be between 100-150 words.
+  
+  Example Transcript:
+  Speaker 1: Hi, how are you doing today?
+  Speaker 2: I'm good, thanks. I wanted to discuss our plans for the upcoming project.
+  Speaker 1: Sure, let's dive in.
+  Speaker 2: First, we need to outline the key deliverables and timelines. I think the initial prototype should be ready by the end of next month.
+  Speaker 1: That sounds reasonable. What about the budget? Do we have an estimate yet?
+  Speaker 2: We're looking at around \$50,000 for the initial phase. This includes development, testing, and some marketing.
+  Speaker 1: We should also consider potential risks, like delays in development or additional costs for unforeseen issues.
+  Speaker 2: Definitely. We need a risk management plan to address these possibilities.
+  ...
+  Speaker 1: That’s a good point. We should also consider the budget implications.
+  
+  Example of Desired Output:
+  Topic 1: Project Planning and Timeline
+  Summary: Discussed the upcoming project, focusing on the key deliverables and timelines. Agreed that the initial prototype should be ready by the end of next month. Emphasized the importance of outlining key tasks and milestones to ensure timely progress.
+  ###
+  Topic 2: Budget and Financial Considerations
+  Summary: Estimated a budget of around \$50,000 for the initial phase, covering development, testing, and marketing. Highlighted the need to consider potential risks, such as delays in development and additional costs for unforeseen issues. Discussed the importance of a risk management plan to mitigate these risks.
+  ###
+  Topic 3: Risk Management
+  Summary: Identified potential risks including development delays and unforeseen costs. Stressed the importance of creating a risk management plan to address these challenges proactively. Discussed strategies for monitoring and mitigating risks throughout the project lifecycle.
+  ###
+  
+  Transcript:
+  $transcript
+  '''
+      .replaceAll('  ', '')
+      .trim();
+  // debugPrint(prompt);
+  var response = await executeGptPrompt(prompt);
+  return response.split('###').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 }
 
 Future<String> postMemoryCreationNotification(Memory memory) async {

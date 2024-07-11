@@ -27,11 +27,11 @@ Future<void> updatePineconeMemoryId(String memoryId, int newId) {
       }));
 }
 
-Future<bool> createPineconeVector(String memoryId, List<double> vectorList, DateTime createdAt) async {
+Future<bool> upsertPineconeVector(String memoryId, List<double> vectorList, DateTime createdAt) async {
   var body = jsonEncode({
     'vectors': [
       {
-        'id': memoryId,
+        'id': '${SharedPreferencesUtil().uid}-$memoryId',
         'values': vectorList,
         'metadata': {
           'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,

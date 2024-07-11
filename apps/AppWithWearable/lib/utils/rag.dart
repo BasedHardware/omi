@@ -19,7 +19,6 @@ Future<List<dynamic>> retrieveRAGContext(String message) async {
   var startTimestamp = datesRange.isNotEmpty ? datesRange[0].millisecondsSinceEpoch ~/ 1000 : null;
   var endTimestamp = datesRange.isNotEmpty ? datesRange[1].millisecondsSinceEpoch ~/ 1000 : null;
 
-  // TODO: I feel like this always return the same memories? Test more.
   // TODO: how to show all the memories used in the chat, maybe a expand toggle?
   Future<List<List<String>>> memoriesByTopic = _retrieveMemoriesByTopic(topics, startTimestamp, endTimestamp, message);
   List<Memory> memories = [];
@@ -52,7 +51,11 @@ Future<List<dynamic>> retrieveRAGContext(String message) async {
 }
 
 Future<List<List<String>>> _retrieveMemoriesByTopic(
-    List<String> topics, int? startTimestamp, int? endTimestamp, String message) {
+  List<String> topics,
+  int? startTimestamp,
+  int? endTimestamp,
+  String message,
+) {
   return Future.wait(topics.map((topic) async {
     try {
       List<double> vectorizedMessage = await getEmbeddingsFromInput(topic);

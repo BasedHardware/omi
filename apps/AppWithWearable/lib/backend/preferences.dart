@@ -211,6 +211,10 @@ class SharedPreferencesUtil {
 
   bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
 
+  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted', value);
+
+  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted') ?? false;
+
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
