@@ -20,6 +20,7 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/background_service.dart';
+import 'package:friend_private/pages/capture/microphone_transcribing_util.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -318,15 +319,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       FlutterBackgroundService service = FlutterBackgroundService();
       if (await service.isRunning()) {
         setState(() {
-          iosDuration = 5;
+          iosDuration = 15;
           androidDuration = 15;
         });
         if (Platform.isAndroid) {
           await androidBgTranscribing(Duration(seconds: androidDuration), AppLifecycleState.resumed);
         } else if (Platform.isIOS) {
           var path = await getApplicationDocumentsDirectory();
-          var filePath = '${path.path}/recording_0.aac';
-
+          var filePath = '${path.path}/recording_0.wav';
           await iosBgTranscribing(filePath, Duration(seconds: iosDuration), true);
         }
         setState(() {
@@ -360,7 +360,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           await androidBgTranscribing(Duration(seconds: androidDuration), state);
         } else if (Platform.isIOS) {
           var path = await getApplicationDocumentsDirectory();
-          var filePath = '${path.path}/recording_0.aac';
+          var filePath = '${path.path}/recording_0.wav';
 
           await iosBgTranscribing(filePath, Duration(seconds: iosDuration), true);
         }
@@ -371,33 +371,24 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   Future androidBgTranscribing(Duration interval, AppLifecycleState state) async {
     final backgroundService = FlutterBackgroundService();
-
     _backgroundTranscriptTimer?.cancel();
     _backgroundTranscriptTimer = Timer.periodic(interval, (timer) async {
       if (state == AppLifecycleState.resumed) {
         try {
-          var path = await getApplicationDocumentsDirectory();
-          var filePath = '${path.path}/recording_$fileCount.aac';
-          var file = File(filePath);
-          backgroundService.invoke('timerUpdate', {'time': '0'});
-          if (file.existsSync()) {
-            Future.delayed(const Duration(milliseconds: 500), () async {
+          if (isTranscribing) return;
+          await androidBgCallback(
+            backgroundService: backgroundService,
+            fileCount: fileCount,
+            updateState: () {
               setState(() {
                 fileCount++;
-              });
-              backgroundService.invoke('timerUpdate', {'time': '30'});
-              _processFileToTranscript(file);
-              var paths = SharedPreferencesUtil().recordingPaths;
-              SharedPreferencesUtil().recordingPaths = [...paths, filePath];
-              setState(() {
                 androidDuration = 30;
               });
-            });
-          } else {
-            debugPrint('File does not exist.');
-          }
+            },
+            processFileToTranscript: _processFileToTranscript,
+          );
         } catch (e) {
-          debugPrint('Error reading and splitting file content: $e');
+          debugPrint('Error changing recorder to new file: $e');
         }
       } else {
         debugPrint('not performing operation in background');
@@ -410,43 +401,24 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     _backgroundTranscriptTimer = Timer.periodic(interval, (timer) async {
       debugPrint('timer triggered at ${DateTime.now()}');
       try {
-        final file = File(filePath);
-
-        if (await file.exists()) {
-          // Get the current length of the file
-          final currentLength = await file.length();
-
-          if (currentLength > lastOffset) {
-            // Read the new content from the file
-            final content = await file.openRead(lastOffset, currentLength).toList();
-
-            // Flatten the list of lists of bytes
-            final newContent = content.expand((bytes) => bytes).toList();
-
-            // Write the new content to a new file
-            var path = await getApplicationDocumentsDirectory();
-            final newFilePath = '${path.path}/recording_$partNumber.aac';
-            final newFile = File(newFilePath);
-            await newFile.writeAsBytes((newContent));
-            debugPrint('New content written to $newFilePath');
-            if (shouldTranscribe) {
-              await _processFileToTranscript(newFile);
-              var paths = SharedPreferencesUtil().recordingPaths;
-              SharedPreferencesUtil().recordingPaths = [...paths, newFilePath];
-            }
-
-            // Update the last offset and part number
+        if (isTranscribing) return;
+        await iosBgCallback(
+          filePath: filePath,
+          interval: interval,
+          shouldTranscribe: shouldTranscribe,
+          lastOffset: lastOffset,
+          partNumber: partNumber,
+          processFileToTranscript: _processFileToTranscript,
+          updateState: (currentLength) {
             setState(() {
               lastOffset = currentLength;
               partNumber++;
               iosDuration = 10;
             });
-          }
-        } else {
-          debugPrint('File does not exist.');
-        }
+          },
+        );
       } catch (e) {
-        debugPrint('Error reading and splitting file content: $e');
+        print('Error reading and splitting file content: $e');
       }
     });
   }
@@ -503,16 +475,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   Future listenToBackgroundService() async {
     final backgroundService = FlutterBackgroundService();
-    backgroundService.on('update').listen((event) async {
-      if (event!['path'] != null && File(event['path']).existsSync()) {
-        await _processFileToTranscript(File(event['path']));
-      }
-      debugPrint('received data message in feed: $event');
-    }, onError: (e, s) {
-      debugPrint('error listening for updates: $e, $s');
-    }, onDone: () {
-      debugPrint('background listen closed');
-    });
     backgroundService.on('stateUpdate').listen((event) async {
       if (event!['state'] == 'recording') {
         setState(() => _state = RecordingState.record);
@@ -529,12 +491,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   _startRecording() async {
+    setState(() {
+      fileCount = 0;
+    });
     if (Platform.isAndroid) {
       if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
         await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       }
     }
-
     await Permission.microphone.request();
     await initializeBackgroundService();
   }
@@ -552,76 +516,66 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     service.invoke("stop");
     setState(() {
       _state = RecordingState.stop;
-      isTranscribing = true;
     });
     if (Platform.isIOS) {
       var path = await getApplicationDocumentsDirectory();
-      var filePath = '${path.path}/recording_0.aac';
-      setState(() {
-        iosDuration = 1;
-      });
-      await iosBgTranscribing(filePath, Duration(seconds: iosDuration), true);
+      var filePath = '${path.path}/recording_0.wav';
+      await iosBgCallback(
+        filePath: filePath,
+        interval: Duration(seconds: iosDuration),
+        shouldTranscribe: false,
+        lastOffset: lastOffset,
+        partNumber: partNumber,
+        processFileToTranscript: _processFileToTranscript,
+        updateState: (currentLength) {
+          setState(() {
+            lastOffset = currentLength;
+            partNumber++;
+            iosDuration = 10;
+          });
+        },
+      );
       _backgroundTranscriptTimer?.cancel();
+      setState(() {
+        partNumber = 1;
+      });
     } else if (Platform.isAndroid) {
-      androidBgTranscribing(Duration(seconds: androidDuration), AppLifecycleState.resumed);
       _backgroundTranscriptTimer?.cancel();
     }
 
-    Future.delayed(const Duration(seconds: 2), () async {
-      var path = await getApplicationDocumentsDirectory();
-      var filePaths = [];
-      var files = path.listSync();
-      if (Platform.isIOS) {
-        for (var file in files) {
-          if (file is File) {
-            if (!file.path.contains('recording_0')) {
-              filePaths.add(file.path);
-            }
-          }
-        }
-        if (SharedPreferencesUtil().transcriptSegments.isEmpty) {
-          // if no segments, process all files (in case of multiple recordings)
-          Future.forEach(filePaths, (f) async {
-            await _processFileToTranscript(File(f));
+    if (Platform.isIOS) {
+      await transcribeAfterStopiOS(
+        processFileToTranscript: _processFileToTranscript,
+        updateState: () {
+          setState(() {
+            isTranscribing = false;
           });
-        } else {
-          // if segments exist, process only the new files
-          Future.forEach(filePaths, (f) async {
-            if (!SharedPreferencesUtil().recordingPaths.contains(f)) {
-              await _processFileToTranscript(File(f));
-            }
-          });
-        }
-      } else if (Platform.isAndroid) {
-        for (var file in files) {
-          if (file is File) {
-            if (file.path.contains('recording_')) {
-              if (!SharedPreferencesUtil().recordingPaths.contains(file.path)) {
-                filePaths.add(file.path);
-              }
-            }
-          }
-          if (SharedPreferencesUtil().transcriptSegments.isEmpty) {
-            // if no segments, process all files (in case of multiple recordings)
-            Future.forEach(filePaths, (f) async {
-              await _processFileToTranscript(File(f));
+        },
+        memory: () {
+          _memoryCreationTimer?.cancel();
+          _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
+        },
+        segments: segments,
+      );
+    } else if (Platform.isAndroid) {
+      setState(() {
+        isTranscribing = true;
+      });
+      Future.delayed(const Duration(seconds: 2), () async {
+        await transcribeAfterStopAndroid(
+          processFileToTranscript: _processFileToTranscript,
+          updateState: () {
+            setState(() {
+              isTranscribing = false;
             });
-          } else {
-            // if segments exist, process only the new files
-            Future.forEach(filePaths, (f) async {
-              if (!SharedPreferencesUtil().recordingPaths.contains(f)) {
-                await _processFileToTranscript(File(f));
-              }
-            });
-          }
-        }
-      }
-    }).then((value) async {
-      setState(() => isTranscribing = false);
-      if (segments.isNotEmpty) {
-        setState(() => memoryCreating = true);
-        await _createMemory();
-      }
-    });
+          },
+          memory: () {
+            _memoryCreationTimer?.cancel();
+            _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
+          },
+          segments: segments,
+        );
+      });
+    }
   }
 }

@@ -55,23 +55,34 @@ void onStart(ServiceInstance service) async {
   await SharedPreferencesUtil.init();
   var record = AudioRecorder();
   var path = await getApplicationDocumentsDirectory();
-  var filePath = '${path.path}/recording_$count.aac';
+  if (service is AndroidServiceInstance) {
+    var files = Directory(path.path).listSync();
+    for (var file in files) {
+      if (file.path.endsWith('.wav')) {
+        file.deleteSync();
+      }
+    }
+  }
+  var filePath = '${path.path}/recording_$count.wav';
   service.invoke("stateUpdate", {"state": 'recording'});
-  await record.start(const RecordConfig(), path: filePath);
+  await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
   // timerUpdate is only invoked on Android
   service.on("timerUpdate").listen((event) async {
     if (event!["time"] == '0') {
-      await record.stop();
-      await record.dispose();
+      if (await record.isRecording()) {
+        await record.stop();
+        await record.dispose();
+      }
+
       debugPrint("recording stopped");
     }
     if (event["time"] == '30') {
       var paths = SharedPreferencesUtil().recordingPaths;
       SharedPreferencesUtil().recordingPaths = [...paths, filePath];
       count++;
-      filePath = '${path.path}/recording_$count.aac';
+      filePath = '${path.path}/recording_$count.wav';
       record = AudioRecorder();
-      await record.start(const RecordConfig(), path: filePath);
+      await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
       debugPrint("recording started again file: $filePath");
     }
   });
