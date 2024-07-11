@@ -31,6 +31,10 @@ class LocationService {
     return permissionGranted;
   }
 
+  Future<PermissionStatus> permissionStatus() async {
+    return await location.hasPermission();
+  }
+
   Future hasPermission() async {
     return await location.hasPermission() == PermissionStatus.granted;
   }

@@ -44,7 +44,7 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -68,6 +68,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptFinishedAt;
 
   LocationData? locationData;
+  bool isLocationServiceEnabled = false;
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -225,6 +226,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
       initiateBytesProcessing();
@@ -251,9 +253,21 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      if (await LocationService().isServiceEnabled() ||
+          (await LocationService().permissionStatus() == PermissionStatus.deniedForever)) {
+        await requestLocationPermission();
+      }
+    }
+    super.didChangeAppLifecycleState(state);
+  }
+
+  @override
   void dispose() {
     record.dispose();
     _memoryCreationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -277,7 +291,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     LocationService locationService = LocationService();
     bool serviceEnabled = await locationService.enableService();
     if (!serviceEnabled) {
-      print('Location service not enabled');
+      debugPrint('Location service not enabled');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -295,9 +309,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     } else {
       PermissionStatus permissionGranted = await locationService.requestPermission();
       if (permissionGranted == PermissionStatus.denied) {
-        print('Location permission not granted');
+        debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
-        print('Location permission denied forever');
+        debugPrint('Location permission denied forever');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
