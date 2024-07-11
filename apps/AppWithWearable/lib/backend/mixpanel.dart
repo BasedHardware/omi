@@ -63,6 +63,8 @@ class MixpanelManager {
 
   void onboardingCompleted() => track('Onboarding Completed');
 
+  void onboardingStepICompleted(String step) => track('Onboarding Step $step Completed');
+
   void settingsOpened() => track('Settings Opened');
 
   void settingsSaved() => track('Developer Settings Saved');
@@ -81,6 +83,10 @@ class MixpanelManager {
 
   void pluginRated(String pluginId, double rating) {
     track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  }
+
+  void pluginResultExpanded(Memory memory, String pluginId) {
+    track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
   }
 
   void recordingLanguageChanged(String language) {
@@ -121,13 +127,6 @@ class MixpanelManager {
       'transcript_word_count': transcriptCopy.split(' ').length,
       'speaker_count': speakersCount,
     };
-  }
-
-  void coachAdvisorFeedback(String t, String feedback) {
-    var properties = _getTranscriptProperties(t);
-    properties['transcript_language'] = _preferences.recordingsLanguage;
-    properties['feedback'] = feedback;
-    track('Coach Advisor Feedback', properties: properties);
   }
 
   Map<String, dynamic> getMemoryEventProperties(Memory memory) {
@@ -254,6 +253,8 @@ class MixpanelManager {
   void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
 
   void firmwareUpdateButtonClick() => track('Firmware Update Clicked');
+
+  void firstTranscriptMade() => track('First Transcript Made');
 
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

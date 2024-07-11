@@ -13,6 +13,7 @@ import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/growthbook.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -129,6 +130,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       // TODO: disconnect and show error
     }
 
+    bool firstTranscriptMade = SharedPreferencesUtil().firstTranscriptMade;
+
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
     audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
@@ -149,6 +152,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           await _processFileToTranscript(data.item1);
           if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
           if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
+          if (segments.isNotEmpty && !firstTranscriptMade) {
+            SharedPreferencesUtil().firstTranscriptMade = true;
+            MixpanelManager().firstTranscriptMade();
+          }
           // uploadFile(data.item1, prefixTimestamp: true);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds

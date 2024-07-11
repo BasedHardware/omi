@@ -305,7 +305,12 @@ List<Widget> getPluginsWidgets(
               ExpandableTextWidget(
                 text: utf8.decode(pluginResponse.content.trim().codeUnits),
                 isExpanded: pluginResponseExpanded[i],
-                toggleExpand: () => onItemToggled(i),
+                toggleExpand: () {
+                  if (!pluginResponseExpanded[i]) {
+                    MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
+                  }
+                  onItemToggled(i);
+                },
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                 maxLines: 6,
                 // Change this to 6 if you want the initial max lines to be 6
