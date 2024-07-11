@@ -125,6 +125,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // await vad.init();
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+    if (codec == BleAudioCodec.unknown) {
+      // TODO: disconnect and show error
+    }
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
@@ -160,6 +163,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       }
     });
+    if (audioBytesStream == null) {
+      // TODO: error out and disconnect
+    }
   }
 
   _processFileToTranscript(File f) async {
