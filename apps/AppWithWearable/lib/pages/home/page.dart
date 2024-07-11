@@ -414,21 +414,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         height: 25,
                       ),
                     ),
-              // IconButton(
-              //   // TODO: Show the button only if a device is connected
-              //   // and there's a new firmware available
-              //   icon: const Icon(
-              //     Icons.download,
-              //     color: Colors.white,
-              //     size: 30,
-              //   ),
-              //   onPressed: () async {
-              //     if (_device != null) {
-              //       MixpanelManager().firmwareUpdateButtonClick();
-              //       await startDfu(_device!, '');
-              //     }
-              //   },
-              // ),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
