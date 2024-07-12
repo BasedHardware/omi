@@ -42,6 +42,9 @@ void main() async {
   await SharedPreferencesUtil.init();
   await ObjectBoxUtil.init();
   await MixpanelManager.init();
+
+  if (isAuth) MixpanelManager().identify();
+
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -140,7 +143,7 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
+      home: (SharedPreferencesUtil().onboardingCompleted && !widget.isAuth)
           ? const HomePageWrapper()
           : const OnboardingWrapper(),
     );

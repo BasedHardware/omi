@@ -48,10 +48,19 @@ Future<bool> executeBackup() async {
   return true;
 }
 
-Future<List<Memory>> retrieveBackup(String uid, String password) async {
+Future<bool> executeBackupWithUid({String? uid}) async {
+  var memories = MemoryProvider().getMemories();
+  if (memories.isEmpty) return true;
+  var encoded = encodeJson(memories.map((e) => e.toJson()).toList(), uid ?? SharedPreferencesUtil().uid);
+  SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+  await uploadBackupApi(encoded);
+  return true;
+}
+
+Future<List<Memory>> retrieveBackup(String uid) async {
   var retrieved = await downloadBackupApi(uid);
   if (retrieved == '') throw Exception('No backup found for this user ID.');
-  var memories = await getDecodedMemories(retrieved, password);
+  var memories = await getDecodedMemories(retrieved, uid);
   MemoryProvider().storeMemories(memories);
   return memories;
 }

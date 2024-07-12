@@ -1,8 +1,13 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -40,7 +45,6 @@ class _AuthComponentState extends State<AuthComponent> {
                           changeLoadingState();
                           await signInWithGoogle();
                           _signIn();
-                          changeLoadingState();
                         },
                 )
               : SignInWithAppleButton(
@@ -51,7 +55,6 @@ class _AuthComponentState extends State<AuthComponent> {
                           changeLoadingState();
                           await signInWithApple();
                           _signIn();
-                          changeLoadingState();
                         },
                   height: 52,
                 ),
@@ -87,8 +90,19 @@ class _AuthComponentState extends State<AuthComponent> {
   void _signIn() async {
     var token = await getIdToken();
     if (token != null) {
+      User user = FirebaseAuth.instance.currentUser!;
+      String uid = user.uid;
+      if (SharedPreferencesUtil().uid != uid) {
+        await executeBackupWithUid(uid: uid);
+        MixpanelManager().migrateUser(uid);
+        await migrateUserServer(uid);
+        SharedPreferencesUtil().uid = uid;
+      } else {
+        await retrieveBackup(uid);
+      }
       widget.onSignIn();
     }
+    changeLoadingState();
   }
 
   void _launchUrl(String url) async {
