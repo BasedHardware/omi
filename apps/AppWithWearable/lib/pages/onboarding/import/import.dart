@@ -40,7 +40,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _getTextField(uidController, hintText: 'Previous User ID', hasSuffixIcon: false, obscureText: false),

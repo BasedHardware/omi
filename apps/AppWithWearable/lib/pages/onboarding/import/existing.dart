@@ -15,7 +15,7 @@ class _HasBackupPageState extends State<HasBackupPage> {
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
         const Padding(
           padding: EdgeInsets.all(32),
