@@ -36,7 +36,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   listenAuthTokenChanges();
-  bool isAuth = (await getIdToken()) != null;
+  bool isAuth = false;
+  try {
+    isAuth = (await getIdToken()) != null;
+  } catch (e) {} // if no connect this will fail
 
   await initializeNotifications();
   await SharedPreferencesUtil.init();

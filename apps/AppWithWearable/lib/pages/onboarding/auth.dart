@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
@@ -34,7 +33,18 @@ class _AuthComponentState extends State<AuthComponent> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          const SizedBox(height: 64),
+          Center(
+            child: SizedBox(
+              height: 24,
+              width: 24,
+              child: loading
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 32),
           !Platform.isIOS
               ? SignInButton(
                   Buttons.google,
@@ -95,21 +105,20 @@ class _AuthComponentState extends State<AuthComponent> {
       String prevUid = SharedPreferencesUtil().uid;
       String newUid = user.uid;
       if (prevUid.isNotEmpty && prevUid != newUid) {
-        await executeBackupWithUid(uid: newUid);
+        // executeBackupWithUid(uid: newUid); this will anyway be called in home
         MixpanelManager().migrateUser(newUid);
         await migrateUserServer(prevUid, newUid);
         SharedPreferencesUtil().uid = newUid;
       } else {
-        // ios doesn't receive email or name if it's not first time
-        if (SharedPreferencesUtil().email.isEmpty) SharedPreferencesUtil().email = user.email ?? '';
         await retrieveBackup(newUid);
         SharedPreferencesUtil().uid = newUid;
         MixpanelManager().identify();
       }
       widget.onSignIn();
     } else {
-      // TODO: handle possible errors
-      // SnackBar
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Unexpected error signing in, please try again.'),
+      ));
     }
     changeLoadingState();
   }
