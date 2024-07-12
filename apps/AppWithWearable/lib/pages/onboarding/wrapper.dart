@@ -7,8 +7,6 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
 import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
-import 'package:friend_private/pages/onboarding/import/existing.dart';
-import 'package:friend_private/pages/onboarding/import/import.dart';
 import 'package:friend_private/pages/onboarding/permissions/permissions.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -26,7 +24,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _controller = TabController(length: 7, vsync: this);
+    _controller = TabController(length: 5, vsync: this);
     _controller!.addListener(() => setState(() {}));
     super.initState();
   }
@@ -112,27 +110,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           goNext: () {
                             _goNext();
                             MixpanelManager().onboardingStepICompleted('Find Devices');
-                          },
-                        ),
-                        HasBackupPage(
-                          goNext: () {
-                            _goNext();
-                            MixpanelManager().onboardingStepICompleted('Has Backup');
-                          },
-                          onSkip: () {
-                            _controller!.animateTo(_controller!.index + 2);
-                            MixpanelManager().onboardingStepICompleted('Has Backup');
-                          },
-                        ),
-                        ImportBackupPage(
-                          goNext: () {
-                            routeToPage(context, const HomePageWrapper(), replace: true);
-                            MixpanelManager().onboardingStepICompleted('Import Backup');
-                            MixpanelManager().onboardingCompleted();
-                          },
-                          goBack: () {
-                            _controller!.animateTo(_controller!.index - 1);
-                            FocusScope.of(context).unfocus();
                           },
                         ),
                         CompletePage(

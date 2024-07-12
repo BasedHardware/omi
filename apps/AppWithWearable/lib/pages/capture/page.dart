@@ -111,7 +111,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       null,
       retrievedFromCache: true,
     ).then((m) {
-      if (m != null && !m.discarded) executeBackup();
+      if (m != null && !m.discarded) executeBackupWithUid();
     });
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
@@ -225,7 +225,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
-    if (memory != null && !memory.discarded) executeBackup();
+    if (memory != null && !memory.discarded) executeBackupWithUid();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';

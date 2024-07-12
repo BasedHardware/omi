@@ -31,22 +31,22 @@ List<dynamic> decodeJson(String encryptedJson, String password) {
   return json.decode(decrypted);
 }
 
-Future<String> getEncodedMemories() async {
-  var password = SharedPreferencesUtil().backupPassword;
-  if (password.isEmpty) return '';
-  var memories = MemoryProvider().getMemories();
-  return encodeJson(memories.map((e) => e.toJson()).toList(), password);
-}
+// Future<String> getEncodedMemories() async {
+//   var password = SharedPreferencesUtil().backupPassword;
+//   if (password.isEmpty) return '';
+//   var memories = MemoryProvider().getMemories();
+//   return encodeJson(memories.map((e) => e.toJson()).toList(), password);
+// }
 
-Future<bool> executeBackup() async {
-  if (!SharedPreferencesUtil().backupsEnabled) return false;
-  var result = await getEncodedMemories();
-  if (result == '') return false;
-  await getDecodedMemories(result, SharedPreferencesUtil().backupPassword);
-  SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
-  await uploadBackupApi(result);
-  return true;
-}
+// Future<bool> executeBackup() async {
+//   if (!SharedPreferencesUtil().backupsEnabled) return false;
+//   var result = await getEncodedMemories();
+//   if (result == '') return false;
+//   await getDecodedMemories(result, SharedPreferencesUtil().backupPassword);
+//   SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+//   await uploadBackupApi(result);
+//   return true;
+// }
 
 Future<bool> executeBackupWithUid({String? uid}) async {
   var memories = MemoryProvider().getMemories();
