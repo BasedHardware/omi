@@ -45,8 +45,8 @@ Future<UserCredential> signInWithApple() async {
     SharedPreferencesUtil().familyName = appleCredential.familyName ?? '';
   }
   // TODO: this would not be set again if the user uninstalls and installs the app again :/ as name and email are only given once.
-  debugPrint('Email: ${SharedPreferencesUtil().email}');
-  debugPrint('Name: ${SharedPreferencesUtil().givenName}');
+  debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
+  debugPrint('signInWithApple Name: ${SharedPreferencesUtil().givenName}');
 
   // Create an `OAuthCredential` from the credential returned by Apple.
   final oauthCredential = OAuthProvider("apple.com").credential(
@@ -60,11 +60,13 @@ Future<UserCredential> signInWithApple() async {
 }
 
 Future<UserCredential> signInWithGoogle() async {
+  print('Signing in with Google');
   // Trigger the authentication flow
   final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-
+  print('Google User: $googleUser');
   // Obtain the auth details from the request
   final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
+  print('Google Auth: $googleAuth');
 
   // Create a new credential
   // TODO: store email + name
@@ -74,7 +76,18 @@ Future<UserCredential> signInWithGoogle() async {
   );
 
   // Once signed in, return the UserCredential
-  return await FirebaseAuth.instance.signInWithCredential(credential);
+  var result = await FirebaseAuth.instance.signInWithCredential(credential);
+  var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
+  var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
+  var email = result.additionalUserInfo?.profile?['email'] ?? '';
+  if (email != null) SharedPreferencesUtil().email = email;
+  if (givenName != null) {
+    SharedPreferencesUtil().givenName = givenName;
+    SharedPreferencesUtil().familyName = familyName;
+  }
+  debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
+  debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
+  return result;
 }
 
 listenAuthTokenChanges() {

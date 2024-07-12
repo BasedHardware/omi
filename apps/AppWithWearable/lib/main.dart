@@ -44,7 +44,7 @@ void main() async {
   await MixpanelManager.init();
   initOpus(await opus_flutter.load());
 
-  GrowthbookUtil.init();
+  await GrowthbookUtil.init();
   CalendarUtil.init();
 
   if (Env.oneSignalAppId != null) {
@@ -140,8 +140,9 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home:
-          (SharedPreferencesUtil().onboardingCompleted && false) ? const HomePageWrapper() : const OnboardingWrapper(),
+      home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
+          ? const HomePageWrapper()
+          : const OnboardingWrapper(),
     );
   }
 }

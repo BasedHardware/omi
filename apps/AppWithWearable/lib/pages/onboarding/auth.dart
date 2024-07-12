@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
@@ -32,25 +31,15 @@ class _AuthComponentState extends State<AuthComponent> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onPressed: () async {
-                    var result = await signInWithGoogle();
-                    debugPrint('Result: $result');
-                    var token = await getIdToken();
-                    if (token != null) {
-                      widget.onSignIn();
-                    }
+                    await signInWithGoogle();
+                    _signIn();
                   },
                 )
               : SignInWithAppleButton(
                   style: SignInWithAppleButtonStyle.whiteOutlined,
                   onPressed: () async {
-                    UserCredential credential = await signInWithApple();
-                    // var result = await signInWithGoogle();
-                    debugPrint('Result: $credential ${credential.user?.displayName} ${credential.user?.email}');
-                    var token = await getIdToken();
-                    debugPrint('Token: $token');
-                    if (token != null) {
-                      widget.onSignIn();
-                    }
+                    await signInWithApple();
+                    _signIn();
                   },
                   height: 52,
                 ),
@@ -85,6 +74,13 @@ class _AuthComponentState extends State<AuthComponent> {
         ],
       ),
     );
+  }
+
+  void _signIn() async {
+    var token = await getIdToken();
+    if (token != null) {
+      widget.onSignIn();
+    }
   }
 
   void _launchUrl(String url) async {
