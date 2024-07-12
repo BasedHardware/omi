@@ -24,6 +24,8 @@ class SharedPreferencesUtil {
     }
   }
 
+  set uid(String value) => saveString('uid', value);
+
   String get uid => getString('uid') ?? '';
 
   // DO NOT USE BESIDES BACKUP IMPORT
@@ -263,9 +265,9 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName';
 
-  // String get userName => getString('userName') ?? givenName; // the one the users sets
-  //
-  // set userName(String value) => saveString('userName', value);
+// String get userName => getString('userName') ?? givenName; // the one the users sets
+//
+// set userName(String value) => saveString('userName', value);
 }
 
 String getOpenAIApiKeyForUsage() =>

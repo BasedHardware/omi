@@ -13,11 +13,12 @@ class MixpanelManager {
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
     if (_mixpanel == null) {
-      _mixpanel =
-          await Mixpanel.init(Env.mixpanelProjectToken!, optOutTrackingDefault: false, trackAutomaticEvents: true);
+      _mixpanel = await Mixpanel.init(
+        Env.mixpanelProjectToken!,
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+      );
       _mixpanel?.setLoggingEnabled(false);
-      _instance.identify();
-      _instance.setPeopleValues();
     }
   }
 
@@ -52,7 +53,20 @@ class MixpanelManager {
     _mixpanel?.reset();
   }
 
-  void identify() => _mixpanel?.identify(_preferences.uid);
+  void identify() {
+  _mixpanel?.identify(_preferences.uid);
+  _instance.setPeopleValues();
+}
+
+  void migrateUser(String newUid) {
+    _mixpanel?.alias(newUid, _preferences.uid);
+    _mixpanel?.identify(newUid);
+  }
+
+  void setNameAndEmail(String name, String email) {
+    setUserProperty('Name', name);
+    setUserProperty('Email', email); // is this the right way? or should be $name and $email
+  }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       _mixpanel?.track(eventName, properties: properties);

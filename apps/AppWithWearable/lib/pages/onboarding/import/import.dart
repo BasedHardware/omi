@@ -125,7 +125,7 @@ class _ImportBackupPageState extends State<ImportBackupPage> with SingleTickerPr
     FocusScope.of(context).unfocus();
     try {
       setState(() => importLoading = true);
-      var memories = await retrieveBackup(uidController.text, passwordController.text);
+      var memories = await retrieveBackup(uidController.text);
       if (memories.isEmpty) {
         _snackBar('No Memories Found');
         setState(() => importLoading = false);
