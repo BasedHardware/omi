@@ -335,7 +335,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (_state == RecordState.record) {
       _stopRecording();
     } else {
-      //  _startRecording();
+      _startRecording();
     }
   }
 
