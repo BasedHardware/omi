@@ -78,13 +78,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                     child: TabBarView(
                       controller: _controller,
-                      // physics: const NeverScrollableScrollPhysics(),
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
                         // TODO: if connected already, stop animation and display battery
                         AuthComponent(
                           onSignIn: () {
                             MixpanelManager().onboardingStepICompleted('Auth');
-                            if (!SharedPreferencesUtil().onboardingCompleted) {
+                            if (SharedPreferencesUtil().onboardingCompleted) {
                               // previous users
                               routeToPage(context, const HomePageWrapper(), replace: true);
                             } else {
