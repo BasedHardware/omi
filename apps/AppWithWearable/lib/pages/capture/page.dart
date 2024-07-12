@@ -183,10 +183,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
+      coordinates: locationData != null ? [locationData!.latitude!, locationData!.longitude!] : [],
     );
-    memory?.latitude = locationData?.latitude;
-    memory?.longitude = locationData?.longitude;
-    debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
     if (memory != null && !memory.discarded) executeBackup();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
@@ -231,20 +229,23 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       debugPrint('SchedulerBinding.instance');
       initiateBytesProcessing();
       // Is this the right place to ask for location permission?
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.of(context).pop(),
-          () async {
-            Navigator.of(context).pop();
-            await requestLocationPermission();
-          },
-          'Know where your memories were created! 🌍',
-          '\nWe can use your location to add a location tag to your memories. This will help you remember where you were when you created them.\n\nWould you like to enable location services?',
-          singleButton: false,
-        ),
-      );
+      if (await LocationService().isServiceEnabled() == false ||
+          await LocationService().permissionStatus() != PermissionStatus.granted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.of(context).pop(),
+            () async {
+              Navigator.of(context).pop();
+              await requestLocationPermission();
+            },
+            'Know where your memories were created! 🌍',
+            '\nWe can use your location to add a location tag to your memories. This will help you remember where you were when you created them.\n\nWould you like to enable location services?',
+            singleButton: false,
+          ),
+        );
+      }
     });
 
     _processCachedTranscript();
@@ -255,7 +256,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
-      if (await LocationService().isServiceEnabled() ||
+      if (await LocationService().isServiceEnabled() &&
           (await LocationService().permissionStatus() == PermissionStatus.deniedForever)) {
         await requestLocationPermission();
       }
@@ -334,7 +335,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (_state == RecordState.record) {
       _stopRecording();
     } else {
-      _startRecording();
+      //  _startRecording();
     }
   }
 

@@ -99,6 +99,8 @@ dependencies:
   device_calendar: ^4.3.2
   flutter_timezone: ^2.0.0
   location: ^7.0.0
+  cached_network_image: ^3.3.1
+  map_launcher: ^3.3.1
 
 dependency_overrides:
   http: ^1.2.1

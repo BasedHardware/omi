@@ -24,7 +24,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(1, 1521024926543535),
       name: 'Memory',
-      lastPropertyId: const obx_int.IdUid(10, 4269258700026239045),
+      lastPropertyId: const obx_int.IdUid(11, 936894433617002540),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -72,14 +72,9 @@ final _entities = <obx_int.ModelEntity>[
             type: 10,
             flags: 0),
         obx_int.ModelProperty(
-            id: const obx_int.IdUid(9, 6548594222168567641),
-            name: 'latitude',
-            type: 8,
-            flags: 0),
-        obx_int.ModelProperty(
-            id: const obx_int.IdUid(10, 4269258700026239045),
-            name: 'longitude',
-            type: 8,
+            id: const obx_int.IdUid(11, 936894433617002540),
+            name: 'coordinates',
+            type: 29,
             flags: 0)
       ],
       relations: <obx_int.ModelRelation>[
@@ -374,7 +369,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         2626201971202508244,
         1809459319638310611,
         6229900676402028868,
-        8014962203152976278
+        8014962203152976278,
+        6548594222168567641,
+        4269258700026239045
       ],
       retiredRelationUids: const [],
       modelVersion: 5,
@@ -401,7 +398,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final recordingFilePathOffset = object.recordingFilePath == null
               ? null
               : fbb.writeString(object.recordingFilePath!);
-          fbb.startTable(11);
+          final coordinatesOffset = object.coordinates == null
+              ? null
+              : fbb.writeListFloat64(object.coordinates!);
+          fbb.startTable(12);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.createdAt.millisecondsSinceEpoch);
           fbb.addOffset(2, transcriptOffset);
@@ -410,8 +410,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           fbb.addInt64(5, object.structured.targetId);
           fbb.addInt64(6, object.startedAt?.millisecondsSinceEpoch);
           fbb.addInt64(7, object.finishedAt?.millisecondsSinceEpoch);
-          fbb.addFloat64(8, object.latitude);
-          fbb.addFloat64(9, object.longitude);
+          fbb.addOffset(10, coordinatesOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -439,17 +438,15 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final finishedAtParam = finishedAtValue == null
               ? null
               : DateTime.fromMillisecondsSinceEpoch(finishedAtValue);
-          final latitudeParam = const fb.Float64Reader()
-              .vTableGetNullable(buffer, rootOffset, 20);
-          final longitudeParam = const fb.Float64Reader()
-              .vTableGetNullable(buffer, rootOffset, 22);
+          final coordinatesParam =
+              const fb.ListReader<double>(fb.Float64Reader(), lazy: false)
+                  .vTableGetNullable(buffer, rootOffset, 24);
           final object = Memory(createdAtParam, transcriptParam, discardedParam,
               id: idParam,
               recordingFilePath: recordingFilePathParam,
               startedAt: startedAtParam,
               finishedAt: finishedAtParam,
-              latitude: latitudeParam,
-              longitude: longitudeParam);
+              coordinates: coordinatesParam);
           object.structured.targetId =
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 14, 0);
           object.structured.attach(store);
@@ -767,13 +764,9 @@ class Memory_ {
   static final finishedAt =
       obx.QueryDateProperty<Memory>(_entities[0].properties[7]);
 
-  /// See [Memory.latitude].
-  static final latitude =
-      obx.QueryDoubleProperty<Memory>(_entities[0].properties[8]);
-
-  /// See [Memory.longitude].
-  static final longitude =
-      obx.QueryDoubleProperty<Memory>(_entities[0].properties[9]);
+  /// See [Memory.coordinates].
+  static final coordinates =
+      obx.QueryDoubleVectorProperty<Memory>(_entities[0].properties[8]);
 
   /// see [Memory.transcriptSegments]
   static final transcriptSegments =

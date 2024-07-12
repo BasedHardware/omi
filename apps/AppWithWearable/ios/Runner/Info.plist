@@ -103,5 +103,10 @@
     <string>Older devices need location.</string>
     <!-- <key>NSLocationAlwaysUsageDescription</key>
     <string>Can I have location always?</string> -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+    	<string>comgooglemaps</string>
+    	<string>iosamap</string>
+</array>
 </dict>
 </plist>
