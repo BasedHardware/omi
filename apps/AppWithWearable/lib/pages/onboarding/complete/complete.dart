@@ -46,33 +46,36 @@ class _CompletePageState extends State<CompletePage> {
         //   )),
         // ),
         const SizedBox(height: 40),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
-                    width: 2,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: const GradientBoxBorder(
+                      gradient: LinearGradient(colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236)
+                      ]),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: MaterialButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  onPressed: widget.goNext,
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(fontSize: 16),
+                  child: MaterialButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    onPressed: widget.goNext,
+                    child: const Text(
+                      'Get Started',
+                      style: TextStyle(fontSize: 16),
+                    ),
                   ),
                 ),
-              ),
-            )
-          ],
+              )
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         // ElevatedButton()
