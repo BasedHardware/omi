@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
@@ -167,9 +166,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  getItemAddOn('Backups', () {
-                    routeToPage(context, const BackupsPage());
-                  }, icon: Icons.backup),
+                  // getItemAddOn('Backups', () {
+                  //   routeToPage(context, const BackupsPage());
+                  // }, icon: Icons.backup),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
