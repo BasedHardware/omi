@@ -101,9 +101,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
               ),
             ),
           ),
-        if (widget.includeSkip)
+        if (widget.includeSkip && deviceList.isEmpty)
           ElevatedButton(
-            onPressed: (){
+            onPressed: () {
               widget.goNext();
               MixpanelManager().useWithoutDeviceOnboardingFindDevices();
             },

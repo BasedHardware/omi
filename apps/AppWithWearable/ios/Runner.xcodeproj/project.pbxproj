@@ -11,6 +11,7 @@
 		0D1B1F2689256C0895BECAE9 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
 		12F9316B94DF72426BF544B4 /* devProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
 		29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		42127D852C2839B60005AB40 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42127D842C2839B60005AB40 /* NotificationService.swift */; };
@@ -111,6 +112,7 @@
 		AECCF8117A9D16730F2FB06D /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodProfile.xcconfig; path = Flutter/prodProfile.xcconfig; sourceTree = "<group>"; };
 		B5EA2AB07CAE9F4733A81081 /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
+		E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		FF73D83A4C6347C1DA49001B /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -205,6 +207,7 @@
 				20C35A59F6DEFF5646F302D3 /* Frameworks */,
 				ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */,
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
+				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -349,6 +352,7 @@
 				29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */,
 				CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */,
 				FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */,
+				16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -607,7 +611,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -1108,7 +1112,7 @@
 			baseConfigurationReference = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1183,7 +1187,7 @@
 			baseConfigurationReference = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1253,7 +1257,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -1310,7 +1314,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -1445,7 +1449,7 @@
 			baseConfigurationReference = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1516,7 +1520,7 @@
 			baseConfigurationReference = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1586,7 +1590,7 @@
 			baseConfigurationReference = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1656,7 +1660,7 @@
 			baseConfigurationReference = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ARCHS = "$ARCHS_STANDARD_64_BIT";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ANALYZER_NONNULL = YES;

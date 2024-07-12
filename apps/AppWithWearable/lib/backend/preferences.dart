@@ -242,6 +242,30 @@ class SharedPreferencesUtil {
   bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
 
   set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
+
+  // AUTH
+
+  String get authToken => getString('authToken') ?? '';
+
+  set authToken(String value) => saveString('authToken', value);
+
+  String get email => getString('email') ?? '';
+
+  set email(String value) => saveString('email', value);
+
+  String get givenName => getString('givenName') ?? '';
+
+  set givenName(String value) => saveString('givenName', value);
+
+  String get familyName => getString('familyName') ?? '';
+
+  set familyName(String value) => saveString('familyName', value);
+
+  String get fullName => '$givenName $familyName';
+
+  // String get userName => getString('userName') ?? givenName; // the one the users sets
+  //
+  // set userName(String value) => saveString('userName', value);
 }
 
 String getOpenAIApiKeyForUsage() =>
