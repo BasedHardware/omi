@@ -43,7 +43,7 @@ Future<bool> upsertPineconeVector(String memoryId, List<double> vectorList, Date
     'namespace': Env.pineconeIndexNamespace
   });
   var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
-  debugPrint('createVectorPinecone response: $responseBody');
+  debugPrint('upsertPineconeVector response: $responseBody');
   return (responseBody['upserted_count'] ?? 0) > 0;
 }
 

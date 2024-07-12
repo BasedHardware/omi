@@ -92,7 +92,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
-  Timer? _processPhoneMicAudioTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
 

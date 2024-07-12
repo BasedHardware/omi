@@ -4,7 +4,6 @@ import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -18,10 +17,6 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
-    // _instance.chatMessages = [];
-    if (!_preferences!.containsKey('uid')) {
-      _preferences!.setString('uid', const Uuid().v4());
-    }
   }
 
   set uid(String value) => saveString('uid', value);
@@ -103,7 +98,7 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
-  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
