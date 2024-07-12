@@ -17,6 +17,10 @@ class AuthComponent extends StatefulWidget {
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  bool loading = false;
+
+  changeLoadingState() => setState(() => loading = !loading);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -30,17 +34,25 @@ class _AuthComponentState extends State<AuthComponent> {
                   Buttons.google,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  onPressed: () async {
-                    await signInWithGoogle();
-                    _signIn();
-                  },
+                  onPressed: loading
+                      ? () {}
+                      : () async {
+                          changeLoadingState();
+                          await signInWithGoogle();
+                          _signIn();
+                          changeLoadingState();
+                        },
                 )
               : SignInWithAppleButton(
                   style: SignInWithAppleButtonStyle.whiteOutlined,
-                  onPressed: () async {
-                    await signInWithApple();
-                    _signIn();
-                  },
+                  onPressed: loading
+                      ? () {}
+                      : () async {
+                          changeLoadingState();
+                          await signInWithApple();
+                          _signIn();
+                          changeLoadingState();
+                        },
                   height: 52,
                 ),
           const SizedBox(height: 16),
@@ -52,17 +64,13 @@ class _AuthComponentState extends State<AuthComponent> {
                 const TextSpan(text: 'By Signing in, you agree to our\n'),
                 TextSpan(
                   text: 'Terms of service',
-                  style: const TextStyle(
-                    decoration: TextDecoration.underline,
-                  ),
+                  style: const TextStyle(decoration: TextDecoration.underline),
                   recognizer: TapGestureRecognizer()..onTap = () => _launchUrl('https://basedhardware.com/terms'),
                 ),
                 const TextSpan(text: ' and '),
                 TextSpan(
                   text: 'Privacy Policy',
-                  style: const TextStyle(
-                    decoration: TextDecoration.underline,
-                  ),
+                  style: const TextStyle(decoration: TextDecoration.underline),
                   recognizer: TapGestureRecognizer()
                     ..onTap = () {
                       _launchUrl('https://basedhardware.com/privacy-policy');
@@ -70,7 +78,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
