@@ -224,8 +224,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               //   decoration: _getTextFieldDecoration('Transcript Server URL'),
               //   style: const TextStyle(color: Colors.white),
               // ),
+              const SizedBox(height: 32),
               SharedPreferencesUtil().devModeEnabled
                   ? ListTile(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('Export Memories'),
                       subtitle: const Text('Export all your memories to a JSON file.'),
                       trailing: loadingExportMemories
@@ -259,6 +261,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ? ListTile(
                       title: const Text('Import Memories'),
                       subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
+                      contentPadding: EdgeInsets.zero,
                       trailing: loadingImportMemories
                           ? const SizedBox(
                               height: 16,

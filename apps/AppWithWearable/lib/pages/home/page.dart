@@ -25,6 +25,7 @@ import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
@@ -125,7 +126,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-
+    executeBackupWithUid();
     _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();

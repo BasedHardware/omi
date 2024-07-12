@@ -54,18 +54,20 @@ class MixpanelManager {
   }
 
   void identify() {
-  _mixpanel?.identify(_preferences.uid);
-  _instance.setPeopleValues();
-}
+    _mixpanel?.identify(_preferences.uid);
+    _instance.setPeopleValues();
+    setNameAndEmail();
+  }
 
   void migrateUser(String newUid) {
     _mixpanel?.alias(newUid, _preferences.uid);
     _mixpanel?.identify(newUid);
+    setNameAndEmail();
   }
 
-  void setNameAndEmail(String name, String email) {
-    setUserProperty('Name', name);
-    setUserProperty('Email', email); // is this the right way? or should be $name and $email
+  void setNameAndEmail() {
+    setUserProperty('\$name', SharedPreferencesUtil().fullName);
+    setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
@@ -91,16 +92,24 @@ class _AuthComponentState extends State<AuthComponent> {
     var token = await getIdToken();
     if (token != null) {
       User user = FirebaseAuth.instance.currentUser!;
-      String uid = user.uid;
-      if (SharedPreferencesUtil().uid != uid) {
-        await executeBackupWithUid(uid: uid);
-        MixpanelManager().migrateUser(uid);
-        await migrateUserServer(uid);
-        SharedPreferencesUtil().uid = uid;
+      String prevUid = SharedPreferencesUtil().uid;
+      String newUid = user.uid;
+      if (prevUid.isNotEmpty && prevUid != newUid) {
+        await executeBackupWithUid(uid: newUid);
+        MixpanelManager().migrateUser(newUid);
+        await migrateUserServer(prevUid, newUid);
+        SharedPreferencesUtil().uid = newUid;
       } else {
-        await retrieveBackup(uid);
+        // ios doesn't receive email or name if it's not first time
+        if (SharedPreferencesUtil().email.isEmpty) SharedPreferencesUtil().email = user.email ?? '';
+        await retrieveBackup(newUid);
+        SharedPreferencesUtil().uid = newUid;
+        MixpanelManager().identify();
       }
       widget.onSignIn();
+    } else {
+      // TODO: handle possible errors
+      // SnackBar
     }
     changeLoadingState();
   }

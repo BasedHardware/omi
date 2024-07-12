@@ -148,9 +148,9 @@ Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) a
   debugPrint('reviewPlugin: ${response?.body}');
 }
 
-Future<void> migrateUserServer(String newUid) async {
+Future<void> migrateUserServer(String prevUid, String newUid) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}migrate-user?prev_uid=${SharedPreferencesUtil().uid}&new_uid=$newUid',
+    url: '${Env.apiBaseUrl}migrate-user?prev_uid=$prevUid&new_uid=$newUid',
     headers: {},
     method: 'POST',
     body: '',
