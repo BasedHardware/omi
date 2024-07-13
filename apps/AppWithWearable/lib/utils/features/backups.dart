@@ -49,10 +49,11 @@ List<dynamic> decodeJson(String encryptedJson, String password) {
 // }
 
 Future<bool> executeBackupWithUid({String? uid}) async {
+  if (!SharedPreferencesUtil().backupsEnabled) return false;
   var memories = MemoryProvider().getMemories();
   if (memories.isEmpty) return true;
   var encoded = encodeJson(memories.map((e) => e.toJson()).toList(), uid ?? SharedPreferencesUtil().uid);
-  SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+  // SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
   await uploadBackupApi(encoded);
   return true;
 }

@@ -138,19 +138,9 @@ class SharedPreferencesUtil {
     saveStringList('transcriptSegments', segments);
   }
 
-  bool get backupsEnabled => getBool('backupsEnabled') ?? false;
+  bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
 
-  set backupsEnabled(bool value) => saveBool('backupsEnabled', value);
-
-  bool get hasBackupPassword => getString('backupPassword') != null && getString('backupPassword')!.isNotEmpty;
-
-  String get backupPassword => getString('backupPassword') ?? '';
-
-  set backupPassword(String value) => saveString('backupPassword', value);
-
-  String get lastBackupDate => getString('lastBackupDate') ?? '';
-
-  set lastBackupDate(String value) => saveString('lastBackupDate', value);
+  set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);
 
   String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
 
