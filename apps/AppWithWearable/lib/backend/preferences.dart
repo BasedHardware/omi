@@ -4,7 +4,6 @@ import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -18,11 +17,9 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
-    // _instance.chatMessages = [];
-    if (!_preferences!.containsKey('uid')) {
-      _preferences!.setString('uid', const Uuid().v4());
-    }
   }
+
+  set uid(String value) => saveString('uid', value);
 
   String get uid => getString('uid') ?? '';
 
@@ -101,19 +98,7 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
-  // List<Message> get chatMessages {
-  //   final List<String> messages = getStringList('messages') ?? [];
-  //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
-  // }
-  //
-  // set chatMessages(List<Message> value) {
-  //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
-  //   saveStringList('messages', messages);
-  // }
-
-  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-
-  // bool get hasSpeakerProfile => true;
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? true;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
@@ -153,19 +138,9 @@ class SharedPreferencesUtil {
     saveStringList('transcriptSegments', segments);
   }
 
-  bool get backupsEnabled => getBool('backupsEnabled') ?? false;
+  bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
 
-  set backupsEnabled(bool value) => saveBool('backupsEnabled', value);
-
-  bool get hasBackupPassword => getString('backupPassword') != null && getString('backupPassword')!.isNotEmpty;
-
-  String get backupPassword => getString('backupPassword') ?? '';
-
-  set backupPassword(String value) => saveString('backupPassword', value);
-
-  String get lastBackupDate => getString('lastBackupDate') ?? '';
-
-  set lastBackupDate(String value) => saveString('lastBackupDate', value);
+  set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);
 
   String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
 
@@ -223,6 +198,10 @@ class SharedPreferencesUtil {
 
   bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
 
+  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted2', value);
+
+  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
+
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
@@ -246,6 +225,34 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType', value); // auto, manual
 
   String get calendarType => getString('calendarType') ?? 'auto';
+
+  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
+
+  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
+
+  // AUTH
+
+  String get authToken => getString('authToken') ?? '';
+
+  set authToken(String value) => saveString('authToken', value);
+
+  String get email => getString('email') ?? '';
+
+  set email(String value) => saveString('email', value);
+
+  String get givenName => getString('givenName') ?? '';
+
+  set givenName(String value) => saveString('givenName', value);
+
+  String get familyName => getString('familyName') ?? '';
+
+  set familyName(String value) => saveString('familyName', value);
+
+  String get fullName => '$givenName $familyName';
+
+// String get userName => getString('userName') ?? givenName; // the one the users sets
+//
+// set userName(String value) => saveString('userName', value);
 }
 
 String getOpenAIApiKeyForUsage() =>
