@@ -1,4 +1,5 @@
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:objectbox/objectbox.dart';
 
 enum MessageSender { ai, human }
@@ -31,10 +32,15 @@ class Message {
 
   Message(this.createdAt, this.text, this.sender, {this.id = 0, this.type = 'text'});
 
-  static String getMessagesAsString(List<Message> messages) {
+  static String getMessagesAsString(List<Message> messages, {bool useUserNameIfAvailable = false}) {
     var sortedMessages = messages.toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    return sortedMessages
-        .map((e) => '(${e.createdAt.toIso8601String().split('.')[0]}) ${e.sender.toString().toUpperCase()}: ${e.text}')
-        .join('\n');
+    return sortedMessages.map((e) {
+      var sender = e.sender == 'human'
+          ? SharedPreferencesUtil().givenName.isNotEmpty && useUserNameIfAvailable
+              ? SharedPreferencesUtil().givenName
+              : 'USER'
+          : e.sender.toString().toUpperCase();
+      return '(${e.createdAt.toIso8601String().split('.')[0]}) $sender: ${e.text}';
+    }).join('\n');
   }
 }
