@@ -29,7 +29,6 @@ List<Widget> getSummaryWidgets(
   String time = memory.startedAt == null
       ? dateTimeFormat('h:mm a', memory.createdAt)
       : '${dateTimeFormat('h:mm a', memory.startedAt)} to ${dateTimeFormat('h:mm a', memory.finishedAt)}';
-  debugPrint('structured.actionItems: ${structured.actionItems.length}');
   return [
     const SizedBox(height: 24),
     Text(
