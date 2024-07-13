@@ -20,6 +20,10 @@ class MemoryProvider {
 
   List<Memory> getMemories() => _box.getAll();
 
+  int getMemoriesCount() => _box.count();
+
+  int getNonDiscardedMemoriesCount() => _box.query(Memory_.discarded.equals(false)).build().count();
+
   List<Memory> getMemoriesOrdered({bool includeDiscarded = false}) {
     if (includeDiscarded) {
       // created at descending
