@@ -13,6 +13,7 @@ import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/growthbook.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -91,7 +92,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
-  Timer? _processPhoneMicAudioTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
 
@@ -110,7 +110,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       null,
       retrievedFromCache: true,
     ).then((m) {
-      if (m != null && !m.discarded) executeBackup();
+      if (m != null && !m.discarded) executeBackupWithUid();
     });
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
@@ -125,6 +125,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // await vad.init();
     // Variables to maintain state
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+    if (codec == BleAudioCodec.unknown) {
+      // TODO: disconnect and show error
+    }
+
+    bool firstTranscriptMade = SharedPreferencesUtil().firstTranscriptMade;
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
@@ -146,6 +151,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           await _processFileToTranscript(data.item1);
           if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
           if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
+          if (segments.isNotEmpty && !firstTranscriptMade) {
+            SharedPreferencesUtil().firstTranscriptMade = true;
+            MixpanelManager().firstTranscriptMade();
+          }
           // uploadFile(data.item1, prefixTimestamp: true);
         } catch (e, stacktrace) {
           // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
@@ -160,6 +169,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       }
     });
+    if (audioBytesStream == null) {
+      // TODO: error out and disconnect
+    }
   }
 
   _processFileToTranscript(File f) async {
@@ -212,7 +224,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
-    if (memory != null && !memory.discarded) executeBackup();
+    if (memory != null && !memory.discarded) executeBackupWithUid();
     if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
       postMemoryCreationNotification(memory).then((r) {
         // r = 'Hi there testing notifications stuff';
@@ -272,7 +284,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     return Stack(
       children: [
         ListView(children: [
-          speechProfileWidget(context),
+          speechProfileWidget(context, setState),
           ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
           getTranscriptWidget(memoryCreating, segments, widget.device),
           const SizedBox(height: 16)

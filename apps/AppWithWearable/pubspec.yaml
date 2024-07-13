@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.14+40
+version: 1.0.16+44
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -60,15 +60,15 @@ dependencies:
   flutter_silero_vad:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
-#  fonnx:
-#    git:
-#      url: https://github.com/Telosnex/fonnx.git
-#      ref: main
+  #  fonnx:
+  #    git:
+  #      url: https://github.com/Telosnex/fonnx.git
+  #      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-  nordic_dfu: ^6.1.4+hotfix
+  #  nordic_dfu: ^6.1.4+hotfix
   package_info_plus: ^8.0.0
 
   path_provider: any
@@ -99,6 +99,11 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   device_calendar: ^4.3.2
   flutter_timezone: ^2.0.0
+  sign_in_button: ^3.2.0
+  sign_in_with_apple: ^6.1.1
+  firebase_core: ^3.2.0
+  firebase_auth: ^5.1.2
+  google_sign_in: ^6.2.1
 
 dependency_overrides:
   http: ^1.2.1
@@ -127,18 +132,8 @@ flutter_launcher_icons:
   image_path: 'assets/images/app_launcher_icon.png'
 
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
-
-  # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/blob.png
     - assets/images/stars.png
@@ -175,28 +170,11 @@ flutter:
           weight: 900
           style: italic
 
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/assets-and-images/#resolution-aware.
+flutter_native_splash:
+  background_image: "assets/images/splash.png"
+  android_12:
+    #    image: assets/images/herologo.png
+    color: "#000000" # TODO: improve hero banner on android12
 
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/assets-and-images/#from-packages
-
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/custom-fonts/#from-packages
+  android: true
+  ios: true

@@ -1,3 +1,4 @@
+import 'package:friend_private/backend/preferences.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -30,6 +31,12 @@ class TranscriptSegment {
   @override
   String toString() {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
+  }
+
+  String getTimestampString() {
+    var start = Duration(seconds: this.start.toInt());
+    var end = Duration(seconds: this.end.toInt());
+    return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   // Factory constructor to create a new Message instance from a map
@@ -125,16 +132,33 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
-  static String buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
+  static String buildDiarizedTranscriptMessage(
+    List<TranscriptSegment> segments, {
+    bool includeTimestamps = false,
+  }) {
     String transcript = '';
+    var userName = SharedPreferencesUtil().givenName;
+    includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
+      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
-        transcript += 'You said: ${segment.text} ';
+        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: ${segment.text} ';
       } else {
-        transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
+        transcript += '$timestampStr Speaker ${segment.speakerId}: ${segment.text} ';
       }
       transcript += '\n\n';
     }
     return transcript.trim();
+  }
+
+  static bool canDisplaySeconds(List<TranscriptSegment> segments) {
+    for (var i = 0; i < segments.length; i++) {
+      for (var j = i + 1; j < segments.length; j++) {
+        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 }

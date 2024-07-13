@@ -4,12 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 getDialog(BuildContext context, Function onCancel, Function onConfirm, String title, String content,
-    {bool singleButton = false}) {
+    {bool singleButton = false, String okButtonText = 'Ok'}) {
   var actions = singleButton
       ? [
           TextButton(
             onPressed: () => onCancel(),
-            child: const Text('Ok', style: TextStyle(color: Colors.white)),
+            child:  Text(okButtonText, style: TextStyle(color: Colors.white)),
           )
         ]
       : [
