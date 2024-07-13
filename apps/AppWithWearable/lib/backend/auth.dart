@@ -110,7 +110,6 @@ listenAuthTokenChanges() {
 }
 
 Future<String?> getIdToken() async {
-  debugPrint('FirebaseAuth.instance.tenantId: ${FirebaseAuth.instance.tenantId}');
   IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
   return newToken?.token;
 }

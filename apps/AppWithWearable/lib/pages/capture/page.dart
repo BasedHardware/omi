@@ -22,9 +22,11 @@ import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/websockets.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
+import 'package:web_socket_channel/io.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -98,6 +100,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
+  // ----
+  WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
+  bool websocketReconnecting = false;
+  IOWebSocketChannel? wsChannel;
+  StreamSubscription? streamSubscription;
+
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
@@ -117,6 +125,99 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   int elapsedSeconds = 0;
+
+  Future<void> initiateBytesStreamingProcessing() async {
+    if (btDevice == null) return;
+    await getDeviceCodec(btDevice!.id);
+    // wsChannel?.sink.close(1000);
+    // streamSubscription?.cancel();
+
+    Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await streamingTranscript(
+        btDevice: btDevice!,
+        onWebsocketConnectionSuccess: () {
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.connected;
+            websocketReconnecting = false;
+            _reconnectionAttempts = 0; // Reset counter on successful connection
+          });
+        },
+        onWebsocketConnectionFailed: (err) {
+          // connection couldn't be initiated for some reason.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.failed;
+            websocketReconnecting = false;
+          });
+          _reconnectWebSocket();
+        },
+        onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
+          // connection was closed, either on resetState, or by deepgram, or by some other reason.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.closed;
+          });
+          if (closeCode != 1000) {
+            // attempt to reconnect
+            _reconnectWebSocket();
+          }
+        },
+        onWebsocketConnectionError: (err) {
+          // connection was okay, but then failed.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.error;
+            websocketReconnecting = false;
+          });
+          _reconnectWebSocket();
+        },
+        onMessageReceived: (List<TranscriptSegment> newSegments) {
+          // TODO: streaming doesn't need elapsed seconds, right? nahh, just decrease all segments - first segment start
+          // TODO: if segments.isempty(), and new is not, remove audiobytes or something - x seconds? so not huge empty audio?
+          // TODO: firstTranscriptMade
+          TranscriptSegment.combineSegments(segments, newSegments);
+          if (newSegments.isNotEmpty) {
+            SharedPreferencesUtil().transcriptSegments = segments;
+            setHasTranscripts(true);
+            setState(() {});
+            setHasTranscripts(true);
+            debugPrint('Memory creation timer restarted');
+            _memoryCreationTimer?.cancel();
+            _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+            currentTranscriptStartedAt ??= DateTime.now();
+            currentTranscriptFinishedAt = DateTime.now();
+          }
+          setState(() {});
+        });
+
+    wsChannel = data.item1;
+    streamSubscription = data.item2;
+    audioStorage = data.item3;
+  }
+
+  int _reconnectionAttempts = 0;
+
+  Future<void> _reconnectWebSocket() async {
+    if (_reconnectionAttempts >= 3) {
+      setState(() {
+        websocketReconnecting = false;
+      });
+      // TODO: reset here to 0? or not, this could cause infinite loop if it's called in parallel from 2 distinct places
+      debugPrint('Max reconnection attempts reached');
+      clearNotification(2);
+      createNotification(
+        notificationId: 2,
+        title: 'Error Generating Transcription',
+        body: 'Check your internet connection and try again. If the problem persists, restart the app.',
+      );
+      return;
+    }
+    setState(() {
+      websocketReconnecting = true;
+    });
+    _reconnectionAttempts++;
+    await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
+    debugPrint('Attempting to reconnect $_reconnectionAttempts time');
+    wsChannel?.sink.close();
+    streamSubscription?.cancel();
+    await initiateBytesStreamingProcessing();
+  }
 
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
@@ -199,9 +300,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('resetState: $restartBytesProcessing');
     audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    wsChannel?.sink.close(1000);
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
-    if (restartBytesProcessing) initiateBytesProcessing();
+    // if (restartBytesProcessing) initiateBytesProcessing();
+    if (restartBytesProcessing) initiateBytesStreamingProcessing();
   }
 
   _createMemory({bool forcedCreation = false}) async {
@@ -264,7 +367,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     btDevice = widget.device;
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
-      initiateBytesProcessing();
+      // initiateBytesProcessing();
+      initiateBytesStreamingProcessing();
     });
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
