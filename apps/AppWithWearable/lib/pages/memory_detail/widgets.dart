@@ -29,7 +29,6 @@ List<Widget> getSummaryWidgets(
   String time = memory.startedAt == null
       ? dateTimeFormat('h:mm a', memory.createdAt)
       : '${dateTimeFormat('h:mm a', memory.startedAt)} to ${dateTimeFormat('h:mm a', memory.finishedAt)}';
-  debugPrint('structured.actionItems: ${structured.actionItems.length}');
   return [
     const SizedBox(height: 24),
     Text(
@@ -305,7 +304,12 @@ List<Widget> getPluginsWidgets(
               ExpandableTextWidget(
                 text: utf8.decode(pluginResponse.content.trim().codeUnits),
                 isExpanded: pluginResponseExpanded[i],
-                toggleExpand: () => onItemToggled(i),
+                toggleExpand: () {
+                  if (!pluginResponseExpanded[i]) {
+                    MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
+                  }
+                  onItemToggled(i);
+                },
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                 maxLines: 6,
                 // Change this to 6 if you want the initial max lines to be 6

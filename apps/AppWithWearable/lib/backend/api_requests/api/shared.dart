@@ -45,6 +45,7 @@ dynamic extractContentFromResponse(http.Response? response,
     return data['choices'][0]['message']['content'];
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
+    // TODO: handle error, better specially for script migration
     throw Exception('Error fetching data: ${response?.statusCode}');
     // return {'error': response?.statusCode};
   }

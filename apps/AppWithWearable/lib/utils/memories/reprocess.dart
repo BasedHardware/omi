@@ -61,7 +61,7 @@ Future<Memory?> reProcessMemory(
 
   getEmbeddingsFromInput(structured.toString()).then((vector) {
     // TODO: update instead if it wasn't "discarded"
-    createPineconeVector(memory.id.toString(), vector, memory.createdAt);
+    upsertPineconeVector(memory.id.toString(), vector, memory.createdAt);
   });
 
   MemoryProvider().updateMemoryStructured(structured);

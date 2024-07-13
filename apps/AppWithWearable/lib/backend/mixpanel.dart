@@ -1,4 +1,6 @@
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -11,10 +13,12 @@ class MixpanelManager {
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
     if (_mixpanel == null) {
-      _mixpanel = await Mixpanel.init(Env.mixpanelProjectToken!,
-          optOutTrackingDefault: false, trackAutomaticEvents: true);
+      _mixpanel = await Mixpanel.init(
+        Env.mixpanelProjectToken!,
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+      );
       _mixpanel?.setLoggingEnabled(false);
-      _instance.identify();
     }
   }
 
@@ -23,6 +27,21 @@ class MixpanelManager {
   }
 
   MixpanelManager._internal();
+
+  setPeopleValues() {
+    setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
+    setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
+    setUserProperty('Backups Enabled', _preferences.backupsEnabled);
+    setUserProperty('Recordings Language', _preferences.recordingsLanguage);
+
+    setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
+    setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
+    setUserProperty('Messages Count', MessageProvider().getMessagesCount());
+  }
+
+  setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
 
   void optInTracking() {
     _mixpanel?.optInTracking();
@@ -34,7 +53,22 @@ class MixpanelManager {
     _mixpanel?.reset();
   }
 
-  void identify() => _mixpanel?.identify(_preferences.uid);
+  void identify() {
+    _mixpanel?.identify(_preferences.uid);
+    _instance.setPeopleValues();
+    setNameAndEmail();
+  }
+
+  void migrateUser(String newUid) {
+    _mixpanel?.alias(newUid, _preferences.uid);
+    _mixpanel?.identify(newUid);
+    setNameAndEmail();
+  }
+
+  void setNameAndEmail() {
+    setUserProperty('\$name', SharedPreferencesUtil().fullName);
+    setUserProperty('\$email', SharedPreferencesUtil().email);
+  }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       _mixpanel?.track(eventName, properties: properties);
@@ -45,21 +79,52 @@ class MixpanelManager {
 
   void onboardingCompleted() => track('Onboarding Completed');
 
+  void onboardingStepICompleted(String step) => track('Onboarding Step $step Completed');
+
   void settingsOpened() => track('Settings Opened');
 
   void settingsSaved() => track('Developer Settings Saved');
 
   void pluginsOpened() => track('Plugins Opened');
 
-  void pluginEnabled(String pluginId) => track('Plugin Enabled', properties: {'plugin_id': pluginId});
+  void pluginEnabled(String pluginId) {
+    track('Plugin Enabled', properties: {'plugin_id': pluginId});
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+  }
 
-  void pluginDisabled(String pluginId) => track('Plugin Disabled', properties: {'plugin_id': pluginId});
+  void pluginDisabled(String pluginId) {
+    track('Plugin Disabled', properties: {'plugin_id': pluginId});
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+  }
 
-  void recordingLanguageChanged(String language) =>
-      track('Recording Language Changed', properties: {'language': language});
+  void pluginRated(String pluginId, double rating) {
+    track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  }
 
-  void bottomNavigationTabClicked(String tab) =>
-      track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
+  void pluginResultExpanded(Memory memory, String pluginId) {
+    track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
+  }
+
+  void recordingLanguageChanged(String language) {
+    track('Recording Language Changed', properties: {'language': language});
+    setUserProperty('Recordings Language', language);
+  }
+
+  void calendarEnabled() {
+    track('Calendar Enabled');
+    setUserProperty('Calendar Enabled', true);
+  }
+
+  void calendarDisabled() {
+    track('Calendar Disabled');
+    setUserProperty('Calendar Enabled', false);
+  }
+
+  void calendarTypeChanged(String type) => track('Calendar Type Changed', properties: {'type': type});
+
+  void calendarSelected() => track('Calendar Selected');
+
+  void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
   void deviceConnected() => track('Device Connected');
 
@@ -80,26 +145,19 @@ class MixpanelManager {
     };
   }
 
-  void coachAdvisorFeedback(String t, String feedback) {
-    var properties = _getTranscriptProperties(t);
-    properties['transcript_language'] = _preferences.recordingsLanguage;
-    properties['feedback'] = feedback;
-    track('Coach Advisor Feedback', properties: properties);
-  }
-
   Map<String, dynamic> getMemoryEventProperties(Memory memory) {
     var properties = _getTranscriptProperties(memory.transcript);
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
     properties['memory_id'] = memory.id;
+    properties['memory_discarded'] = memory.discarded;
     return properties;
   }
 
   void memoryCreated(Memory memory) {
     var properties = getMemoryEventProperties(memory);
     properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] =
-        memory.structured.target!.actionItems.length;
+    properties['action_items_count'] = memory.structured.target!.actionItems.length;
     properties['transcript_language'] = _preferences.recordingsLanguage;
     track('Memory Created', properties: properties);
   }
@@ -118,25 +176,19 @@ class MixpanelManager {
     track('Memory Edited', properties: properties);
   }
 
-  void chatMessageSent(String message) =>
-      track('Chat Message Sent', properties: {
-        'message_length': message.length,
-        'message_word_count': message.split(' ').length
-      });
+  void chatMessageSent(String message) => track('Chat Message Sent',
+      properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
 
-  void speechProfileCapturePageClicked() =>
-      track('Speech Profile Capture Page Clicked');
+  void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
   void speechProfileStarted() => track('Speech Profile Started');
 
-  void speechProfileStartedOnboarding() =>
-      track('Speech Profile Started Onboarding');
+  void speechProfileStartedOnboarding() => track('Speech Profile Started Onboarding');
 
   void speechProfileCompleted() => track('Speech Profile Completed');
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
-      track('Show Discarded Memories Toggled',
-          properties: {'show_discarded': showDiscarded});
+      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
   void chatMessageMemoryClicked(Memory memory) =>
       track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
@@ -147,20 +199,32 @@ class MixpanelManager {
       track('Manual Memory Created', properties: getMemoryEventProperties(memory));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
-    _mixpanel?.getPeople().setOnce('What the user does', whatDoYouDo);
-    _mixpanel?.getPeople().setOnce('Using Friend At', whereDoYouPlanToUseYourFriend);
-    _mixpanel?.getPeople().setOnce('Age Range', ageRange);
+    setUserProperty('What the user does', whatDoYouDo);
+    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Age Range', ageRange);
   }
 
   void reProcessMemory(Memory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
-  void backupsEnabled() => track('Backups Enabled');
+  void backupsEnabled() {
+    track('Backups Enabled');
+    setUserProperty('Backups Enabled', true);
+  }
 
-  void backupsDisabled() => track('Backups Disabled');
+  void backupsDisabled() {
+    track('Backups Disabled');
+    setUserProperty('Backups Enabled', false);
+  }
 
-  void developerModeEnabled() => track('Developer Mode Enabled');
+  void developerModeEnabled() {
+    track('Developer Mode Enabled');
+    setUserProperty('Dev Mode Enabled', true);
+  }
 
-  void developerModeDisabled() => track('Developer Mode Disabled');
+  void developerModeDisabled() {
+    track('Developer Mode Disabled');
+    setUserProperty('Dev Mode Enabled', false);
+  }
 
   void userIDCopied() => track('User ID Copied');
 
@@ -205,7 +269,9 @@ class MixpanelManager {
 
   void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
 
-  void firmwareUpdateButtonClick() => track('Furmware Update Clicked');
+  void firmwareUpdateButtonClick() => track('Firmware Update Clicked');
+
+  void firstTranscriptMade() => track('First Transcript Made');
 
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

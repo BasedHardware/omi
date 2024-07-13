@@ -20,10 +20,12 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
@@ -72,6 +74,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    setState(() {});
   }
 
   Future<void> _initiatePlugins() async {
@@ -97,7 +101,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    // await migrateMemoriesCategoriesAndEmojis();
+    scriptMemoryVectorsExecuted();
     // await migrateMemoriesToObjectBox();
     _initiateMemories();
   }
@@ -116,13 +120,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-
+    executeBackupWithUid();
     _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();
@@ -412,21 +417,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         height: 25,
                       ),
                     ),
-              // IconButton(
-              //   // TODO: Show the button only if a device is connected
-              //   // and there's a new firmware available
-              //   icon: const Icon(
-              //     Icons.download,
-              //     color: Colors.white,
-              //     size: 30,
-              //   ),
-              //   onPressed: () async {
-              //     if (_device != null) {
-              //       MixpanelManager().firmwareUpdateButtonClick();
-              //       await startDfu(_device!, '');
-              //     }
-              //   },
-              // ),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
@@ -435,7 +425,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
+                  await routeToPage(context, const SettingsPage());
+                  setState(() {});
                 },
               )
             ],
