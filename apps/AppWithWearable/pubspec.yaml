@@ -60,15 +60,15 @@ dependencies:
   flutter_silero_vad:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
-#  fonnx:
-#    git:
-#      url: https://github.com/Telosnex/fonnx.git
-#      ref: main
+  #  fonnx:
+  #    git:
+  #      url: https://github.com/Telosnex/fonnx.git
+  #      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-#  nordic_dfu: ^6.1.4+hotfix
+  #  nordic_dfu: ^6.1.4+hotfix
   package_info_plus: ^8.0.0
 
   path_provider: any
@@ -173,7 +173,8 @@ flutter:
 flutter_native_splash:
   background_image: "assets/images/splash.png"
   android_12:
-    image: assets/images/herologo.png
-    color: "#000000"
+    #    image: assets/images/herologo.png
+    color: "#000000" # TODO: improve hero banner on android12
+
   android: true
   ios: true
