@@ -68,7 +68,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptFinishedAt;
 
   LocationData? locationData;
-  bool isLocationServiceEnabled = false;
+  bool shouldAskPermissionAgain = true;
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -235,9 +235,17 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           context: context,
           builder: (c) => getDialog(
             context,
-            () => Navigator.of(context).pop(),
+            () {
+              setState(() {
+                shouldAskPermissionAgain = false;
+              });
+              Navigator.of(context).pop();
+            },
             () async {
               Navigator.of(context).pop();
+              setState(() {
+                shouldAskPermissionAgain = true;
+              });
               await requestLocationPermission();
             },
             'Know where your memories were created! 🌍',
@@ -257,8 +265,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       if (await LocationService().isServiceEnabled() &&
-          (await LocationService().permissionStatus() == PermissionStatus.deniedForever)) {
-        await requestLocationPermission();
+          (await LocationService().permissionStatus() == PermissionStatus.deniedForever ||
+              await LocationService().permissionStatus() == PermissionStatus.denied)) {
+        if (shouldAskPermissionAgain) {
+          setState(() {
+            shouldAskPermissionAgain = false;
+          });
+          await requestLocationPermission();
+        }
       }
     }
     super.didChangeAppLifecycleState(state);
