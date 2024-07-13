@@ -414,11 +414,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               lastOffset = currentLength;
               partNumber++;
               iosDuration = 10;
+              isTranscribing = false;
             });
           },
         );
       } catch (e) {
-        print('Error reading and splitting file content: $e');
+        debugPrint('Error for file: $filePath');
+        debugPrint('Error reading and splitting file content: $e');
       }
     });
   }
@@ -511,6 +513,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('File size: $size');
   }
 
+  Future<void> waitForTranscriptionToFinish() async {
+    while (isTranscribing) {
+      debugPrint('Waiting for transcription to finish...');
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    debugPrint('Transcription finished');
+  }
+
   _stopRecording() async {
     final service = FlutterBackgroundService();
     service.invoke("stop");
@@ -520,6 +530,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (Platform.isIOS) {
       var path = await getApplicationDocumentsDirectory();
       var filePath = '${path.path}/recording_0.wav';
+      await waitForTranscriptionToFinish();
       await iosBgCallback(
         filePath: filePath,
         interval: Duration(seconds: iosDuration),
@@ -532,6 +543,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             lastOffset = currentLength;
             partNumber++;
             iosDuration = 10;
+            isTranscribing = false;
           });
         },
       );
@@ -544,6 +556,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
 
     if (Platform.isIOS) {
+      await waitForTranscriptionToFinish();
       await transcribeAfterStopiOS(
         processFileToTranscript: _processFileToTranscript,
         updateState: () {
