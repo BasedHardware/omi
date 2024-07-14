@@ -131,13 +131,13 @@ jobs:
 #        run: |
 #          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
 
-      - name: Update Provisioning Profiles
-        run: bundle exec fastlane update_profiles
-        working-directory: apps/AppWithWearable/ios
-        env:
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+#      - name: Update Provisioning Profiles
+#        run: bundle exec fastlane update_profiles
+#        working-directory: apps/AppWithWearable/ios
+#        env:
+#          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+#          ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
+#          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
 
       - name: Install Pod
         run: pod install

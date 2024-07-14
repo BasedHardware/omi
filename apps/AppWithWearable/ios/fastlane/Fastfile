@@ -17,13 +17,9 @@ default_platform(:ios)
 
 platform :ios do
   desc "Push a new beta build to TestFlight"
-
-  lane :update_profiles do
-     setup_ci if ENV['CI']
-     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
-  end
-
   lane :beta do
+    setup_ci if ENV['CI']
+    match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
     increment_build_number(xcodeproj: "Runner.xcodeproj")
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true, xcargs: "-allowProvisioningUpdates")
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
