@@ -19,7 +19,7 @@ jobs:
     runs-on: macos-latest
 
     env:
-      KEYSTORE_PATH: apps/AppWithWearable/android/app/upload-keystore.jks
+      KEYSTORE_PATH: apps/AppWithWearable/android/upload-keystore.jks
       ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
       FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD : ${{ secrets.APPLE_PASSWORD }}
 
@@ -75,11 +75,17 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.SECRET_JKS }}
         run: echo $KEYSTORE_BASE64 | base64 --decode > $KEYSTORE_PATH
 
+
+      #Get App Store Connect Key And Write it on current device
+      - name: Setup service account json file for Android
+        run: echo '${{ secrets.FRIEND_SERVICE_ACCOUNT_JSON }}' > apps/AppWithWearable/android/friend_service_account_key.json
+
       - name: Build Android App Package
         run: |
             flutter clean
             flutter build appbundle --release
         working-directory: apps/AppWithWearable/android
+
 
 
       - name: Deploy Google Play
