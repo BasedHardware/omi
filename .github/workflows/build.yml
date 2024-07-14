@@ -135,6 +135,12 @@ jobs:
       - name: Install Pod
         run: pod install
         working-directory: apps/AppWithWearable/ios
+
+      - name: Build iOS App
+        run: |
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
+      
+
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta
         working-directory: apps/AppWithWearable/ios
