@@ -14,19 +14,20 @@ import 'package:web_socket_channel/io.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
 
-Future<IOWebSocketChannel?> _initCustomStream(
+Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(List<TranscriptSegment>) onMessageReceived,
   VoidCallback onWebsocketConnectionSuccess,
   void Function(dynamic) onWebsocketConnectionFailed,
   void Function(int?, String?) onWebsocketConnectionClosed,
   void Function(dynamic) onWebsocketConnectionError,
+  int sampleRate,
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
   // https://38aa-190-25-123-167.ngrok-free.app
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse(
-        '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}'),
+        '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
   );
   channel.ready.then((_) {
     channel.stream.listen(
@@ -71,15 +72,17 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streaming
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
 }) async {
-  WavBytesUtil wavBytesUtil = WavBytesUtil();
+  BleAudioCodec codec = await getDeviceCodec(btDevice.id);
+  WavBytesUtil wavBytesUtil = WavBytesUtil(codec: codec);
 
   try {
-    IOWebSocketChannel? channel = await _initCustomStream(
+    IOWebSocketChannel? channel = await _initWebsocketStream(
       onMessageReceived,
       onWebsocketConnectionSuccess,
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
+      codec == BleAudioCodec.pcm8 ? 8000 : 16000,
     );
 
     StreamSubscription? stream = await getBleAudioBytesListener(

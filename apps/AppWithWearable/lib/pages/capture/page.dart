@@ -53,6 +53,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   RecordState _state = RecordState.stop;
   static const quietSecondsForMemoryCreation = 120;
 
+  bool _streamingTranscriptEnabled = false;
+
   /// ----
   BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [
@@ -168,10 +170,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           _reconnectWebSocket();
         },
         onMessageReceived: (List<TranscriptSegment> newSegments) {
-          // TODO: streaming doesn't need elapsed seconds, right? nahh, just decrease all segments - first segment start
           // TODO: if segments.isempty(), and new is not, remove audiobytes or something - x seconds? so not huge empty audio?
           // TODO: firstTranscriptMade
-          TranscriptSegment.combineSegments(segments, newSegments);
+          // TODO: settings language changed, restarts the websocket, same for speech profile.
+          // TODO: display states for the websocket failed, as please retry
+          // TODO: test this DOESNT WORK ON 2nd RUN, as segment[0] is already 0
+          TranscriptSegment.combineSegments(segments, newSegments, streamedResponse: true);
           if (newSegments.isNotEmpty) {
             SharedPreferencesUtil().transcriptSegments = segments;
             setHasTranscripts(true);
@@ -303,8 +307,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     wsChannel?.sink.close(1000);
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
-    // if (restartBytesProcessing) initiateBytesProcessing();
-    if (restartBytesProcessing) initiateBytesStreamingProcessing();
+    if (restartBytesProcessing) {
+      if (_streamingTranscriptEnabled) {
+        initiateBytesStreamingProcessing();
+      } else {
+        initiateBytesProcessing();
+      }
+    }
   }
 
   _createMemory({bool forcedCreation = false}) async {
@@ -365,10 +374,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
-      // initiateBytesProcessing();
-      initiateBytesStreamingProcessing();
+      if (_streamingTranscriptEnabled) {
+        initiateBytesStreamingProcessing();
+      } else {
+        initiateBytesProcessing();
+      }
     });
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
