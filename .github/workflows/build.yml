@@ -124,9 +124,7 @@ jobs:
 
 
 
-      - name: Install Pod
-        run: pod install
-        working-directory: apps/AppWithWearable/ios
+
 
 #      - name: Build iOS App
 #        working-directory: apps/AppWithWearable/ios
@@ -141,7 +139,9 @@ jobs:
           ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
 
-
+      - name: Install Pod
+        run: pod install
+        working-directory: apps/AppWithWearable/ios
 
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta --verbose

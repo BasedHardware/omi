@@ -25,7 +25,17 @@ platform :ios do
 
   lane :beta do
     increment_build_number(xcodeproj: "Runner.xcodeproj")
-    build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true)
+#     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true, )
+    gym(
+        workspace: "Runner.xcworkspace",
+        scheme: "Runner",
+        export_options: {
+          provisioningProfiles: {
+            "com.friend-app-with-wearable.ios12" => "Based Hardware INC"
+          }
+        },
+        xcargs: "-allowProvisioningUpdates"
+      )
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
   end
 end
