@@ -116,13 +116,20 @@ jobs:
         with:
             xcode-version: '15.0.1'
 
+
+
+      - name: Setup app store connect
+        run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
+        working-directory: apps/AppWithWearable/ios
+
+
+
       - name: Update Provisioning Profiles
         run: bundle exec fastlane update_profiles
         working-directory: apps/AppWithWearable/ios
 
 
-      - name: Setup app store connect
-        run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
+
       - name: Install Pod
         run: pod install
         working-directory: apps/AppWithWearable/ios
