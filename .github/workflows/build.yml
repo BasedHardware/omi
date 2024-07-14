@@ -108,11 +108,16 @@ jobs:
 #          ln -s ../Runner.app
 #          cd ..
 #          zip -r app.ipa Payload
-          
+
+
+
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
             xcode-version: '15.0.1'
+
+      - name: Update Provisioning Profiles
+        run: fastlane update_profiles
 
       - name: Setup app store connect
         run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
