@@ -36,7 +36,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>10</string>
+	<string>16</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
