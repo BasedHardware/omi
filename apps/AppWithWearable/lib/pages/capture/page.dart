@@ -399,12 +399,17 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // super.build(context);
     return Stack(
       children: [
-        ListView(children: [
-          speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-          getTranscriptWidget(memoryCreating, segments, widget.device),
-          const SizedBox(height: 16)
-        ]),
+        ListView(
+          children: [
+            speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
+            ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+            getTranscriptWidget(memoryCreating, segments, widget.device),
+            if (wsConnectionState == WebsocketConnectionStatus.error ||
+                wsConnectionState == WebsocketConnectionStatus.failed)
+              getWebsocketErrorWidget(),
+            const SizedBox(height: 16)
+          ],
+        ),
         getPhoneMicRecordingButton(_recordingToggled, _state)
       ],
     );
