@@ -32,10 +32,11 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   channel.ready.then((_) {
     channel.stream.listen(
       (event) {
-        // debugPrint('Event from Stream: $event');
+        debugPrint('Event from Stream: $event');
         if (event == 'ping') return;
         final segments = jsonDecode(event);
         if (segments is List) {
+          if (segments.isEmpty) return;
           onMessageReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
         } else {
           debugPrint('pong');

@@ -154,15 +154,17 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState) {
+speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
   return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
       ? Stack(
           children: [
             GestureDetector(
               onTap: () async {
                 MixpanelManager().speechProfileCapturePageClicked();
+                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) reset();
               },
               child: Container(
                 decoration: BoxDecoration(
