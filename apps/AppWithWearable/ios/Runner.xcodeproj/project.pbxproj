@@ -392,11 +392,11 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
-				FLUTTER_BUILD_NAME = 1.0.12;
+				FLUTTER_BUILD_NAME = 1.0.17;
 				FLUTTER_BUILD_NUMBER = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -546,11 +546,11 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
-				FLUTTER_BUILD_NAME = 1.0.12;
+				FLUTTER_BUILD_NAME = 1.0.17;
 				FLUTTER_BUILD_NUMBER = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -594,11 +594,11 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
-				FLUTTER_BUILD_NAME = 1.0.12;
+				FLUTTER_BUILD_NAME = 1.0.17;
 				FLUTTER_BUILD_NUMBER = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",

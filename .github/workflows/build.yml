@@ -43,8 +43,6 @@ jobs:
         with:
           ruby-version: '3.3.3'
 
-
-
       #2
       - name: Install Bundler
         run: gem install bundler
@@ -60,14 +58,6 @@ jobs:
       #3
       - name: Install Fastlane
         run: bundle install
-
-      # Cache pub packages
-#      - name: Cache pub packages
-#        uses: actions/cache@v2
-#        with:
-#          path: ~/.pub-cache
-#          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-#          restore-keys: ${{ runner.os }}-pub-
 
       # Setup the env
       - name: Setup Env
@@ -89,60 +79,17 @@ jobs:
         run: flutter pub get
         working-directory: apps/AppWithWearable
 
-#      - name: Run Fastlane for Android
-#        run: bundle exec fastlane build_debug
-#        working-directory: apps/AppWithWearable/android
-
-
-#      - name : Create Android Build
-#        working-directory: apps/AppWithWearable
-#        run: flutter build apk --release --split-per-abi
-
-#      - name : Create iOS Build
-#        working-directory: apps/AppWithWearable
-#        run: |
-#          flutter build ios --no-codesign
-#          cd build/ios/iphoneos
-#          mkdir Payload
-#          cd Payload
-#          ln -s ../Runner.app
-#          cd ..
-#          zip -r app.ipa Payload
-
-
-
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
             xcode-version: '15.0.1'
 
-
-
       - name: Setup app store connect
         run: echo '${{ secrets.ASC_JSON_KEY }}' > apps/AppWithWearable/ios/fastlane/store.json
-
-
-
-
-
-
-#      - name: Build iOS App
-#        working-directory: apps/AppWithWearable/ios
-#        run: |
-#          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
-
-#      - name: Update Provisioning Profiles
-#        run: bundle exec fastlane update_profiles
-#        working-directory: apps/AppWithWearable/ios
-#        env:
-#          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-#          ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
-#          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
 
       - name: Install Pod
         run: pod install
         working-directory: apps/AppWithWearable/ios
-
 
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta --verbose
@@ -153,11 +100,4 @@ jobs:
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
           CI: true
-#      #Creating bundles of output
-#      - name: Push to Releases
-#        uses: ncipollo/release-action@v1
-#        with:
-#          artifacts: "apps/AppWithWearable/build/app/outputs/apk/release/*,apps/AppWithWearable/build/ios/iphoneos/app.ipa"
-#          tag: v1.0.${{ github.run_number }}
-#          token: ${{ secrets.TOKEN }}
 
