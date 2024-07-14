@@ -104,6 +104,9 @@ dependencies:
   firebase_core: ^3.2.0
   firebase_auth: ^5.1.2
   google_sign_in: ^6.2.1
+  location: ^7.0.0
+  cached_network_image: ^3.3.1
+  map_launcher: ^3.3.1
 
 dependency_overrides:
   http: ^1.2.1

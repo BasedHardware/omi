@@ -32,6 +32,8 @@ class Memory {
   @Index()
   bool discarded;
 
+  List<double>? coordinates = [];
+
   Memory(
     this.createdAt,
     this.transcript,
@@ -40,6 +42,7 @@ class Memory {
     this.recordingFilePath,
     this.startedAt,
     this.finishedAt,
+    this.coordinates,
   });
 
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
@@ -64,6 +67,7 @@ class Memory {
       recordingFilePath: json['recordingFilePath'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
+      coordinates: json['coordinates'] != null ? List<double>.from(json['coordinates']) : null,
     );
     memory.structured.target = Structured.fromJson(json['structured']);
     if (json['pluginsResponse'] != null) {
@@ -102,6 +106,7 @@ class Memory {
       'structured': structured.target!.toJson(),
       'pluginsResponse': pluginsResponse.map<String>((response) => response.content).toList(),
       'discarded': discarded,
+      'coordinates': coordinates,
     };
   }
 }

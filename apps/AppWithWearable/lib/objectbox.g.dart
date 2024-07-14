@@ -24,7 +24,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(1, 1521024926543535),
       name: 'Memory',
-      lastPropertyId: const obx_int.IdUid(8, 970897693726655020),
+      lastPropertyId: const obx_int.IdUid(9, 6186917569313515214),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -70,6 +70,11 @@ final _entities = <obx_int.ModelEntity>[
             id: const obx_int.IdUid(8, 970897693726655020),
             name: 'finishedAt',
             type: 10,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(9, 6186917569313515214),
+            name: 'coordinates',
+            type: 29,
             flags: 0)
       ],
       relations: <obx_int.ModelRelation>[
@@ -391,7 +396,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final recordingFilePathOffset = object.recordingFilePath == null
               ? null
               : fbb.writeString(object.recordingFilePath!);
-          fbb.startTable(9);
+          final coordinatesOffset = object.coordinates == null
+              ? null
+              : fbb.writeListFloat64(object.coordinates!);
+          fbb.startTable(10);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.createdAt.millisecondsSinceEpoch);
           fbb.addOffset(2, transcriptOffset);
@@ -400,6 +408,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           fbb.addInt64(5, object.structured.targetId);
           fbb.addInt64(6, object.startedAt?.millisecondsSinceEpoch);
           fbb.addInt64(7, object.finishedAt?.millisecondsSinceEpoch);
+          fbb.addOffset(8, coordinatesOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -427,11 +436,15 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final finishedAtParam = finishedAtValue == null
               ? null
               : DateTime.fromMillisecondsSinceEpoch(finishedAtValue);
+          final coordinatesParam =
+              const fb.ListReader<double>(fb.Float64Reader(), lazy: false)
+                  .vTableGetNullable(buffer, rootOffset, 20);
           final object = Memory(createdAtParam, transcriptParam, discardedParam,
               id: idParam,
               recordingFilePath: recordingFilePathParam,
               startedAt: startedAtParam,
-              finishedAt: finishedAtParam);
+              finishedAt: finishedAtParam,
+              coordinates: coordinatesParam);
           object.structured.targetId =
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 14, 0);
           object.structured.attach(store);
@@ -748,6 +761,10 @@ class Memory_ {
   /// See [Memory.finishedAt].
   static final finishedAt =
       obx.QueryDateProperty<Memory>(_entities[0].properties[7]);
+
+  /// See [Memory.coordinates].
+  static final coordinates =
+      obx.QueryDoubleVectorProperty<Memory>(_entities[0].properties[8]);
 
   /// see [Memory.transcriptSegments]
   static final transcriptSegments =
