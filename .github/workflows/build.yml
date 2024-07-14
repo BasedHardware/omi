@@ -118,6 +118,8 @@ jobs:
 
       - name: Update Provisioning Profiles
         run: bundle exec fastlane update_profiles
+        working-directory: apps/AppWithWearable/ios
+
 
       - name: Setup app store connect
         run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
