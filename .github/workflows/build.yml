@@ -137,9 +137,10 @@ jobs:
         working-directory: apps/AppWithWearable/ios
 
       - name: Build iOS App
+        working-directory: apps/AppWithWearable/ios
         run: |
           xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
-      
+       
 
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta
