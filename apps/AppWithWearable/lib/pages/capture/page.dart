@@ -16,13 +16,16 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:location/location.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 
@@ -42,7 +45,7 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -97,6 +100,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
+
+  LocationData? locationData;
+  bool shouldAskPermissionAgain = true;
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -206,6 +212,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   _createMemory({bool forcedCreation = false}) async {
     setState(() => memoryCreating = true);
+    locationData = await LocationService().getLocation();
+    print('Location data: $locationData');
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
@@ -221,6 +229,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
+      coordinates: locationData != null ? [locationData!.latitude!, locationData!.longitude!] : [],
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -262,9 +271,35 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
       initiateBytesProcessing();
+      if (await LocationService().isServiceEnabled() == false ||
+          await LocationService().permissionStatus() != PermissionStatus.granted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () {
+              setState(() {
+                shouldAskPermissionAgain = false;
+              });
+              Navigator.of(context).pop();
+            },
+            () async {
+              Navigator.of(context).pop();
+              setState(() {
+                shouldAskPermissionAgain = true;
+              });
+              await requestLocationPermission();
+            },
+            'Know where your memories were created! 🌍',
+            '\nWe can use your location to add a location tag to your memories. This will help you remember where you were when you created them.\n\nWould you like to enable location services?',
+            singleButton: false,
+          ),
+        );
+      }
     });
     _processCachedTranscript();
     // processTranscriptContent(context, '''a''', null);
@@ -272,10 +307,71 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      if (await LocationService().isServiceEnabled() &&
+          (await LocationService().permissionStatus() == PermissionStatus.deniedForever ||
+              await LocationService().permissionStatus() == PermissionStatus.denied)) {
+        if (shouldAskPermissionAgain) {
+          setState(() {
+            shouldAskPermissionAgain = false;
+          });
+          await requestLocationPermission();
+        }
+      }
+    }
+    super.didChangeAppLifecycleState(state);
+  }
+
+  @override
   void dispose() {
     record.dispose();
     _memoryCreationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future requestLocationPermission() async {
+    LocationService locationService = LocationService();
+    bool serviceEnabled = await locationService.enableService();
+    if (!serviceEnabled) {
+      debugPrint('Location service not enabled');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location services are disabled. Please enable them to add a location tag to your memories.',
+              style: TextStyle(
+                color: Color.fromARGB(255, 255, 255, 255),
+                fontSize: 12.0,
+              ),
+            ),
+            duration: Duration(milliseconds: 2000),
+          ),
+        );
+      }
+    } else {
+      PermissionStatus permissionGranted = await locationService.requestPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        debugPrint('Location permission not granted');
+      } else if (permissionGranted == PermissionStatus.deniedForever) {
+        debugPrint('Location permission denied forever');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'If you change your mind, you can enable location services in your device settings.',
+                style: TextStyle(
+                  color: Color.fromARGB(255, 255, 255, 255),
+                  fontSize: 12.0,
+                ),
+              ),
+              duration: Duration(milliseconds: 2000),
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
