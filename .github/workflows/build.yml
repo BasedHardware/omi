@@ -124,6 +124,11 @@ jobs:
       - name: Update Provisioning Profiles
         run: bundle exec fastlane update_profiles
         working-directory: apps/AppWithWearable/ios
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+
 
 
 
