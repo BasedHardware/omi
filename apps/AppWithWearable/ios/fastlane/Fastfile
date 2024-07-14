@@ -21,7 +21,7 @@ platform :ios do
   lane :update_profiles do
       # Match will fetch and install provisioning profiles
       match(
-        type: "development", # or "appstore" for distribution
+        type: "appstore", # or "appstore" for distribution
         app_identifier: "com.friend-app-with-wearable.ios12",
         readonly:true
         # Other options like git_url, git_branch, username, password, etc. can be specified here
