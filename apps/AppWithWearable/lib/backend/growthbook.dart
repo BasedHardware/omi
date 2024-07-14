@@ -50,7 +50,7 @@ class GrowthbookUtil {
   }
 
   bool hasStreamingTranscriptFeatureOn() {
-    return true;
+    return false;
     if (!hasTranscriptServerFeatureOn()) return false;
 
     var feature = _gb!.feature('streaming-transcript');
