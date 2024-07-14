@@ -25,7 +25,7 @@ platform :ios do
     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
     version = get_version_number(
       xcodeproj: "Runner.xcodeproj",
-      target: "App"
+      target: "Runner"
     )
     increment_build_number(xcodeproj: "Runner.xcodeproj")
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true, xcargs: "-allowProvisioningUpdates")
