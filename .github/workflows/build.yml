@@ -119,7 +119,7 @@ jobs:
 
 
       - name: Setup app store connect
-        run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
+        run: echo '${{ secrets.ASC_JSON_KEY }}' > apps/AppWithWearable/ios/fastlane/store.json
 
 
 
