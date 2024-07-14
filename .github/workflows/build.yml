@@ -128,10 +128,10 @@ jobs:
         run: pod install
         working-directory: apps/AppWithWearable/ios
 
-      - name: Build iOS App
-        working-directory: apps/AppWithWearable/ios
-        run: |
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
+#      - name: Build iOS App
+#        working-directory: apps/AppWithWearable/ios
+#        run: |
+#          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
 
       - name: Update Provisioning Profiles
         run: bundle exec fastlane update_profiles
