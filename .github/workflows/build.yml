@@ -12,7 +12,7 @@ on:
 
 
 jobs:
-  flutter_job:
+  build_deploy_job:
 
     # The machine, we can also use windows-latest or ubuntu-latest
     # We are choosing macos-latest because we will be also building for iOS
@@ -43,7 +43,7 @@ jobs:
         with:
           ruby-version: '3.3.3'
 
-      #2
+      #2 Install Bundler
       - name: Install Bundler
         run: gem install bundler
 
@@ -55,7 +55,7 @@ jobs:
             restore-keys: |
               ${{ runner.os }}-gems-  
 
-      #3
+      #3 Install Fastlane
       - name: Install Fastlane
         run: bundle install
 
@@ -75,22 +75,39 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.SECRET_JKS }}
         run: echo $KEYSTORE_BASE64 | base64 --decode > $KEYSTORE_PATH
 
+      - name: Build Android App Package
+        run: |
+            flutter clean
+            flutter build appbundle --release
+        working-directory: apps/AppWithWearable/android
+
+
+      - name: Deploy Google Play
+        run: bundle exec fastlane alpha_appbundle
+        working-directory: apps/AppWithWearable/android
+
+
+      # Install Flutter Dependencies
       - name: Install dependencies
         run: flutter pub get
         working-directory: apps/AppWithWearable
 
+      #Setup xCode for iOS deployment
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
             xcode-version: '15.0.1'
 
+      #Get App Store Connect Key And Write it on current device
       - name: Setup app store connect
         run: echo '${{ secrets.ASC_JSON_KEY }}' > apps/AppWithWearable/ios/fastlane/store.json
 
+      #Instal POD files for iOS
       - name: Install Pod
         run: pod install
         working-directory: apps/AppWithWearable/ios
 
+      #Run fastlane to build application and deploy it on testflight
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta --verbose
         working-directory: apps/AppWithWearable/ios

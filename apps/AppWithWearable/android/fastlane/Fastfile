@@ -1,31 +1,71 @@
-# This file contains the fastlane.tools configuration
-# You can find the documentation at https://docs.fastlane.tools
-#
-# For a list of all available actions, check out
-#
-#     https://docs.fastlane.tools/actions
-#
-# For a list of all available plugins, check out
-#
-#     https://docs.fastlane.tools/plugins/available-plugins
-#
-
-# Uncomment the line if you want fastlane to automatically update itself
-# update_fastlane
 
 default_platform(:android)
 
 platform :android do
-  desc "Build a debug APK"
-  lane :build_debug do
-    sh("flutter build apk --debug")
+  lane :alpha_appbundle do
+    upload_to_play_store(
+      track: 'alpha',
+      aab: 'apps/AppWithWearable/build/app/outputs/bundle/release/app-release.aab',
+    )
   end
 
-  desc "Build a release APK"
-  lane :build_release do
-    sh("flutter build apk --release")
+  lane :production_appbundle do
+    upload_to_play_store(
+      track: 'production',
+      aab: 'apps/AppWithWearable/build/app/outputs/bundle/release/app-release.aab',
+    )
+  end
+
+  lane :alpha_apk do
+    upload_to_play_store(
+      track: 'alpha',
+      apk: 'apps/AppWithWearable/build/app/outputs/apk/release/app-release.apk',
+    )
+  end
+
+  lane :production_apk do
+    upload_to_play_store(
+      track: 'production',
+      apk: 'apps/AppWithWearable/build/app/outputs/apk/release/app-release.apk',
+    )
+  end
+
+  lane :gp_promote_alpha_beta do
+    upload_to_play_store(
+      track: 'alpha',
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      track_promote_to: 'beta',
+    )
+  end
+
+  lane :gp_promote_alpha_production do
+    upload_to_play_store(
+      track: 'alpha',
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      track_promote_to: 'production',
+    )
+  end
+
+  lane :gp_promote_beta do
+    upload_to_play_store(
+      track: 'beta',
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      track_promote_to: 'production',
+    )
   end
 end
-
-
-
