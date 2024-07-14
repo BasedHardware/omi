@@ -20,7 +20,7 @@ platform :ios do
 
   lane :update_profiles do
      setup_ci if ENV['CI']
-     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
+     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "development",readonly:true)
   end
 
   lane :beta do
