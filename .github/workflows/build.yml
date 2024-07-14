@@ -143,6 +143,7 @@ jobs:
         run: pod install
         working-directory: apps/AppWithWearable/ios
 
+
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta --verbose
         working-directory: apps/AppWithWearable/ios
@@ -150,7 +151,8 @@ jobs:
           MATCH_PASSWORD : ${{ secrets.MATCH_PASSWORD }}
           ASC_JSON_KEY: ${{ secrets.ASC_JSON_KEY }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-
+          FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+          CI: true
 #      #Creating bundles of output
 #      - name: Push to Releases
 #        uses: ncipollo/release-action@v1
