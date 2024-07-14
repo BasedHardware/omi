@@ -144,7 +144,7 @@ jobs:
 
 
       - name: Run Fastlane for iOS
-        run: bundle exec fastlane beta
+        run: bundle exec fastlane beta --verbose
         working-directory: apps/AppWithWearable/ios
         env:
           MATCH_PASSWORD : ${{ secrets.MATCH_PASSWORD }}
