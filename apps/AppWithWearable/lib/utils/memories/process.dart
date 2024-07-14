@@ -21,6 +21,7 @@ Future<Memory?> processTranscriptContent(
   bool retrievedFromCache = false,
   DateTime? startedAt,
   DateTime? finishedAt,
+  List<double>? coordinates = const [],
 }) async {
   if (transcript.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
@@ -31,6 +32,7 @@ Future<Memory?> processTranscriptContent(
       retrievedFromCache,
       startedAt,
       finishedAt,
+      coordinates,
     );
     devModeWebhookCall(memory);
     MemoryProvider().saveMemory(memory);
@@ -71,6 +73,7 @@ Future<Memory> memoryCreationBlock(
   bool retrievedFromCache,
   DateTime? startedAt,
   DateTime? finishedAt,
+  List<double>? coordinates,
 ) async {
   SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache);
   bool failed = false;
@@ -112,6 +115,7 @@ Future<Memory> memoryCreationBlock(
     startedAt,
     finishedAt,
     structured.title.isEmpty,
+    coordinates,
   );
   debugPrint('Memory created: ${memory.id}');
 
@@ -146,6 +150,7 @@ Future<Memory> finalizeMemoryRecord(
   DateTime? startedAt,
   DateTime? finishedAt,
   bool discarded,
+  List<double>? coordinates,
 ) async {
   var memory = Memory(
     DateTime.now(),
@@ -154,6 +159,7 @@ Future<Memory> finalizeMemoryRecord(
     recordingFilePath: recordingFilePath,
     startedAt: startedAt,
     finishedAt: finishedAt,
+    coordinates: coordinates,
   );
   memory.transcriptSegments.addAll(transcriptSegments);
   memory.structured.target = structured;

@@ -85,15 +85,15 @@ android {
             storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
             storePassword keystoreProperties['storePassword']
         }
-        debug{
-            minifyEnabled true
-        }
     }
 
     buildTypes {
         release {
             productFlavors.dev.signingConfig signingConfigs.debug
             productFlavors.prod.signingConfig signingConfigs.release
+        }
+        debug{
+            minifyEnabled true
         }
     }
 }

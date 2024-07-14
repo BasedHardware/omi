@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
+import 'package:friend_private/pages/memory_detail/maps_util.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -63,6 +65,35 @@ List<Widget> getSummaryWidgets(
             'Overview',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
           ),
+    memory.discarded
+        ? const SizedBox.shrink()
+        : ((memory.coordinates != null && memory.coordinates!.isNotEmpty)
+            ? GestureDetector(
+                onTap: () {
+                  MapsUtil.launchMap(memory.coordinates!.first, memory.coordinates!.last);
+                },
+                child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(memory.coordinates!.first, memory.coordinates!.last)),
+              )
+            : SizedBox.shrink()),
+    memory.discarded
+        ? const SizedBox.shrink()
+        : ((memory.coordinates != null && memory.coordinates!.isNotEmpty)
+            ? const SizedBox(height: 8)
+            : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
