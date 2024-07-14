@@ -215,7 +215,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
     );
   }
 
-  if (segments.isEmpty) {
+  if (segments.isEmpty){// && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
             mainAxisSize: MainAxisSize.min,
@@ -272,6 +272,19 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+getWebsocketErrorWidget() {
+  return const Padding(
+    padding: EdgeInsets.only(top: 80),
+    child: Center(
+      child: Text(
+        'Error connecting to the server. Please check your internet connection.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
       ),
     ),
   );
