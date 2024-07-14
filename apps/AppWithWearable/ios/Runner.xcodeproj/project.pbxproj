@@ -397,7 +397,7 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
 				FLUTTER_BUILD_NAME = 1.0.17;
-				FLUTTER_BUILD_NUMBER = 46;
+				FLUTTER_BUILD_NUMBER = 47;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -551,7 +551,7 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
 				FLUTTER_BUILD_NAME = 1.0.17;
-				FLUTTER_BUILD_NUMBER = 46;
+				FLUTTER_BUILD_NUMBER = 47;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -599,7 +599,7 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
 				FLUTTER_BUILD_NAME = 1.0.17;
-				FLUTTER_BUILD_NUMBER = 46;
+				FLUTTER_BUILD_NUMBER = 47;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
