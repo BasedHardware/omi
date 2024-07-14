@@ -116,7 +116,11 @@ jobs:
         with:
             xcode-version: '15.0.1'
 
-
+      - name: Build iOS App
+        working-directory: apps/AppWithWearable/ios
+        run: |
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
+      
 
       - name: Setup app store connect
         run: echo "$ASC_JSON_KEY" >> apps/AppWithWearable/ios/fastlane/store.json
@@ -136,11 +140,7 @@ jobs:
         run: pod install
         working-directory: apps/AppWithWearable/ios
 
-      - name: Build iOS App
-        working-directory: apps/AppWithWearable/ios
-        run: |
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos build CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
-       
+
 
       - name: Run Fastlane for iOS
         run: bundle exec fastlane beta
