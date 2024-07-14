@@ -24,7 +24,6 @@ platform :ios do
   end
 
   lane :beta do
-    xcversion(version: "15.0.1")
     increment_build_number(xcodeproj: "Runner.xcodeproj")
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true, xcargs: "-allowProvisioningUpdates")
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
