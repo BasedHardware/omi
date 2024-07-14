@@ -23,10 +23,6 @@ platform :ios do
   lane :beta do
     setup_ci if ENV['CI']
     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
-    version = get_version_number(
-      xcodeproj: "Runner.xcodeproj",
-      target: "Runner"
-    )
     increment_build_number(xcodeproj: "Runner.xcodeproj")
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true, xcargs: "-allowProvisioningUpdates")
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
