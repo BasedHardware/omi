@@ -19,18 +19,11 @@ platform :ios do
   desc "Push a new beta build to TestFlight"
 
   lane :update_profiles do
-      # Match will fetch and install provisioning profiles
-      match(
-        type: "appstore", # or "appstore" for distribution
-        app_identifier: "com.friend-app-with-wearable.ios12",
-        readonly:true
-        # Other options like git_url, git_branch, username, password, etc. can be specified here
-      )
-    end
+     setup_ci if ENV['CI']
+     match(app_identifier: "com.friend-app-with-wearable.ios12",type: "appstore",readonly:true)
+  end
 
   lane :beta do
-    setup_ci if ENV['CI']
-#     match(app_identifier:"com.friend-app-with-wearable.ios12", type:"appstore", readonly:true)
     increment_build_number(xcodeproj: "Runner.xcodeproj")
     build_app(workspace:"Runner.xcworkspace", scheme: "Runner", clean:true)
     pilot(api_key_path: "fastlane/store.json", skip_waiting_for_build_processing: true)
