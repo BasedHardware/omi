@@ -169,8 +169,7 @@ class _PluginsPageState extends State<PluginsPage> {
                       leading: CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 28,
-                        backgroundImage:
-                            NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
+                        backgroundImage: NetworkImage(plugin.getImageUrl()),
                       ),
                       title: Text(
                         plugin.name,
@@ -204,35 +203,39 @@ class _PluginsPageState extends State<PluginsPage> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              plugin.memories ? Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  'Memories',
-                                  style: TextStyle(
-                                      color: index % 2 == 0 ? Colors.black : Colors.deepPurple,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ): const SizedBox.shrink(),
+                              plugin.memories
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        'Memories',
+                                        style: TextStyle(
+                                            color: index % 2 == 0 ? Colors.black : Colors.deepPurple,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
                               const SizedBox(width: 8),
-                              plugin.chat ? Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  'Chat',
-                                  style: TextStyle(
-                                      color: index % 2 == 1 ? Colors.black : Colors.deepPurple,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ): const SizedBox.shrink(),
+                              plugin.chat
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        'Chat',
+                                        style: TextStyle(
+                                            color: index % 2 == 1 ? Colors.black : Colors.deepPurple,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
                             ],
                           )
                         ],

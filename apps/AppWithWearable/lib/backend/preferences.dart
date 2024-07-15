@@ -123,6 +123,7 @@ class SharedPreferencesUtil {
   }
 
   disablePlugin(String value) {
+    if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
     final List<String> plugins = pluginsEnabled;
     plugins.remove(value);
     pluginsEnabled = plugins;

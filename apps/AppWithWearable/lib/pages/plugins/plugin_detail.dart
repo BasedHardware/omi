@@ -34,8 +34,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               leading: CircleAvatar(
                 backgroundColor: Colors.white,
                 maxRadius: 28,
-                backgroundImage:
-                    NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${widget.plugin.image}'),
+                backgroundImage: NetworkImage(widget.plugin.getImageUrl()),
               ),
               title: Column(
                 mainAxisAlignment: MainAxisAlignment.start,

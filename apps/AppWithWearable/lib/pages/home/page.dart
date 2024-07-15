@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -57,6 +58,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<CapturePageState> capturePageKey = GlobalKey();
+  GlobalKey<ChatPageState> chatPageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
@@ -83,6 +85,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   Future<void> _initiatePlugins() async {
+    plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
   }
@@ -261,6 +264,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
+                      key: chatPageKey,
                       textFieldFocusNode: chatTextFieldFocusNode,
                       messages: messages,
                       refreshMessages: _refreshMessages,
@@ -429,9 +433,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             setState(() {});
                             return;
                           }
-                          SharedPreferencesUtil().selectedChatPluginId = s!;
+                          if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+
+                          SharedPreferencesUtil().selectedChatPluginId = s;
+                          var plugin = plugins.firstWhereOrNull((p) => p.id == s);
+                          chatPageKey.currentState?.sendInitialPluginMessage(plugin);
                           setState(() {});
-                          // TODO: initiate conversation with plugin, plugin says something to start
                         },
                         dropdownColor: Colors.black,
                         style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -509,9 +516,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 CircleAvatar(
                   backgroundColor: Colors.white,
                   maxRadius: 12,
-                  backgroundImage: NetworkImage(
-                    'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
-                  ),
+                  backgroundImage: NetworkImage(plugin.getImageUrl()),
                 ),
                 const SizedBox(width: 8),
                 Text(

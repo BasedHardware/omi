@@ -284,3 +284,33 @@ String qaRagPrompt(String context, List<Message> messages) {
   debugPrint(prompt);
   return prompt;
 }
+
+Future<String> getInitialPluginPrompt(Plugin? plugin) async {
+  if (plugin == null) {
+    return '''
+        Your are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+    ''';
+  }
+  return '''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Personality/Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+        '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
+}

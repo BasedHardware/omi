@@ -17,6 +17,7 @@ class Message {
 
   String text;
   String sender;
+  String? pluginId;
 
   set senderEnum(MessageSender sender) => this.sender = sender.toString().split('.').last;
 
@@ -30,7 +31,7 @@ class Message {
 
   final memories = ToMany<Memory>();
 
-  Message(this.createdAt, this.text, this.sender, {this.id = 0, this.type = 'text'});
+  Message(this.createdAt, this.text, this.sender, {this.id = 0, this.type = 'text', this.pluginId});
 
   static String getMessagesAsString(List<Message> messages, {bool useUserNameIfAvailable = false}) {
     var sortedMessages = messages.toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
