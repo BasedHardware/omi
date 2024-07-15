@@ -9,7 +9,9 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
-  const PluginsPage({super.key});
+  final bool filterChatOnly;
+
+  const PluginsPage({super.key, this.filterChatOnly = false});
 
   @override
   _PluginsPageState createState() => _PluginsPageState();
@@ -23,6 +25,9 @@ class _PluginsPageState extends State<PluginsPage> {
   Future<void> _fetchPlugins() async {
     var prefs = SharedPreferencesUtil();
     var pluginsList = prefs.pluginsList;
+    if (widget.filterChatOnly) {
+      pluginsList = pluginsList.where((plugin) => plugin.chat).toList();
+    }
     var pluginsId = prefs.pluginsEnabled;
     for (var plugin in pluginsList) {
       plugin.isEnabled = pluginsId.contains(plugin.id);

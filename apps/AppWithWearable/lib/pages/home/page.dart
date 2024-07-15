@@ -14,12 +14,14 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
@@ -61,6 +63,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
+  List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
@@ -80,7 +83,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   Future<void> _initiatePlugins() async {
-    var plugins = await retrievePlugins();
+    plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
   }
 
@@ -412,12 +415,87 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           side: const BorderSide(color: Colors.white, width: 1),
                         ),
                       ),
-                      child: Image.asset(
-                        'assets/images/logo_transparent.png',
-                        width: 25,
-                        height: 25,
-                      ),
+                      child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                     ),
+              _controller!.index == 2
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 0),
+                      child: DropdownButton<String>(
+                        menuMaxHeight: 350,
+                        value: SharedPreferencesUtil().selectedChatPluginId == ''
+                            ? null
+                            : SharedPreferencesUtil().selectedChatPluginId,
+                        onChanged: (s) {
+                          SharedPreferencesUtil().selectedChatPluginId = s!;
+                          setState(() {});
+                          // TODO: initiate conversation with plugin, plugin says something to start
+                        },
+                        onTap: SharedPreferencesUtil().pluginsEnabled.isEmpty
+                            ? () async {
+                                await routeToPage(context, const PluginsPage(filterChatOnly: true,));
+                                setState(() {});
+                              }
+                            : null,
+                        dropdownColor: Colors.black,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        underline: Container(
+                          height: 0,
+                          color: Colors.white,
+                        ),
+                        isExpanded: false,
+                        itemHeight: 48,
+                        items: [
+                              DropdownMenuItem<String>(
+                                value: 'no_selected',
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    const CircleAvatar(
+                                      backgroundColor: Colors.transparent,
+                                      maxRadius: 12,
+                                      child: Icon(
+                                        Icons.question_answer,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      SharedPreferencesUtil().pluginsEnabled.isEmpty
+                                          ? 'Enable Plugins'
+                                          : 'No Plugin Selected',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                                    )
+                                  ],
+                                ),
+                              )
+                            ] +
+                            plugins
+                                .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
+                                .map<DropdownMenuItem<String>>((Plugin plugin) {
+                              return DropdownMenuItem<String>(
+                                value: plugin.id,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: Colors.white,
+                                      maxRadius: 12,
+                                      backgroundImage: NetworkImage(
+                                          'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name,
+                                      style: const TextStyle(
+                                          color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                                    )
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                      ),
+                    )
+                  : const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(
                   Icons.settings,

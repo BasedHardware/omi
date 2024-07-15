@@ -43,6 +43,10 @@ class Plugin {
   bool isEnabled = false;
   String image;
 
+  // can be used for
+  bool memories;
+  bool chat;
+
   List<PluginReview> reviews;
   PluginReview? userReview;
   double? ratingAvg;
@@ -55,6 +59,8 @@ class Plugin {
     required this.description,
     required this.prompt,
     required this.image,
+    required this.memories,
+    required this.chat,
     this.reviews = const [],
     this.userReview,
     this.ratingAvg,
@@ -75,6 +81,8 @@ class Plugin {
       userReview: json['user_review'] != null ? PluginReview.fromJson(json['user_review']) : null,
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
+      memories: json['memories'] ?? true,
+      chat: json['chat'] ?? false,
     );
   }
 
