@@ -23,7 +23,6 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
     if (timeout && timeoutCounter >= 10) return null;
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
-      print('device: ${device.name}');
       // Remember the first connected device.
       // Technically, there should be only one
       if (deviceId == '') {

@@ -104,13 +104,16 @@ Future<UserCredential> signInWithGoogle() async {
 
 listenAuthTokenChanges() {
   FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
-    var token = await getIdToken();
-    SharedPreferencesUtil().authToken = token ?? '';
+    try {
+      var token = await getIdToken();
+      SharedPreferencesUtil().authToken = token ?? '';
+    } catch (e) {
+      debugPrint('Error getting token: $e');
+    }
   });
 }
 
 Future<String?> getIdToken() async {
-  debugPrint('FirebaseAuth.instance.tenantId: ${FirebaseAuth.instance.tenantId}');
   IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
   return newToken?.token;
 }
