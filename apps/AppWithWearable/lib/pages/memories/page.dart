@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
