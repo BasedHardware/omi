@@ -201,6 +201,40 @@ class _PluginsPageState extends State<PluginsPage> {
                               style: const TextStyle(color: Colors.grey, fontSize: 14),
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              plugin.memories ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  'Memories',
+                                  style: TextStyle(
+                                      color: index % 2 == 0 ? Colors.black : Colors.deepPurple,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ): const SizedBox.shrink(),
+                              const SizedBox(width: 8),
+                              plugin.chat ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  'Chat',
+                                  style: TextStyle(
+                                      color: index % 2 == 1 ? Colors.black : Colors.deepPurple,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ): const SizedBox.shrink(),
+                            ],
+                          )
                         ],
                       ),
                       trailing: IconButton(

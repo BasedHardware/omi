@@ -422,20 +422,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       padding: const EdgeInsets.only(left: 0),
                       child: DropdownButton<String>(
                         menuMaxHeight: 350,
-                        value: SharedPreferencesUtil().selectedChatPluginId == ''
-                            ? null
-                            : SharedPreferencesUtil().selectedChatPluginId,
-                        onChanged: (s) {
+                        value: SharedPreferencesUtil().selectedChatPluginId,
+                        onChanged: (s) async {
+                          if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) || s == 'enable') {
+                            await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                            setState(() {});
+                            return;
+                          }
                           SharedPreferencesUtil().selectedChatPluginId = s!;
                           setState(() {});
                           // TODO: initiate conversation with plugin, plugin says something to start
                         },
-                        onTap: SharedPreferencesUtil().pluginsEnabled.isEmpty
-                            ? () async {
-                                await routeToPage(context, const PluginsPage(filterChatOnly: true,));
-                                setState(() {});
-                              }
-                            : null,
                         dropdownColor: Colors.black,
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                         underline: Container(
@@ -444,55 +441,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         ),
                         isExpanded: false,
                         itemHeight: 48,
-                        items: [
-                              DropdownMenuItem<String>(
-                                value: 'no_selected',
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    const CircleAvatar(
-                                      backgroundColor: Colors.transparent,
-                                      maxRadius: 12,
-                                      child: Icon(
-                                        Icons.question_answer,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      SharedPreferencesUtil().pluginsEnabled.isEmpty
-                                          ? 'Enable Plugins'
-                                          : 'No Plugin Selected',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                                    )
-                                  ],
-                                ),
-                              )
-                            ] +
-                            plugins
-                                .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
-                                .map<DropdownMenuItem<String>>((Plugin plugin) {
-                              return DropdownMenuItem<String>(
-                                value: plugin.id,
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: Colors.white,
-                                      maxRadius: 12,
-                                      backgroundImage: NetworkImage(
-                                          'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                                    )
-                                  ],
-                                ),
-                              );
-                            }).toList(),
+                        items: _getPluginsDropdownItems(context),
                       ),
                     )
                   : const SizedBox(width: 16),
@@ -523,6 +472,74 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         ),
       ),
     ));
+  }
+
+  _getPluginsDropdownItems(BuildContext context) {
+    var items = [
+          DropdownMenuItem<String>(
+            value: 'no_selected',
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.transparent,
+                  maxRadius: 12,
+                  child: Icon(
+                    Icons.question_answer,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins' : 'No Plugin Selected',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          )
+        ] +
+        plugins
+            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
+            .map<DropdownMenuItem<String>>((Plugin plugin) {
+          return DropdownMenuItem<String>(
+            value: plugin.id,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  maxRadius: 12,
+                  backgroundImage: NetworkImage(
+                    'https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          );
+        }).toList();
+    if (SharedPreferencesUtil().pluginsEnabled.isNotEmpty) {
+      items.add(const DropdownMenuItem<String>(
+        value: 'enable',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.transparent,
+              maxRadius: 12,
+              child: Icon(Icons.star, color: Colors.purpleAccent),
+            ),
+            SizedBox(width: 8),
+            Text('Enable Plugins', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+          ],
+        ),
+      ));
+    }
+    return items;
   }
 
   @override
