@@ -10,6 +10,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -425,7 +426,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
+                  String language = SharedPreferencesUtil().recordingsLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                   await routeToPage(context, const SettingsPage());
+                  // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                  if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
+                      (language != SharedPreferencesUtil().recordingsLanguage ||
+                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
+                    capturePageKey.currentState?.resetState(restartBytesProcessing: true);
+                  }
                   setState(() {});
                 },
               )
