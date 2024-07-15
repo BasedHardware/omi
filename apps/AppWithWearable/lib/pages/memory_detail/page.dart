@@ -4,12 +4,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/memories.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/custom_audio_player.dart';
-import 'package:friend_private/pages/plugins/page.dart';
-import 'package:friend_private/utils/temp.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
@@ -165,7 +160,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-
+            ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
