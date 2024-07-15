@@ -115,7 +115,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
     processTranscriptContent(
       context,
       transcript,
@@ -335,7 +335,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
-    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
+    String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
     try {
