@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
-
-import '../backend/api_requests/api/pinecone.dart';
 
 Future<List<dynamic>> retrieveRAGContext(String message) async {
   Tuple2<List<String>, List<DateTime>>? context =
