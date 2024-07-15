@@ -24,6 +24,7 @@ import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
@@ -106,6 +107,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
   IOWebSocketChannel? _wsChannel;
+  InternetStatus? _internetStatus;
+
+  late StreamSubscription<InternetStatus> _internetListener;
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -242,36 +246,46 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
-    _audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
-      if (value.isEmpty) return;
+    _audioBytesStream = await getBleAudioBytesListener(
+      btDevice!.id,
+      onAudioBytesReceived: (List<int> value) async {
+        if (value.isEmpty) return;
 
-      toProcessBytes2.storeFramePacket(value);
-      audioStorage!.storeFramePacket(value);
-      if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
-        Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
-        try {
-          await _processFileToTranscript(data.item1);
-          if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
-          if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
-          if (segments.isNotEmpty && !firstTranscriptMade) {
-            SharedPreferencesUtil().firstTranscriptMade = true;
-            MixpanelManager().firstTranscriptMade();
-            firstTranscriptMade = true;
+        toProcessBytes2.storeFramePacket(value);
+        audioStorage!.storeFramePacket(value);
+        if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
+          if (_internetStatus == InternetStatus.disconnected) {
+            debugPrint('No internet connection, not processing audio');
+            return;
           }
-          // uploadFile(data.item1, prefixTimestamp: true);
-        } catch (e, stacktrace) {
-          // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
-          CrashReporting.reportHandledCrash(
-            e,
-            stacktrace,
-            level: NonFatalExceptionLevel.warning,
-            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
-          );
-          debugPrint('Error: e.toString() ${e.toString()}');
-          toProcessBytes2.insertAudioBytes(data.item2);
+
+          Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+          try {
+            await _processFileToTranscript(data.item1);
+            if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
+            if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
+            if (segments.isNotEmpty && !firstTranscriptMade) {
+              SharedPreferencesUtil().firstTranscriptMade = true;
+              MixpanelManager().firstTranscriptMade();
+              firstTranscriptMade = true;
+            }
+            // uploadFile(data.item1, prefixTimestamp: true);
+          } catch (e, stacktrace) {
+            // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
+            debugPrint('Error processing 30 seconds frame');
+            print(e); // don't change this to debugPrint
+            CrashReporting.reportHandledCrash(
+              e,
+              stacktrace,
+              level: NonFatalExceptionLevel.warning,
+              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+            );
+
+            toProcessBytes2.insertAudioBytes(data.item2);
+          }
         }
-      }
-    });
+      },
+    );
     if (_audioBytesStream == null) {
       // TODO: error out and disconnect
     }
@@ -383,6 +397,18 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       }
     });
     _processCachedTranscript();
+    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+      switch (status) {
+        case InternetStatus.connected:
+          _internetStatus = InternetStatus.connected;
+          break;
+        case InternetStatus.disconnected:
+          _internetStatus = InternetStatus.disconnected;
+          _memoryCreationTimer
+              ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          break;
+      }
+    });
     // processTranscriptContent(context, '''a''', null);
     super.initState();
   }
@@ -390,7 +416,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void dispose() {
     record.dispose();
+    _audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    _wsChannel?.sink.close(1000);
+    _internetListener.cancel();
     super.dispose();
   }
 
