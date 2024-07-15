@@ -226,6 +226,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     var prompt = qaRagPrompt(
       ragContext,
       await MessageProvider().retrieveMostRecentMessages(limit: 10, pluginId: pluginId),
+      plugin: plugins.firstWhereOrNull((e) => e.id == pluginId),
     );
     await streamApiResponse(
       prompt,

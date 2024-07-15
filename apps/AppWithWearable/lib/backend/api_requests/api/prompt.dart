@@ -265,14 +265,14 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
   }
 }
 
-String qaRagPrompt(String context, List<Message> messages) {
+String qaRagPrompt(String context, List<Message> messages, {Plugin? plugin}) {
   var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation. 
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
     If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
-    
+    ${plugin == null ? '' : '\nYour name is: ${plugin.name}, and your personality/description is "${plugin.description}".\nMake sure to reflect your personality in your response.\n'}
     Conversation History:
-    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true)}
+    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true, usePluginNameIfAvailable: true)}
 
     Context:
     ```
