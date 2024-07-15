@@ -176,8 +176,8 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var str = userName.isEmpty ? 'a busy entrepreneur' : '$userName (a busy entrepreneur)';
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
-  First determine if there's crucial value to notify $str about it.
-  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
+  First determine if there's crucial feedback to notify $str about it.
+  If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
    
   Transcript:
