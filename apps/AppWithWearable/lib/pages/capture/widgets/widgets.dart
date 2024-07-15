@@ -164,7 +164,8 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function reset) 
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
-                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) reset();
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
+                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) reset();
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -215,7 +216,8 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
     );
   }
 
-  if (segments.isEmpty){// && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
+  if (segments.isEmpty) {
+    // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
             mainAxisSize: MainAxisSize.min,
