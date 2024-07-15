@@ -7,12 +7,14 @@ class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
   final bool horizontalMargin;
   final bool topMargin;
+  final bool canDisplaySeconds;
 
   const TranscriptWidget({
     super.key,
     required this.segments,
     this.horizontalMargin = true,
     this.topMargin = true,
+    this.canDisplaySeconds = true,
   });
 
   @override
@@ -33,6 +35,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
         if (idx == widget.segments.length + 1) return const SizedBox(height: 64);
         final data = widget.segments[idx - 1];
+
+        var start = Duration(seconds: data.start.toInt());
+        var end = Duration(seconds: data.end.toInt());
         return Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
@@ -49,7 +54,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   Text(
                     data.isUser ? 'You' : 'Speaker ${data.speakerId}',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
-                  )
+                  ),
+                  widget.canDisplaySeconds ? const SizedBox(width: 12) : const SizedBox(),
+                  // pad as start-end as hours:minutes:seconds e.g. 01:23:45
+                  widget.canDisplaySeconds
+                      ? Text(
+                          '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                        )
+                      : const SizedBox(),
                 ],
               ),
               const SizedBox(height: 12),

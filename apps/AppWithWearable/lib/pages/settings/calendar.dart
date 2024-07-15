@@ -1,5 +1,6 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -90,6 +91,7 @@ class _CalendarPageState extends State<CalendarPage> {
         groupValue: SharedPreferencesUtil().calendarType,
         onChanged: (v) {
           SharedPreferencesUtil().calendarType = v!;
+          MixpanelManager().calendarTypeChanged(v);
           setState(() {});
         },
       ),
@@ -100,6 +102,7 @@ class _CalendarPageState extends State<CalendarPage> {
         groupValue: SharedPreferencesUtil().calendarType,
         onChanged: (v) {
           SharedPreferencesUtil().calendarType = v!;
+          MixpanelManager().calendarTypeChanged(v);
           setState(() {});
         },
       ),
@@ -152,6 +155,7 @@ class _CalendarPageState extends State<CalendarPage> {
           onChanged: (String? value) {
             SharedPreferencesUtil().calendarId = value!;
             setState(() {});
+            MixpanelManager().calendarSelected();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Calendar ${calendar.name} selected.'),
@@ -168,9 +172,12 @@ class _CalendarPageState extends State<CalendarPage> {
     if (s) {
       _getCalendars();
       SharedPreferencesUtil().calendarEnabled = s;
+      MixpanelManager().calendarEnabled();
     } else {
       SharedPreferencesUtil().calendarEnabled = s;
       SharedPreferencesUtil().calendarId = '';
+      SharedPreferencesUtil().calendarType = 'auto';
+      MixpanelManager().calendarDisabled();
     }
     setState(() {
       calendarEnabled = s;

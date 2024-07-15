@@ -52,6 +52,7 @@ Future<bool> userHasSpeakerProfile(String uid) async {
 }
 
 Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
+  debugPrint('getUserSamplesState for uid: $uid');
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}samples?uid=$uid',
     headers: {},
@@ -64,6 +65,7 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
 }
 
 Future<bool> uploadSample(File file, String uid) async {
+  debugPrint('uploadSample ${file.path} for uid: $uid');
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}samples/upload?uid=$uid'),
