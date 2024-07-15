@@ -93,8 +93,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   Future<void> _initiatePlugins() async {
-    plugins = SharedPreferencesUtil().pluginsList;
     _edgeCasePluginNotAvailable();
+    plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
     _edgeCasePluginNotAvailable();
@@ -435,31 +435,39 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               _controller!.index == 2
                   ? Padding(
                       padding: const EdgeInsets.only(left: 0),
-                      child: DropdownButton<String>(
-                        menuMaxHeight: 350,
-                        value: SharedPreferencesUtil().selectedChatPluginId,
-                        onChanged: (s) async {
-                          if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) || s == 'enable') {
-                            await routeToPage(context, const PluginsPage(filterChatOnly: true));
-                            setState(() {});
-                            return;
-                          }
-                          if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+                      child: Container(
+                        // decoration: BoxDecoration(
+                        //   border: Border.all(color: Colors.grey),
+                        //   borderRadius: BorderRadius.circular(30),
+                        // ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: DropdownButton<String>(
+                          menuMaxHeight: 350,
+                          value: SharedPreferencesUtil().selectedChatPluginId,
+                          onChanged: (s) async {
+                            if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) ||
+                                s == 'enable') {
+                              await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                              setState(() {});
+                              return;
+                            }
+                            if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
 
-                          SharedPreferencesUtil().selectedChatPluginId = s;
-                          var plugin = plugins.firstWhereOrNull((p) => p.id == s);
-                          chatPageKey.currentState?.sendInitialPluginMessage(plugin);
-                          setState(() {});
-                        },
-                        dropdownColor: Colors.black,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                        underline: Container(
-                          height: 0,
-                          color: Colors.white,
+                            SharedPreferencesUtil().selectedChatPluginId = s;
+                            var plugin = plugins.firstWhereOrNull((p) => p.id == s);
+                            chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                            setState(() {});
+                          },
+                          icon: Container(),
+                          alignment: Alignment.center,
+                          dropdownColor: Colors.black,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          underline: Container(height: 0, color: Colors.transparent),
+                          isExpanded: false,
+                          itemHeight: 48,
+                          padding: EdgeInsets.zero,
+                          items: _getPluginsDropdownItems(context),
                         ),
-                        isExpanded: false,
-                        itemHeight: 48,
-                        items: _getPluginsDropdownItems(context),
                       ),
                     )
                   : const SizedBox(width: 16),
@@ -499,17 +507,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const CircleAvatar(
-                  backgroundColor: Colors.transparent,
-                  maxRadius: 12,
-                  child: Icon(
-                    Icons.question_answer,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 8),
+                const Icon(size: 20, Icons.chat, color: Colors.white),
+                const SizedBox(width: 10),
                 Text(
-                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins' : 'No Plugin Selected',
+                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
@@ -522,7 +523,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           return DropdownMenuItem<String>(
             value: plugin.id,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 CircleAvatar(
                   backgroundColor: Colors.white,
@@ -531,7 +533,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name,
+                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name + ' '*(18 - plugin.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
@@ -550,7 +552,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
               child: Icon(Icons.star, color: Colors.purpleAccent),
             ),
             SizedBox(width: 8),
-            Text('Enable Plugins', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
           ],
         ),
       ));
