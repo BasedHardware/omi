@@ -84,10 +84,21 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  _edgeCasePluginNotAvailable() {
+    var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.chat)) {
+      SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
+    }
+  }
+
   Future<void> _initiatePlugins() async {
     plugins = SharedPreferencesUtil().pluginsList;
+    _edgeCasePluginNotAvailable();
     plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
+    _edgeCasePluginNotAvailable();
+    setState(() {});
   }
 
   @override
