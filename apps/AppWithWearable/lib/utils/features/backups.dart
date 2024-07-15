@@ -60,7 +60,7 @@ Future<bool> executeBackupWithUid({String? uid}) async {
 
 Future<List<Memory>> retrieveBackup(String uid) async {
   var retrieved = await downloadBackupApi(uid);
-  if (retrieved == '') throw Exception('No backup found for this user ID.');
+  if (retrieved == '') return [];
   var memories = await getDecodedMemories(retrieved, uid);
   MemoryProvider().storeMemories(memories);
   return memories;

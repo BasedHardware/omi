@@ -88,8 +88,19 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     var canNotify =
         batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
     if (canNotify != null) {
-      await canNotify.setNotifyValue(true);
-      return canNotify.lastValueStream.listen((value) {
+      try{
+        await canNotify.setNotifyValue(true);
+      } catch (e, stackTrace) {
+      debugPrint('Error setting notify value: $e');
+      CrashReporting.reportHandledCrash(
+        e,
+        stackTrace,
+        level: NonFatalExceptionLevel.error,
+        userAttributes: {'deviceId': btDevice.id},
+      );
+      return null;
+    }
+    return canNotify.lastValueStream.listen((value) {
         // debugPrint('Battery level listener: $value');
         if (value.isNotEmpty) {
           onBatteryLevelChange!(value[0]);
@@ -116,7 +127,18 @@ Future<StreamSubscription?> getBleAudioBytesListener(
   var codecCharacteristic = getCharacteristicByUuid(bytesService, '19b10002-e8f2-537e-4f6c-d104768a1214');
 
   if (streamCharacteristic != null && codecCharacteristic != null) {
-    await streamCharacteristic.setNotifyValue(true);
+    try {
+      await streamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+    } catch (e, stackTrace) {
+      debugPrint('Error setting notify value: $e');
+      CrashReporting.reportHandledCrash(
+        e,
+        stackTrace,
+        level: NonFatalExceptionLevel.error,
+        userAttributes: {'deviceId': deviceId},
+      );
+      return null;
+    }
     if (Platform.isAndroid) await device.requestMtu(512); // FORCING REQUEST AGAIN OF MTU
 
     debugPrint('Subscribed to audioBytes stream from Friend Device');
@@ -141,7 +163,7 @@ _errorObtainingCodec({
     StackTrace.current,
     level: NonFatalExceptionLevel.error,
   );
-  return BleAudioCodec.unknown;
+  return BleAudioCodec.pcm8; // unknown
 }
 
 Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
@@ -153,8 +175,13 @@ Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
   if (streamCharacteristic == null) return _errorObtainingCodec(message: 'Audio stream characteristic not found');
   if (codecCharacteristic == null) return _errorObtainingCodec(message: 'Audio codec characteristic not found');
 
-  debugPrint('codecCharacteristic: ${await codecCharacteristic.read()}');
-  var codecId = (await codecCharacteristic.read()).single;
+  var codecId = 1;
+  try {
+    codecId = (await codecCharacteristic.read()).single;
+  } catch (e, stackTrace) {
+    debugPrint('Error reading codec characteristic: $e');
+    return _errorObtainingCodec(message: 'Error reading codec characteristic');
+  }
   BleAudioCodec codec;
   switch (codecId) {
     // case 0:
