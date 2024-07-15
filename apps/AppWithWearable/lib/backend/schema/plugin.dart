@@ -98,6 +98,8 @@ class Plugin {
       'rating_avg': ratingAvg,
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
+      'memories': memories,
+      'chat': chat,
     };
   }
 
