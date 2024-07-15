@@ -1,3 +1,4 @@
+import 'package:friend_private/backend/preferences.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -9,6 +10,9 @@ class TranscriptSegment {
   String? speaker;
   late int speakerId;
   bool isUser;
+
+  // @Property(type: PropertyType.date)
+  // DateTime? createdAt;
   double start;
   double end;
 
@@ -18,13 +22,21 @@ class TranscriptSegment {
     required this.isUser,
     required this.start,
     required this.end,
+    // this.createdAt,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+    // createdAt ??= DateTime.now(); // TODO: -30 seconds + start time ? max(now, (now-30)
   }
 
   @override
   String toString() {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
+  }
+
+  String getTimestampString() {
+    var start = Duration(seconds: this.start.toInt());
+    var end = Duration(seconds: this.end.toInt());
+    return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   // Factory constructor to create a new Message instance from a map
@@ -35,6 +47,7 @@ class TranscriptSegment {
       isUser: (json['is_user'] ?? false) as bool,
       start: json['start'] as double,
       end: json['end'] as double,
+      // createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
     );
   }
 
@@ -45,6 +58,7 @@ class TranscriptSegment {
       'speaker': speaker,
       'speaker_id': speakerId,
       'is_user': isUser,
+      // 'created_at': createdAt?.toIso8601String(),
       'start': start,
       'end': end,
     };
@@ -72,26 +86,43 @@ class TranscriptSegment {
     segments.removeWhere((element) => element.text.isEmpty);
   }
 
-  static combineSegments(List<TranscriptSegment> segments, List<TranscriptSegment> data) {
-    if (data.isEmpty) return;
+  static combineSegments(
+    List<TranscriptSegment> segments,
+    List<TranscriptSegment> newSegments, {
+    int elapsedSeconds = 0, // chunks
+    double streamStartedAtSecond = 0, // streamed
+  }) {
+    if (newSegments.isEmpty) return;
+
+    for (var segment in newSegments) {
+      segment.start -= streamStartedAtSecond;
+      segment.end -= streamStartedAtSecond;
+    }
+
     var joinedSimilarSegments = <TranscriptSegment>[];
-    for (var value in data) {
+    for (var newSegment in newSegments) {
+      newSegment.start += elapsedSeconds;
+      newSegment.end += elapsedSeconds;
+
       if (joinedSimilarSegments.isNotEmpty &&
-          (joinedSimilarSegments.last.speaker == value.speaker ||
-              (joinedSimilarSegments.last.isUser && value.isUser))) {
-        joinedSimilarSegments.last.text += ' ${value.text}';
+          (joinedSimilarSegments.last.speaker == newSegment.speaker ||
+              (joinedSimilarSegments.last.isUser && newSegment.isUser))) {
+        joinedSimilarSegments.last.text += ' ${newSegment.text}';
+        joinedSimilarSegments.last.end = newSegment.end;
       } else {
-        joinedSimilarSegments.add(value);
+        joinedSimilarSegments.add(newSegment);
       }
     }
+    // segments is not empty
+    // prev segment speaker is same as first new segment speaker || prev segment is user and first new segment is user
+    // and the difference between the end of the last segment and the start of the first new segment is less than 30 seconds
 
     if (segments.isNotEmpty &&
         (segments.last.speaker == joinedSimilarSegments[0].speaker ||
             (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
-        segments.last.text.split(' ').length < 200) {
-      // for better UI included last line segments.last.text.split(' ').length < 200
-      // so even if speaker 0 then speaker 0 again (same thing), it will look better
+        (joinedSimilarSegments[0].start - segments.last.end < 30)) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
+      segments.last.end = joinedSimilarSegments[0].end;
       joinedSimilarSegments.removeAt(0);
     }
 
@@ -101,16 +132,33 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
-  static String buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
+  static String buildDiarizedTranscriptMessage(
+    List<TranscriptSegment> segments, {
+    bool includeTimestamps = false,
+  }) {
     String transcript = '';
+    var userName = SharedPreferencesUtil().givenName;
+    includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
+      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
-        transcript += 'You said: ${segment.text} ';
+        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: ${segment.text} ';
       } else {
-        transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
+        transcript += '$timestampStr Speaker ${segment.speakerId}: ${segment.text} ';
       }
       transcript += '\n\n';
     }
     return transcript.trim();
+  }
+
+  static bool canDisplaySeconds(List<TranscriptSegment> segments) {
+    for (var i = 0; i < segments.length; i++) {
+      for (var j = i + 1; j < segments.length; j++) {
+        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 }

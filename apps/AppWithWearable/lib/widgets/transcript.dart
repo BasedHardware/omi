@@ -2,17 +2,20 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/preferences.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
   final bool horizontalMargin;
   final bool topMargin;
+  final bool canDisplaySeconds;
 
   const TranscriptWidget({
     super.key,
     required this.segments,
     this.horizontalMargin = true,
     this.topMargin = true,
+    this.canDisplaySeconds = true,
   });
 
   @override
@@ -33,6 +36,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
         if (idx == widget.segments.length + 1) return const SizedBox(height: 64);
         final data = widget.segments[idx - 1];
+
         return Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
@@ -47,9 +51,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       width: 26, height: 26),
                   const SizedBox(width: 12),
                   Text(
-                    data.isUser ? 'You' : 'Speaker ${data.speakerId}',
+                    data.isUser
+                        ? SharedPreferencesUtil().givenName.isNotEmpty
+                            ? SharedPreferencesUtil().givenName
+                            : 'You'
+                        : 'Speaker ${data.speakerId}',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
-                  )
+                  ),
+                  widget.canDisplaySeconds ? const SizedBox(width: 12) : const SizedBox(),
+                  // pad as start-end as hours:minutes:seconds e.g. 01:23:45
+                  widget.canDisplaySeconds
+                      ? Text(
+                          data.getTimestampString(),
+                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                        )
+                      : const SizedBox(),
                 ],
               ),
               const SizedBox(height: 12),

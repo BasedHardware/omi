@@ -4,8 +4,10 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/find.dart';
 
-Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
+Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
+  print('scanAndConnectDevice');
   var deviceId = SharedPreferencesUtil().deviceId;
+  print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
       return BTDeviceStruct(
@@ -15,7 +17,9 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
       );
     }
   }
+  int timeoutCounter = 0;
   while (true) {
+    if (timeout && timeoutCounter >= 10) return null;
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
       if (deviceId == '' && device.name == 'Friend') {
@@ -34,6 +38,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true}) async {
     }
     // If the device is not found, wait for a bit before retrying.
     await Future.delayed(const Duration(seconds: 2));
+    timeoutCounter += 2;
   }
 }
 

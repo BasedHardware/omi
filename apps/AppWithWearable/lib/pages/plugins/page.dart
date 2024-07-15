@@ -1,7 +1,10 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/plugins/plugin_detail.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,7 +27,7 @@ class _PluginsPageState extends State<PluginsPage> {
     for (var plugin in pluginsList) {
       plugin.isEnabled = pluginsId.contains(plugin.id);
     }
-    plugins = pluginsList;
+    plugins = pluginsList.sortedBy((plugin) => plugin.ratingCount * (plugin.ratingAvg ?? 0)).reversed.toList();
     setState(() => isLoading = false);
   }
 
@@ -89,9 +92,8 @@ class _PluginsPageState extends State<PluginsPage> {
               height: 32,
             ),
             Container(
-              width: double.maxFinite,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+              margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
               decoration: const BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -114,53 +116,24 @@ class _PluginsPageState extends State<PluginsPage> {
                   });
                 },
                 obscureText: false,
-                decoration: const InputDecoration(
-                  hintText: 'Find your plugin',
-                  hintStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  errorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
-                  focusedErrorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Color(0x00000000),
-                      width: 1.0,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(4.0),
-                      topRight: Radius.circular(4.0),
-                    ),
-                  ),
+                decoration: InputDecoration(
+                  hintText: 'Find your plugin...',
+                  hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  suffixIcon: searchQuery.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          icon: const Icon(
+                            Icons.cancel,
+                            color: Color(0xFFF7F4F4),
+                            size: 28.0,
+                          ),
+                          onPressed: () {
+                            searchQuery = '';
+                            setState(() {});
+                          },
+                        ),
                 ),
                 style: const TextStyle(
                   // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
@@ -183,6 +156,11 @@ class _PluginsPageState extends State<PluginsPage> {
                     ),
                     margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
                     child: ListTile(
+                      onTap: () async {
+                        await routeToPage(context, PluginDetailPage(plugin: plugin));
+                        _fetchPlugins();
+                        // refresh plugins
+                      },
                       leading: CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 28,
@@ -194,13 +172,31 @@ class _PluginsPageState extends State<PluginsPage> {
                         maxLines: 1,
                         style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                       ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          plugin.description,
-                          maxLines: 2,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
+                      subtitle: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                          plugin.ratingAvg != null
+                              ? Row(
+                                  children: [
+                                    Text(plugin.getRatingAvg()!),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text('(${plugin.ratingCount})'),
+                                  ],
+                                )
+                              : Container(),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              plugin.description,
+                              maxLines: 2,
+                              style: const TextStyle(color: Colors.grey, fontSize: 14),
+                            ),
+                          ),
+                        ],
                       ),
                       trailing: IconButton(
                         icon: Icon(

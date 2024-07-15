@@ -40,12 +40,21 @@ class GrowthbookUtil {
   }
 
   bool hasTranscriptServerFeatureOn() {
+    // return true;
     if (Env.growthbookApiKey == null) return false;
     if (!SharedPreferencesUtil().useTranscriptServer) return false;
 
     var feature = _gb!.feature('server-transcript');
     var enabled = feature.on;
-    debugPrint('hasTranscriptServerFeatureOn: ${feature.value}');
+    return enabled;
+  }
+
+  bool hasStreamingTranscriptFeatureOn() {
+    return false;
+    if (!hasTranscriptServerFeatureOn()) return false;
+
+    var feature = _gb!.feature('streaming-transcript');
+    var enabled = feature.on;
     return enabled;
   }
 }

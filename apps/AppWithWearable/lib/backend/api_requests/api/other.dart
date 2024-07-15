@@ -7,10 +7,11 @@ import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/plugin.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
+  debugPrint('deepgramTranscribe');
   var startTime = DateTime.now();
   // TODO: why there seems to be no punctuation
   Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
@@ -21,7 +22,7 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
     'punctuate': true,
     'diarize': true,
     'smart_format': true,
-    'multichannel': true
+    'multichannel': false
     // 'detect_topics': true,
     // 'topics': true,
     // 'intents': true,

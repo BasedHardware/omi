@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/storage/sample.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -32,9 +33,8 @@ Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e, stackTrace) {
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    throw Exception('An error occurred transcribeAudioFile: $e');
+  } catch (e) {
+    rethrow;
   }
 }
 
@@ -51,6 +51,7 @@ Future<bool> userHasSpeakerProfile(String uid) async {
 }
 
 Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
+  debugPrint('getUserSamplesState for uid: $uid');
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}samples?uid=$uid',
     headers: {},
@@ -63,6 +64,7 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
 }
 
 Future<bool> uploadSample(File file, String uid) async {
+  debugPrint('uploadSample ${file.path} for uid: $uid');
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}samples/upload?uid=$uid'),
@@ -118,4 +120,39 @@ Future<bool> deleteBackupApi() async {
   if (response == null) return false;
   debugPrint('deleteBackup: ${response.body}');
   return response.statusCode == 200;
+}
+
+Future<List<Plugin>> retrievePlugins() async {
+  var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
+  if (response?.statusCode == 200) {
+    try {
+      return Plugin.fromJsonList(jsonDecode(response!.body));
+    } catch (e, stackTrace) {
+      debugPrint(e.toString());
+      CrashReporting.reportHandledCrash(e, stackTrace);
+      return [];
+    }
+  }
+  return [];
+}
+
+Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}plugins/review?uid=${SharedPreferencesUtil().uid}&plugin_id=$pluginId',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'score': score, review: review}),
+  );
+  debugPrint('reviewPlugin: ${response?.body}');
+}
+
+Future<void> migrateUserServer(String prevUid, String newUid) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}migrate-user?prev_uid=$prevUid&new_uid=$newUid',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  debugPrint('migrateUser: ${response?.body}');
 }

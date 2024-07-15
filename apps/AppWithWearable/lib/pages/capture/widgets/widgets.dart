@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
@@ -153,14 +154,18 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context) {
+speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
   return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
       ? Stack(
           children: [
             GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+              onTap: () async {
                 MixpanelManager().speechProfileCapturePageClicked();
+                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                await routeToPage(context, const SpeakerIdPage());
+                setState(() {});
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
+                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) reset();
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -212,6 +217,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
   }
 
   if (segments.isEmpty) {
+    // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
             mainAxisSize: MainAxisSize.min,
@@ -268,6 +274,19 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+getWebsocketErrorWidget() {
+  return const Padding(
+    padding: EdgeInsets.only(top: 80),
+    child: Center(
+      child: Text(
+        'Error connecting to the server. Please check your internet connection.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
       ),
     ),
   );
