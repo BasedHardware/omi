@@ -127,7 +127,9 @@ Future<List<Plugin>> retrievePlugins() async {
       url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
   if (response?.statusCode == 200) {
     try {
-      return Plugin.fromJsonList(jsonDecode(response!.body));
+      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      debugPrint('retrievePlugins: ${plugins.length}');
+      return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);

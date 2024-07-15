@@ -135,7 +135,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                           child: const Text(
                             'Memories',
-                            style: TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w500),
+                            style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         )
                       : const SizedBox.shrink(),
