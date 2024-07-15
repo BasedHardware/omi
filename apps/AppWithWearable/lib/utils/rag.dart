@@ -7,8 +7,8 @@ import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-Future<List<dynamic>> retrieveRAGContext(String message) async {
-  var prevMessages = await MessageProvider().retrieveMostRecentMessages(limit: 10);
+Future<List<dynamic>> retrieveRAGContext(String message, {String? prevMessagesPluginId}) async {
+  var prevMessages = await MessageProvider().retrieveMostRecentMessages(limit: 10, pluginId: prevMessagesPluginId);
   Tuple2<List<String>, List<DateTime>>? ragContext = await determineRequiresContext(prevMessages);
   debugPrint('_retrieveRAGContext betterContextQuestion: $ragContext');
   if (ragContext == null || (ragContext.item1.isEmpty && ragContext.item2.isEmpty)) {
