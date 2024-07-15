@@ -199,7 +199,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
       currentTranscriptFinishedAt = DateTime.now();
     }
-    _doProcessingOfInstructions();
+    // _doProcessingOfInstructions();
     setState(() => isTranscribing = false);
   }
 
