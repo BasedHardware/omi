@@ -89,15 +89,15 @@ class TranscriptSegment {
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {
-    int elapsedSeconds = 0,
+    int elapsedSeconds = 0, // chunks
+    double streamStartedAtSecond = 0, // streamed
   }) {
-    // TODO: combine keeping the time at which each segment was created?
-    // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
-    // what if they are 1 minute or more
     if (newSegments.isEmpty) return;
 
-    // var lastSegmentSecondsElapsed = segments.isNotEmpty ? DateTime.now().difference(segments.last.createdAt!) : 0;
-    // debugPrint('lastSegmentSecondsElapsed: $lastSegmentSecondsElapsed');
+    for (var segment in newSegments) {
+      segment.start -= streamStartedAtSecond;
+      segment.end -= streamStartedAtSecond;
+    }
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {

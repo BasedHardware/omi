@@ -22,7 +22,6 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
     if (timeout && timeoutCounter >= 10) return null;
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
-      print('device: ${device.name}');
       if (deviceId == '' && device.name == 'Friend') {
         deviceId = device.id;
         SharedPreferencesUtil().deviceId = deviceId;
