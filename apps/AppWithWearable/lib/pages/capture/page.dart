@@ -258,6 +258,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             debugPrint('No internet connection, not processing audio');
             return;
           }
+          if (await WavBytesUtil.tempWavExists()) return; // wait til that one is fully processed
 
           Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
           try {
@@ -269,6 +270,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               MixpanelManager().firstTranscriptMade();
               firstTranscriptMade = true;
             }
+
+            // TODO: remove file
             // uploadFile(data.item1, prefixTimestamp: true);
           } catch (e, stacktrace) {
             // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
@@ -280,9 +283,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               level: NonFatalExceptionLevel.warning,
               userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
             );
-
             toProcessBytes2.insertAudioBytes(data.item2);
           }
+          WavBytesUtil.deleteTempWav();
         }
       },
     );
@@ -329,6 +332,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   _createMemory({bool forcedCreation = false}) async {
+    if (memoryCreating) return;
+    // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
@@ -388,6 +393,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void initState() {
     btDevice = widget.device;
     _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
+    WavBytesUtil.clearTempWavFiles();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
       if (_streamingTranscriptEnabled) {

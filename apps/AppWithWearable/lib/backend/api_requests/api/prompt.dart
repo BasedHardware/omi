@@ -243,9 +243,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
         '''
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
-  var response = await gptApiCall(model: 'gpt-4o', messages: [
-    {"role": "user", "content": message}
-  ]);
+  var response = await executeGptPrompt(message);
   debugPrint('determineRequiresContext response: $response');
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
