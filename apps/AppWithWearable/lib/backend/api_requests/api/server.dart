@@ -33,9 +33,8 @@ Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e, stackTrace) {
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    throw Exception('An error occurred transcribeAudioFile: $e');
+  } catch (e) {
+    rethrow;
   }
 }
 
