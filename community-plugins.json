@@ -7,7 +7,7 @@
     "prompt": "You will be given a conversation between a doctor and a patient. Your task is to process this transcription by identifying and extracting key medical information such as symptoms, diagnoses, treatments, and follow-up care. Create structured clinical notes including patient identification, symptoms summary, medical history, clinical findings, diagnosis, treatment plans, and follow-up recommendations. Ensure adherence to medical documentation standards and patient confidentiality. Any missing details should be recorded as 'Not Mentioned'.",
     "image": "/assets/plugin_images/doctor-patient-notes.png",
     "memories": true,
-    "chat": true
+    "chat": false
   },
   {
     "id": "startup-mentor",
@@ -127,7 +127,7 @@
     "prompt": "You will be given a conversation transcript. Analyze the content to produce a summary sentiment analysis.  Create three categories: Positive Sentiment, Negative Sentiment, and Neutral sentiment. For each category provide 3 bullet points that provide examples from the transcript that represent the category. For each category provide a percentage representing the amount of the transcript that applies to the category.  As a summary, define the average sentiment.  In other words, if most of the sentiment was neutral, you produce a line 'Average sentiment: Neutral'",
     "image": "/assets/plugin_images/sentiment-analyzer.png",
     "memories": true,
-    "chat": true
+    "chat": false
   },
   {
     "id": "conversation-summarizer",
@@ -137,7 +137,7 @@
     "prompt": "You will be given a conversation transcript. Your task is to summarize the conversation into key points. Identify the main topics discussed and provide a concise summary of the conversation. Ensure that the summary captures the essence of the conversation and highlights the most important points. If the conversation is extremely long, focus on the most relevant parts.",
     "image": "/assets/plugin_images/conversation-summarizer.png",
     "memories": true,
-    "chat": true
+    "chat": false
   },
   {
     "id": "topic-identifier",
@@ -147,6 +147,6 @@
     "prompt": "You will be given a conversation transcript. Your task is to identify the different topics discussed in the conversation and summarize them. Provide a concise summary of each topic and highlight the key points discussed.",
     "image": "/assets/plugin_images/topic-identifier.png",
     "memories": true,
-    "chat": true
+    "chat": false
   }
 ]

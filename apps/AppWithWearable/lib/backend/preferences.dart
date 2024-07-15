@@ -128,6 +128,10 @@ class SharedPreferencesUtil {
     pluginsEnabled = plugins;
   }
 
+  String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';
+
+  set selectedChatPluginId(String value) => saveString('selectedChatPluginId2', value);
+
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
     return segments.map((e) => TranscriptSegment.fromJson(jsonDecode(e))).toList();

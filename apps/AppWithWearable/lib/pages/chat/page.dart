@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -213,12 +212,16 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
     List<Memory> memories = ragInfo[1].cast<Memory>();
     debugPrint('RAG Context: $ragContext memories: ${memories.length}');
     MixpanelManager().chatMessageSent(message);
-    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(aiMessage), () {
-      aiMessage.memories.addAll(memories);
-      MessageProvider().updateMessage(aiMessage);
-      widget.refreshMessages();
-      if (memories.isNotEmpty) _moveListToBottom(extra: (70 * memories.length).toDouble());
-    });
+    await streamApiResponse(
+      qaRagPrompt(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10)),
+      _callbackFunctionChatStreaming(aiMessage),
+      () {
+        aiMessage.memories.addAll(memories);
+        MessageProvider().updateMessage(aiMessage);
+        widget.refreshMessages();
+        if (memories.isNotEmpty) _moveListToBottom(extra: (70 * memories.length).toDouble());
+      },
+    );
     changeLoadingState();
   }
 
