@@ -117,7 +117,7 @@
     "prompt": "You will be given a conversation transcript. The transcription and speaker dissemination is very poor and contains many errors. Your task is to improve the transcript by inferring the speakers and analyzing the sentiment of the conversation. Correct the errors in the transcription and provide a more accurate and coherent version of the conversation. Ensure that the speakers are correctly identified and that the sentiment of the conversation is accurately reflected. If the conversation is extremely long, transcribe only the most relevant parts.",
     "image": "/assets/plugin_images/transcript-improver.png",
     "memories": true,
-    "chat": true
+    "chat": false
   },
   {
     "id": "sentiment-analyzer",
