@@ -59,6 +59,7 @@ void onStart(ServiceInstance service) async {
     var files = Directory(path.path).listSync();
     for (var file in files) {
       if (file.path.endsWith('.wav')) {
+        debugPrint('deleting file: ${file.path}');
         file.deleteSync();
       }
     }
