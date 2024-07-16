@@ -40,7 +40,6 @@ Future<List<BluetoothService>> getBleServices(String deviceId) async {
       userAttributes: {'deviceId': deviceId},
     );
     return [];
-    return [];
   }
 }
 
@@ -155,6 +154,13 @@ Future cameraStopPhotoController(BTDeviceStruct btDevice) async {
   var streamCharacteristic = getCharacteristicByUuid(bytesService!, '19B10006-E8F2-537E-4F6C-D104768A1214');
   await streamCharacteristic!.write([0x00]);
   print('cameraStopPhotoController');
+}
+
+Future<bool> hasImageStreamingCharacteristic(String deviceId) async {
+  final bytesService = await getServiceByUuid(deviceId, '19b10000-e8f2-537e-4f6c-d104768a1214');
+  if (bytesService == null) return false;
+  var streamCharacteristic = getCharacteristicByUuid(bytesService, '19b10005-e8f2-537e-4f6c-d104768a1214');
+  return streamCharacteristic != null;
 }
 
 Future<StreamSubscription?> getBleImageBytesListener(

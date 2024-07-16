@@ -96,7 +96,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 //     ''', speaker: 'SPEAKER_00', isUser: false, start: 0, end: 30)
   ];
 
-  StreamSubscription? _audioBytesStream;
+  StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
 
   Timer? _memoryCreationTimer;
@@ -195,7 +195,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         });
 
     _wsChannel = data.item1;
-    _audioBytesStream = data.item2;
+    _bleBytesStream = data.item2;
     audioStorage = data.item3;
   }
 
@@ -230,36 +230,43 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
     debugPrint('Attempting to reconnect $_reconnectionAttempts time');
     // _wsChannel?.
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _wsChannel?.sink.close(); // trigger one more reconnectWebSocket call
     await initiateBytesStreamingProcessing();
   }
 
-  List<Uint8List> images = [];
+  List<Tuple2<Uint8List, String>> images = [];
   ImageBytesUtil imageBytesUtil = ImageBytesUtil();
 
   Future<void> openGlassProcessing() async {
-    await getBleImageBytesListener(btDevice!.id, onImageBytesReceived: (List<int> value) async {
+    _bleBytesStream = await getBleImageBytesListener(btDevice!.id, onImageBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
-      print(value);
+      // print(value);
       Uint8List data = Uint8List.fromList(value);
       Uint8List? completedImage = imageBytesUtil.processChunk(data);
-      if (completedImage != null) {
+      if (completedImage != null && completedImage.isNotEmpty) {
         debugPrint('Completed image size: ${completedImage.length}');
-        images.add(completedImage);
-        setState(() {});
-        debugPrint('Images: ${images.length}');
+        getImageDescription(completedImage).then((description) {
+          images.add(Tuple2(completedImage, description));
+          setState(() {});
+          debugPrint('Images: ${images.length}');
+          setHasTranscripts(true);
+        });
       }
     });
     await cameraStopPhotoController(btDevice!);
     await cameraStartPhotoController(btDevice!);
   }
 
+  bool isGlasses = false;
+
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-    // await openGlassProcessing();
-    // return;
+    print(SharedPreferencesUtil().deviceName);
+    isGlasses = await hasImageStreamingCharacteristic(btDevice!.id);
+    if (isGlasses) return await openGlassProcessing();
+
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
       // TODO: disconnect and show error
@@ -269,7 +276,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
-    _audioBytesStream = await getBleAudioBytesListener(
+    _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
@@ -310,7 +317,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       },
     );
-    if (_audioBytesStream == null) {
+    if (_bleBytesStream == null) {
       // TODO: error out and disconnect
     }
   }
@@ -338,7 +345,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _wsChannel?.sink.close(1000);
     if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
@@ -443,7 +450,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void dispose() {
     record.dispose();
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _wsChannel?.sink.close(1000);
     _internetListener.cancel();
@@ -459,26 +466,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           children: [
             speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
             ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-            getTranscriptWidget(memoryCreating, segments, widget.device),
+            getTranscriptWidget(memoryCreating, segments, images, widget.device),
             if (wsConnectionState == WebsocketConnectionStatus.error ||
                 wsConnectionState == WebsocketConnectionStatus.failed)
               getWebsocketErrorWidget(),
             const SizedBox(height: 16),
-            GridView.builder(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              scrollDirection: Axis.vertical,
-              itemCount: images.length,
-              physics: const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, idx) {
-                return Image.memory(images[idx]);
-              },
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-            ),
           ],
         ),
         getPhoneMicRecordingButton(_recordingToggled, _state)
