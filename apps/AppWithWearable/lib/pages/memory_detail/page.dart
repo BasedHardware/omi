@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
@@ -50,6 +51,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   void initState() {
     _determineCanDisplaySeconds();
+    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
@@ -111,7 +113,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     borderRadius: BorderRadius.all(Radius.circular(32)),
                     side: BorderSide(color: Colors.grey, width: 1)),
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: widget.memory.getTranscript()));
+                  Clipboard.setData(ClipboardData(text: widget.memory.getTranscript(generate: true)));
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('Transcript copied to clipboard'),
                     duration: Duration(seconds: 1),

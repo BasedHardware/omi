@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
@@ -12,6 +13,7 @@ class AIMessage extends StatelessWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final List<Memory> memories;
+  final Plugin? pluginSender;
 
   const AIMessage({
     super.key,
@@ -19,6 +21,7 @@ class AIMessage extends StatelessWidget {
     required this.sendMessage,
     required this.displayOptions,
     required this.memories,
+    this.pluginSender,
   });
 
   @override
@@ -27,27 +30,32 @@ class AIMessage extends StatelessWidget {
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/background.png"),
-              fit: BoxFit.cover,
-            ),
-            borderRadius: BorderRadius.all(Radius.circular(16.0)),
-          ),
-          height: 32,
-          width: 32,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Image.asset(
-                "assets/images/herologo.png",
-                height: 24,
-                width: 24,
+        pluginSender != null
+            ? CircleAvatar(
+                radius: 16,
+                backgroundImage: NetworkImage(pluginSender!.getImageUrl()),
+              )
+            : Container(
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage("assets/images/background.png"),
+                    fit: BoxFit.cover,
+                  ),
+                  borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                ),
+                height: 32,
+                width: 32,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Image.asset(
+                      "assets/images/herologo.png",
+                      height: 24,
+                      width: 24,
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
         const SizedBox(width: 16.0),
         Expanded(
           child: Column(
@@ -69,7 +77,7 @@ class AIMessage extends StatelessWidget {
               message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
+                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (message.id != 1) _getCopyButton(context),

@@ -190,7 +190,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(5, 3905873968765933532),
       name: 'Message',
-      lastPropertyId: const obx_int.IdUid(5, 5337649766892625543),
+      lastPropertyId: const obx_int.IdUid(6, 3615800576746497622),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -217,6 +217,11 @@ final _entities = <obx_int.ModelEntity>[
         obx_int.ModelProperty(
             id: const obx_int.IdUid(5, 5337649766892625543),
             name: 'type',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(6, 3615800576746497622),
+            name: 'pluginId',
             type: 9,
             flags: 0)
       ],
@@ -587,12 +592,16 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final textOffset = fbb.writeString(object.text);
           final senderOffset = fbb.writeString(object.sender);
           final typeOffset = fbb.writeString(object.type);
-          fbb.startTable(6);
+          final pluginIdOffset = object.pluginId == null
+              ? null
+              : fbb.writeString(object.pluginId!);
+          fbb.startTable(7);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.createdAt.millisecondsSinceEpoch);
           fbb.addOffset(2, textOffset);
           fbb.addOffset(3, senderOffset);
           fbb.addOffset(4, typeOffset);
+          fbb.addOffset(5, pluginIdOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -609,8 +618,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 4, 0);
           final typeParam = const fb.StringReader(asciiOptimization: true)
               .vTableGet(buffer, rootOffset, 12, '');
+          final pluginIdParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGetNullable(buffer, rootOffset, 14);
           final object = Message(createdAtParam, textParam, senderParam,
-              id: idParam, type: typeParam);
+              id: idParam, type: typeParam, pluginId: pluginIdParam);
           obx_int.InternalToManyAccess.setRelInfo<Message>(object.memories,
               store, obx_int.RelInfo<Message>.toMany(1, object.id));
           return object;
@@ -849,6 +860,10 @@ class Message_ {
   /// See [Message.type].
   static final type =
       obx.QueryStringProperty<Message>(_entities[4].properties[4]);
+
+  /// See [Message.pluginId].
+  static final pluginId =
+      obx.QueryStringProperty<Message>(_entities[4].properties[5]);
 
   /// see [Message.memories]
   static final memories =

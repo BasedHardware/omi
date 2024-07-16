@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.15+43
+version: 1.0.18+49
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -60,15 +60,15 @@ dependencies:
   flutter_silero_vad:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
-#  fonnx:
-#    git:
-#      url: https://github.com/Telosnex/fonnx.git
-#      ref: main
+  #  fonnx:
+  #    git:
+  #      url: https://github.com/Telosnex/fonnx.git
+  #      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-#  nordic_dfu: ^6.1.4+hotfix
+  #  nordic_dfu: ^6.1.4+hotfix
   package_info_plus: ^8.0.0
 
   path_provider: any
@@ -99,6 +99,12 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   device_calendar: ^4.3.2
   flutter_timezone: ^2.0.0
+  sign_in_button: ^3.2.0
+  sign_in_with_apple: ^6.1.1
+  firebase_core: ^3.2.0
+  firebase_auth: ^5.1.2
+  google_sign_in: ^6.2.1
+  internet_connection_checker_plus: ^2.5.0
 
 dependency_overrides:
   http: ^1.2.1
@@ -168,7 +174,8 @@ flutter:
 flutter_native_splash:
   background_image: "assets/images/splash.png"
   android_12:
-    image: assets/images/herologo.png
-    color: "#000000"
+    #    image: assets/images/herologo.png
+    color: "#000000" # TODO: improve hero banner on android12
+
   android: true
   ios: true

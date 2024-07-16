@@ -37,21 +37,24 @@ Future<SummaryResult> summarizeMemory(
   // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
   // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
 
-  // TODO: improve overview with conversation summarizer plugin?
   // TODO: Generate tags/topics relevant to better query?
-  var prompt =
-      '''Based on the following recording transcript of a conversation, provide structure and clarity to the memory in JSON according rules stated below.
-    The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Make sure to use English for your response.
+  // TODO: use name in any way?
+  // var extraStr = SharedPreferencesUtil().givenName.isEmpty ? '' : ' ${SharedPreferencesUtil().givenName}';
+  // Test and see if the action items say "name should do x thing" "speaker 0 should do y thing"
+
+  // Specify which speaker is responsible for each action item., to comment?
+  var prompt = '''Your task is to provide structure and clarity to the recording transcription of a conversation.
+    The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Use English for your response.
 
     ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
     
     For the title, use the main topic of the conversation.
     For the overview, condense the conversation into a brief summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
-    For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation.
+    For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
         
-    Here is the transcript ```${transcript.trim()}```.
+    Transcript: ```${transcript.trim()}```
     
     The output should be formatted as a JSON instance that conforms to the JSON schema below.
     
@@ -63,9 +66,9 @@ Future<SummaryResult> summarizeMemory(
     {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief summary with the main topics discussed, make sure to capture the key details.", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}, "events": {"title": "Events", "description": "A list of events extracted from the conversation, that the user must have on his calendar.", "default": [], "type": "array", "items": {"\$ref": "#/definitions/CalendarEvent"}}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "CalendarEvent": {"title": "CalendarEvent", "type": "object", "properties": {"title": {"title": "Title", "description": "The title of the event", "type": "string"}, "description": {"title": "Description", "description": "A brief description of the event", "default": "", "type": "string"}, "startsAt": {"title": "Starts At", "description": "The start date and time of the event", "type": "string", "format": "date-time"}, "duration": {"title": "Duration", "description": "The duration of the event in minutes", "default": 30, "type": "integer"}}, "required": ["title", "startsAt"]}}}
     ```
     '''
-          .replaceAll('     ', '')
-          .replaceAll('    ', '')
-          .trim();
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
   debugPrint(prompt);
   var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
   var structured = Structured.fromJson(jsonDecode(structuredResponse));
@@ -82,6 +85,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
   // TODO: improve plugin result, include result + id to map it to.
   List<Future<Tuple2<Plugin, String>>> pluginPrompts = enabledPlugins.map((plugin) async {
     try {
+      // TODO: tweak with user name in anyway?
       String response = await executeGptPrompt('''
         Your are an AI with the following characteristics:
         Name: ${plugin.name}, 
@@ -89,7 +93,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
         Task: ${plugin.prompt}
         
         Note: It is possible that the conversation you are given, has nothing to do with your task, \
-        in that case, output just an empty string. (For example, you are given a business conversation, but your task is medical analysis)
+        in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
         
         Conversation: ```${transcript.trim()}```,
        
@@ -168,10 +172,12 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   if (memory.structured.target!.title.isEmpty) return '';
   if (memory.structured.target!.actionItems.isEmpty) return '';
 
+  var userName = SharedPreferencesUtil().givenName;
+  var str = userName.isEmpty ? 'a busy entrepreneur' : '$userName (a busy entrepreneur)';
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
-  First determine if there's crucial value to notify a busy entrepreneur about it.
-  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
+  First determine if there's crucial feedback to notify $str about it.
+  If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
    
   Transcript:
@@ -191,12 +197,12 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
   if (memories.isEmpty) return msg;
   if (memories.where((m) => !m.discarded).length <= 1) return msg;
-
+  var str = SharedPreferencesUtil().givenName.isEmpty ? 'the user' : SharedPreferencesUtil().givenName;
   var prompt = '''
-  The following are a list of user memories with the transcripts with its respective structuring, that were saved during the user's day.
-  The user wants to get a daily summary of the key action items he has to take based on his day memories.
+  The following are a list of $str\'s memories from today, with the transcripts with its respective structuring, that $str had during his day.
+  $str wants to get a summary of the key action items he has to take based on his today's memories.
 
-  Remember the person is busy so this has to be very efficient and concise.
+  Remember $str is busy so this has to be very efficient and concise.
   Respond in at most 50 words.
   
   Output your response in plain text, without markdown.
@@ -214,7 +220,7 @@ Future<String> dailySummaryNotifications(List<Memory> memories) async {
 
 Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Message> messages) async {
   String message = '''
-        Based on the current conversation an AI is having with a Human, determine if the AI requires context outside the conversation to respond to the user's message.
+        Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
         More context could mean, user stored old conversations, notes, or information that seems very user-specific.
         
         - First determine if the conversation requires context, in the field "requires_context".
@@ -237,9 +243,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
         '''
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
-  var response = await gptApiCall(model: 'gpt-4o', messages: [
-    {"role": "user", "content": message}
-  ]);
+  var response = await executeGptPrompt(message);
   debugPrint('determineRequiresContext response: $response');
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
@@ -261,17 +265,17 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
   }
 }
 
-String qaRagPrompt(String context, List<Message> messages) {
+String qaRagPrompt(String context, List<Message> messages, {Plugin? plugin}) {
   var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation. 
-    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
+    If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
-    
+    ${plugin == null ? '' : '\nYour name is: ${plugin.name}, and your personality/description is "${plugin.description}".\nMake sure to reflect your personality in your response.\n'}
     Conversation History:
-    ${Message.getMessagesAsString(messages)}
+    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true, usePluginNameIfAvailable: true)}
 
     Context:
-    ``` 
+    ```
     $context
     ```
     Answer:
@@ -279,4 +283,34 @@ String qaRagPrompt(String context, List<Message> messages) {
       .replaceAll('    ', '');
   debugPrint(prompt);
   return prompt;
+}
+
+Future<String> getInitialPluginPrompt(Plugin? plugin) async {
+  if (plugin == null) {
+    return '''
+        Your are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+    ''';
+  }
+  return '''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Personality/Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+        '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
 }

@@ -33,9 +33,8 @@ Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e, stackTrace) {
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    throw Exception('An error occurred transcribeAudioFile: $e');
+  } catch (e) {
+    rethrow;
   }
 }
 
@@ -128,7 +127,9 @@ Future<List<Plugin>> retrievePlugins() async {
       url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
   if (response?.statusCode == 200) {
     try {
-      return Plugin.fromJsonList(jsonDecode(response!.body));
+      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      debugPrint('retrievePlugins: ${plugins.length}');
+      return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);
@@ -146,4 +147,14 @@ Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) a
     body: jsonEncode({'score': score, review: review}),
   );
   debugPrint('reviewPlugin: ${response?.body}');
+}
+
+Future<void> migrateUserServer(String prevUid, String newUid) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}migrate-user?prev_uid=$prevUid&new_uid=$newUid',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  debugPrint('migrateUser: ${response?.body}');
 }

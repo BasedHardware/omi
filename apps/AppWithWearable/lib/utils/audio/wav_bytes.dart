@@ -79,6 +79,45 @@ class WavBytesUtil {
 
   bool hasFrames() => frames.isNotEmpty;
 
+  static clearTempWavFiles() async {
+    final directory = await getApplicationDocumentsDirectory();
+    var file0 = File('${directory.path}/temp.wav');
+    if (file0.existsSync()) file0.deleteSync();
+
+    // for (var i = 1; i < 10; i++) {
+    //   var file = File('${directory.path}/temp$i.wav');
+    //   if (file.existsSync()) file.deleteSync();
+    // }
+  }
+
+  static tempWavExists() async {
+    final directory = await getApplicationDocumentsDirectory();
+    var file0 = File('${directory.path}/temp.wav');
+    return file0.existsSync();
+  }
+
+  static deleteTempWav() async {
+    final directory = await getApplicationDocumentsDirectory();
+    var file0 = File('${directory.path}/temp.wav');
+    if (file0.existsSync()) file0.deleteSync();
+  }
+
+  static getTempWavName() async {
+    final directory = await getApplicationDocumentsDirectory();
+    var fileName = 'temp.wav';
+    // check if temp.wav exists, if so use temp1.wav, temp2.wav, etc.
+    var file = File('${directory.path}/$fileName');
+    if (file.existsSync()) {
+      var i = 1;
+      while (file.existsSync()) {
+        fileName = 'temp$i.wav';
+        file = File('${directory.path}/$fileName');
+        i++;
+      }
+    }
+    return fileName;
+  }
+
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
     // debugPrint('First frame size: ${frames[0].length} && Last frame size: ${frames.last.length}');
     List<List<int>> framesCopy;
