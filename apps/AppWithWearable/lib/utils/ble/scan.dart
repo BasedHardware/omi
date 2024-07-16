@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -22,9 +23,12 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
     if (timeout && timeoutCounter >= 10) return null;
     List<BTDeviceStruct> foundDevices = await bleFindDevices();
     for (BTDeviceStruct device in foundDevices) {
-      if (deviceId == '' && device.name == 'Friend') {
+      // Remember the first connected device.
+      // Technically, there should be only one
+      if (deviceId == '') {
         deviceId = device.id;
-        SharedPreferencesUtil().deviceId = deviceId;
+        SharedPreferencesUtil().deviceId = device.id;
+        SharedPreferencesUtil().deviceName = device.name;
       }
 
       if (device.id == deviceId) {
@@ -40,10 +44,4 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
     await Future.delayed(const Duration(seconds: 2));
     timeoutCounter += 2;
   }
-}
-
-Future<List<BTDeviceStruct?>> scanDevices() async {
-  List<BTDeviceStruct> foundDevices = await bleFindDevices();
-  var filteredDevices = foundDevices.where((device) => device.name == "Friend").toList();
-  return filteredDevices;
 }

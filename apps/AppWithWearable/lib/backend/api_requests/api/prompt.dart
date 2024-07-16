@@ -176,8 +176,8 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var str = userName.isEmpty ? 'a busy entrepreneur' : '$userName (a busy entrepreneur)';
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
-  First determine if there's crucial value to notify $str about it.
-  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
+  First determine if there's crucial feedback to notify $str about it.
+  If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
    
   Transcript:
@@ -243,9 +243,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
         '''
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
-  var response = await gptApiCall(model: 'gpt-4o', messages: [
-    {"role": "user", "content": message}
-  ]);
+  var response = await executeGptPrompt(message);
   debugPrint('determineRequiresContext response: $response');
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
@@ -267,14 +265,14 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
   }
 }
 
-String qaRagPrompt(String context, List<Message> messages) {
+String qaRagPrompt(String context, List<Message> messages, {Plugin? plugin}) {
   var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation. 
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
     If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
-    
+    ${plugin == null ? '' : '\nYour name is: ${plugin.name}, and your personality/description is "${plugin.description}".\nMake sure to reflect your personality in your response.\n'}
     Conversation History:
-    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true)}
+    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true, usePluginNameIfAvailable: true)}
 
     Context:
     ```
@@ -285,4 +283,34 @@ String qaRagPrompt(String context, List<Message> messages) {
       .replaceAll('    ', '');
   debugPrint(prompt);
   return prompt;
+}
+
+Future<String> getInitialPluginPrompt(Plugin? plugin) async {
+  if (plugin == null) {
+    return '''
+        Your are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+    ''';
+  }
+  return '''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Personality/Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+        '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
 }

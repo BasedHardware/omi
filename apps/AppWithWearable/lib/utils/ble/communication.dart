@@ -78,16 +78,19 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
   if (batteryService == null) return null;
 
   var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
-  var currValue = await canRead?.read();
-  if (currValue != null && currValue.isNotEmpty) {
-    debugPrint('Battery level: ${currValue[0]}');
-    onBatteryLevelChange!(currValue[0]);
-  }
-  var canNotify = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
-  if (canRead != null && canNotify != null) {
-    try{
-      await canNotify.setNotifyValue(true);
-    } catch (e, stackTrace) {
+  if (canRead != null) {
+    var currValue = await canRead.read();
+    if (currValue.isNotEmpty) {
+      debugPrint('Battery level: ${currValue[0]}');
+      onBatteryLevelChange!(currValue[0]);
+    }
+
+    var canNotify =
+        batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
+    if (canNotify != null) {
+      try{
+        await canNotify.setNotifyValue(true);
+      } catch (e, stackTrace) {
       debugPrint('Error setting notify value: $e');
       CrashReporting.reportHandledCrash(
         e,
@@ -98,9 +101,12 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
       return null;
     }
     return canNotify.lastValueStream.listen((value) {
-      // debugPrint('Battery level listener: $value');
-      if (value.isNotEmpty) onBatteryLevelChange!(value[0]);
-    });
+        // debugPrint('Battery level listener: $value');
+        if (value.isNotEmpty) {
+          onBatteryLevelChange!(value[0]);
+        }
+      });
+    }
   }
   return null;
 }
