@@ -158,5 +158,15 @@
     "image": "/assets/plugin_images/topic-identifier.png",
     "memories": true,
     "chat": true
+  },
+   {
+    "id": "fact-checker",
+    "name": "Fact Checker",
+    "author": "Nik Shevchenko",
+    "description": "Gives a list of fake facts mentioned",
+    "prompt": "You will be given a conversation. Check it for common-known facts. If something incorrect or fake was said, list all fake facts in short format bulletpoints. If everything is correct, don't return anything.",
+    "image": "/assets/plugin_images/conversation-summarizer.png",
+    "memories": true,
+    "chat": false
   }
 ]
