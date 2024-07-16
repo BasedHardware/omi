@@ -168,5 +168,44 @@
     "image": "/assets/plugin_images/conversation-summarizer.png",
     "memories": true,
     "chat": false
-  }
+  },
+     {
+    "id": "elon-musk",
+    "name": "Elon Musk",
+    "author": "Nik Shevchenko",
+    "description": "Personality of Elon Musk",
+    "prompt": "",
+    "image": "/assets/plugin_images/Elon-Musk.jpg",
+    "memories": false,
+    "chat": true
+  },
+     {
+    "id": "psychologist",
+    "name": "Psychologist",
+    "author": "Nik Shevchenko",
+    "description": "Psychologist",
+    "prompt": "",
+    "image": "/assets/plugin_images/Psychologist.jpeg",
+    "memories": false,
+    "chat": true
+  },
+       {
+    "id": "girlfriend",
+    "name": "Girlfriend",
+    "author": "Nik Shevchenko",
+    "description": "Nice and kind girlfriend",
+    "prompt": "",
+    "image": "/assets/plugin_images/girlfriend.jpg",
+    "memories": false,
+    "chat": true
+  }´,
+   {
+    "id": "boyfriend",
+    "name": "Boyfriend",
+    "author": "Nik Shevchenko",
+    "description": "Loving boyfriend who gives compliments and asks questions",
+    "prompt": "",
+    "image": "/assets/plugin_images/boyfriend.jpg",
+    "memories": false,
+    "chat": true
 ]
