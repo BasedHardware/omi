@@ -313,7 +313,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             onPressed: () => _tabChange(0),
                             child: Padding(
                               padding: const EdgeInsets.only(top: 20, bottom: 20),
-                              child: Text('Memories',
+                              child: Text('Conversations',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
