@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
@@ -233,10 +235,31 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     await initiateBytesStreamingProcessing();
   }
 
+  List<Uint8List> images = [];
+  ImageBytesUtil imageBytesUtil = ImageBytesUtil();
+
+  Future<void> openGlassProcessing() async {
+    await getBleImageBytesListener(btDevice!.id, onImageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+      print(value);
+      Uint8List data = Uint8List.fromList(value);
+      Uint8List? completedImage = imageBytesUtil.processChunk(data);
+      if (completedImage != null) {
+        debugPrint('Completed image size: ${completedImage.length}');
+        images.add(completedImage);
+        setState(() {});
+        debugPrint('Images: ${images.length}');
+      }
+    });
+    await cameraStopPhotoController(btDevice!);
+    await cameraStartPhotoController(btDevice!);
+  }
+
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-
+    // await openGlassProcessing();
+    // return;
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
       // TODO: disconnect and show error
@@ -271,10 +294,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               firstTranscriptMade = true;
             }
 
-            // TODO: remove file
             // uploadFile(data.item1, prefixTimestamp: true);
           } catch (e, stacktrace) {
-            // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
             debugPrint('Error processing 30 seconds frame');
             print(e); // don't change this to debugPrint
             CrashReporting.reportHandledCrash(
@@ -442,7 +463,22 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             if (wsConnectionState == WebsocketConnectionStatus.error ||
                 wsConnectionState == WebsocketConnectionStatus.failed)
               getWebsocketErrorWidget(),
-            const SizedBox(height: 16)
+            const SizedBox(height: 16),
+            GridView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              scrollDirection: Axis.vertical,
+              itemCount: images.length,
+              physics: const NeverScrollableScrollPhysics(),
+              itemBuilder: (context, idx) {
+                return Image.memory(images[idx]);
+              },
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+            ),
           ],
         ),
         getPhoneMicRecordingButton(_recordingToggled, _state)
