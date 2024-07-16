@@ -39,7 +39,7 @@ Future transcribeAfterStopiOS({
       debugPrint('Processing file: $f');
       await processFileToTranscript(File(f));
     }).then((value) async {
-      debugPrint('All files processed in iOS 3');
+      debugPrint('All files processed in iOS');
       SharedPreferencesUtil().recordingPaths = [];
       updateState();
       if (segments.isNotEmpty) {
@@ -85,6 +85,7 @@ Future transcribeAfterStopAndroid(
       await processFileToTranscript(File(f));
     }).then((value) async {
       debugPrint('All files processed in Android');
+      SharedPreferencesUtil().recordingPaths = [];
       updateState();
       if (segments.isNotEmpty) {
         debugPrint('segments not empty: ${segments.length}');
