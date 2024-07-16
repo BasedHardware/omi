@@ -59,7 +59,6 @@ class _PluginsPageState extends State<PluginsPage> {
   }
 
   List<Plugin> _filteredPlugins() {
-    print('Chat: $filterChat memories: $filterMemories');
     return searchQuery.isEmpty
         ? plugins.where((p) => (p.chat && filterChat) || (p.memories && filterMemories)).toList()
         : plugins
