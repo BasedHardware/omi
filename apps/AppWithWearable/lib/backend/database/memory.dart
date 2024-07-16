@@ -83,11 +83,14 @@ class Memory {
     return memory;
   }
 
-  String getTranscript({int? maxCount}) {
+  String getTranscript({int? maxCount, bool generate = false}) {
     try {
-      var transcript = this.transcript;
-      if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
-      return utf8.decode(transcript.toString().codeUnits);
+      var transcript = generate && transcriptSegments.isNotEmpty
+          ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
+          : this.transcript;
+      var decoded = utf8.decode(transcript.codeUnits);
+      if (maxCount != null) return decoded.substring(0, min(maxCount, decoded.length));
+      return decoded;
     } catch (e) {
       return transcript;
     }

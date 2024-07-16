@@ -35,8 +35,11 @@ Future<dynamic> gptApiCall({
   }
 
   var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
-  return extractContentFromResponse(response,
-      isEmbedding: urlSuffix == 'embeddings', isFunctionCalling: tools.isNotEmpty);
+  return extractContentFromResponse(
+    response,
+    isEmbedding: urlSuffix == 'embeddings',
+    isFunctionCalling: tools.isNotEmpty,
+  );
 }
 
 Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
