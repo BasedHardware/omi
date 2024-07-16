@@ -154,15 +154,18 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState) {
+speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
   return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
       ? Stack(
           children: [
             GestureDetector(
               onTap: () async {
                 MixpanelManager().speechProfileCapturePageClicked();
+                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
+                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) reset();
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -214,6 +217,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
   }
 
   if (segments.isEmpty) {
+    // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
             mainAxisSize: MainAxisSize.min,
@@ -270,6 +274,19 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+getWebsocketErrorWidget() {
+  return const Padding(
+    padding: EdgeInsets.only(top: 80),
+    child: Center(
+      child: Text(
+        'Error connecting to the server. Please check your internet connection.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
       ),
     ),
   );

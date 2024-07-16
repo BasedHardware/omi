@@ -1,33 +1,24 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/prompt.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:http/http.dart' as http;
 
 import './streaming_models.dart';
 
 Future streamApiResponse(
-  String context,
+  String prompt,
   Future<dynamic> Function(String) callback,
   VoidCallback onDone,
 ) async {
   var client = http.Client();
   const url = 'https://api.openai.com/v1/chat/completions';
-  // final apiKey = '123';
-  final headers = {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
-  };
+  final headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}'};
 
   var body = jsonEncode({
     "model": "gpt-4o",
     "messages": [
-      {
-        "role": "system",
-        "content": qaRagPrompt(context, await MessageProvider().retrieveMostRecentMessages(limit: 10)),
-      }
+      {"role": "system", "content": prompt}
     ],
     "stream": true,
   });

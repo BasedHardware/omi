@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:friend_private/backend/preferences.dart';
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -30,6 +33,12 @@ class TranscriptSegment {
   @override
   String toString() {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
+  }
+
+  String getTimestampString() {
+    var start = Duration(seconds: this.start.toInt());
+    var end = Duration(seconds: this.end.toInt());
+    return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   // Factory constructor to create a new Message instance from a map
@@ -82,15 +91,15 @@ class TranscriptSegment {
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {
-    int elapsedSeconds = 0,
+    int elapsedSeconds = 0, // chunks
+    double streamStartedAtSecond = 0, // streamed
   }) {
-    // TODO: combine keeping the time at which each segment was created?
-    // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
-    // what if they are 1 minute or more
     if (newSegments.isEmpty) return;
 
-    // var lastSegmentSecondsElapsed = segments.isNotEmpty ? DateTime.now().difference(segments.last.createdAt!) : 0;
-    // debugPrint('lastSegmentSecondsElapsed: $lastSegmentSecondsElapsed');
+    for (var segment in newSegments) {
+      segment.start -= streamStartedAtSecond;
+      segment.end -= streamStartedAtSecond;
+    }
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
@@ -125,16 +134,35 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
-  static String buildDiarizedTranscriptMessage(List<TranscriptSegment> segments) {
+  static String segmentsAsString(
+    List<TranscriptSegment> segments, {
+    bool includeTimestamps = false,
+  }) {
     String transcript = '';
+    var userName = SharedPreferencesUtil().givenName;
+    includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
+      // TODO: maybe store TranscriptSegment directly as utf8 decoded
+      var segmentText = utf8.decode(segment.text.trim().codeUnits);
+      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
-        transcript += 'You said: ${segment.text} ';
+        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
       } else {
-        transcript += 'Speaker ${segment.speakerId}: ${segment.text} ';
+        transcript += '$timestampStr Speaker ${segment.speakerId}: $segmentText ';
       }
       transcript += '\n\n';
     }
     return transcript.trim();
+  }
+
+  static bool canDisplaySeconds(List<TranscriptSegment> segments) {
+    for (var i = 0; i < segments.length; i++) {
+      for (var j = i + 1; j < segments.length; j++) {
+        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 }

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -25,6 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
   late bool devModeEnabled;
+  late bool backupsEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
@@ -37,6 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    backupsEnabled = SharedPreferencesUtil().backupsEnabled;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -90,41 +93,68 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       );
                     }
-                    setState(() {
-                      _selectedLanguage = newValue;
-                    });
+                    setState(() => _selectedLanguage = newValue);
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
                   // TODO: do not works like this, fix if reusing
                   // ...getNotificationsWidgets(setState, postMemoryNotificationIsChecked, reconnectNotificationIsChecked),
                   ...getPreferencesWidgets(
-                      onOptInAnalytics: () {
-                        setState(() {
-                          optInAnalytics = false;
-                          SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                          optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-                        });
-                      },
-                      viewPrivacyDetails: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                        MixpanelManager().privacyDetailsPageOpened();
-                      },
-                      optInAnalytics: optInAnalytics,
-                      devModeEnabled: devModeEnabled,
-                      onDevModeClicked: () {
-                        setState(() {
-                          if (devModeEnabled) {
-                            devModeEnabled = false;
-                            SharedPreferencesUtil().devModeEnabled = false;
-                            MixpanelManager().developerModeDisabled();
-                          } else {
-                            devModeEnabled = true;
-                            MixpanelManager().developerModeEnabled();
-                            SharedPreferencesUtil().devModeEnabled = true;
-                          }
-                        });
-                      }),
+                    onOptInAnalytics: () {
+                      setState(() {
+                        optInAnalytics = false;
+                        SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                        optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
+                      });
+                    },
+                    viewPrivacyDetails: () {
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                      MixpanelManager().privacyDetailsPageOpened();
+                    },
+                    optInAnalytics: optInAnalytics,
+                    devModeEnabled: devModeEnabled,
+                    onDevModeClicked: () {
+                      setState(() {
+                        if (devModeEnabled) {
+                          devModeEnabled = false;
+                          SharedPreferencesUtil().devModeEnabled = false;
+                          MixpanelManager().developerModeDisabled();
+                        } else {
+                          devModeEnabled = true;
+                          MixpanelManager().developerModeEnabled();
+                          SharedPreferencesUtil().devModeEnabled = true;
+                        }
+                      });
+                    },
+                    backupsEnabled: backupsEnabled,
+                    onBackupsClicked: () {
+                      setState(() {
+                        if (backupsEnabled) {
+                          showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.of(context).pop(),
+                                    () {
+                                      backupsEnabled = false;
+                                      SharedPreferencesUtil().backupsEnabled = false;
+                                      MixpanelManager().backupsDisabled();
+                                      deleteBackupApi();
+                                      Navigator.of(context).pop();
+                                      setState(() {});
+                                    },
+                                    'Disable Automatic Backups',
+                                    'You will be responsible for backing up your own data. We will not be able to restore it automatically once you disable this feature. Are you sure?',
+                                  ));
+                        } else {
+                          SharedPreferencesUtil().backupsEnabled = true;
+                          setState(() => backupsEnabled = true);
+                          MixpanelManager().backupsEnabled();
+                          executeBackupWithUid();
+                        }
+                      });
+                    },
+                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
@@ -161,15 +191,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  getItemAddOn('Speech Profile', () {
-                    routeToPage(context, const SpeakerIdPage());
-                  }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn()),
+                  GrowthbookUtil().hasTranscriptServerFeatureOn()
+                      ? getItemAddOn('Speech Profile', () {
+                          routeToPage(context, const SpeakerIdPage());
+                        }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn())
+                      : Container(),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  getItemAddOn('Backups', () {
-                    routeToPage(context, const BackupsPage());
-                  }, icon: Icons.backup),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
