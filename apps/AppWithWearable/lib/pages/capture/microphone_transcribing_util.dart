@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -39,6 +40,7 @@ Future transcribeAfterStopiOS({
       await processFileToTranscript(File(f));
     }).then((value) async {
       debugPrint('All files processed in iOS 3');
+      SharedPreferencesUtil().recordingPaths = [];
       updateState();
       if (segments.isNotEmpty) {
         debugPrint('segments not empty: ${segments.length} in iOS');
@@ -95,8 +97,6 @@ Future transcribeAfterStopAndroid(
 }
 
 Future iosBgCallback({
-  required String filePath,
-  required Duration interval,
   required bool shouldTranscribe,
   required int lastOffset,
   required int partNumber,
@@ -104,6 +104,8 @@ Future iosBgCallback({
   required Function(int) updateState,
 }) async {
   try {
+    var path = await getApplicationDocumentsDirectory();
+    var filePath = '${path.path}/recording_0.wav';
     final file = File(filePath);
 
     if (await file.exists()) {
@@ -129,6 +131,8 @@ Future iosBgCallback({
           await processFileToTranscript(newFile);
           var paths = SharedPreferencesUtil().recordingPaths;
           SharedPreferencesUtil().recordingPaths = [...paths, newFilePath];
+          newFile.deleteSync();
+          debugPrint('file deleted: $newFilePath');
         }
         updateState(currentLength);
       }
@@ -157,6 +161,8 @@ Future androidBgCallback({
       await processFileToTranscript(file);
       var paths = SharedPreferencesUtil().recordingPaths;
       SharedPreferencesUtil().recordingPaths = [...paths, filePath];
+      file.deleteSync();
+      debugPrint('file deleted: $filePath');
     });
   } else {
     debugPrint('File does not exist.');
