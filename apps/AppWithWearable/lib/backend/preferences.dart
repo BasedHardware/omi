@@ -123,10 +123,15 @@ class SharedPreferencesUtil {
   }
 
   disablePlugin(String value) {
+    if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
     final List<String> plugins = pluginsEnabled;
     plugins.remove(value);
     pluginsEnabled = plugins;
   }
+
+  String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';
+
+  set selectedChatPluginId(String value) => saveString('selectedChatPluginId2', value);
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];

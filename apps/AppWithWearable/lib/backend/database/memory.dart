@@ -86,10 +86,11 @@ class Memory {
   String getTranscript({int? maxCount, bool generate = false}) {
     try {
       var transcript = generate && transcriptSegments.isNotEmpty
-          ? TranscriptSegment.buildDiarizedTranscriptMessage(transcriptSegments, includeTimestamps: true)
+          ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
           : this.transcript;
-      if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
-      return utf8.decode(transcript.toString().codeUnits);
+      var decoded = utf8.decode(transcript.codeUnits);
+      if (maxCount != null) return decoded.substring(0, min(maxCount, decoded.length));
+      return decoded;
     } catch (e) {
       return transcript;
     }
