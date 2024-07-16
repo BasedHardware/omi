@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/llm.dart';
@@ -6,6 +7,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
@@ -313,4 +315,22 @@ Future<String> getInitialPluginPrompt(Plugin? plugin) async {
       .replaceAll('     ', '')
       .replaceAll('    ', '')
       .trim();
+}
+
+Future<String> getImageDescription(Uint8List data) async {
+  var messages = [
+    {
+      'role': 'user',
+      'content': [
+        {'type': "text", 'text': "What’s in this image?"},
+        {
+          'type': "image_url",
+          'image_url': {"url": "data:image/jpeg;base64,${base64Encode(data)}"},
+        },
+      ],
+    },
+  ];
+  String response = await gptApiCall(model: 'gpt-4o', messages: messages);
+  print(response);
+  return response;
 }

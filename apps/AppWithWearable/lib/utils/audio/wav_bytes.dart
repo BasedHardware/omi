@@ -283,7 +283,7 @@ class ImageBytesUtil {
         debugPrint('Starting new image');
         _buffer = Uint8List(0);
       } else {
-        debugPrint('Skipping frame');
+        // debugPrint('Skipping frame');
         return null;
       }
     } else {

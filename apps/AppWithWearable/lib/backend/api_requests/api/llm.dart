@@ -8,7 +8,7 @@ import 'package:friend_private/backend/preferences.dart';
 Future<dynamic> gptApiCall({
   required String model,
   String urlSuffix = 'chat/completions',
-  List<Map<String, String>> messages = const [],
+  List<Map<String, dynamic>> messages = const [],
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
   List tools = const [],
