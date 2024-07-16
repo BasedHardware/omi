@@ -131,8 +131,10 @@ Future iosBgCallback({
           await processFileToTranscript(newFile);
           var paths = SharedPreferencesUtil().recordingPaths;
           SharedPreferencesUtil().recordingPaths = [...paths, newFilePath];
-          newFile.deleteSync();
-          debugPrint('file deleted: $newFilePath');
+          if (newFile.existsSync()) {
+            newFile.deleteSync();
+            debugPrint('file deleted: $newFilePath');
+          }
         }
         updateState(currentLength);
       }
@@ -161,7 +163,9 @@ Future androidBgCallback({
       await processFileToTranscript(file);
       var paths = SharedPreferencesUtil().recordingPaths;
       SharedPreferencesUtil().recordingPaths = [...paths, filePath];
-      file.deleteSync();
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
       debugPrint('file deleted: $filePath');
     });
   } else {
