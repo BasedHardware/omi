@@ -136,7 +136,20 @@ Before starting, make sure you have the following installed:
     dart run build_runner build
     ```
 
-7. **Run the App**:
+7. **Setup Firebase**:
+   - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
+   - Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
+
+      ```
+      flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=com.friend-app-with-wearable.ios12 --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
+      ```
+   - Similarly for dev environment
+
+      ```
+      flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.develop --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/
+      ```
+
+8. **Run the App**:
     - Select your target device in Xcode or Android Studio.
     - Run the app.
 
