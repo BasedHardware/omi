@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/utils/rag.dart';
@@ -28,14 +30,15 @@ class ChatPage extends StatefulWidget {
   });
 
   @override
-  State<ChatPage> createState() => _ChatPageState();
+  State<ChatPage> createState() => ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   ScrollController scrollController = ScrollController();
 
   var prefs = SharedPreferencesUtil();
+  late List<Plugin> plugins;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool loading = false;
@@ -89,10 +92,12 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
 
   @override
   void initState() {
+    plugins = prefs.pluginsList;
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _moveListToBottom();
     });
     _initDailySummary();
+    if (MessageProvider().getMessagesCount() == 0) sendInitialPluginMessage(null);
     super.initState();
   }
 
@@ -117,7 +122,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
             itemBuilder: (context, chatIndex) {
               final message = widget.messages[chatIndex];
               final isLastMessage = chatIndex == widget.messages.length - 1;
-              double topPadding = chatIndex == 0 ? 24 : 8;
+              double topPadding = chatIndex == 0 ? 24 : 16;
               double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
               return Padding(
                 key: ValueKey(message.id),
@@ -128,6 +133,7 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
                         sendMessage: _sendMessageUtil,
                         displayOptions: widget.messages.length <= 1,
                         memories: message.memories,
+                        pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
                       )
                     : HumanMessage(message: message),
               );
@@ -206,25 +212,56 @@ class _ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin 
 
   _sendMessageUtil(String message) async {
     changeLoadingState();
-    Message aiMessage = await _prepareStreaming(message);
-    dynamic ragInfo = await retrieveRAGContext(message);
+    String? pluginId = SharedPreferencesUtil().selectedChatPluginId == 'no_selected'
+        ? null
+        : SharedPreferencesUtil().selectedChatPluginId;
+
+    Message aiMessage = await _prepareStreaming(message, pluginId: pluginId);
+    dynamic ragInfo = await retrieveRAGContext(message, prevMessagesPluginId: pluginId);
     String ragContext = ragInfo[0];
     List<Memory> memories = ragInfo[1].cast<Memory>();
     debugPrint('RAG Context: $ragContext memories: ${memories.length}');
+
     MixpanelManager().chatMessageSent(message);
-    await streamApiResponse(ragContext, _callbackFunctionChatStreaming(aiMessage), () {
-      aiMessage.memories.addAll(memories);
-      MessageProvider().updateMessage(aiMessage);
-      widget.refreshMessages();
-      if (memories.isNotEmpty) _moveListToBottom(extra: (70 * memories.length).toDouble());
-    });
+    var prompt = qaRagPrompt(
+      ragContext,
+      await MessageProvider().retrieveMostRecentMessages(limit: 10, pluginId: pluginId),
+      plugin: plugins.firstWhereOrNull((e) => e.id == pluginId),
+    );
+    await streamApiResponse(
+      prompt,
+      _callbackFunctionChatStreaming(aiMessage),
+      () {
+        aiMessage.memories.addAll(memories);
+        MessageProvider().updateMessage(aiMessage);
+        widget.refreshMessages();
+        if (memories.isNotEmpty) _moveListToBottom(extra: (70 * memories.length).toDouble());
+      },
+    );
     changeLoadingState();
   }
 
-  _prepareStreaming(String text) {
+  sendInitialPluginMessage(Plugin? plugin) async {
+    changeLoadingState();
+    var ai = Message(DateTime.now(), '', 'ai', pluginId: plugin?.id);
+    MessageProvider().saveMessage(ai);
+    widget.messages.add(ai);
+    _moveListToBottom();
+    streamApiResponse(
+      await getInitialPluginPrompt(plugin),
+      _callbackFunctionChatStreaming(ai),
+      () {
+        MessageProvider().updateMessage(ai);
+        widget.refreshMessages();
+      },
+    );
+    changeLoadingState();
+  }
+
+  _prepareStreaming(String text, {String? pluginId}) {
     textController.clear(); // setState if isolated
     var human = Message(DateTime.now(), text, 'human');
-    var ai = Message(DateTime.now(), '', 'ai');
+    var ai = Message(DateTime.now(), '', 'ai', pluginId: pluginId);
     MessageProvider().saveMessage(human);
     MessageProvider().saveMessage(ai);
     widget.messages.add(human);

@@ -1,27 +1,27 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:http/http.dart' as http;
 
 import './streaming_models.dart';
 
 Future streamApiResponse(
-  String context,
+  String prompt,
   Future<dynamic> Function(String) callback,
   VoidCallback onDone,
 ) async {
   var client = http.Client();
   const url = 'https://api.openai.com/v1/chat/completions';
-  // final apiKey = '123';
-  final headers = {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
-  };
+  final headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}'};
 
-  String body = qaStreamedBody(context, await MessageProvider().retrieveMostRecentMessages(limit: 10));
+  var body = jsonEncode({
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "system", "content": prompt}
+    ],
+    "stream": true,
+  });
   var request = http.Request("POST", Uri.parse(url))
     ..headers.addAll(headers)
     ..body = body;
@@ -109,31 +109,4 @@ void handlePartialResponseContent(String data, Future<dynamic> Function(String) 
       callback(content);
     }
   }
-}
-
-String qaStreamedBody(String context, List<Message> chatHistory) {
-  var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to answer the question. 
-    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so answer the question casually.
-    
-    Conversation History:
-    ${chatHistory.reversed.map((e) => '${e.sender.toString().toUpperCase()}: ${e.text}').join('\n')}
-
-    Context:
-    ``` 
-    $context
-    ```
-    Answer:
-    '''
-      .replaceAll('    ', '');
-  debugPrint(prompt);
-  var body = jsonEncode({
-    "model": "gpt-4o",
-    "messages": [
-      {"role": "system", "content": prompt}
-    ],
-    "stream": true,
-  });
-  return body;
 }

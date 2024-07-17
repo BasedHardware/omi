@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:objectbox/objectbox.dart';
 
+enum MemoryType { audio, image }
+
 @Entity()
 class Memory {
   @Id()
@@ -21,6 +23,7 @@ class Memory {
 
   String transcript;
   final transcriptSegments = ToMany<TranscriptSegment>();
+  final photos = ToMany<MemoryPhoto>();
 
   String? recordingFilePath;
 
@@ -41,6 +44,8 @@ class Memory {
     this.startedAt,
     this.finishedAt,
   });
+
+  MemoryType get type => transcript.isNotEmpty ? MemoryType.audio : MemoryType.image;
 
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
@@ -83,11 +88,14 @@ class Memory {
     return memory;
   }
 
-  String getTranscript({int? maxCount}) {
+  String getTranscript({int? maxCount, bool generate = false}) {
     try {
-      var transcript = this.transcript;
-      if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
-      return utf8.decode(transcript.toString().codeUnits);
+      var transcript = generate && transcriptSegments.isNotEmpty
+          ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
+          : this.transcript;
+      var decoded = utf8.decode(transcript.codeUnits);
+      if (maxCount != null) return decoded.substring(0, min(maxCount, decoded.length));
+      return decoded;
     } catch (e) {
       return transcript;
     }
@@ -238,4 +246,16 @@ class Event {
       'created': created,
     };
   }
+}
+
+@Entity()
+class MemoryPhoto {
+  @Id()
+  int id = 0;
+
+  String base64;
+  String description;
+  final memory = ToOne<Memory>();
+
+  MemoryPhoto(this.base64, this.description, {this.id = 0});
 }
