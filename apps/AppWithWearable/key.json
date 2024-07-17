@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "friend-wearable-429416",
+  "private_key_id": "d03d30f8e1b30c903894fe306a0e03e8c422bd4d",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC5A5GPWko6yI4p\ntPZo76cA1eS+87orAUbysynHH5zezBg9xxLrfUrZxfeqH5EibnBY8bWzNdPE6k7M\nAqEAuRoUqW2fpKJSQ7f9m75qPEAWSfjNaWJzlo9b4ip4HY78f2NgSQ521fmkh70z\nFROd4x7wpRuXqt65pkbcBw31JCpDURlhiR4KXyDdtBhtuuMlMNpuwOksxL0U01fH\nOukG9oRZUYQgV1nHaDi2yWzF5KdiOxnQ5NjQBsInFECIwfb549fFheOExxErZ2dq\ns1iY/tCU44+yBjUZZo+zaPoRu1g5vzzuXxm+hpiijARUlo94egoNPseSQLlwleqs\nymrd25brAgMBAAECggEANPugo7znpQ3qKGd6aXK4ELUwXL7PgaFMABTu0edrtSId\njxODh4zJ8rOOyVlg5stZwR73OesgSjQPfL0D/oEDxwb+Lcmn8ocSGb6QOTwn3jow\n1iJn31Ium9GY9+z/FbAldV12lvGQHF4DAK34gC6ana+qxzRXtDK5+CjNBnbk44HI\nMS2KOmKqYidcFro2q/crXuF/KKg4i0bNZpejL08ql/lGQIk12P78sVphHA3orjUm\niD01IiYN3xjf4FFa4Y++PbZ9ZGP2a168vLwwKqUpZNV7P9YvMwDdHS9zCALHkme+\n/tgS5Lexs1kfJqoJcvxrFqdq1wwLH0dBs48ZOjJOgQKBgQD6duIrMkxE9NaE4tV9\nw1oIqHFKjItoPl9e5kV4iF390jE0lHzmBBGz1fiEULOZAMiYYwwdc7yswNRdcxLT\ngpU1KKgTKk5CTZgDCpyHfVTvZI7xVHTvAy2RUMU9B6BT0evfjj7dJIo68zkHYa3d\n47W1vfQXYqluKvw2iIStU08VrQKBgQC9Gl6N6EQd+MYHrKNNukHgiF9cJCkqO4JC\nBqVtx+TGmBiyRuVG/jKmQ81h7oxvjVgIjsAbLaaeYuJGQqAlLBYc3S8RPd0NgvNK\nrzCcoubuzUNgT8xuVirOZfXLj1+NLHj+IZycrCyCoryVgRQfZfuSP8MjcIikYRER\n1sjy4lgB9wKBgB0Bw7PJAXhC+s0tEBielUDHcUd2+3Y5MwZkmMsaz/fjbftu7wAc\nnIg9UajRR9uCcbjkT7ThgIppUq738sg4KVuct8pwbdvT7LT9d59hboLDHKLqaxh7\nP73CovUseu76Mt0TNkiaQMAPBx3JvD8kbhj8RNaogILXy5ntOaBxM4mJAoGAPeGR\nK5LkJ4KvGvfNgLQAtr8ppXdX2TAcEgsmu2P8Y1iGTGCSysaIQIxTe0aawi5YroQ4\nLSylJ5NoRGGtEjz5B30B1/yMh81gXAI0QC22sFKPR8cVOM4Nt/j5lCFYvVPeTBsn\nqsVU03L5j1rsANJYnqUq8D/1FwWElnfYzlJvRkUCgYEA2CWFKZcKMPS24K3RYRj+\nWfTI91MLrQZ2+hW6X2QYAWhR4j6VeBji+Kj5SlROgQSZYYoAPguFWB71kmQRtKs0\nwJliGPlJBi+OMB2WI0tmbeT2ZBfqhHlPNPpV4VExI6THyP6Oi9O4Yzmvqhfylvbw\n05SXe7At3uZiCmYUhKeXPtU=\n-----END PRIVATE KEY-----\n",
+  "client_email": "friend@friend-wearable-429416.iam.gserviceaccount.com",
+  "client_id": "109462092457845110585",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/friend%40friend-wearable-429416.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
