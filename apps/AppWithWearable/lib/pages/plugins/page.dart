@@ -9,7 +9,9 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PluginsPage extends StatefulWidget {
-  const PluginsPage({super.key});
+  final bool filterChatOnly;
+
+  const PluginsPage({super.key, this.filterChatOnly = false});
 
   @override
   _PluginsPageState createState() => _PluginsPageState();
@@ -19,6 +21,9 @@ class _PluginsPageState extends State<PluginsPage> {
   bool isLoading = true;
   String searchQuery = '';
   List<Plugin> plugins = [];
+
+  bool filterChat = true;
+  bool filterMemories = true;
 
   Future<void> _fetchPlugins() async {
     var prefs = SharedPreferencesUtil();
@@ -33,6 +38,10 @@ class _PluginsPageState extends State<PluginsPage> {
 
   @override
   void initState() {
+    if (widget.filterChatOnly) {
+      filterChat = true;
+      filterMemories = false;
+    }
     _fetchPlugins();
     super.initState();
   }
@@ -51,8 +60,11 @@ class _PluginsPageState extends State<PluginsPage> {
 
   List<Plugin> _filteredPlugins() {
     return searchQuery.isEmpty
-        ? plugins
-        : plugins.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+        ? plugins.where((p) => (p.chat && filterChat) || (p.memories && filterMemories)).toList()
+        : plugins
+            .where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase()))
+            .where((p) => (p.chat && filterChat) || (p.memories && filterMemories))
+            .toList();
   }
 
   @override
@@ -86,139 +98,339 @@ class _PluginsPageState extends State<PluginsPage> {
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
-        child: Column(
-          children: [
-            const SizedBox(
-              height: 32,
+        child: CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 32),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-              margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-                border: GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 1,
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+                decoration: const BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.all(Radius.circular(16)),
+                  border: GradientBoxBorder(
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
+                    width: 1,
+                  ),
+                  shape: BoxShape.rectangle,
                 ),
-                shape: BoxShape.rectangle,
-              ),
-              // TODO: reuse chat textfield
-              child: TextField(
-                onChanged: (value) {
-                  setState(() {
-                    searchQuery = value;
-                  });
-                },
-                obscureText: false,
-                decoration: InputDecoration(
-                  hintText: 'Find your plugin...',
-                  hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  suffixIcon: searchQuery.isEmpty
-                      ? const SizedBox.shrink()
-                      : IconButton(
-                          icon: const Icon(
-                            Icons.cancel,
-                            color: Color(0xFFF7F4F4),
-                            size: 28.0,
-                          ),
-                          onPressed: () {
-                            searchQuery = '';
-                            setState(() {});
-                          },
-                        ),
-                ),
-                style: const TextStyle(
-                  // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: filteredPlugins.length,
-                itemBuilder: (context, index) {
-                  final plugin = filteredPlugins[index];
-                  return Container(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.rectangle,
-                      borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-                      color: Colors.grey.shade900,
-                    ),
-                    margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
-                    child: ListTile(
-                      onTap: () async {
-                        await routeToPage(context, PluginDetailPage(plugin: plugin));
-                        _fetchPlugins();
-                        // refresh plugins
-                      },
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.white,
-                        maxRadius: 28,
-                        backgroundImage:
-                            NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
-                      ),
-                      title: Text(
-                        plugin.name,
-                        maxLines: 1,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                      ),
-                      subtitle: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
-                          plugin.ratingAvg != null
-                              ? Row(
-                                  children: [
-                                    Text(plugin.getRatingAvg()!),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                                    const SizedBox(width: 4),
-                                    Text('(${plugin.ratingCount})'),
-                                  ],
-                                )
-                              : Container(),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Text(
-                              plugin.description,
-                              maxLines: 2,
-                              style: const TextStyle(color: Colors.grey, fontSize: 14),
+                // TODO: reuse chat textfield
+                child: TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      searchQuery = value;
+                    });
+                  },
+                  obscureText: false,
+                  decoration: InputDecoration(
+                    hintText: 'Find your plugin...',
+                    hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    suffixIcon: searchQuery.isEmpty
+                        ? const SizedBox.shrink()
+                        : IconButton(
+                            icon: const Icon(
+                              Icons.cancel,
+                              color: Color(0xFFF7F4F4),
+                              size: 28.0,
                             ),
+                            onPressed: () {
+                              searchQuery = '';
+                              setState(() {});
+                            },
                           ),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: Icon(
-                          plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
-                          color: plugin.isEnabled ? Colors.white : Colors.grey,
-                        ),
-                        onPressed: () {
-                          _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
-                        },
-                      ),
-                      // trailing: Switch(
-                      //   value: plugin.isEnabled,
-                      //   activeColor: Colors.deepPurple,
-                      //   onChanged: (value) {
-                      //     _togglePlugin(plugin.id.toString(), value);
-                      //   },
-                      // ),
-                    ),
-                  );
-                },
+                  ),
+                  style: const TextStyle(
+                    // fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    // const Text(
+                    //   'Filter:',
+                    //   style: TextStyle(color: Colors.white, fontSize: 16),
+                    // ),
+                    // const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          filterMemories = !filterMemories;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: filterMemories ? Colors.deepPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border:
+                              filterMemories ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                        ),
+                        child: const Text(
+                          'Memories',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          filterChat = !filterChat;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: filterChat ? Colors.deepPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border: filterChat ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                        ),
+                        child: const Text(
+                          'Chat',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ),
+            // const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            SliverList(
+                delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final plugin = filteredPlugins[index];
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.rectangle,
+                    borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+                    color: Colors.grey.shade900,
+                  ),
+                  margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
+                  child: ListTile(
+                    onTap: () async {
+                      await routeToPage(context, PluginDetailPage(plugin: plugin));
+                      _fetchPlugins();
+                      // refresh plugins
+                    },
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.white,
+                      maxRadius: 28,
+                      backgroundImage: NetworkImage(plugin.getImageUrl()),
+                    ),
+                    title: Text(
+                      plugin.name,
+                      maxLines: 1,
+                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                        plugin.ratingAvg != null
+                            ? Row(
+                                children: [
+                                  Text(plugin.getRatingAvg()!),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text('(${plugin.ratingCount})'),
+                                ],
+                              )
+                            : Container(),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            plugin.description,
+                            maxLines: 2,
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            plugin.memories
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Memories',
+                                      style: TextStyle(
+                                          color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                            const SizedBox(width: 8),
+                            plugin.chat
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Chat',
+                                      style: TextStyle(
+                                          color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ],
+                        )
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(
+                        plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: plugin.isEnabled ? Colors.white : Colors.grey,
+                      ),
+                      onPressed: () {
+                        _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
+                      },
+                    ),
+                    // trailing: Switch(
+                    //   value: plugin.isEnabled,
+                    //   activeColor: Colors.deepPurple,
+                    //   onChanged: (value) {
+                    //     _togglePlugin(plugin.id.toString(), value);
+                    //   },
+                    // ),
+                  ),
+                );
+              },
+              childCount: filteredPlugins.length,
+            )),
+            // Expanded(
+            //   child: ListView.builder(
+            //     itemCount: filteredPlugins.length,
+            //     itemBuilder: (context, index) {
+            //       final plugin = filteredPlugins[index];
+            //       return Container(
+            //         padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
+            //         decoration: BoxDecoration(
+            //           shape: BoxShape.rectangle,
+            //           borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+            //           color: Colors.grey.shade900,
+            //         ),
+            //         margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0, left: 16, right: 16),
+            //         child: ListTile(
+            //           onTap: () async {
+            //             await routeToPage(context, PluginDetailPage(plugin: plugin));
+            //             _fetchPlugins();
+            //             // refresh plugins
+            //           },
+            //           leading: CircleAvatar(
+            //             backgroundColor: Colors.white,
+            //             maxRadius: 28,
+            //             backgroundImage: NetworkImage(plugin.getImageUrl()),
+            //           ),
+            //           title: Text(
+            //             plugin.name,
+            //             maxLines: 1,
+            //             style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+            //           ),
+            //           subtitle: Column(
+            //             mainAxisAlignment: MainAxisAlignment.start,
+            //             crossAxisAlignment: CrossAxisAlignment.start,
+            //             children: [
+            //               SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+            //               plugin.ratingAvg != null
+            //                   ? Row(
+            //                       children: [
+            //                         Text(plugin.getRatingAvg()!),
+            //                         const SizedBox(width: 4),
+            //                         const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+            //                         const SizedBox(width: 4),
+            //                         Text('(${plugin.ratingCount})'),
+            //                       ],
+            //                     )
+            //                   : Container(),
+            //               Padding(
+            //                 padding: const EdgeInsets.only(top: 4.0),
+            //                 child: Text(
+            //                   plugin.description,
+            //                   maxLines: 2,
+            //                   style: const TextStyle(color: Colors.grey, fontSize: 14),
+            //                 ),
+            //               ),
+            //               const SizedBox(height: 8),
+            //               Row(
+            //                 children: [
+            //                   plugin.memories
+            //                       ? Container(
+            //                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            //                           decoration: BoxDecoration(
+            //                             color: Colors.grey,
+            //                             borderRadius: BorderRadius.circular(16),
+            //                           ),
+            //                           child: const Text(
+            //                             'Memories',
+            //                             style: TextStyle(
+            //                                 color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+            //                           ),
+            //                         )
+            //                       : const SizedBox.shrink(),
+            //                   const SizedBox(width: 8),
+            //                   plugin.chat
+            //                       ? Container(
+            //                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            //                           decoration: BoxDecoration(
+            //                             color: Colors.grey,
+            //                             borderRadius: BorderRadius.circular(16),
+            //                           ),
+            //                           child: const Text(
+            //                             'Chat',
+            //                             style: TextStyle(
+            //                                 color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+            //                           ),
+            //                         )
+            //                       : const SizedBox.shrink(),
+            //                 ],
+            //               )
+            //             ],
+            //           ),
+            //           trailing: IconButton(
+            //             icon: Icon(
+            //               plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
+            //               color: plugin.isEnabled ? Colors.white : Colors.grey,
+            //             ),
+            //             onPressed: () {
+            //               _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
+            //             },
+            //           ),
+            //           // trailing: Switch(
+            //           //   value: plugin.isEnabled,
+            //           //   activeColor: Colors.deepPurple,
+            //           //   onChanged: (value) {
+            //           //     _togglePlugin(plugin.id.toString(), value);
+            //           //   },
+            //           // ),
+            //         ),
+            //       );
+            //     },
+            //   ),
+            // ),
           ],
         ),
       ),

@@ -7,9 +7,6 @@ class MessageProvider {
   static final Box<Message> _box = ObjectBoxUtil().box!.store.box<Message>();
 
   factory MessageProvider() {
-    if (_box.isEmpty()) {
-      _box.put(Message(DateTime.now(), 'What would you like to search for?', 'ai'));
-    }
     return _instance;
   }
 
@@ -23,10 +20,25 @@ class MessageProvider {
 
   Future<void> updateMessage(Message message) async => _box.put(message);
 
-  Future<List<Message>> retrieveMostRecentMessages({int limit = 5}) async {
-    var query = _box.query().order(Message_.createdAt, flags: Order.descending).build();
+  Future<List<Message>> retrieveMostRecentMessages({int limit = 5, String? pluginId}) async {
+    Query<Message> query = _box.query().order(Message_.createdAt, flags: Order.descending).build();
     query.limit = limit;
-    return query.find();
+    var messages = query.find();
+    // get the index from 0 to n, where message.sender == 'ai' and pluginId  matches, then sublist
+    var idx = 0;
+    for (var i = 0; i < messages.length; i++) {
+      if (messages[i].sender == 'ai') {
+        if (pluginId == messages[i].pluginId) {
+          idx = i;
+        } else {
+          break;
+        }
+      }
+    }
+    if (messages.isNotEmpty && messages[0].sender == 'ai' && messages[0].text == '') {
+      return messages.sublist(1, idx + 1);
+    }
+    return messages.sublist(0, idx + 1);
   }
 
   int getMessagesCount() => _box.count();

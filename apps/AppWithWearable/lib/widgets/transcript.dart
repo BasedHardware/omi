@@ -73,7 +73,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    utf8.decode(data.text.toString().codeUnits),
+                    utf8.decode(data.text.toString().codeUnits, allowMalformed: true),
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),

@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -49,7 +51,7 @@ Future<SummaryResult> summarizeMemory(
     ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
     
     For the title, use the main topic of the conversation.
-    For the overview, condense the conversation into a brief summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
     For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
@@ -176,8 +178,8 @@ Future<String> postMemoryCreationNotification(Memory memory) async {
   var str = userName.isEmpty ? 'a busy entrepreneur' : '$userName (a busy entrepreneur)';
   var prompt = '''
   The following is the structuring from a transcript of a conversation that just finished.
-  First determine if there's crucial value to notify $str about it.
-  If not, simply output an empty string, but if it is output 10 words (at most) with the most important action item from the conversation.
+  First determine if there's crucial feedback to notify $str about it.
+  If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
   Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
    
   Transcript:
@@ -243,9 +245,7 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
         '''
       .replaceAll('        ', '');
   debugPrint('determineRequiresContext message: $message');
-  var response = await gptApiCall(model: 'gpt-4o', messages: [
-    {"role": "user", "content": message}
-  ]);
+  var response = await executeGptPrompt(message);
   debugPrint('determineRequiresContext response: $response');
   var cleanedResponse = response.toString().replaceAll('```', '').replaceAll('json', '').trim();
   try {
@@ -267,14 +267,14 @@ Future<Tuple2<List<String>, List<DateTime>>?> determineRequiresContext(List<Mess
   }
 }
 
-String qaRagPrompt(String context, List<Message> messages) {
+String qaRagPrompt(String context, List<Message> messages, {Plugin? plugin}) {
   var prompt = '''
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation. 
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
     If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
-    
+    ${plugin == null ? '' : '\nYour name is: ${plugin.name}, and your personality/description is "${plugin.description}".\nMake sure to reflect your personality in your response.\n'}
     Conversation History:
-    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true)}
+    ${Message.getMessagesAsString(messages, useUserNameIfAvailable: true, usePluginNameIfAvailable: true)}
 
     Context:
     ```
@@ -285,4 +285,106 @@ String qaRagPrompt(String context, List<Message> messages) {
       .replaceAll('    ', '');
   debugPrint(prompt);
   return prompt;
+}
+
+Future<String> getInitialPluginPrompt(Plugin? plugin) async {
+  if (plugin == null) {
+    return '''
+        Your are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+    ''';
+  }
+  return '''
+        Your are an AI with the following characteristics:
+        Name: ${plugin.name}, 
+        Personality/Description: ${plugin.description},
+        Task: ${plugin.prompt}
+        
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+       
+        Output your response in plain text, without markdown.
+        '''
+      .replaceAll('     ', '')
+      .replaceAll('    ', '')
+      .trim();
+}
+
+Future<String> getPhotoDescription(Uint8List data) async {
+  var messages = [
+    {
+      'role': 'user',
+      'content': [
+        {'type': "text", 'text': "What’s in this image?"},
+        {
+          'type': "image_url",
+          'image_url': {"url": "data:image/jpeg;base64,${base64Encode(data)}"},
+        },
+      ],
+    },
+  ];
+  return await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+
+}
+// TODO: another thought is to ask gpt for a list of "scenes", so each one could be stored independently in vectors
+Future<List<int>> determineImagesToKeep(List<Tuple2<Uint8List, String>> images) async {
+  // was thinking here to take all images, and based on description, filter the ones that do not have repeated descriptions.
+  String prompt = '''
+  You will be provided with a list of descriptions of images that were taken from POV, with 5 seconds difference between each photo.
+  
+  Your task is to discard the repeated pictures, and output the indexes of the images that do not refer to the same scene, keeping only 1 description for the scene (so 1 index).
+  
+  Images: [${images.map((e) => "\"${e.item2}\"").join(', ')}]
+  
+  The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+  As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+  the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+  
+  Here is the output schema:
+  ```
+  {"properties": {"indices": {"title": "Indices", "description": "The indices of the images that are relevant", "default": [], "type": "array", "items": {"type": "integer"}}}}
+  ```
+  ''';
+  var response = await executeGptPrompt(prompt);
+  var result = jsonDecode(response.replaceAll('json', '').replaceAll('```', ''));
+  result['indices'] = result['indices'].map<int>((e) => e as int).toList();
+  print(result['indices']);
+  return result['indices'];
+}
+
+Future<SummaryResult> summarizePhotos(List<Tuple2<String, String>> images) async {
+  var prompt =
+      '''The user took a series of pictures from his POV, and generated a description for each photo, and wants to create a memory from them.
+
+    For the title, use the main topic of the scenes.
+    For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+    For the category, classify the scenes into one of the available categories.
+        
+    Photos Descriptions: ```${images.mapIndexed((i, e) => "${i + 1}. \"${e.item2}\"").join('\n')}```
+    
+    The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+    As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+    the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+    
+    Here is the output schema:
+    ```
+    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "An overview of the multiple scenes, highlighting the key details from it", "default": "", "type": "string"}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}}}
+    ```
+    '''
+          .replaceAll('     ', '')
+          .replaceAll('    ', '')
+          .trim();
+  debugPrint(prompt);
+  var structuredResponse = extractJson(await executeGptPrompt(prompt));
+  var structured = Structured.fromJson(jsonDecode(structuredResponse));
+  return SummaryResult(structured, []);
 }
