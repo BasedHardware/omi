@@ -6,6 +6,12 @@ nav_order: 2
 
 # Building the device
 
+Here is a quick video guide that shows the assembly process:
+
+https://github.com/user-attachments/assets/9ac8f298-c795-421e-bbf7-81ac45e53adb
+
+https://github.com/user-attachments/assets/d038536c-cff6-4de2-bd70-2bbbf63f892f
+
 If you received an unassembled Friend or want to build one yourself, follow the steps below:
 
 **Step 0.** Components
