@@ -48,4 +48,13 @@ class GrowthbookUtil {
     var enabled = feature.on;
     return enabled;
   }
+
+  bool hasStreamingTranscriptFeatureOn() {
+    return false;
+    if (!hasTranscriptServerFeatureOn()) return false;
+
+    var feature = _gb!.feature('streaming-transcript');
+    var enabled = feature.on;
+    return enabled;
+  }
 }

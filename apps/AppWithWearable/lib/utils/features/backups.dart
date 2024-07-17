@@ -31,27 +31,37 @@ List<dynamic> decodeJson(String encryptedJson, String password) {
   return json.decode(decrypted);
 }
 
-Future<String> getEncodedMemories() async {
-  var password = SharedPreferencesUtil().backupPassword;
-  if (password.isEmpty) return '';
-  var memories = MemoryProvider().getMemories();
-  return encodeJson(memories.map((e) => e.toJson()).toList(), password);
-}
+// Future<String> getEncodedMemories() async {
+//   var password = SharedPreferencesUtil().backupPassword;
+//   if (password.isEmpty) return '';
+//   var memories = MemoryProvider().getMemories();
+//   return encodeJson(memories.map((e) => e.toJson()).toList(), password);
+// }
 
-Future<bool> executeBackup() async {
+// Future<bool> executeBackup() async {
+//   if (!SharedPreferencesUtil().backupsEnabled) return false;
+//   var result = await getEncodedMemories();
+//   if (result == '') return false;
+//   await getDecodedMemories(result, SharedPreferencesUtil().backupPassword);
+//   SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+//   await uploadBackupApi(result);
+//   return true;
+// }
+
+Future<bool> executeBackupWithUid({String? uid}) async {
   if (!SharedPreferencesUtil().backupsEnabled) return false;
-  var result = await getEncodedMemories();
-  if (result == '') return false;
-  await getDecodedMemories(result, SharedPreferencesUtil().backupPassword);
-  SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
-  await uploadBackupApi(result);
+  var memories = MemoryProvider().getMemories();
+  if (memories.isEmpty) return true;
+  var encoded = encodeJson(memories.map((e) => e.toJson()).toList(), uid ?? SharedPreferencesUtil().uid);
+  // SharedPreferencesUtil().lastBackupDate = DateTime.now().toIso8601String();
+  await uploadBackupApi(encoded);
   return true;
 }
 
-Future<List<Memory>> retrieveBackup(String uid, String password) async {
+Future<List<Memory>> retrieveBackup(String uid) async {
   var retrieved = await downloadBackupApi(uid);
-  if (retrieved == '') throw Exception('No backup found for this user ID.');
-  var memories = await getDecodedMemories(retrieved, password);
+  if (retrieved == '') return [];
+  var memories = await getDecodedMemories(retrieved, uid);
   MemoryProvider().storeMemories(memories);
   return memories;
 }

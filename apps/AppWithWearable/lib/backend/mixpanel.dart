@@ -13,11 +13,12 @@ class MixpanelManager {
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
     if (_mixpanel == null) {
-      _mixpanel =
-          await Mixpanel.init(Env.mixpanelProjectToken!, optOutTrackingDefault: false, trackAutomaticEvents: true);
+      _mixpanel = await Mixpanel.init(
+        Env.mixpanelProjectToken!,
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+      );
       _mixpanel?.setLoggingEnabled(false);
-      _instance.identify();
-      _instance.setPeopleValues();
     }
   }
 
@@ -52,7 +53,22 @@ class MixpanelManager {
     _mixpanel?.reset();
   }
 
-  void identify() => _mixpanel?.identify(_preferences.uid);
+  void identify() {
+    _mixpanel?.identify(_preferences.uid);
+    _instance.setPeopleValues();
+    setNameAndEmail();
+  }
+
+  void migrateUser(String newUid) {
+    _mixpanel?.alias(newUid, _preferences.uid);
+    _mixpanel?.identify(newUid);
+    setNameAndEmail();
+  }
+
+  void setNameAndEmail() {
+    setUserProperty('\$name', SharedPreferencesUtil().fullName);
+    setUserProperty('\$email', SharedPreferencesUtil().email);
+  }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       _mixpanel?.track(eventName, properties: properties);
@@ -62,6 +78,8 @@ class MixpanelManager {
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
 
   void onboardingCompleted() => track('Onboarding Completed');
+
+  void onboardingStepICompleted(String step) => track('Onboarding Step $step Completed');
 
   void settingsOpened() => track('Settings Opened');
 
@@ -81,6 +99,10 @@ class MixpanelManager {
 
   void pluginRated(String pluginId, double rating) {
     track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  }
+
+  void pluginResultExpanded(Memory memory, String pluginId) {
+    track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
   }
 
   void recordingLanguageChanged(String language) {
@@ -123,18 +145,12 @@ class MixpanelManager {
     };
   }
 
-  void coachAdvisorFeedback(String t, String feedback) {
-    var properties = _getTranscriptProperties(t);
-    properties['transcript_language'] = _preferences.recordingsLanguage;
-    properties['feedback'] = feedback;
-    track('Coach Advisor Feedback', properties: properties);
-  }
-
   Map<String, dynamic> getMemoryEventProperties(Memory memory) {
     var properties = _getTranscriptProperties(memory.transcript);
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
     properties['memory_id'] = memory.id;
+    properties['memory_discarded'] = memory.discarded;
     return properties;
   }
 
@@ -254,6 +270,8 @@ class MixpanelManager {
   void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
 
   void firmwareUpdateButtonClick() => track('Firmware Update Clicked');
+
+  void firstTranscriptMade() => track('First Transcript Made');
 
 // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 }

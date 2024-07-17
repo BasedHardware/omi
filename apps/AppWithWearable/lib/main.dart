@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -10,6 +12,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
+import 'package:friend_private/firebase_options.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
@@ -29,10 +32,22 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  listenAuthTokenChanges();
+  bool isAuth = false;
+  try {
+    isAuth = (await getIdToken()) != null;
+  } catch (e) {} // if no connect this will fail
+
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   await ObjectBoxUtil.init();
   await MixpanelManager.init();
+
+  if (isAuth) MixpanelManager().identify();
+
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -55,21 +70,23 @@ void main() async {
           Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
-        _getRunApp();
+        _getRunApp(isAuth);
       },
       CrashReporting.reportCrash,
     );
   } else {
-    _getRunApp();
+    _getRunApp(isAuth);
   }
 }
 
-_getRunApp() {
-  return runApp(const MyApp());
+_getRunApp(bool isAuth) {
+  return runApp(MyApp(isAuth: isAuth));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final bool isAuth;
+
+  const MyApp({super.key, required this.isAuth});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -129,7 +146,7 @@ class _MyAppState extends State<MyApp> {
           )),
       themeMode: ThemeMode.dark,
       // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted) //  && SharedPreferencesUtil().deviceId != ''
+      home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
           ? const HomePageWrapper()
           : const OnboardingWrapper(),
     );

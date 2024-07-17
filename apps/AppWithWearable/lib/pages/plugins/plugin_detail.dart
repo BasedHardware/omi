@@ -34,8 +34,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               leading: CircleAvatar(
                 backgroundColor: Colors.white,
                 maxRadius: 28,
-                backgroundImage:
-                    NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${widget.plugin.image}'),
+                backgroundImage: NetworkImage(widget.plugin.getImageUrl()),
               ),
               title: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
@@ -115,6 +114,47 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
                 ),
               ])),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Works with',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(width: 16),
+                  widget.plugin.memories
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text(
+                            'Memories',
+                            style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                  const SizedBox(width: 8),
+                  widget.plugin.chat
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text(
+                            'Chat',
+                            style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
             const Padding(

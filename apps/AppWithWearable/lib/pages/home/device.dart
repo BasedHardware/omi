@@ -20,6 +20,9 @@ class ConnectedDevice extends StatefulWidget {
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   @override
   Widget build(BuildContext context) {
+    var deviceId = widget.device?.id ?? SharedPreferencesUtil().deviceId;
+    var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.device == null ? 'Paired Device' : 'Connected Device'),
@@ -35,7 +38,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                'DEVICE-${widget.device?.id.split('-').last.substring(0, 6) ?? SharedPreferencesUtil().deviceId.substring(0, 6)}',
+                '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16.0,
@@ -100,6 +103,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     if (widget.device != null) bleDisconnectDevice(widget.device!);
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().deviceId = '';
+                    SharedPreferencesUtil().deviceName = '';
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text('Your Friend is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
                     ));
