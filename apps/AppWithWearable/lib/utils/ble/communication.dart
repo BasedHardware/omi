@@ -156,7 +156,7 @@ Future cameraStopPhotoController(BTDeviceStruct btDevice) async {
   print('cameraStopPhotoController');
 }
 
-Future<bool> hasImageStreamingCharacteristic(String deviceId) async {
+Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   final bytesService = await getServiceByUuid(deviceId, '19b10000-e8f2-537e-4f6c-d104768a1214');
   if (bytesService == null) return false;
   var streamCharacteristic = getCharacteristicByUuid(bytesService, '19b10005-e8f2-537e-4f6c-d104768a1214');

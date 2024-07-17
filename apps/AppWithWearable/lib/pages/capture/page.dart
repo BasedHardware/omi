@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -208,9 +209,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // if (websocketReconnecting) return;
 
     if (_reconnectionAttempts >= 3) {
-      setState(() {
-        websocketReconnecting = false;
-      });
+      setState(() => websocketReconnecting = false);
       // TODO: reset here to 0? or not, this could cause infinite loop if it's called in parallel from 2 distinct places
       debugPrint('Max reconnection attempts reached');
       clearNotification(2);
@@ -235,7 +234,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     await initiateBytesStreamingProcessing();
   }
 
-  List<Tuple2<Uint8List, String>> images = [];
+  List<Tuple2<String, String>> photos = [];
   ImageBytesUtil imageBytesUtil = ImageBytesUtil();
 
   Future<void> openGlassProcessing() async {
@@ -246,11 +245,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       Uint8List? completedImage = imageBytesUtil.processChunk(data);
       if (completedImage != null && completedImage.isNotEmpty) {
         debugPrint('Completed image size: ${completedImage.length}');
-        getImageDescription(completedImage).then((description) {
-          images.add(Tuple2(completedImage, description));
+        getPhotoDescription(completedImage).then((description) {
+          photos.add(Tuple2(base64Encode(completedImage), description));
           setState(() {});
-          debugPrint('Images: ${images.length}');
+          debugPrint('photos: ${photos.length}');
           setHasTranscripts(true);
+          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
         });
       }
     });
@@ -264,7 +264,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
     print(SharedPreferencesUtil().deviceName);
-    isGlasses = await hasImageStreamingCharacteristic(btDevice!.id);
+    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
     if (isGlasses) return await openGlassProcessing();
 
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
@@ -348,7 +348,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _wsChannel?.sink.close(1000);
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       if (_streamingTranscriptEnabled) {
@@ -366,11 +366,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
-    try {
-      var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-      file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
-      uploadFile(file);
-    } catch (e) {} // in case was a local recording and not a BLE recording
+    if (audioStorage?.frames.isNotEmpty == true) {
+      try {
+        var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
+        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
+        uploadFile(file);
+      } catch (e) {} // in case was a local recording and not a BLE recording
+    }
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
@@ -378,6 +380,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
+      photos: photos, // TODO: determinephotosToKeep(photos);
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -387,7 +390,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
         var msg = Message(DateTime.now(), r, 'ai');
         msg.memories.add(memory);
         MessageProvider().saveMessage(msg);
@@ -410,6 +412,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     currentTranscriptFinishedAt = null;
     elapsedSeconds = 0;
     streamStartedAtSecond = 0;
+    photos = [];
   }
 
   setHasTranscripts(bool hasTranscripts) {
@@ -466,7 +469,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           children: [
             speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
             ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-            getTranscriptWidget(memoryCreating, segments, images, widget.device),
+            getTranscriptWidget(memoryCreating, segments, photos, widget.device),
             if (wsConnectionState == WebsocketConnectionStatus.error ||
                 wsConnectionState == WebsocketConnectionStatus.failed)
               getWebsocketErrorWidget(),

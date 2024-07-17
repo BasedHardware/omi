@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/growthbook.dart';
@@ -10,7 +8,7 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -215,7 +213,7 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function reset) 
 getTranscriptWidget(
   bool memoryCreating,
   List<TranscriptSegment> segments,
-  List<Tuple2<Uint8List, String>> images,
+  List<Tuple2<String, String>> photos,
   BTDeviceStruct? btDevice,
 ) {
   if (memoryCreating) {
@@ -225,7 +223,7 @@ getTranscriptWidget(
     );
   }
 
-  if (segments.isEmpty && images.isEmpty) {
+  if (segments.isEmpty && photos.isEmpty) {
     // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
@@ -247,42 +245,7 @@ getTranscriptWidget(
           )
         : const SizedBox.shrink();
   }
-  if (images.isNotEmpty) {
-    return GridView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      scrollDirection: Axis.vertical,
-      itemCount: images.length,
-      physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (context, idx) {
-        return GestureDetector(
-          onTap: () {
-            showDialog(
-                context: context,
-                builder: (c) {
-                  return getDialog(
-                    context,
-                    () => Navigator.pop(context),
-                    () => Navigator.pop(context),
-                    'Image',
-                    images[idx].item2,
-                    singleButton: true,
-                  );
-                });
-          },
-          child: Container(
-            decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade600, width: 0.5)),
-            child: Image.memory(images[idx].item1, fit: BoxFit.cover),
-          ),
-        );
-      },
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-    );
-  }
+  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
   return TranscriptWidget(segments: segments);
 }
 
