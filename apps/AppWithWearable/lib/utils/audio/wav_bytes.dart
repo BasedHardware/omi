@@ -314,15 +314,6 @@ class ImageBytesUtil {
     }
   }
 
-  static String toBase64Image(Uint8List src) {
-    return 'data:image/jpeg;base64,${toBase64(src)}';
-  }
-
-  static String toBase64(Uint8List src) {
-    final characters = String.fromCharCodes(src);
-    return base64Encode(utf8.encode(characters));
-  }
-
   static Future<File?> uint8ListToFile(Uint8List uint8list) async {
     try {
       final tempDir = await getTemporaryDirectory();

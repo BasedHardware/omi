@@ -14,6 +14,7 @@ Future<dynamic> gptApiCall({
   List tools = const [],
   File? audioFile,
   double temperature = 0.3,
+  int? maxTokens,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
@@ -30,6 +31,9 @@ Future<dynamic> gptApiCall({
     } else if (tools.isNotEmpty) {
       bodyData['tools'] = tools;
       bodyData['tool_choice'] = 'auto';
+    }
+    if (maxTokens != null) {
+      bodyData['max_tokens'] = maxTokens;
     }
     body = jsonEncode(bodyData);
   }
