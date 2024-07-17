@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:location/location.dart';
+import 'package:http/http.dart' as http;
 
 class LocationService {
   Location location = Location();
@@ -39,9 +43,28 @@ class LocationService {
     return await location.hasPermission() == PermissionStatus.granted;
   }
 
-  Future<LocationData?> getLocation() async {
+  Future<Geolocation?> getGeolocationDetails() async {
     if (await hasPermission()) {
-      return await location.getLocation();
+      LocationData locationData = await location.getLocation();
+      var res = await http.get(
+        Uri.parse(
+            "https://maps.googleapis.com/maps/api/geocode/json?latlng=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}"),
+      );
+      if (res.statusCode == 200) {
+        var data = json.decode(res.body);
+        Geolocation geolocation = Geolocation(
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          address: data['results'][0]['formatted_address'],
+          locationType: data['results'][0]['types'][0],
+          googlePlaceId: data['results'][0]['place_id'],
+        );
+        return geolocation;
+      }
+      return Geolocation(
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+      );
     } else {
       return null;
     }

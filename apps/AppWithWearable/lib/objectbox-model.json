@@ -5,7 +5,7 @@
   "entities": [
     {
       "id": "1:1521024926543535",
-      "lastPropertyId": "9:6186917569313515214",
+      "lastPropertyId": "10:3624046344531751569",
       "name": "Memory",
       "properties": [
         {
@@ -57,9 +57,12 @@
           "type": 10
         },
         {
-          "id": "9:6186917569313515214",
-          "name": "coordinates",
-          "type": 29
+          "id": "10:3624046344531751569",
+          "name": "geolocationId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "9:6154185358716329725",
+          "relationTarget": "Geolocation"
         }
       ],
       "relations": [
@@ -300,10 +303,64 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "8:2312654834515625467",
+      "lastPropertyId": "9:3436280891624167371",
+      "name": "Geolocation",
+      "properties": [
+        {
+          "id": "1:1952605082460208171",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2402449790162622314",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "3:5800995391166396329",
+          "name": "longitude",
+          "type": 8
+        },
+        {
+          "id": "4:3558783765965300264",
+          "name": "altitude",
+          "type": 8
+        },
+        {
+          "id": "5:8594765972973800978",
+          "name": "accuracy",
+          "type": 8
+        },
+        {
+          "id": "6:169071506304205779",
+          "name": "time",
+          "type": 10
+        },
+        {
+          "id": "7:6279827165797510451",
+          "name": "googlePlaceId",
+          "type": 9
+        },
+        {
+          "id": "8:5633937244733148929",
+          "name": "address",
+          "type": 9
+        },
+        {
+          "id": "9:3436280891624167371",
+          "name": "locationType",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "7:265133176252396324",
-  "lastIndexId": "8:5225160858485949527",
+  "lastEntityId": "8:2312654834515625467",
+  "lastIndexId": "9:6154185358716329725",
   "lastRelationId": "2:4703245221378113920",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
@@ -316,7 +373,8 @@
     2626201971202508244,
     1809459319638310611,
     6229900676402028868,
-    8014962203152976278
+    8014962203152976278,
+    6186917569313515214
   ],
   "retiredRelationUids": [],
   "version": 1
