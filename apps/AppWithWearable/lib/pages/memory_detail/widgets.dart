@@ -10,7 +10,6 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
-import 'package:friend_private/pages/memory_detail/maps_util.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -18,6 +17,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'maps_util.dart';
 
 List<Widget> getSummaryWidgets(
   BuildContext context,
@@ -67,33 +68,7 @@ List<Widget> getSummaryWidgets(
           ),
     memory.discarded
         ? const SizedBox.shrink()
-        : ((memory.coordinates != null && memory.coordinates!.isNotEmpty)
-            ? GestureDetector(
-                onTap: () {
-                  MapsUtil.launchMap(memory.coordinates!.first, memory.coordinates!.last);
-                },
-                child: CachedNetworkImage(
-                    imageBuilder: (context, imageProvider) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: imageProvider,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      );
-                    },
-                    imageUrl: MapsUtil.getMapImageUrl(memory.coordinates!.first, memory.coordinates!.last)),
-              )
-            : SizedBox.shrink()),
-    memory.discarded
-        ? const SizedBox.shrink()
-        : ((memory.coordinates != null && memory.coordinates!.isNotEmpty)
-            ? const SizedBox(height: 8)
-            : const SizedBox.shrink()),
+        : ((memory.geolocation.target != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
@@ -223,9 +198,10 @@ _getEditTextField(Memory memory, TextEditingController controller, bool enabled,
         )
       : SelectionArea(
           child: Text(
-          controller.text,
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-        ));
+            controller.text,
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+          ),
+        );
 }
 
 List<Widget> getPluginsWidgets(
@@ -353,6 +329,49 @@ List<Widget> getPluginsWidgets(
     ],
     const SizedBox(height: 8)
   ];
+}
+
+List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
+  return memory.geolocation.target == null
+      ? []
+      : [
+          memory.discarded
+              ? const SizedBox.shrink()
+              : Text(
+                  'Place of Memory',
+                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+                ),
+          const SizedBox(height: 8),
+          memory.discarded
+              ? const SizedBox.shrink()
+              : ((memory.geolocation.target != null)
+                  ? GestureDetector(
+                      onTap: () {
+                        MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                      },
+                      child: CachedNetworkImage(
+                        imageBuilder: (context, imageProvider) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 10, bottom: 8),
+                            height: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                        imageUrl: MapsUtil.getMapImageUrl(
+                          memory.geolocation.target!.latitude!,
+                          memory.geolocation.target!.longitude!,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink()),
+          const SizedBox(height: 8),
+        ];
 }
 
 showOptionsBottomSheet(

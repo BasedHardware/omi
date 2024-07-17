@@ -144,22 +144,24 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   children: [
                     ListView(shrinkWrap: true, children: _getTranscriptWidgets()),
                     ListView(
-                        shrinkWrap: true,
-                        children: getSummaryWidgets(
-                              context,
-                              widget.memory,
-                              overviewController,
-                              editingOverview,
-                              focusOverviewField,
-                              setState,
-                            ) +
-                            getPluginsWidgets(
-                              context,
-                              widget.memory,
-                              pluginsList,
-                              pluginResponseExpanded,
-                              (i) => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
-                            )),
+                      shrinkWrap: true,
+                      children: getSummaryWidgets(
+                            context,
+                            widget.memory,
+                            overviewController,
+                            editingOverview,
+                            focusOverviewField,
+                            setState,
+                          ) +
+                          getPluginsWidgets(
+                            context,
+                            widget.memory,
+                            pluginsList,
+                            pluginResponseExpanded,
+                            (i) => setState(() => pluginResponseExpanded[i] = !pluginResponseExpanded[i]),
+                          ) +
+                          getGeolocationWidgets(widget.memory, context),
+                    ),
                   ],
                 ),
               ),
