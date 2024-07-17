@@ -8,10 +8,12 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
+import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:record/record.dart';
+import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStruct? device) {
@@ -51,7 +53,7 @@ getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStr
               textAlign: TextAlign.center,
             ),
             Text(
-              'DEVICE-${device.id.split('-').last.substring(0, 6)}',
+              '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16.0,
@@ -154,15 +156,18 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState) {
+speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
   return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
       ? Stack(
           children: [
             GestureDetector(
               onTap: () async {
                 MixpanelManager().speechProfileCapturePageClicked();
+                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
+                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) reset();
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -205,7 +210,12 @@ speechProfileWidget(BuildContext context, StateSetter setState) {
       : const SizedBox(height: 16);
 }
 
-getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDeviceStruct? btDevice) {
+getTranscriptWidget(
+  bool memoryCreating,
+  List<TranscriptSegment> segments,
+  List<Tuple2<String, String>> photos,
+  BTDeviceStruct? btDevice,
+) {
   if (memoryCreating) {
     return const Padding(
       padding: EdgeInsets.only(top: 80),
@@ -213,7 +223,8 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
     );
   }
 
-  if (segments.isEmpty) {
+  if (segments.isEmpty && photos.isEmpty) {
+    // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
             mainAxisSize: MainAxisSize.min,
@@ -234,6 +245,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
           )
         : const SizedBox.shrink();
   }
+  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
   return TranscriptWidget(segments: segments);
 }
 
@@ -270,6 +282,19 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+getWebsocketErrorWidget() {
+  return const Padding(
+    padding: EdgeInsets.only(top: 80),
+    child: Center(
+      child: Text(
+        'Error connecting to the server. Please check your internet connection.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
       ),
     ),
   );

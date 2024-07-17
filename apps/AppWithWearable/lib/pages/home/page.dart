@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -10,15 +11,18 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
@@ -54,12 +58,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<CapturePageState> capturePageKey = GlobalKey();
+  GlobalKey<ChatPageState> chatPageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
+  List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
@@ -78,9 +84,21 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  _edgeCasePluginNotAvailable() {
+    var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.chat)) {
+      SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
+    }
+  }
+
   Future<void> _initiatePlugins() async {
-    var plugins = await retrievePlugins();
+    _edgeCasePluginNotAvailable();
+    plugins = SharedPreferencesUtil().pluginsList;
+    plugins = await retrievePlugins();
     SharedPreferencesUtil().pluginsList = plugins;
+    _edgeCasePluginNotAvailable();
+    setState(() {});
   }
 
   @override
@@ -203,6 +221,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().deviceName = _device!.name;
     _startForeground();
     setState(() {});
   }
@@ -257,6 +276,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
+                      key: chatPageKey,
                       textFieldFocusNode: chatTextFieldFocusNode,
                       messages: messages,
                       refreshMessages: _refreshMessages,
@@ -411,12 +431,47 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           side: const BorderSide(color: Colors.white, width: 1),
                         ),
                       ),
-                      child: Image.asset(
-                        'assets/images/logo_transparent.png',
-                        width: 25,
-                        height: 25,
-                      ),
+                      child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                     ),
+              _controller!.index == 2
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 0),
+                      child: Container(
+                        // decoration: BoxDecoration(
+                        //   border: Border.all(color: Colors.grey),
+                        //   borderRadius: BorderRadius.circular(30),
+                        // ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: DropdownButton<String>(
+                          menuMaxHeight: 350,
+                          value: SharedPreferencesUtil().selectedChatPluginId,
+                          onChanged: (s) async {
+                            if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) ||
+                                s == 'enable') {
+                              await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                              setState(() {});
+                              return;
+                            }
+                            if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+
+                            SharedPreferencesUtil().selectedChatPluginId = s;
+                            var plugin = plugins.firstWhereOrNull((p) => p.id == s);
+                            chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                            setState(() {});
+                          },
+                          icon: Container(),
+                          alignment: Alignment.center,
+                          dropdownColor: Colors.black,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          underline: Container(height: 0, color: Colors.transparent),
+                          isExpanded: false,
+                          itemHeight: 48,
+                          padding: EdgeInsets.zero,
+                          items: _getPluginsDropdownItems(context),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
@@ -425,7 +480,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
+                  String language = SharedPreferencesUtil().recordingsLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                   await routeToPage(context, const SettingsPage());
+                  // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                  if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
+                      (language != SharedPreferencesUtil().recordingsLanguage ||
+                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
+                    capturePageKey.currentState?.resetState(restartBytesProcessing: true);
+                  }
                   setState(() {});
                 },
               )
@@ -438,11 +501,72 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     ));
   }
 
+  _getPluginsDropdownItems(BuildContext context) {
+    var items = [
+          DropdownMenuItem<String>(
+            value: 'no_selected',
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Icon(size: 20, Icons.chat, color: Colors.white),
+                const SizedBox(width: 10),
+                Text(
+                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          )
+        ] +
+        plugins
+            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
+            .map<DropdownMenuItem<String>>((Plugin plugin) {
+          return DropdownMenuItem<String>(
+            value: plugin.id,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  maxRadius: 12,
+                  backgroundImage: NetworkImage(plugin.getImageUrl()),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name + ' '*(18 - plugin.name.length),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          );
+        }).toList();
+    if (SharedPreferencesUtil().pluginsEnabled.isNotEmpty) {
+      items.add(const DropdownMenuItem<String>(
+        value: 'enable',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.transparent,
+              maxRadius: 12,
+              child: Icon(Icons.star, color: Colors.purpleAccent),
+            ),
+            SizedBox(width: 8),
+            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+          ],
+        ),
+      ));
+    }
+    return items;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
+
     _controller?.dispose();
     super.dispose();
   }

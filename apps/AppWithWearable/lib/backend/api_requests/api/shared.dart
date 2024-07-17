@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -11,6 +13,14 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
+    // var startTime = DateTime.now();
+    bool result = await InternetConnection().hasInternetAccess; // 600 ms on avg
+    // debugPrint('Internet connection check took: ${DateTime.now().difference(startTime).inMilliseconds} ms');
+    if (!result) {
+      debugPrint('No internet connection, aborting $method $url');
+      return null;
+    }
+
     final client = InstabugHttpClient();
 
     if (method == 'POST') {
@@ -19,17 +29,27 @@ Future<http.Response?> makeApiCall({
       return await client.get(Uri.parse(url), headers: headers);
     } else if (method == 'DELETE') {
       return await client.delete(Uri.parse(url), headers: headers);
+    } else {
+      throw Exception('Unsupported HTTP method: $method');
     }
-  } catch (e) {
+  } catch (e, stackTrace) {
     debugPrint('HTTP request failed: $e');
+    CrashReporting.reportHandledCrash(
+      e,
+      stackTrace,
+      userAttributes: {'url': url, 'method': method},
+      level: NonFatalExceptionLevel.warning,
+    );
     return null;
   } finally {}
-  return null;
 }
 
 // Function to extract content from the API response.
-dynamic extractContentFromResponse(http.Response? response,
-    {bool isEmbedding = false, bool isFunctionCalling = false}) {
+dynamic extractContentFromResponse(
+  http.Response? response, {
+  bool isEmbedding = false,
+  bool isFunctionCalling = false,
+}) {
   if (response != null && response.statusCode == 200) {
     var data = jsonDecode(response.body);
     if (isEmbedding) {
@@ -46,7 +66,17 @@ dynamic extractContentFromResponse(http.Response? response,
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    throw Exception('Error fetching data: ${response?.statusCode}');
-    // return {'error': response?.statusCode};
+    CrashReporting.reportHandledCrash(
+      Exception('Error fetching data: ${response?.statusCode}'),
+      StackTrace.current,
+      userAttributes: {
+        'response_null': (response == null).toString(),
+        'response_status_code': response?.statusCode.toString() ?? '',
+        'is_embedding': isEmbedding.toString(),
+        'is_function_calling': isFunctionCalling.toString(),
+      },
+      level: NonFatalExceptionLevel.warning,
+    );
+    return null;
   }
 }

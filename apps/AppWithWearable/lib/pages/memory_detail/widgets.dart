@@ -275,8 +275,7 @@ List<Widget> getPluginsWidgets(
                       leading: CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 16,
-                        backgroundImage:
-                            NetworkImage('https://raw.githubusercontent.com/BasedHardware/Friend/main/${plugin.image}'),
+                        backgroundImage: NetworkImage(plugin.getImageUrl()),
                       ),
                       title: Text(
                         plugin.name,

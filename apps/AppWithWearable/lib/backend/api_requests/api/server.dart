@@ -33,9 +33,8 @@ Future<List<TranscriptSegment>> transcribe(File file, String uid) async {
     } else {
       throw Exception('Failed to upload file. Status code: ${response.statusCode} Body: ${response.body}');
     }
-  } catch (e, stackTrace) {
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    throw Exception('An error occurred transcribeAudioFile: $e');
+  } catch (e) {
+    rethrow;
   }
 }
 
@@ -128,7 +127,9 @@ Future<List<Plugin>> retrievePlugins() async {
       url: '${Env.apiBaseUrl}plugins?uid=${SharedPreferencesUtil().uid}', headers: {}, body: '', method: 'GET');
   if (response?.statusCode == 200) {
     try {
-      return Plugin.fromJsonList(jsonDecode(response!.body));
+      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      debugPrint('retrievePlugins: ${plugins.length}');
+      return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);

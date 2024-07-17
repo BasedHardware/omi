@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
@@ -27,8 +30,12 @@ import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:location/location.dart';
+import 'package:friend_private/utils/websockets.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
+import 'package:web_socket_channel/io.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -54,6 +61,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   final record = AudioRecorder();
   RecordState _state = RecordState.stop;
   static const quietSecondsForMemoryCreation = 120;
+
+  bool _streamingTranscriptEnabled = false;
 
   /// ----
   BTDeviceStruct? btDevice;
@@ -93,7 +102,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 //     ''', speaker: 'SPEAKER_00', isUser: false, start: 0, end: 30)
   ];
 
-  StreamSubscription? audioBytesStream;
+  StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
 
   Timer? _memoryCreationTimer;
@@ -102,14 +111,24 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
+
   Geolocation? geolocationData;
   bool shouldAskPermissionAgain = true;
+
+  // ----
+  WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
+  bool websocketReconnecting = false;
+  IOWebSocketChannel? _wsChannel;
+  InternetStatus? _internetStatus;
+
+  late StreamSubscription<InternetStatus> _internetListener;
+
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
     processTranscriptContent(
       context,
       transcript,
@@ -124,13 +143,140 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   int elapsedSeconds = 0;
+  double streamStartedAtSecond = 0;
+
+  Future<void> initiateBytesStreamingProcessing() async {
+    if (btDevice == null) return;
+
+    Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await streamingTranscript(
+        btDevice: btDevice!,
+        onWebsocketConnectionSuccess: () {
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.connected;
+            websocketReconnecting = false;
+            _reconnectionAttempts = 0; // Reset counter on successful connection
+          });
+        },
+        onWebsocketConnectionFailed: (err) {
+          // connection couldn't be initiated for some reason.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.failed;
+            websocketReconnecting = false;
+          });
+          _reconnectWebSocket();
+        },
+        onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
+          // connection was closed, either on resetState, or by backend, or by some other reason.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.closed;
+          });
+          if (closeCode != 1000) {
+            // attempt to reconnect
+            _reconnectWebSocket();
+          }
+        },
+        onWebsocketConnectionError: (err) {
+          // connection was okay, but then failed.
+          setState(() {
+            wsConnectionState = WebsocketConnectionStatus.error;
+            websocketReconnecting = false;
+          });
+          _reconnectWebSocket();
+        },
+        onMessageReceived: (List<TranscriptSegment> newSegments) {
+          if (segments.isEmpty && newSegments.isNotEmpty) {
+            debugPrint('newSegments: ${newSegments.last} ${audioStorage!.frames.length ~/ 100}');
+            // TODO: small bug
+            // - When memory i is created, newSegment.start will still contain the whole websocket time,
+            //   so we are removing all audio here, first phrase/ word will be lost from created audio.
+            audioStorage?.removeFramesRange(fromSecond: 0, toSecond: max((newSegments.last.end - 1).toInt(), 0));
+            streamStartedAtSecond = newSegments[0].start;
+          }
+          TranscriptSegment.combineSegments(segments, newSegments, streamStartedAtSecond: streamStartedAtSecond);
+          if (newSegments.isNotEmpty) {
+            SharedPreferencesUtil().transcriptSegments = segments;
+            setHasTranscripts(true);
+            debugPrint('Memory creation timer restarted');
+            _memoryCreationTimer?.cancel();
+            _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+            currentTranscriptStartedAt ??= DateTime.now();
+            currentTranscriptFinishedAt = DateTime.now();
+          }
+          setState(() {});
+        });
+
+    _wsChannel = data.item1;
+    _bleBytesStream = data.item2;
+    audioStorage = data.item3;
+  }
+
+  int _reconnectionAttempts = 0;
+
+  Future<void> _reconnectWebSocket() async {
+    // TODO: fix function
+    // - we are closing so that this triggers a new reconnect, but maybe it shouldn't, as this will trigger error sometimes, and close
+    //   causing 4 up to 5 reconnect attempts, double notification, double memory creation and so on.
+    // if (websocketReconnecting) return;
+
+    if (_reconnectionAttempts >= 3) {
+      setState(() => websocketReconnecting = false);
+      // TODO: reset here to 0? or not, this could cause infinite loop if it's called in parallel from 2 distinct places
+      debugPrint('Max reconnection attempts reached');
+      clearNotification(2);
+      createNotification(
+        notificationId: 2,
+        title: 'Error Generating Transcription',
+        body: 'Check your internet connection and try again. If the problem persists, restart the app.',
+      );
+      resetState(restartBytesProcessing: false); // Should trigger this only once, and then disconnects websocket
+
+      return;
+    }
+    setState(() {
+      websocketReconnecting = true;
+    });
+    _reconnectionAttempts++;
+    await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
+    debugPrint('Attempting to reconnect $_reconnectionAttempts time');
+    // _wsChannel?.
+    _bleBytesStream?.cancel();
+    _wsChannel?.sink.close(); // trigger one more reconnectWebSocket call
+    await initiateBytesStreamingProcessing();
+  }
+
+  List<Tuple2<String, String>> photos = [];
+  ImageBytesUtil imageBytesUtil = ImageBytesUtil();
+
+  Future<void> openGlassProcessing() async {
+    _bleBytesStream = await getBleImageBytesListener(btDevice!.id, onImageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+      // print(value);
+      Uint8List data = Uint8List.fromList(value);
+      Uint8List? completedImage = imageBytesUtil.processChunk(data);
+      if (completedImage != null && completedImage.isNotEmpty) {
+        debugPrint('Completed image size: ${completedImage.length}');
+        getPhotoDescription(completedImage).then((description) {
+          photos.add(Tuple2(base64Encode(completedImage), description));
+          setState(() {});
+          debugPrint('photos: ${photos.length}');
+          setHasTranscripts(true);
+          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
+        });
+      }
+    });
+    await cameraStopPhotoController(btDevice!);
+    await cameraStartPhotoController(btDevice!);
+  }
+
+  bool isGlasses = false;
 
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-    // VadUtil vad = VadUtil();
-    // await vad.init();
-    // Variables to maintain state
+    print(SharedPreferencesUtil().deviceName);
+    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
+    if (isGlasses) return await openGlassProcessing();
+
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
       // TODO: disconnect and show error
@@ -140,43 +286,48 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
-    audioBytesStream = await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
-      if (value.isEmpty) return;
+    _bleBytesStream = await getBleAudioBytesListener(
+      btDevice!.id,
+      onAudioBytesReceived: (List<int> value) async {
+        if (value.isEmpty) return;
 
-      toProcessBytes2.storeFramePacket(value);
-      // if (segments.isNotEmpty && wavBytesUtil2.hasFrames())
-      audioStorage!.storeFramePacket(value);
-
-      // if (toProcessBytes2.frames.length % 100 == 0) {
-      //   debugPrint('Frames length: ${toProcessBytes2.frames.length / 100} seconds');
-      // }
-      // debugPrint('toProcessBytes2.frames.length: ${toProcessBytes2.frames.length}');
-      if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
-        Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
-        // vad.containsVoice(data.item1);
-        try {
-          await _processFileToTranscript(data.item1);
-          if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
-          if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
-          if (segments.isNotEmpty && !firstTranscriptMade) {
-            SharedPreferencesUtil().firstTranscriptMade = true;
-            MixpanelManager().firstTranscriptMade();
+        toProcessBytes2.storeFramePacket(value);
+        audioStorage!.storeFramePacket(value);
+        if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
+          if (_internetStatus == InternetStatus.disconnected) {
+            debugPrint('No internet connection, not processing audio');
+            return;
           }
-          // uploadFile(data.item1, prefixTimestamp: true);
-        } catch (e, stacktrace) {
-          // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
-          CrashReporting.reportHandledCrash(
-            e,
-            stacktrace,
-            level: NonFatalExceptionLevel.warning,
-            userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
-          );
-          debugPrint('Error: e.toString() ${e.toString()}');
-          toProcessBytes2.insertAudioBytes(data.item2);
+          if (await WavBytesUtil.tempWavExists()) return; // wait til that one is fully processed
+
+          Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+          try {
+            await _processFileToTranscript(data.item1);
+            if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
+            if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
+            if (segments.isNotEmpty && !firstTranscriptMade) {
+              SharedPreferencesUtil().firstTranscriptMade = true;
+              MixpanelManager().firstTranscriptMade();
+              firstTranscriptMade = true;
+            }
+
+            // uploadFile(data.item1, prefixTimestamp: true);
+          } catch (e, stacktrace) {
+            debugPrint('Error processing 30 seconds frame');
+            print(e); // don't change this to debugPrint
+            CrashReporting.reportHandledCrash(
+              e,
+              stacktrace,
+              level: NonFatalExceptionLevel.warning,
+              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
+            );
+            toProcessBytes2.insertAudioBytes(data.item2);
+          }
+          WavBytesUtil.deleteTempWav();
         }
-      }
-    });
-    if (audioBytesStream == null) {
+      },
+    );
+    if (_bleBytesStream == null) {
       // TODO: error out and disconnect
     }
   }
@@ -204,25 +355,36 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
-    audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
+    _wsChannel?.sink.close(1000);
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
-    if (restartBytesProcessing) initiateBytesProcessing();
+    if (restartBytesProcessing) {
+      if (_streamingTranscriptEnabled) {
+        initiateBytesStreamingProcessing();
+      } else {
+        initiateBytesProcessing();
+      }
+    }
   }
 
   _createMemory({bool forcedCreation = false}) async {
+    if (memoryCreating) return;
+    // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     geolocationData = await LocationService().getGeolocationDetails();
     debugPrint('Location data: $geolocationData');
-    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
+    String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
-    try {
-      var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-      file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
-      uploadFile(file);
-    } catch (e) {} // in case was a local recording and not a BLE recording
+    if (audioStorage?.frames.isNotEmpty == true) {
+      try {
+        var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
+        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
+        uploadFile(file);
+      } catch (e) {} // in case was a local recording and not a BLE recording
+    }
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
@@ -231,6 +393,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocationData,
+      photos: photos, // TODO: determinephotosToKeep(photos);
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -240,7 +403,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
         var msg = Message(DateTime.now(), r, 'ai');
         msg.memories.add(memory);
         MessageProvider().saveMessage(msg);
@@ -262,6 +424,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
     elapsedSeconds = 0;
+    streamStartedAtSecond = 0;
+    photos = [];
   }
 
   setHasTranscripts(bool hasTranscripts) {
@@ -273,9 +437,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void initState() {
     btDevice = widget.device;
     WidgetsBinding.instance.addObserver(this);
+    _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
+    WavBytesUtil.clearTempWavFiles();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
-      initiateBytesProcessing();
+      if (_streamingTranscriptEnabled) {
+        initiateBytesStreamingProcessing();
+      } else {
+        initiateBytesProcessing();
+      }
       if (await LocationService().isServiceEnabled() == false ||
           await LocationService().permissionStatus() != PermissionStatus.granted) {
         showDialog(
@@ -303,6 +473,18 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       }
     });
     _processCachedTranscript();
+    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+      switch (status) {
+        case InternetStatus.connected:
+          _internetStatus = InternetStatus.connected;
+          break;
+        case InternetStatus.disconnected:
+          _internetStatus = InternetStatus.disconnected;
+          _memoryCreationTimer
+              ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          break;
+      }
+    });
     // processTranscriptContent(context, '''a''', null);
     super.initState();
   }
@@ -327,8 +509,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void dispose() {
     record.dispose();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    _wsChannel?.sink.close(1000);
+    _internetListener.cancel();
     super.dispose();
   }
 
@@ -380,12 +565,17 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // super.build(context);
     return Stack(
       children: [
-        ListView(children: [
-          speechProfileWidget(context, setState),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-          getTranscriptWidget(memoryCreating, segments, widget.device),
-          const SizedBox(height: 16)
-        ]),
+        ListView(
+          children: [
+            speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
+            ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+            getTranscriptWidget(memoryCreating, segments, photos, widget.device),
+            if (wsConnectionState == WebsocketConnectionStatus.error ||
+                wsConnectionState == WebsocketConnectionStatus.failed)
+              getWebsocketErrorWidget(),
+            const SizedBox(height: 16),
+          ],
+        ),
         getPhoneMicRecordingButton(_recordingToggled, _state)
       ],
     );

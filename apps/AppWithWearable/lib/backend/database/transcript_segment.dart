@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:friend_private/backend/preferences.dart';
 import 'package:objectbox/objectbox.dart';
 
@@ -89,15 +91,15 @@ class TranscriptSegment {
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {
-    int elapsedSeconds = 0,
+    int elapsedSeconds = 0, // chunks
+    double streamStartedAtSecond = 0, // streamed
   }) {
-    // TODO: combine keeping the time at which each segment was created?
-    // currentTranscriptStartedAt - 30 seconds as input, segments processed til now.
-    // what if they are 1 minute or more
     if (newSegments.isEmpty) return;
 
-    // var lastSegmentSecondsElapsed = segments.isNotEmpty ? DateTime.now().difference(segments.last.createdAt!) : 0;
-    // debugPrint('lastSegmentSecondsElapsed: $lastSegmentSecondsElapsed');
+    for (var segment in newSegments) {
+      segment.start -= streamStartedAtSecond;
+      segment.end -= streamStartedAtSecond;
+    }
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
@@ -132,7 +134,7 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
-  static String buildDiarizedTranscriptMessage(
+  static String segmentsAsString(
     List<TranscriptSegment> segments, {
     bool includeTimestamps = false,
   }) {
@@ -140,11 +142,13 @@ class TranscriptSegment {
     var userName = SharedPreferencesUtil().givenName;
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
+      // TODO: maybe store TranscriptSegment directly as utf8 decoded
+      var segmentText = utf8.decode(segment.text.trim().codeUnits);
       var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
-        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: ${segment.text} ';
+        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
       } else {
-        transcript += '$timestampStr Speaker ${segment.speakerId}: ${segment.text} ';
+        transcript += '$timestampStr Speaker ${segment.speakerId}: $segmentText ';
       }
       transcript += '\n\n';
     }

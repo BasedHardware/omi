@@ -191,15 +191,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  getItemAddOn('Speech Profile', () {
-                    routeToPage(context, const SpeakerIdPage());
-                  }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn()),
+                  GrowthbookUtil().hasTranscriptServerFeatureOn()
+                      ? getItemAddOn('Speech Profile', () {
+                          routeToPage(context, const SpeakerIdPage());
+                        }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn())
+                      : Container(),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  // getItemAddOn('Backups', () {
-                  //   routeToPage(context, const BackupsPage());
-                  // }, icon: Icons.backup),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());

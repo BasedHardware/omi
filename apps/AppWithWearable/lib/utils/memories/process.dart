@@ -23,8 +23,9 @@ Future<Memory?> processTranscriptContent(
   DateTime? startedAt,
   DateTime? finishedAt,
   Geolocation? geolocation,
+  List<Tuple2<String, String>> photos = const [],
 }) async {
-  if (transcript.isNotEmpty) {
+  if (transcript.isNotEmpty || photos.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
       context,
       transcript,
@@ -34,6 +35,7 @@ Future<Memory?> processTranscriptContent(
       startedAt,
       finishedAt,
       geolocation,
+      photos,
     );
     devModeWebhookCall(memory);
     MemoryProvider().saveMemory(memory);
@@ -45,12 +47,17 @@ Future<Memory?> processTranscriptContent(
 Future<SummaryResult?> _retrieveStructure(
   BuildContext context,
   String transcript,
+  List<Tuple2<String, String>> photos,
   bool retrievedFromCache, {
   bool ignoreCache = false,
 }) async {
   SummaryResult summary;
   try {
-    summary = await summarizeMemory(transcript, [], ignoreCache: ignoreCache);
+    if (photos.isNotEmpty) {
+      summary = await summarizePhotos(photos);
+    } else {
+      summary = await summarizeMemory(transcript, [], ignoreCache: ignoreCache);
+    }
   } catch (e, stacktrace) {
     debugPrint('Error: $e');
     CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
@@ -75,11 +82,12 @@ Future<Memory> memoryCreationBlock(
   DateTime? startedAt,
   DateTime? finishedAt,
   Geolocation? geolocation,
+  List<Tuple2<String, String>> photos,
 ) async {
-  SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache);
+  SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache);
   bool failed = false;
   if (summarizeResult == null) {
-    summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache, ignoreCache: true);
+    summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache, ignoreCache: true);
     if (summarizeResult == null) {
       failed = true;
       summarizeResult = SummaryResult(Structured('', '', emoji: '😢', category: 'failed'), []);
@@ -117,6 +125,7 @@ Future<Memory> memoryCreationBlock(
     finishedAt,
     structured.title.isEmpty,
     geolocation,
+    photos,
   );
   debugPrint('Memory created: ${memory.id}');
 
@@ -152,6 +161,7 @@ Future<Memory> finalizeMemoryRecord(
   DateTime? finishedAt,
   bool discarded,
   Geolocation? geolocation,
+  List<Tuple2<String, String>> photos,
 ) async {
   var memory = Memory(
     DateTime.now(),
@@ -169,6 +179,10 @@ Future<Memory> finalizeMemoryRecord(
 
   for (var r in pluginsResponse) {
     memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
+  }
+
+  for (var image in photos) {
+    memory.photos.add(MemoryPhoto(image.item1, image.item2));
   }
 
   MemoryProvider().saveMemory(memory);
