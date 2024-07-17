@@ -9,6 +9,7 @@ import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -101,7 +102,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
-  LocationData? locationData;
+  Geolocation? geolocationData;
   bool shouldAskPermissionAgain = true;
 
   _processCachedTranscript() async {
@@ -212,8 +213,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   _createMemory({bool forcedCreation = false}) async {
     setState(() => memoryCreating = true);
-    locationData = await LocationService().getLocation();
-    print('Location data: $locationData');
+    geolocationData = await LocationService().getGeolocationDetails();
+    debugPrint('Location data: $geolocationData');
     String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
@@ -229,7 +230,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      coordinates: locationData != null ? [locationData!.latitude!, locationData!.longitude!] : [],
+      geolocation: geolocationData,
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
