@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -21,7 +22,7 @@ Future<Memory?> processTranscriptContent(
   bool retrievedFromCache = false,
   DateTime? startedAt,
   DateTime? finishedAt,
-  List<double>? coordinates = const [],
+  Geolocation? geolocation,
 }) async {
   if (transcript.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
@@ -32,7 +33,7 @@ Future<Memory?> processTranscriptContent(
       retrievedFromCache,
       startedAt,
       finishedAt,
-      coordinates,
+      geolocation,
     );
     devModeWebhookCall(memory);
     MemoryProvider().saveMemory(memory);
@@ -73,7 +74,7 @@ Future<Memory> memoryCreationBlock(
   bool retrievedFromCache,
   DateTime? startedAt,
   DateTime? finishedAt,
-  List<double>? coordinates,
+  Geolocation? geolocation,
 ) async {
   SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache);
   bool failed = false;
@@ -115,7 +116,7 @@ Future<Memory> memoryCreationBlock(
     startedAt,
     finishedAt,
     structured.title.isEmpty,
-    coordinates,
+    geolocation,
   );
   debugPrint('Memory created: ${memory.id}');
 
@@ -150,7 +151,7 @@ Future<Memory> finalizeMemoryRecord(
   DateTime? startedAt,
   DateTime? finishedAt,
   bool discarded,
-  List<double>? coordinates,
+  Geolocation? geolocation,
 ) async {
   var memory = Memory(
     DateTime.now(),
@@ -159,8 +160,10 @@ Future<Memory> finalizeMemoryRecord(
     recordingFilePath: recordingFilePath,
     startedAt: startedAt,
     finishedAt: finishedAt,
-    coordinates: coordinates,
   );
+  if (geolocation != null) {
+    memory.geolocation.target = geolocation;
+  }
   memory.transcriptSegments.addAll(transcriptSegments);
   memory.structured.target = structured;
 

@@ -14,6 +14,7 @@ import 'package:objectbox/internal.dart'
 import 'package:objectbox/objectbox.dart' as obx;
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 
+import 'backend/database/geolocation.dart';
 import 'backend/database/memory.dart';
 import 'backend/database/message.dart';
 import 'backend/database/transcript_segment.dart';
@@ -24,7 +25,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(1, 1521024926543535),
       name: 'Memory',
-      lastPropertyId: const obx_int.IdUid(9, 6186917569313515214),
+      lastPropertyId: const obx_int.IdUid(10, 3624046344531751569),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -72,10 +73,12 @@ final _entities = <obx_int.ModelEntity>[
             type: 10,
             flags: 0),
         obx_int.ModelProperty(
-            id: const obx_int.IdUid(9, 6186917569313515214),
-            name: 'coordinates',
-            type: 29,
-            flags: 0)
+            id: const obx_int.IdUid(10, 3624046344531751569),
+            name: 'geolocationId',
+            type: 11,
+            flags: 520,
+            indexId: const obx_int.IdUid(9, 6154185358716329725),
+            relationTarget: 'Geolocation')
       ],
       relations: <obx_int.ModelRelation>[
         obx_int.ModelRelation(
@@ -321,6 +324,60 @@ final _entities = <obx_int.ModelEntity>[
             relationTarget: 'Structured')
       ],
       relations: <obx_int.ModelRelation>[],
+      backlinks: <obx_int.ModelBacklink>[]),
+  obx_int.ModelEntity(
+      id: const obx_int.IdUid(8, 2312654834515625467),
+      name: 'Geolocation',
+      lastPropertyId: const obx_int.IdUid(9, 3436280891624167371),
+      flags: 0,
+      properties: <obx_int.ModelProperty>[
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(1, 1952605082460208171),
+            name: 'id',
+            type: 6,
+            flags: 1),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(2, 2402449790162622314),
+            name: 'latitude',
+            type: 8,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(3, 5800995391166396329),
+            name: 'longitude',
+            type: 8,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(4, 3558783765965300264),
+            name: 'altitude',
+            type: 8,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(5, 8594765972973800978),
+            name: 'accuracy',
+            type: 8,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(6, 169071506304205779),
+            name: 'time',
+            type: 10,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(7, 6279827165797510451),
+            name: 'googlePlaceId',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(8, 5633937244733148929),
+            name: 'address',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(9, 3436280891624167371),
+            name: 'locationType',
+            type: 9,
+            flags: 0)
+      ],
+      relations: <obx_int.ModelRelation>[],
       backlinks: <obx_int.ModelBacklink>[])
 ];
 
@@ -359,8 +416,8 @@ Future<obx.Store> openStore(
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
       entities: _entities,
-      lastEntityId: const obx_int.IdUid(7, 265133176252396324),
-      lastIndexId: const obx_int.IdUid(8, 5225160858485949527),
+      lastEntityId: const obx_int.IdUid(8, 2312654834515625467),
+      lastIndexId: const obx_int.IdUid(9, 6154185358716329725),
       lastRelationId: const obx_int.IdUid(2, 4703245221378113920),
       lastSequenceId: const obx_int.IdUid(0, 0),
       retiredEntityUids: const [],
@@ -369,7 +426,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         2626201971202508244,
         1809459319638310611,
         6229900676402028868,
-        8014962203152976278
+        8014962203152976278,
+        6186917569313515214
       ],
       retiredRelationUids: const [],
       modelVersion: 5,
@@ -379,7 +437,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
   final bindings = <Type, obx_int.EntityDefinition>{
     Memory: obx_int.EntityDefinition<Memory>(
         model: _entities[0],
-        toOneRelations: (Memory object) => [object.structured],
+        toOneRelations: (Memory object) =>
+            [object.structured, object.geolocation],
         toManyRelations: (Memory object) => {
               obx_int.RelInfo<Memory>.toMany(2, object.id):
                   object.transcriptSegments,
@@ -396,10 +455,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final recordingFilePathOffset = object.recordingFilePath == null
               ? null
               : fbb.writeString(object.recordingFilePath!);
-          final coordinatesOffset = object.coordinates == null
-              ? null
-              : fbb.writeListFloat64(object.coordinates!);
-          fbb.startTable(10);
+          fbb.startTable(11);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.createdAt.millisecondsSinceEpoch);
           fbb.addOffset(2, transcriptOffset);
@@ -408,7 +464,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           fbb.addInt64(5, object.structured.targetId);
           fbb.addInt64(6, object.startedAt?.millisecondsSinceEpoch);
           fbb.addInt64(7, object.finishedAt?.millisecondsSinceEpoch);
-          fbb.addOffset(8, coordinatesOffset);
+          fbb.addInt64(9, object.geolocation.targetId);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -436,18 +492,17 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final finishedAtParam = finishedAtValue == null
               ? null
               : DateTime.fromMillisecondsSinceEpoch(finishedAtValue);
-          final coordinatesParam =
-              const fb.ListReader<double>(fb.Float64Reader(), lazy: false)
-                  .vTableGetNullable(buffer, rootOffset, 20);
           final object = Memory(createdAtParam, transcriptParam, discardedParam,
               id: idParam,
               recordingFilePath: recordingFilePathParam,
               startedAt: startedAtParam,
-              finishedAt: finishedAtParam,
-              coordinates: coordinatesParam);
+              finishedAt: finishedAtParam);
           object.structured.targetId =
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 14, 0);
           object.structured.attach(store);
+          object.geolocation.targetId =
+              const fb.Int64Reader().vTableGet(buffer, rootOffset, 22, 0);
+          object.geolocation.attach(store);
           obx_int.InternalToManyAccess.setRelInfo<Memory>(
               object.transcriptSegments,
               store,
@@ -722,6 +777,75 @@ obx_int.ModelDefinition getObjectBoxModel() {
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 16, 0);
           object.structured.attach(store);
           return object;
+        }),
+    Geolocation: obx_int.EntityDefinition<Geolocation>(
+        model: _entities[7],
+        toOneRelations: (Geolocation object) => [],
+        toManyRelations: (Geolocation object) => {},
+        getId: (Geolocation object) => object.id,
+        setId: (Geolocation object, int id) {
+          object.id = id;
+        },
+        objectToFB: (Geolocation object, fb.Builder fbb) {
+          final googlePlaceIdOffset = object.googlePlaceId == null
+              ? null
+              : fbb.writeString(object.googlePlaceId!);
+          final addressOffset =
+              object.address == null ? null : fbb.writeString(object.address!);
+          final locationTypeOffset = object.locationType == null
+              ? null
+              : fbb.writeString(object.locationType!);
+          fbb.startTable(10);
+          fbb.addInt64(0, object.id);
+          fbb.addFloat64(1, object.latitude);
+          fbb.addFloat64(2, object.longitude);
+          fbb.addFloat64(3, object.altitude);
+          fbb.addFloat64(4, object.accuracy);
+          fbb.addInt64(5, object.time?.millisecondsSinceEpoch);
+          fbb.addOffset(6, googlePlaceIdOffset);
+          fbb.addOffset(7, addressOffset);
+          fbb.addOffset(8, locationTypeOffset);
+          fbb.finish(fbb.endTable());
+          return object.id;
+        },
+        objectFromFB: (obx.Store store, ByteData fbData) {
+          final buffer = fb.BufferContext(fbData);
+          final rootOffset = buffer.derefObject(0);
+          final timeValue =
+              const fb.Int64Reader().vTableGetNullable(buffer, rootOffset, 14);
+          final latitudeParam =
+              const fb.Float64Reader().vTableGetNullable(buffer, rootOffset, 6);
+          final longitudeParam =
+              const fb.Float64Reader().vTableGetNullable(buffer, rootOffset, 8);
+          final altitudeParam = const fb.Float64Reader()
+              .vTableGetNullable(buffer, rootOffset, 10);
+          final accuracyParam = const fb.Float64Reader()
+              .vTableGetNullable(buffer, rootOffset, 12);
+          final timeParam = timeValue == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(timeValue);
+          final googlePlaceIdParam =
+              const fb.StringReader(asciiOptimization: true)
+                  .vTableGetNullable(buffer, rootOffset, 16);
+          final addressParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGetNullable(buffer, rootOffset, 18);
+          final locationTypeParam =
+              const fb.StringReader(asciiOptimization: true)
+                  .vTableGetNullable(buffer, rootOffset, 20);
+          final idParam =
+              const fb.Int64Reader().vTableGet(buffer, rootOffset, 4, 0);
+          final object = Geolocation(
+              latitude: latitudeParam,
+              longitude: longitudeParam,
+              altitude: altitudeParam,
+              accuracy: accuracyParam,
+              time: timeParam,
+              googlePlaceId: googlePlaceIdParam,
+              address: addressParam,
+              locationType: locationTypeParam,
+              id: idParam);
+
+          return object;
         })
   };
 
@@ -762,9 +886,9 @@ class Memory_ {
   static final finishedAt =
       obx.QueryDateProperty<Memory>(_entities[0].properties[7]);
 
-  /// See [Memory.coordinates].
-  static final coordinates =
-      obx.QueryDoubleVectorProperty<Memory>(_entities[0].properties[8]);
+  /// See [Memory.geolocation].
+  static final geolocation =
+      obx.QueryRelationToOne<Memory, Geolocation>(_entities[0].properties[8]);
 
   /// see [Memory.transcriptSegments]
   static final transcriptSegments =
@@ -931,4 +1055,43 @@ class Event_ {
   /// See [Event.structured].
   static final structured =
       obx.QueryRelationToOne<Event, Structured>(_entities[6].properties[6]);
+}
+
+/// [Geolocation] entity fields to define ObjectBox queries.
+class Geolocation_ {
+  /// See [Geolocation.id].
+  static final id =
+      obx.QueryIntegerProperty<Geolocation>(_entities[7].properties[0]);
+
+  /// See [Geolocation.latitude].
+  static final latitude =
+      obx.QueryDoubleProperty<Geolocation>(_entities[7].properties[1]);
+
+  /// See [Geolocation.longitude].
+  static final longitude =
+      obx.QueryDoubleProperty<Geolocation>(_entities[7].properties[2]);
+
+  /// See [Geolocation.altitude].
+  static final altitude =
+      obx.QueryDoubleProperty<Geolocation>(_entities[7].properties[3]);
+
+  /// See [Geolocation.accuracy].
+  static final accuracy =
+      obx.QueryDoubleProperty<Geolocation>(_entities[7].properties[4]);
+
+  /// See [Geolocation.time].
+  static final time =
+      obx.QueryDateProperty<Geolocation>(_entities[7].properties[5]);
+
+  /// See [Geolocation.googlePlaceId].
+  static final googlePlaceId =
+      obx.QueryStringProperty<Geolocation>(_entities[7].properties[6]);
+
+  /// See [Geolocation.address].
+  static final address =
+      obx.QueryStringProperty<Geolocation>(_entities[7].properties[7]);
+
+  /// See [Geolocation.locationType].
+  static final locationType =
+      obx.QueryStringProperty<Geolocation>(_entities[7].properties[8]);
 }
