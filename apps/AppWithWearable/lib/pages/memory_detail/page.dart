@@ -8,8 +8,10 @@ import 'package:friend_private/pages/memory_detail/custom_audio_player.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/photos_grid.dart';
 
 import 'package:friend_private/widgets/transcript.dart';
+import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final Memory memory;
@@ -168,7 +170,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   controller: _controller,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    ListView(shrinkWrap: true, children: _getTranscriptWidgets()),
+                    ListView(
+                      shrinkWrap: true,
+                      children: widget.memory.type == MemoryType.image ? _getImagesWidget() : _getTranscriptWidgets(),
+                    ),
                     ListView(
                         shrinkWrap: true,
                         children: getSummaryWidgets(
@@ -215,6 +220,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               canDisplaySeconds: canDisplaySeconds),
       const SizedBox(height: 32)
     ];
+  }
+
+  List<Widget> _getImagesWidget() {
+    var photos = widget.memory.photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    print('Images length ${photos.length}');
+    return [PhotosGridComponent(photos: photos), const SizedBox(height: 32)];
   }
 
   _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {
