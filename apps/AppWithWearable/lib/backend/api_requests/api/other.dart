@@ -123,3 +123,26 @@ Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory) async {
     return '';
   }
 }
+
+Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, List<TranscriptSegment> segments) async {
+  debugPrint('triggerMemoryRequestAtEndpoint: $url');
+  if (url.isEmpty) return '';
+  try {
+    var response = await makeApiCall(
+      url: url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(segments.map((e) => e.toJson()).toList()),
+      method: 'POST',
+    );
+    debugPrint('response: ${response?.statusCode}');
+    var body = jsonDecode(response?.body ?? '{}');
+    print(body);
+    return body['message'] ?? '';
+  } catch (e) {
+    debugPrint('Error triggering transcript request at endpoint: $e');
+    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.warning, userAttributes: {
+      'url': url,
+    });
+    return '';
+  }
+}
