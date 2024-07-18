@@ -92,7 +92,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
         Your are an AI with the following characteristics:
         Name: ${plugin.name}, 
         Description: ${plugin.description},
-        Task: ${plugin.prompt}
+        Task: ${plugin.memoryPrompt}
         
         Note: It is possible that the conversation you are given, has nothing to do with your task, \
         in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
@@ -304,8 +304,8 @@ Future<String> getInitialPluginPrompt(Plugin? plugin) async {
   return '''
         Your are an AI with the following characteristics:
         Name: ${plugin.name}, 
-        Personality/Description: ${plugin.description},
-        Task: ${plugin.prompt}
+        Personality/Description: ${plugin.chatPrompt},
+        Task: ${plugin.memoryPrompt}
         
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.

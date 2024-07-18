@@ -87,7 +87,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _edgeCasePluginNotAvailable() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.chat)) {
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat())) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }
   }
@@ -96,7 +96,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _edgeCasePluginNotAvailable();
     plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
-    SharedPreferencesUtil().pluginsList = plugins;
     _edgeCasePluginNotAvailable();
     setState(() {});
   }
@@ -534,7 +533,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name + ' '*(18 - plugin.name.length),
+                  plugin.name.length > 18
+                      ? '${plugin.name.substring(0, 18)}...'
+                      : plugin.name + ' ' * (18 - plugin.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],

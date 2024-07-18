@@ -7,8 +7,6 @@ import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   debugPrint('deepgramTranscribe');
@@ -60,24 +58,6 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
     }
   }
   return segments;
-}
-
-Future<List<Plugin>> retrievePlugins() async {
-  var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  if (response?.statusCode == 200) {
-    try {
-      return Plugin.fromJsonList(jsonDecode(response!.body));
-    } catch (e, stackTrace) {
-      CrashReporting.reportHandledCrash(e, stackTrace);
-      return [];
-    }
-  }
-  return [];
 }
 
 Future<String> devModeWebhookCall(Memory? memory) async {
