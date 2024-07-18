@@ -4,16 +4,13 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:friend_private/backend/api_requests/api/llm.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/api_requests/stream_api_response.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
@@ -358,43 +355,44 @@ class CapturePageState extends State<CapturePage>
 
   Map<int, int> processedSegments = {};
 
-  _doProcessingOfInstructions() async {
-    for (var element in segments) {
-      var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
-      for (var option in hotWords) {
-        if (element.text.toLowerCase().contains(option)) {
-          debugPrint('Hey Friend detected');
-          var index = element.text.lastIndexOf(option);
-          if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
+  // Merge conflict. Doesn't exist in the latest commit on the main branch. Should be removed?
+  // _doProcessingOfInstructions() async {
+  //   for (var element in segments) {
+  //     var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
+  //     for (var option in hotWords) {
+  //       if (element.text.toLowerCase().contains(option)) {
+  //         debugPrint('Hey Friend detected');
+  //         var index = element.text.lastIndexOf(option);
+  //         if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
 
-          var substring = element.text.substring(index + option.length);
-          var words = substring.split(' ');
-          if (words.length >= 5) {
-            debugPrint('Hey Friend detected and 10 words after');
-            String message = await executeGptPrompt('''
-          The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
-          Extract the only the instruction the user is asking in 5 to 10 words.
-          
-          ${element.text.substring(index)}''');
-            debugPrint('Message: $message');
+  //         var substring = element.text.substring(index + option.length);
+  //         var words = substring.split(' ');
+  //         if (words.length >= 5) {
+  //           debugPrint('Hey Friend detected and 10 words after');
+  //           String message = await executeGptPrompt('''
+  //         The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
+  //         Extract the only the instruction the user is asking in 5 to 10 words.
 
-            MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
-            widget.refreshMessages();
-            dynamic ragInfo = await retrieveRAGContext(message);
-            String ragContext = ragInfo[0];
-            List<Memory> memories = ragInfo[1].cast<Memory>();
-            String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
-            var response = await executeGptPrompt(body);
-            var aiMessage = Message(DateTime.now(), response, 'ai');
-            aiMessage.memories.addAll(memories);
-            MessageProvider().saveMessage(aiMessage);
-            widget.refreshMessages();
-            processedSegments[element.id] = index;
-          }
-        }
-      }
-    }
-  }
+  //         ${element.text.substring(index)}''');
+  //           debugPrint('Message: $message');
+
+  //           MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
+  //           widget.refreshMessages();
+  //           dynamic ragInfo = await retrieveRAGContext(message);
+  //           String ragContext = ragInfo[0];
+  //           List<Memory> memories = ragInfo[1].cast<Memory>();
+  //           String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
+  //           var response = await executeGptPrompt(body);
+  //           var aiMessage = Message(DateTime.now(), response, 'ai');
+  //           aiMessage.memories.addAll(memories);
+  //           MessageProvider().saveMessage(aiMessage);
+  //           widget.refreshMessages();
+  //           processedSegments[element.id] = index;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
@@ -480,31 +478,32 @@ class CapturePageState extends State<CapturePage>
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
       await phonerecorderInit(_processFileToTranscript);
-    _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
-    WavBytesUtil.clearTempWavFiles();
-    SchedulerBinding.instance.addPostFrameCallback((_) async {
-      debugPrint('SchedulerBinding.instance');
-      if (_streamingTranscriptEnabled) {
-        initiateBytesStreamingProcessing();
-      } else {
-        initiateBytesProcessing();
-      }
+      _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
+      WavBytesUtil.clearTempWavFiles();
+      SchedulerBinding.instance.addPostFrameCallback((_) async {
+        debugPrint('SchedulerBinding.instance');
+        if (_streamingTranscriptEnabled) {
+          initiateBytesStreamingProcessing();
+        } else {
+          initiateBytesProcessing();
+        }
+      });
+      _processCachedTranscript();
+      _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+        switch (status) {
+          case InternetStatus.connected:
+            _internetStatus = InternetStatus.connected;
+            break;
+          case InternetStatus.disconnected:
+            _internetStatus = InternetStatus.disconnected;
+            _memoryCreationTimer
+                ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+            break;
+        }
+      });
+      // processTranscriptContent(context, '''a''', null);
+      super.initState();
     });
-    _processCachedTranscript();
-    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
-      switch (status) {
-        case InternetStatus.connected:
-          _internetStatus = InternetStatus.connected;
-          break;
-        case InternetStatus.disconnected:
-          _internetStatus = InternetStatus.disconnected;
-          _memoryCreationTimer
-              ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
-          break;
-      }
-    });
-    // processTranscriptContent(context, '''a''', null);
-    super.initState();
   }
 
   @override
@@ -542,9 +541,9 @@ class CapturePageState extends State<CapturePage>
     return Stack(
       children: [
         ListView(children: [
-          speechProfileWidget(context, setState),
+          speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
           ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-          getTranscriptWidget(memoryCreating, segments, widget.device),
+          getTranscriptWidget(memoryCreating, segments, photos, widget.device),
           if (wsConnectionState == WebsocketConnectionStatus.error ||
               wsConnectionState == WebsocketConnectionStatus.failed)
             getWebsocketErrorWidget(),
