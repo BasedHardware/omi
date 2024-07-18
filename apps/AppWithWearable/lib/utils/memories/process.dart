@@ -38,6 +38,14 @@ Future<Memory?> processTranscriptContent(
     devModeWebhookCall(memory).then((s) {
       if (s.isNotEmpty) createNotification(title: 'Webhook Result', body: s, notificationId: 10);
     });
+    // var onMemoryCreationPlugins = SharedPreferencesUtil()
+    //     .pluginsList
+    //     .where((element) => element.externalIntegration?.triggersOn == 'memory_creation' && element.enabled)
+    //     .toList();
+    // for (var plugin in onMemoryCreationPlugins) {
+    //   await callPlugin(plugin, memory);
+    // }
+
     MemoryProvider().saveMemory(memory);
     return memory;
   }
