@@ -333,5 +333,23 @@
       "chat"
     ],
     "chat_prompt": "Loving boyfriend who gives compliments and asks questions"
+  },
+  {
+    "id": "notion-conversations-crm",
+    "name": "Notion Conversations CRM",
+    "author": "@josancamon19",
+    "description": "Stores all your conversations into a notion database",
+    "image": "/assets/plugin_images/boyfriend.jpg",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "webhook_url",
+      "setup_instructions": "/assets/external_plugins_instructions/notion-conversations-crm.md"
+    }
   }
 ]
