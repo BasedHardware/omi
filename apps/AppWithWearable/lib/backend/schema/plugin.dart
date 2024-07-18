@@ -1,3 +1,5 @@
+import 'package:friend_private/backend/preferences.dart';
+
 class PluginReview {
   String uid;
   DateTime ratedAt;
@@ -53,6 +55,17 @@ class ExternalIntegration {
     );
   }
 
+  String getTriggerOnString() {
+    switch (triggersOn) {
+      case 'memory_creation':
+        return 'Memory Creation';
+      case 'transcript_received':
+        return 'Transcript Received';
+      default:
+        return 'Unknown';
+    }
+  }
+
   toJson() {
     return {
       'triggers_on': triggersOn,
@@ -81,7 +94,7 @@ class Plugin {
   double? ratingAvg;
   int ratingCount;
 
-  bool isEnabled = false;
+  bool enabled = false;
 
   Plugin({
     required this.id,
@@ -149,9 +162,19 @@ class Plugin {
   }
 
   static List<Plugin> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) {
-      print(e);
-      return Plugin.fromJson(e);
+    var pluginsId = SharedPreferencesUtil().pluginsEnabled;
+    List<Plugin> plugins = jsonList.map((e) {
+      var plugin = Plugin.fromJson(e);
+      plugin.enabled = pluginsId.contains(plugin.id);
+      return plugin;
     }).toList();
+    plugins.sort((a, b) {
+      var aRating = a.ratingAvg ?? 0;
+      var bRating = b.ratingAvg ?? 0;
+      var aCount = a.ratingCount;
+      var bCount = b.ratingCount;
+      return (aRating * aCount).compareTo(bRating * bCount);
+    });
+    return plugins.reversed.toList();
   }
 }

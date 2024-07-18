@@ -98,3 +98,14 @@ Future<String?> wavToBase64(String filePath) async {
     return null; // Handle error gracefully in your application
   }
 }
+
+Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
+  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
+  var response = await makeApiCall(
+    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main/$pluginMarkdownPath',
+    method: 'GET',
+    headers: {},
+    body: '',
+  );
+  return response?.body ?? '';
+}
