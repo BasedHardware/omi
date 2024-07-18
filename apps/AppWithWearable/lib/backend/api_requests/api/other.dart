@@ -80,18 +80,41 @@ Future<List<Plugin>> retrievePlugins() async {
   return [];
 }
 
-Future<bool> devModeWebhookCall(Memory? memory) async {
+Future<String> devModeWebhookCall(Memory? memory) async {
   debugPrint('devModeWebhookCall: $memory');
   var url = SharedPreferencesUtil().webhookUrl;
   debugPrint('webhook url: $url');
-  if (url.isEmpty || memory == null) return false;
-  var data = jsonEncode(memory.toJson());
+  if (url.isEmpty || memory == null) return '';
+  var data = memory.toJson();
+  data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
   var response = await makeApiCall(
     url: url,
     headers: {'Content-Type': 'application/json'},
-    body: data,
+    body: jsonEncode(data),
     method: 'POST',
   );
   debugPrint('response: ${response?.statusCode}');
-  return response?.statusCode == 200;
+  var body = jsonDecode(response?.body ?? '{}');
+  return body['message'] ?? '';
+}
+
+Future<String?> wavToBase64(String filePath) async {
+  if (filePath.isEmpty) return null;
+  try {
+    // Read file as bytes
+    File file = File(filePath);
+    if (!file.existsSync()) {
+      print('File does not exist: $filePath');
+      return null;
+    }
+    List<int> fileBytes = await file.readAsBytes();
+
+    // Encode bytes to base64
+    String base64Encoded = base64Encode(fileBytes);
+
+    return base64Encoded;
+  } catch (e) {
+    print('Error converting WAV to base64: $e');
+    return null; // Handle error gracefully in your application
+  }
 }
