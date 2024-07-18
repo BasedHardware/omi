@@ -59,12 +59,14 @@ class _PluginsPageState extends State<PluginsPage> {
   }
 
   List<Plugin> _filteredPlugins() {
+    var plugins = this
+        .plugins
+        .where((p) => (p.worksWithChat() && filterChat) || (p.worksWithMemories() && filterMemories))
+        .toList();
+
     return searchQuery.isEmpty
-        ? plugins.where((p) => (p.chat && filterChat) || (p.memories && filterMemories)).toList()
-        : plugins
-            .where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase()))
-            .where((p) => (p.chat && filterChat) || (p.memories && filterMemories))
-            .toList();
+        ? plugins
+        : plugins.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
   }
 
   @override
@@ -267,7 +269,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            plugin.memories
+                            plugin.worksWithMemories()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
@@ -282,7 +284,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                   )
                                 : const SizedBox.shrink(),
                             const SizedBox(width: 8),
-                            plugin.chat
+                            plugin.worksWithChat()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
@@ -291,6 +293,21 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                     child: const Text(
                                       'Chat',
+                                      style: TextStyle(
+                                          color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                            const SizedBox(width: 8),
+                            plugin.worksExternally()
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'External Integration',
                                       style: TextStyle(
                                           color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
                                     ),

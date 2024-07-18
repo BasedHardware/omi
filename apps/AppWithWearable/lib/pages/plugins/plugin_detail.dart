@@ -96,7 +96,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                utf8.decode(widget.plugin.prompt.codeUnits),
+                utf8.decode((widget.plugin.memoryPrompt ?? '').codeUnits),
                 style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
               ),
             ),
@@ -126,7 +126,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     style: TextStyle(fontSize: 16),
                   ),
                   const SizedBox(width: 16),
-                  widget.plugin.memories
+                  widget.plugin.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -140,7 +140,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         )
                       : const SizedBox.shrink(),
                   const SizedBox(width: 8),
-                  widget.plugin.chat
+                  widget.plugin.worksWithChat()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
