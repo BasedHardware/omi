@@ -355,7 +355,7 @@
   },
   {
     "id": "news-checker",
-    "name": "News Checker During Conversations",
+    "name": "News/Facts checker",
     "author": "@josancamon19",
     "description": "Checks the news during conversations and provides corrections",
     "image": "/assets/plugin_images/notion-crm.png",

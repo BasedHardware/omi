@@ -1,0 +1,1 @@
+No setup required. Just install the plugin and start using it.
