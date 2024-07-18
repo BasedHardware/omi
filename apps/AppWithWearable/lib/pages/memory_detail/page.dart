@@ -50,6 +50,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     }
   }
 
+  
+
   @override
   void initState() {
     _determineCanDisplaySeconds();
@@ -97,7 +99,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                 onPressed: () {
                   showShareBottomSheet(context, widget.memory, setState);
                 },
-                icon: const Icon(Icons.more_horiz),
+                icon: const Icon(Icons.ios_share),
               ),
               IconButton(
                 onPressed: () {
