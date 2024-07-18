@@ -24,6 +24,7 @@ class _PluginsPageState extends State<PluginsPage> {
 
   bool filterChat = true;
   bool filterMemories = true;
+  bool filterExternal = true;
 
   Future<void> _fetchPlugins() async {
     var prefs = SharedPreferencesUtil();
@@ -41,6 +42,7 @@ class _PluginsPageState extends State<PluginsPage> {
     if (widget.filterChatOnly) {
       filterChat = true;
       filterMemories = false;
+      filterExternal = false;
     }
     _fetchPlugins();
     super.initState();
@@ -61,7 +63,10 @@ class _PluginsPageState extends State<PluginsPage> {
   List<Plugin> _filteredPlugins() {
     var plugins = this
         .plugins
-        .where((p) => (p.worksWithChat() && filterChat) || (p.worksWithMemories() && filterMemories))
+        .where((p) =>
+            (p.worksWithChat() && filterChat) ||
+            (p.worksWithMemories() && filterMemories) ||
+            (p.worksExternally() && filterExternal))
         .toList();
 
     return searchQuery.isEmpty
@@ -208,7 +213,28 @@ class _PluginsPageState extends State<PluginsPage> {
                           style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
-                    )
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          filterExternal = !filterExternal;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: filterExternal ? Colors.deepPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border:
+                              filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                        ),
+                        child: const Text(
+                          'External',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -283,7 +309,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                   )
                                 : const SizedBox.shrink(),
-                            const SizedBox(width: 8),
+                            SizedBox(width: plugin.worksWithChat() ? 8 : 0),
                             plugin.worksWithChat()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -298,7 +324,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                   )
                                 : const SizedBox.shrink(),
-                            const SizedBox(width: 8),
+                            SizedBox(width: plugin.worksExternally() ? 8 : 0),
                             plugin.worksExternally()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

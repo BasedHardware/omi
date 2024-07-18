@@ -129,7 +129,6 @@ Future<List<Plugin>> retrievePlugins() async {
     try {
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
       SharedPreferencesUtil().pluginsList = plugins;
-      debugPrint('retrievePlugins: ${plugins.length}');
       return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
