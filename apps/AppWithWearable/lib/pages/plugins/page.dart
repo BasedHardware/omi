@@ -1,10 +1,10 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -26,17 +26,6 @@ class _PluginsPageState extends State<PluginsPage> {
   bool filterMemories = true;
   bool filterExternal = true;
 
-  Future<void> _fetchPlugins() async {
-    var prefs = SharedPreferencesUtil();
-    var pluginsList = prefs.pluginsList;
-    var pluginsId = prefs.pluginsEnabled;
-    for (var plugin in pluginsList) {
-      plugin.isEnabled = pluginsId.contains(plugin.id);
-    }
-    plugins = pluginsList.sortedBy((plugin) => plugin.ratingCount * (plugin.ratingAvg ?? 0)).reversed.toList();
-    setState(() => isLoading = false);
-  }
-
   @override
   void initState() {
     if (widget.filterChatOnly) {
@@ -44,7 +33,7 @@ class _PluginsPageState extends State<PluginsPage> {
       filterMemories = false;
       filterExternal = false;
     }
-    _fetchPlugins();
+    plugins = SharedPreferencesUtil().pluginsList;
     super.initState();
   }
 
@@ -57,7 +46,7 @@ class _PluginsPageState extends State<PluginsPage> {
       prefs.disablePlugin(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
-    _fetchPlugins();
+    setState(() => plugins = SharedPreferencesUtil().pluginsList);
   }
 
   List<Plugin> _filteredPlugins() {
@@ -255,8 +244,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   child: ListTile(
                     onTap: () async {
                       await routeToPage(context, PluginDetailPage(plugin: plugin));
-                      _fetchPlugins();
-                      // refresh plugins
+                      setState(() => plugins = SharedPreferencesUtil().pluginsList);
                     },
                     leading: CircleAvatar(
                       backgroundColor: Colors.white,
@@ -345,11 +333,27 @@ class _PluginsPageState extends State<PluginsPage> {
                     ),
                     trailing: IconButton(
                       icon: Icon(
-                        plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: plugin.isEnabled ? Colors.white : Colors.grey,
+                        plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
+                        if (plugin.worksExternally()) {
+                          showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.pop(context),
+                                    () {
+                                      Navigator.pop(context);
+                                      _togglePlugin(plugin.id.toString(), !plugin.enabled);
+                                    },
+                                    'Authorize External Plugin',
+                                    'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                                    okButtonText: 'Confirm',
+                                  ));
+                        } else {
+                          _togglePlugin(plugin.id.toString(), !plugin.enabled);
+                        }
                       },
                     ),
                     // trailing: Switch(
