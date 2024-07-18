@@ -62,6 +62,11 @@
           "id": "2:4703245221378113920",
           "name": "transcriptSegments",
           "targetId": "6:4187059965573492189"
+        },
+        {
+          "id": "3:7136919903563407649",
+          "name": "photos",
+          "targetId": "8:2420068094328998058"
         }
       ]
     },
@@ -300,11 +305,43 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "8:2420068094328998058",
+      "lastPropertyId": "4:1039156685420731048",
+      "name": "MemoryPhoto",
+      "properties": [
+        {
+          "id": "1:1608680924662484644",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6322407607045937555",
+          "name": "base64",
+          "type": 9
+        },
+        {
+          "id": "3:8935840048941751960",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "4:1039156685420731048",
+          "name": "memoryId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "9:7717987872558258803",
+          "relationTarget": "Memory"
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "7:265133176252396324",
-  "lastIndexId": "8:5225160858485949527",
-  "lastRelationId": "2:4703245221378113920",
+  "lastEntityId": "8:2420068094328998058",
+  "lastIndexId": "9:7717987872558258803",
+  "lastRelationId": "3:7136919903563407649",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,

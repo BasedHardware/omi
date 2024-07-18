@@ -9,6 +9,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
@@ -21,8 +22,9 @@ Future<Memory?> processTranscriptContent(
   bool retrievedFromCache = false,
   DateTime? startedAt,
   DateTime? finishedAt,
+  List<Tuple2<String, String>> photos = const [],
 }) async {
-  if (transcript.isNotEmpty) {
+  if (transcript.isNotEmpty || photos.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
       context,
       transcript,
@@ -31,8 +33,19 @@ Future<Memory?> processTranscriptContent(
       retrievedFromCache,
       startedAt,
       finishedAt,
+      photos,
     );
-    devModeWebhookCall(memory);
+    devModeWebhookCall(memory).then((s) {
+      if (s.isNotEmpty) createNotification(title: 'Webhook Result', body: s, notificationId: 10);
+    });
+    // var onMemoryCreationPlugins = SharedPreferencesUtil()
+    //     .pluginsList
+    //     .where((element) => element.externalIntegration?.triggersOn == 'memory_creation' && element.enabled)
+    //     .toList();
+    // for (var plugin in onMemoryCreationPlugins) {
+    //   await callPlugin(plugin, memory);
+    // }
+
     MemoryProvider().saveMemory(memory);
     return memory;
   }
@@ -42,12 +55,17 @@ Future<Memory?> processTranscriptContent(
 Future<SummaryResult?> _retrieveStructure(
   BuildContext context,
   String transcript,
+  List<Tuple2<String, String>> photos,
   bool retrievedFromCache, {
   bool ignoreCache = false,
 }) async {
   SummaryResult summary;
   try {
-    summary = await summarizeMemory(transcript, [], ignoreCache: ignoreCache);
+    if (photos.isNotEmpty) {
+      summary = await summarizePhotos(photos);
+    } else {
+      summary = await summarizeMemory(transcript, [], ignoreCache: ignoreCache);
+    }
   } catch (e, stacktrace) {
     debugPrint('Error: $e');
     CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.error, userAttributes: {
@@ -71,11 +89,12 @@ Future<Memory> memoryCreationBlock(
   bool retrievedFromCache,
   DateTime? startedAt,
   DateTime? finishedAt,
+  List<Tuple2<String, String>> photos,
 ) async {
-  SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache);
+  SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache);
   bool failed = false;
   if (summarizeResult == null) {
-    summarizeResult = await _retrieveStructure(context, transcript, retrievedFromCache, ignoreCache: true);
+    summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache, ignoreCache: true);
     if (summarizeResult == null) {
       failed = true;
       summarizeResult = SummaryResult(Structured('', '', emoji: '😢', category: 'failed'), []);
@@ -112,6 +131,7 @@ Future<Memory> memoryCreationBlock(
     startedAt,
     finishedAt,
     structured.title.isEmpty,
+    photos,
   );
   debugPrint('Memory created: ${memory.id}');
 
@@ -146,6 +166,7 @@ Future<Memory> finalizeMemoryRecord(
   DateTime? startedAt,
   DateTime? finishedAt,
   bool discarded,
+  List<Tuple2<String, String>> photos,
 ) async {
   var memory = Memory(
     DateTime.now(),
@@ -160,6 +181,10 @@ Future<Memory> finalizeMemoryRecord(
 
   for (var r in pluginsResponse) {
     memory.pluginsResponse.add(PluginResponse(r.item2, pluginId: r.item1.id));
+  }
+
+  for (var image in photos) {
+    memory.photos.add(MemoryPhoto(image.item1, image.item2));
   }
 
   MemoryProvider().saveMemory(memory);
