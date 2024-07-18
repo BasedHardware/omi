@@ -137,7 +137,7 @@ class Plugin {
       'author': author,
       'description': description,
       'image': image,
-      'capabilities': capabilities,
+      'capabilities': capabilities.toList(),
       'memory_prompt': memoryPrompt,
       'chat_prompt': chatPrompt,
       'external_integration': externalIntegration?.toJson(),
@@ -150,7 +150,6 @@ class Plugin {
 
   static List<Plugin> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) {
-      print(e['id']);
       print(e);
       return Plugin.fromJson(e);
     }).toList();

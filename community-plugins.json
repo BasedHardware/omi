@@ -339,7 +339,7 @@
     "name": "Notion Conversations CRM",
     "author": "@josancamon19",
     "description": "Stores all your conversations into a notion database",
-    "image": "/assets/plugin_images/boyfriend.jpg",
+    "image": "/assets/plugin_images/notion-crm.png",
     "prompt": "",
     "memories": false,
     "chat": false,
