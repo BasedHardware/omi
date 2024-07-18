@@ -1,6 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -54,6 +55,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   void initState() {
     _determineCanDisplaySeconds();
+    print(jsonEncode(widget.memory.toJson()));
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
