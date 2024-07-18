@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -55,7 +54,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   void initState() {
     _determineCanDisplaySeconds();
-    print(jsonEncode(widget.memory.toJson()));
+    // triggerMemoryCreatedEvents(widget.memory);
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
