@@ -102,7 +102,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ...getPreferencesWidgets(
                     onOptInAnalytics: () {
                       setState(() {
-                        optInAnalytics = false;
+                        optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
                         SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
                         optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
                       });
