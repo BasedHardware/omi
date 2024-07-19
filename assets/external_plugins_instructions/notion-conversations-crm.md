@@ -5,7 +5,6 @@
 5. Copy your database id from the URL of the database. For example, if the URL is `...myworkspace/a391a37323a74dbaa798fc02e8d61006?v=...`, the database id is `a391a37323a74dbaa798fc02e8d61006`.
 6. Set your integration secret, and your database id in the following [form](https://josancamon19--plugins-examples-plugins-app.modal.run/setup-notion-crm).
 
-<br/>
-<br/>
+#### -
 
 > This is a experimental feature. It may not work as expected. If you have any feedback, please let us know at joan@basedhardware.com.
