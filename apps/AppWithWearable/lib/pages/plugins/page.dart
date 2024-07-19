@@ -219,7 +219,7 @@ class _PluginsPageState extends State<PluginsPage> {
                               filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
                         ),
                         child: const Text(
-                          'External',
+                          'Integration',
                           style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -321,7 +321,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     child: const Text(
-                                      'External Integration',
+                                      'Integration',
                                       style: TextStyle(
                                           color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
                                     ),

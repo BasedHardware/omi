@@ -163,7 +163,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'External Integration Instructions',
+                      'Integration Instructions',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   )
@@ -260,7 +260,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Text(
-                            'External Integration',
+                            'Integration',
                             style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         )
