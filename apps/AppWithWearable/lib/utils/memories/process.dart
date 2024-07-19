@@ -9,6 +9,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
@@ -35,18 +36,8 @@ Future<Memory?> processTranscriptContent(
       finishedAt,
       photos,
     );
-    devModeWebhookCall(memory).then((s) {
-      if (s.isNotEmpty) createNotification(title: 'Webhook Result', body: s, notificationId: 10);
-    });
-    // var onMemoryCreationPlugins = SharedPreferencesUtil()
-    //     .pluginsList
-    //     .where((element) => element.externalIntegration?.triggersOn == 'memory_creation' && element.enabled)
-    //     .toList();
-    // for (var plugin in onMemoryCreationPlugins) {
-    //   await callPlugin(plugin, memory);
-    // }
-
     MemoryProvider().saveMemory(memory);
+    triggerMemoryCreatedEvents(memory);
     return memory;
   }
   return null;

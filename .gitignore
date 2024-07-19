@@ -86,10 +86,6 @@ hs_err_pid*
 backend/app-server/dist
 src/recordings
 
-# Apps
-apps/AppStandalone/lib/firebase_options.dart
-apps/AppStandalone/firebase.json
-
 # Solidworks models
 *.SLDPRT
 *.SLDASM
@@ -104,10 +100,11 @@ apps/AppStandalone/firebase.json
 # test output
 test/recordings
 
-#Flutter
+# Flutter
 env.g.dart
 */upload-keystore.jks
 */key.properties
+*.jks
 
 # Jekyll
 docs/_site/
@@ -115,4 +112,6 @@ docs/_site/
 
 /apps/AppWithWearable/lib/env/dev_env.g.dart
 /apps/AppWithWearable/lib/env/prod_env.g.dart
-*.jks
+/apps/AppWithWearable/lib/objectbox.g.dart
+/apps/AppWithWearable/lib/firebase_options.dart
+/apps/AppWithWearable/firebase.json

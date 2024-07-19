@@ -352,5 +352,23 @@
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/notion-crm",
       "setup_instructions_file_path": "/assets/external_plugins_instructions/notion-conversations-crm.md"
     }
+  },
+  {
+    "id": "news-checker",
+    "name": "News checker",
+    "author": "@josancamon19",
+    "description": "Checks the news during conversations and provides insights.",
+    "image": "/assets/plugin_images/news-checker-logo.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/news-checker",
+      "setup_instructions_file_path": "/assets/external_plugins_instructions/news-checker.md"
+    }
   }
 ]
