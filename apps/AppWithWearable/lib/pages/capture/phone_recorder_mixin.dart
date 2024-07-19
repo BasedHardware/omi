@@ -33,27 +33,27 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     }
     await Permission.microphone.request();
     await initializeBackgroundService();
-    if (backgroundTranscriptTimer != null && !backgroundTranscriptTimer!.isActive) {
-      debugPrint('Timer is not active');
-      if (recordingState == RecordingState.record) {
-        if (Platform.isIOS) {
-          setState(() {
-            iosDuration = 30;
-          });
-          await iosBgTranscribing(
-            Duration(seconds: iosDuration),
-            true,
-            processFileToTranscript,
-          );
-        } else if (Platform.isAndroid) {
-          setState(() {
-            androidDuration = 30;
-          });
-          await androidBgTranscribing(
-              Duration(seconds: androidDuration), AppLifecycleState.resumed, processFileToTranscript);
-        }
-      }
-    }
+    // if (backgroundTranscriptTimer != null && !backgroundTranscriptTimer!.isActive) {
+    //   debugPrint('Timer is not active');
+    //   if (recordingState == RecordingState.record) {
+    //     if (Platform.isIOS) {
+    //       setState(() {
+    //         iosDuration = 30;
+    //       });
+    //       await iosBgTranscribing(
+    //         Duration(seconds: iosDuration),
+    //         true,
+    //         processFileToTranscript,
+    //       );
+    //     } else if (Platform.isAndroid) {
+    //       setState(() {
+    //         androidDuration = 30;
+    //       });
+    //       await androidBgTranscribing(
+    //           Duration(seconds: androidDuration), AppLifecycleState.resumed, processFileToTranscript);
+    //     }
+    //   }
+    // }
   }
 
   Future<void> waitForTranscriptionToFinish() async {
@@ -127,6 +127,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
 
   Future phonerecorderInit(Function processTranscript) async {
     FlutterBackgroundService service = FlutterBackgroundService();
+    await bgServiceNotifier();
     if (await service.isRunning()) {
       setState(() {
         iosDuration = 30;
@@ -137,10 +138,14 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
       } else if (Platform.isIOS) {
         await iosBgTranscribing(Duration(seconds: iosDuration), true, processTranscript);
       }
-      setState(() {
-        recordingState = RecordingState.record;
-      });
+
+      // setState(() {
+      //   recordingState = RecordingState.record;
+      // });
     }
+  }
+
+  Future bgServiceNotifier() async {
     final backgroundService = FlutterBackgroundService();
     backgroundService.on('stateUpdate').listen((event) async {
       if (event!['state'] == 'recording') {

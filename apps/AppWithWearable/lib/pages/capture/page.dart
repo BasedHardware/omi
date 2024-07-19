@@ -502,8 +502,8 @@ class CapturePageState extends State<CapturePage>
         }
       });
       // processTranscriptContent(context, '''a''', null);
-      super.initState();
     });
+    super.initState();
   }
 
   @override
