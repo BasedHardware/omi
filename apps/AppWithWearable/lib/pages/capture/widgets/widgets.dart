@@ -8,10 +8,12 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
+import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:record/record.dart';
+import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStruct? device) {
@@ -208,7 +210,12 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function reset) 
       : const SizedBox(height: 16);
 }
 
-getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDeviceStruct? btDevice) {
+getTranscriptWidget(
+  bool memoryCreating,
+  List<TranscriptSegment> segments,
+  List<Tuple2<String, String>> photos,
+  BTDeviceStruct? btDevice,
+) {
   if (memoryCreating) {
     return const Padding(
       padding: EdgeInsets.only(top: 80),
@@ -216,7 +223,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
     );
   }
 
-  if (segments.isEmpty) {
+  if (segments.isEmpty && photos.isEmpty) {
     // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
     return btDevice != null
         ? const Column(
@@ -238,6 +245,7 @@ getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDev
           )
         : const SizedBox.shrink();
   }
+  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
   return TranscriptWidget(segments: segments);
 }
 

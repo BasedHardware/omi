@@ -4,10 +4,13 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
-import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/expandable_text.dart';
+import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
+import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final Memory memory;
@@ -51,6 +54,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   void initState() {
     _determineCanDisplaySeconds();
+    // triggerMemoryCreatedEvents(widget.memory);
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
     structured = widget.memory.structured.target!;
     titleController.text = structured.title;
@@ -93,6 +97,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               const SizedBox(width: 8),
               IconButton(
                 onPressed: () {
+                  showShareBottomSheet(context, widget.memory, setState);
+                },
+                icon: const Icon(Icons.ios_share),
+              ),
+              IconButton(
+                onPressed: () {
                   showOptionsBottomSheet(
                     context,
                     setState,
@@ -132,7 +142,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               indicatorPadding: EdgeInsets.zero,
               controller: _controller,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-              tabs: const [Tab(text: 'Transcript'), Tab(text: 'Summary')],
+              tabs: [
+                Tab(text: widget.memory.type == MemoryType.image ? 'Photos' : 'Transcript'),
+                const Tab(text: 'Summary')
+              ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),
             Expanded(
@@ -142,7 +155,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   controller: _controller,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    ListView(shrinkWrap: true, children: _getTranscriptWidgets()),
+                    ListView(
+                      shrinkWrap: true,
+                      children: widget.memory.type == MemoryType.image ? _getImagesWidget() : _getTranscriptWidgets(),
+                    ),
                     ListView(
                         shrinkWrap: true,
                         children: getSummaryWidgets(
@@ -189,6 +205,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               canDisplaySeconds: canDisplaySeconds),
       const SizedBox(height: 32)
     ];
+  }
+
+  List<Widget> _getImagesWidget() {
+    var photos = widget.memory.photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    print('Images length ${photos.length}');
+    return [PhotosGridComponent(photos: photos), const SizedBox(height: 32)];
   }
 
   _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {

@@ -108,7 +108,7 @@ class SharedPreferencesUtil {
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
-    return plugins.map((e) => Plugin.fromJson(jsonDecode(e))).toList();
+    return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
   }
 
   set pluginsList(List<Plugin> value) {
@@ -121,16 +121,26 @@ class SharedPreferencesUtil {
   set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
 
   enablePlugin(String value) {
-    final List<String> plugins = pluginsEnabled;
-    plugins.add(value);
-    pluginsEnabled = plugins;
+    final List<String> pluginsId = pluginsEnabled;
+    pluginsId.add(value);
+    pluginsEnabled = pluginsId;
+
+    final List<Plugin> plugins = pluginsList;
+    final plugin = plugins.firstWhere((element) => element.id == value);
+    plugin.enabled = true;
+    pluginsList = plugins;
   }
 
   disablePlugin(String value) {
     if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
-    final List<String> plugins = pluginsEnabled;
-    plugins.remove(value);
-    pluginsEnabled = plugins;
+    final List<String> pluginsId = pluginsEnabled;
+    pluginsId.remove(value);
+    pluginsEnabled = pluginsId;
+
+    final List<Plugin> plugins = pluginsList;
+    final plugin = plugins.firstWhere((element) => element.id == value);
+    plugin.enabled = false;
+    pluginsList = plugins;
   }
 
   String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';

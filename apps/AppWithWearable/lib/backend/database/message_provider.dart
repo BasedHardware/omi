@@ -21,9 +21,15 @@ class MessageProvider {
   Future<void> updateMessage(Message message) async => _box.put(message);
 
   Future<List<Message>> retrieveMostRecentMessages({int limit = 5, String? pluginId}) async {
-    Query<Message> query = _box.query().order(Message_.createdAt, flags: Order.descending).build();
+    Query<Message> query = _box
+        .query(
+          Message_.fromIntegration.equals(false), // determine if keep
+        )
+        .order(Message_.createdAt, flags: Order.descending)
+        .build();
     query.limit = limit;
     var messages = query.find();
+
     // get the index from 0 to n, where message.sender == 'ai' and pluginId  matches, then sublist
     var idx = 0;
     for (var i = 0; i < messages.length; i++) {

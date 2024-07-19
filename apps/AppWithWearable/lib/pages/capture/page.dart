@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
@@ -20,6 +23,7 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/features/backups.dart';
+import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -27,6 +31,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
+import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 class CapturePage extends StatefulWidget {
@@ -94,7 +99,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 //     ''', speaker: 'SPEAKER_00', isUser: false, start: 0, end: 30)
   ];
 
-  StreamSubscription? _audioBytesStream;
+  StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
 
   Timer? _memoryCreationTimer;
@@ -110,6 +115,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   InternetStatus? _internetStatus;
 
   late StreamSubscription<InternetStatus> _internetListener;
+  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -122,6 +128,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       SharedPreferencesUtil().transcriptSegments,
       null,
       retrievedFromCache: true,
+      sendMessageToChat: sendMessageToChat,
     ).then((m) {
       if (m != null && !m.discarded) executeBackupWithUid();
     });
@@ -193,7 +200,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         });
 
     _wsChannel = data.item1;
-    _audioBytesStream = data.item2;
+    _bleBytesStream = data.item2;
     audioStorage = data.item3;
   }
 
@@ -206,9 +213,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // if (websocketReconnecting) return;
 
     if (_reconnectionAttempts >= 3) {
-      setState(() {
-        websocketReconnecting = false;
-      });
+      setState(() => websocketReconnecting = false);
       // TODO: reset here to 0? or not, this could cause infinite loop if it's called in parallel from 2 distinct places
       debugPrint('Max reconnection attempts reached');
       clearNotification(2);
@@ -228,14 +233,43 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
     debugPrint('Attempting to reconnect $_reconnectionAttempts time');
     // _wsChannel?.
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _wsChannel?.sink.close(); // trigger one more reconnectWebSocket call
     await initiateBytesStreamingProcessing();
   }
 
+  List<Tuple2<String, String>> photos = [];
+  ImageBytesUtil imageBytesUtil = ImageBytesUtil();
+
+  Future<void> openGlassProcessing() async {
+    _bleBytesStream = await getBleImageBytesListener(btDevice!.id, onImageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+      // print(value);
+      Uint8List data = Uint8List.fromList(value);
+      Uint8List? completedImage = imageBytesUtil.processChunk(data);
+      if (completedImage != null && completedImage.isNotEmpty) {
+        debugPrint('Completed image size: ${completedImage.length}');
+        getPhotoDescription(completedImage).then((description) {
+          photos.add(Tuple2(base64Encode(completedImage), description));
+          setState(() {});
+          debugPrint('photos: ${photos.length}');
+          setHasTranscripts(true);
+          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
+        });
+      }
+    });
+    await cameraStopPhotoController(btDevice!);
+    await cameraStartPhotoController(btDevice!);
+  }
+
+  bool isGlasses = false;
+
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
+    print(SharedPreferencesUtil().deviceName);
+    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
+    if (isGlasses) return await openGlassProcessing();
 
     BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
@@ -246,7 +280,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
-    _audioBytesStream = await getBleAudioBytesListener(
+    _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
@@ -271,10 +305,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               firstTranscriptMade = true;
             }
 
-            // TODO: remove file
             // uploadFile(data.item1, prefixTimestamp: true);
           } catch (e, stacktrace) {
-            // TODO: if it fails, so if more than 30 seconds waiting to be processed, createMemory should wait until < 30 seconds
             debugPrint('Error processing 30 seconds frame');
             print(e); // don't change this to debugPrint
             CrashReporting.reportHandledCrash(
@@ -289,7 +321,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         }
       },
     );
-    if (_audioBytesStream == null) {
+    if (_bleBytesStream == null) {
       // TODO: error out and disconnect
     }
   }
@@ -304,6 +336,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
+      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -317,10 +350,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _wsChannel?.sink.close(1000);
-    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       if (_streamingTranscriptEnabled) {
@@ -331,6 +364,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
+  void sendMessageToChat(Message message, Memory? memory) {
+    if (memory != null) message.memories.add(memory);
+    MessageProvider().saveMessage(message);
+    widget.refreshMessages();
+  }
+
   _createMemory({bool forcedCreation = false}) async {
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
@@ -338,11 +377,13 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
-    try {
-      var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-      file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
-      uploadFile(file);
-    } catch (e) {} // in case was a local recording and not a BLE recording
+    if (audioStorage?.frames.isNotEmpty == true) {
+      try {
+        var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
+        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
+        uploadFile(file);
+      } catch (e) {} // in case was a local recording and not a BLE recording
+    }
     Memory? memory = await processTranscriptContent(
       context,
       transcript,
@@ -350,6 +391,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
+      photos: photos, // TODO: determinephotosToKeep(photos);
+      sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -359,11 +402,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
-        var msg = Message(DateTime.now(), r, 'ai');
-        msg.memories.add(memory);
-        MessageProvider().saveMessage(msg);
-        widget.refreshMessages();
+        sendMessageToChat(Message(DateTime.now(), r, 'ai'), memory);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
@@ -382,6 +421,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     currentTranscriptFinishedAt = null;
     elapsedSeconds = 0;
     streamStartedAtSecond = 0;
+    photos = [];
+    conversationId = const Uuid().v4();
   }
 
   setHasTranscripts(bool hasTranscripts) {
@@ -422,7 +463,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void dispose() {
     record.dispose();
-    _audioBytesStream?.cancel();
+    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _wsChannel?.sink.close(1000);
     _internetListener.cancel();
@@ -438,11 +479,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           children: [
             speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
             ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-            getTranscriptWidget(memoryCreating, segments, widget.device),
+            getTranscriptWidget(memoryCreating, segments, photos, widget.device),
             if (wsConnectionState == WebsocketConnectionStatus.error ||
                 wsConnectionState == WebsocketConnectionStatus.failed)
               getWebsocketErrorWidget(),
-            const SizedBox(height: 16)
+            const SizedBox(height: 16),
           ],
         ),
         getPhoneMicRecordingButton(_recordingToggled, _state)
