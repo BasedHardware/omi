@@ -1,13 +1,13 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
-import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
@@ -50,8 +50,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       }
     }
   }
-
-  
 
   @override
   void initState() {
