@@ -343,9 +343,10 @@ class _PluginsPageState extends State<PluginsPage> {
                             builder: (c) => getDialog(
                               context,
                               () => Navigator.pop(context),
-                              () {
+                              () async {
                                 Navigator.pop(context);
-                                _togglePlugin(plugin.id.toString(), !plugin.enabled);
+                                await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                setState(() => plugins = SharedPreferencesUtil().pluginsList);
                               },
                               'Authorize External Plugin',
                               'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
@@ -368,6 +369,7 @@ class _PluginsPageState extends State<PluginsPage> {
                 );
               },
               childCount: filteredPlugins.length,
+              // TODO: integration plugins should have a "auth" completed button or smth.
             )),
             // Expanded(
             //   child: ListView.builder(

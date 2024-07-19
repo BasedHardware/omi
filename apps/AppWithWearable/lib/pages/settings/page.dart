@@ -194,7 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   GrowthbookUtil().hasTranscriptServerFeatureOn()
                       ? getItemAddOn('Speech Profile', () {
                           routeToPage(context, const SpeakerIdPage());
-                        }, icon: Icons.multitrack_audio, visibility: GrowthbookUtil().hasTranscriptServerFeatureOn())
+                        }, icon: Icons.multitrack_audio)
                       : Container(),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
