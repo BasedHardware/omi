@@ -76,7 +76,7 @@ ASKNEWS_CLIENT_SECRET=
 
 ## Creating a Plugin
 
-To create a plugin, you can start from the example using a FastAPI app deployed on [modal.com](modal.com)
+To create a plugin, you can start from the example using a FastAPI app deployed on [Modal](https://modal.com/)
 
 ```python
 from fastapi import FastAPI, HTTPException, Request, Form
