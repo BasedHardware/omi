@@ -15,9 +15,9 @@
 #define PDM_PWR_PIN NRF_GPIO_PIN_MAP(1, 10)
 
 // Codecs
-#define CODEC_PCM 1
+// #define CODEC_PCM 1
 // #define CODEC_MU_LAW 1
-// #define CODEC_OPUS 1
+#define CODEC_OPUS 1
 
 // Codec packages
 #if CODEC_PCM | CODEC_MU_LAW
