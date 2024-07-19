@@ -337,7 +337,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         color: plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        if (plugin.worksExternally()) {
+                        if (plugin.worksExternally() && !plugin.enabled) {
                           showDialog(
                             context: context,
                             builder: (c) => getDialog(
