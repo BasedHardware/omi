@@ -180,7 +180,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 : const SizedBox.shrink(),
             widget.plugin.worksExternally()
                 ? Padding(
-                    padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
+                    padding: const EdgeInsets.only(top: 16, left: 16, right: 20),
                     child: MarkdownBody(
                       shrinkWrap: true,
                       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
@@ -202,6 +202,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           backgroundColor: Colors.transparent,
                           decoration: TextDecoration.none,
                           color: Colors.white,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       data: instructionsMarkdown ?? '',
