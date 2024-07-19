@@ -29,6 +29,8 @@ build/
 **/android/**/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/app/google-services.json
+**/android/app/src/dev/google-services.json
+**/android/app/src/prod/google-services.json
 
 # iOS specific
 **/ios/**/Pods/
@@ -42,6 +44,8 @@ build/
 **/ios/**/GeneratedPluginRegistrant.*
 **/ios/**/xcuserdata
 **/ios/Runner/GoogleService-Info.plist
+**/ios/Config/*
+**/ios/Config/**/*
 
 # macOS specific
 **/macos/**/Pods/
@@ -85,6 +89,11 @@ hs_err_pid*
 # Servers
 backend/app-server/dist
 src/recordings
+
+# Apps
+apps/AppWithWearable/lib/firebase_options.dart
+apps/AppWithWearable/lib/firebase_options_*.dart
+apps/AppWithWearable/firebase.json
 
 # Solidworks models
 *.SLDPRT
