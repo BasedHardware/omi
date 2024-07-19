@@ -32,8 +32,8 @@ getOnTranscriptSegmentReceivedEvents(List<TranscriptSegment> segment, String ses
       .where((element) => element.externalIntegration?.triggersOn == 'transcript_processed' && element.enabled)
       .toList();
   List<Future<Tuple2<Plugin, String>>> triggerPluginResult = plugins.map((plugin) async {
-    // var url = plugin.externalIntegration!.webhookUrl;
-    var url = 'https://610e-148-64-106-26.ngrok-free.app/news-checker';
+    var url = plugin.externalIntegration!.webhookUrl;
+    // var url = 'https://610e-148-64-106-26.ngrok-free.app/news-checker';
     if (url.contains('?')) {
       url += '&uid=${SharedPreferencesUtil().uid}';
     } else {
