@@ -177,3 +177,19 @@ structure:
   }
 }
 ```
+
+If you want to submit a plugin that doesn't use custom integrations:
+
+
+```json
+{
+  "id": "your-plugin-id",
+  "name": "Your Plugin Name",
+  "author": "@your-username",
+  "description": "A brief description of your plugin",
+  "image": "/assets/plugin_images/your-plugin-image.png",
+  "prompt": "",
+  "memories": false,
+  "chat": false,
+}
+```
