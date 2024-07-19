@@ -59,8 +59,8 @@ class ExternalIntegration {
     switch (triggersOn) {
       case 'memory_creation':
         return 'Memory Creation';
-      case 'transcript_received':
-        return 'Transcript Received';
+      case 'transcript_processed':
+        return 'Transcript Segment Processed (every 30 seconds during conversation)';
       default:
         return 'Unknown';
     }
@@ -141,7 +141,7 @@ class Plugin {
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Friend/main/$image';
+  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Friend/main$image';
 
   Map<String, dynamic> toJson() {
     return {
