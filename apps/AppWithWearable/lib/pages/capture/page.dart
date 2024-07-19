@@ -23,6 +23,7 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/features/backups.dart';
+import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -30,6 +31,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
+import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 class CapturePage extends StatefulWidget {
@@ -113,6 +115,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   InternetStatus? _internetStatus;
 
   late StreamSubscription<InternetStatus> _internetListener;
+  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -332,6 +335,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
+      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId);
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -413,6 +417,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     elapsedSeconds = 0;
     streamStartedAtSecond = 0;
     photos = [];
+    conversationId = const Uuid().v4();
   }
 
   setHasTranscripts(bool hasTranscripts) {

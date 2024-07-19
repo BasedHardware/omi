@@ -219,7 +219,7 @@ class _PluginsPageState extends State<PluginsPage> {
                               filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
                         ),
                         child: const Text(
-                          'External',
+                          'Integration',
                           style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -321,7 +321,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     child: const Text(
-                                      'External Integration',
+                                      'Integration',
                                       style: TextStyle(
                                           color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
@@ -337,15 +337,16 @@ class _PluginsPageState extends State<PluginsPage> {
                         color: plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        if (plugin.worksExternally()) {
+                        if (plugin.worksExternally() && !plugin.enabled) {
                           showDialog(
                             context: context,
                             builder: (c) => getDialog(
                               context,
                               () => Navigator.pop(context),
-                              () {
+                              () async {
                                 Navigator.pop(context);
-                                _togglePlugin(plugin.id.toString(), !plugin.enabled);
+                                await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                setState(() => plugins = SharedPreferencesUtil().pluginsList);
                               },
                               'Authorize External Plugin',
                               'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
@@ -368,6 +369,7 @@ class _PluginsPageState extends State<PluginsPage> {
                 );
               },
               childCount: filteredPlugins.length,
+              // TODO: integration plugins should have a "auth" completed button or smth.
             )),
             // Expanded(
             //   child: ListView.builder(

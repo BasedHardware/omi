@@ -100,7 +100,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   color: widget.plugin.enabled ? Colors.white : Colors.grey,
                 ),
                 onPressed: () {
-                  if (widget.plugin.worksExternally()) {
+                  if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
                     showDialog(
                         context: context,
                         builder: (c) => getDialog(
@@ -163,7 +163,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'External Integration Instructions',
+                      'Integration Instructions',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   )
@@ -180,8 +180,31 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 : const SizedBox.shrink(),
             widget.plugin.worksExternally()
                 ? Padding(
-                    padding: const EdgeInsets.only(top: 32, left: 16, right: 16),
+                    padding: const EdgeInsets.only(top: 16, left: 16, right: 20),
                     child: MarkdownBody(
+                      shrinkWrap: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                        a: const TextStyle(fontSize: 18, height: 1.2),
+                        p: const TextStyle(fontSize: 16, height: 1.2),
+                        blockquote: const TextStyle(
+                          fontSize: 16,
+                          height: 1.2,
+                          backgroundColor: Colors.transparent,
+                          color: Colors.black,
+                        ),
+                        blockquoteDecoration: BoxDecoration(
+                          color: Colors.grey.shade800,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        code: const TextStyle(
+                          fontSize: 16,
+                          height: 1.2,
+                          backgroundColor: Colors.transparent,
+                          decoration: TextDecoration.none,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       data: instructionsMarkdown ?? '',
                       onTapLink: (text, href, title) {
                         if (href != null) {
@@ -260,7 +283,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Text(
-                            'External Integration',
+                            'Integration',
                             style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         )

@@ -91,8 +91,14 @@ android {
         release {
             productFlavors.dev.signingConfig signingConfigs.debug
             productFlavors.prod.signingConfig signingConfigs.release
+            // fixing calendar
+            // https://github.com/builttoroam/device_calendar/issues/99#issuecomment-612449677
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
         }
     }
+
 }
 
 flutter {

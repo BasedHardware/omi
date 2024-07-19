@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Setup Notion CRM</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        p {
+            color: #666;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        label {
+            margin-bottom: 0.5rem;
+            color: #333;
+            text-align: left;
+        }
+
+        input[type="text"] {
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 0.5rem;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+            }
+
+            label {
+                margin-bottom: 0.3rem;
+                font-size: 0.9rem;
+            }
+
+            input[type="text"], button {
+                width: 100%;
+                padding: 0.75rem;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Setup Notion Personal CRM</h1>
+    <p>This page allows you to configure your Notion Personal CRM for conversations.</p>
+    <form action="/creds/notion-crm" method="post">
+        <input type="hidden" name="uid" value="{{ uid }}">
+        <div>
+            <label for="api_key">API Key:</label>
+            <input type="text" id="api_key" name="api_key" required>
+        </div>
+        <div>
+            <label for="database_id">Database ID:</label>
+            <input type="text" id="database_id" name="database_id" required>
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+</div>
+</body>
+</html>
