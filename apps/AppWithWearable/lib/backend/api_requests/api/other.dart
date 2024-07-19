@@ -131,7 +131,10 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
     var response = await makeApiCall(
       url: url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(segments.map((e) => e.toJson()).toList()),
+      body: jsonEncode({
+        'session_id': sessionId,
+        'segments': segments.map((e) => e.toJson()).toList(),
+      }),
       method: 'POST',
     );
     debugPrint('response: ${response?.statusCode}');
