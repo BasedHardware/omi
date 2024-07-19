@@ -88,7 +88,10 @@ def news_checker(conversation: list[dict]) -> str:
     
     The output was: {output}
     
-    Your task is to provide a 15 words summary of the output. Be clear and concise.
+    The conversation is:
+    {conversation_str}
+    
+    Your task is to provide a 15 words summary to help guide the bias or not accurate facts in the conversation.
     ''')
     print('Output', result.content)
     return result.content
