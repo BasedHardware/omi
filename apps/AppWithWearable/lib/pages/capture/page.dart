@@ -128,6 +128,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       SharedPreferencesUtil().transcriptSegments,
       null,
       retrievedFromCache: true,
+      sendMessageToChat: sendMessageToChat,
     ).then((m) {
       if (m != null && !m.discarded) executeBackupWithUid();
     });
@@ -335,7 +336,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
-      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId);
+      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -363,6 +364,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
+  void sendMessageToChat(Message message, Memory? memory) {
+    if (memory != null) message.memories.add(memory);
+    MessageProvider().saveMessage(message);
+    widget.refreshMessages();
+  }
+
   _createMemory({bool forcedCreation = false}) async {
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
@@ -385,6 +392,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       photos: photos, // TODO: determinephotosToKeep(photos);
+      sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -394,10 +402,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        var msg = Message(DateTime.now(), r, 'ai');
-        msg.memories.add(memory);
-        MessageProvider().saveMessage(msg);
-        widget.refreshMessages();
+        sendMessageToChat(Message(DateTime.now(), r, 'ai'), memory);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
