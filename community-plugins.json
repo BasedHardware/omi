@@ -355,14 +355,13 @@
   },
   {
     "id": "news-checker",
-    "name": "News/Facts checker",
+    "name": "News checker",
     "author": "@josancamon19",
-    "description": "Checks the news during conversations and provides corrections",
-    "image": "/assets/plugin_images/notion-crm.png",
+    "description": "Checks the news during conversations and provides insights.",
+    "image": "/assets/plugin_images/news-checker-logo",
     "prompt": "",
     "memories": false,
     "chat": false,
-    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
       "external_integration"
     ],
