@@ -93,7 +93,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   Future<void> _initiatePlugins() async {
-    _edgeCasePluginNotAvailable();
     plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
     _edgeCasePluginNotAvailable();
@@ -137,6 +136,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
+    print('Selected: ${SharedPreferencesUtil().selectedChatPluginId}');
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -451,6 +451,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                               setState(() {});
                               return;
                             }
+                            print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
                             if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
 
                             SharedPreferencesUtil().selectedChatPluginId = s;
@@ -518,7 +519,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           )
         ] +
         plugins
-            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
+            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id) && p.worksWithChat())
             .map<DropdownMenuItem<String>>((Plugin plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
