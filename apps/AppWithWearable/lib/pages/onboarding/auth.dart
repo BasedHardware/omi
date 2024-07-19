@@ -100,6 +100,7 @@ class _AuthComponentState extends State<AuthComponent> {
 
   void _signIn() async {
     var token = await getIdToken();
+    print('Token: $token');
     if (token != null) {
       User user = FirebaseAuth.instance.currentUser!;
       String prevUid = SharedPreferencesUtil().uid;

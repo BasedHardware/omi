@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -256,5 +257,72 @@ class WavBytesUtil {
     }
 
     return samples;
+  }
+}
+
+class ImageBytesUtil {
+  int previousChunkId = -1;
+  Uint8List _buffer = Uint8List(0);
+
+  Uint8List? processChunk(List<int> data) {
+    // debugPrint('Received chunk: ${data.length} bytes');
+    if (data.isEmpty) return null;
+
+    if (data[0] == 255 && data[1] == 255) {
+      debugPrint('Received end of image');
+      previousChunkId = -1;
+      return _buffer;
+    }
+
+    int packetId = data[0] + (data[1] << 8);
+    data = data.sublist(2);
+    // debugPrint('Packet ID: $packetId - Previous ID: $previousChunkId');
+
+    if (previousChunkId == -1) {
+      if (packetId == 0) {
+        debugPrint('Starting new image');
+        _buffer = Uint8List(0);
+      } else {
+        // debugPrint('Skipping frame');
+        return null;
+      }
+    } else {
+      if (packetId != previousChunkId + 1) {
+        debugPrint('Lost packet ~ lost image');
+        _buffer = Uint8List(0);
+        previousChunkId = -1;
+        return null;
+      }
+    }
+    previousChunkId = packetId;
+    _buffer = Uint8List.fromList([..._buffer, ...data]);
+    // debugPrint('Added to buffer, new size: ${_buffer.length}');
+    return null;
+  }
+
+  static Future<File?> base64ToFile(String base64Str) async {
+    // Decode the base64 string
+    try {
+      Uint8List bytes = base64Decode(base64Str.split(',')[1]);
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/image_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(bytes);
+      return file;
+    } catch (e) {
+      print('Error saving image: $e');
+      return null;
+    }
+  }
+
+  static Future<File?> uint8ListToFile(Uint8List uint8list) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/image_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(uint8list);
+      return file;
+    } catch (e) {
+      print('Error saving image: $e');
+      return null;
+    }
   }
 }

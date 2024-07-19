@@ -80,6 +80,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    print('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setState(() {});
   }
@@ -87,16 +88,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _edgeCasePluginNotAvailable() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.chat)) {
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat())) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }
   }
 
   Future<void> _initiatePlugins() async {
-    _edgeCasePluginNotAvailable();
     plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
-    SharedPreferencesUtil().pluginsList = plugins;
     _edgeCasePluginNotAvailable();
     setState(() {});
   }
@@ -138,6 +137,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
+    print('Selected: ${SharedPreferencesUtil().selectedChatPluginId}');
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -452,6 +452,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                               setState(() {});
                               return;
                             }
+                            print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
                             if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
 
                             SharedPreferencesUtil().selectedChatPluginId = s;
@@ -519,7 +520,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           )
         ] +
         plugins
-            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id))
+            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id) && p.worksWithChat())
             .map<DropdownMenuItem<String>>((Plugin plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
@@ -534,7 +535,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  plugin.name.length > 18 ? '${plugin.name.substring(0, 18)}...' : plugin.name + ' '*(18 - plugin.name.length),
+                  plugin.name.length > 18
+                      ? '${plugin.name.substring(0, 18)}...'
+                      : plugin.name + ' ' * (18 - plugin.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],

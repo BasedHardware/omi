@@ -8,12 +8,13 @@ import 'package:friend_private/backend/preferences.dart';
 Future<dynamic> gptApiCall({
   required String model,
   String urlSuffix = 'chat/completions',
-  List<Map<String, String>> messages = const [],
+  List<Map<String, dynamic>> messages = const [],
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
   List tools = const [],
   File? audioFile,
   double temperature = 0.3,
+  int? maxTokens,
 }) async {
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
@@ -30,6 +31,9 @@ Future<dynamic> gptApiCall({
     } else if (tools.isNotEmpty) {
       bodyData['tools'] = tools;
       bodyData['tool_choice'] = 'auto';
+    }
+    if (maxTokens != null) {
+      bodyData['max_tokens'] = maxTokens;
     }
     body = jsonEncode(bodyData);
   }

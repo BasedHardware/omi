@@ -1,10 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -18,6 +22,21 @@ class PluginDetailPage extends StatefulWidget {
 }
 
 class _PluginDetailPageState extends State<PluginDetailPage> {
+  String? instructionsMarkdown;
+
+  @override
+  void initState() {
+    if (widget.plugin.worksExternally()) {
+      getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
+        setState(() {
+          instructionsMarkdown = value;
+        });
+      });
+    }
+
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,29 +96,130 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               ),
               trailing: IconButton(
                 icon: Icon(
-                  widget.plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
-                  color: widget.plugin.isEnabled ? Colors.white : Colors.grey,
+                  widget.plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                  color: widget.plugin.enabled ? Colors.white : Colors.grey,
                 ),
                 onPressed: () {
-                  _togglePlugin(widget.plugin.id.toString(), !widget.plugin.isEnabled);
+                  if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
+                    showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                              context,
+                              () => Navigator.pop(context),
+                              () {
+                                Navigator.pop(context);
+                                _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                              },
+                              'Authorize External Plugin',
+                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              okButtonText: 'Confirm',
+                            ));
+                  } else {
+                    _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                  }
                 },
               ),
             ),
             const SizedBox(height: 16),
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Prompt',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                utf8.decode(widget.plugin.prompt.codeUnits),
-                style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
-              ),
-            ),
+            widget.plugin.worksWithMemories()
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Memories Prompt',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksWithMemories()
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      utf8.decode((widget.plugin.memoryPrompt ?? '').codeUnits),
+                      style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksWithChat() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            widget.plugin.worksWithChat()
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Chat Prompt',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksWithChat()
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      utf8.decode((widget.plugin.chatPrompt!).codeUnits),
+                      style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            widget.plugin.worksExternally()
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Integration Instructions',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksExternally() ? const SizedBox(height: 8) : const SizedBox.shrink(),
+            widget.plugin.worksExternally()
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
+                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksExternally()
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 16, left: 16, right: 20),
+                    child: MarkdownBody(
+                      shrinkWrap: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                        a: const TextStyle(fontSize: 18, height: 1.2),
+                        p: const TextStyle(fontSize: 16, height: 1.2),
+                        blockquote: const TextStyle(
+                          fontSize: 16,
+                          height: 1.2,
+                          backgroundColor: Colors.transparent,
+                          color: Colors.black,
+                        ),
+                        blockquoteDecoration: BoxDecoration(
+                          color: Colors.grey.shade800,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        code: const TextStyle(
+                          fontSize: 16,
+                          height: 1.2,
+                          backgroundColor: Colors.transparent,
+                          decoration: TextDecoration.none,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      data: instructionsMarkdown ?? '',
+                      onTapLink: (text, href, title) {
+                        if (href != null) {
+                          if (href.contains('?')) {
+                            href += '&uid=${SharedPreferencesUtil().uid}';
+                          } else {
+                            href += '?uid=${SharedPreferencesUtil().uid}';
+                          }
+                          launchUrl(Uri.parse(href));
+                        }
+                      },
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0),
@@ -120,13 +240,14 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   const Text(
                     'Works with',
                     style: TextStyle(fontSize: 16),
                   ),
                   const SizedBox(width: 16),
-                  widget.plugin.memories
+                  widget.plugin.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -139,8 +260,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  const SizedBox(width: 8),
-                  widget.plugin.chat
+                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
+                  widget.plugin.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -149,6 +270,20 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                           child: const Text(
                             'Chat',
+                            style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
+                  widget.plugin.worksExternally()
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text(
+                            'Integration',
                             style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         )
@@ -193,7 +328,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   SharedPreferencesUtil().pluginsList = pluginsList;
                   MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
                   debugPrint('Refreshed plugins list.');
-                  // TODO: refresh ratings on plugin, simply (rating count * avg) + new rating / rating count + 1
+                  // TODO: refresh ratings on plugin
                   setState(() {});
                 },
               ),
@@ -206,7 +341,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
     setState(() {
-      widget.plugin.isEnabled = isEnabled;
+      widget.plugin.enabled = isEnabled;
     });
     if (isEnabled) {
       prefs.enablePlugin(pluginId);

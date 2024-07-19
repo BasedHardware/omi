@@ -128,15 +128,15 @@ Future<List<Plugin>> retrievePlugins() async {
   if (response?.statusCode == 200) {
     try {
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
-      debugPrint('retrievePlugins: ${plugins.length}');
+      SharedPreferencesUtil().pluginsList = plugins;
       return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);
-      return [];
+      return SharedPreferencesUtil().pluginsList;
     }
   }
-  return [];
+  return SharedPreferencesUtil().pluginsList;
 }
 
 Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
