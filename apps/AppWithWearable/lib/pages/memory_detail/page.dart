@@ -51,6 +51,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     }
   }
 
+  
+
   @override
   void initState() {
     _determineCanDisplaySeconds();
@@ -95,6 +97,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               Expanded(child: Text(" ${structured.getEmoji()}")),
               const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  showShareBottomSheet(context, widget.memory, setState);
+                },
+                icon: const Icon(Icons.ios_share),
+              ),
               IconButton(
                 onPressed: () {
                   showOptionsBottomSheet(
