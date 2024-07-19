@@ -182,6 +182,22 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.only(top: 32, left: 16, right: 16),
                     child: MarkdownBody(
+                      shrinkWrap: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                        a: const TextStyle(fontSize: 16, height: 1.2),
+                        // p: const TextStyle(fontSize: 12, height: 1.2),
+                        blockquote: const TextStyle(
+                          fontSize: 16,
+                          height: 1.2,
+                          backgroundColor: Colors.transparent,
+                          color: Colors.black,
+                        ),
+                        blockquoteDecoration: BoxDecoration(
+                          color: Colors.grey.shade800,
+                          borderRadius: BorderRadius.circular(4),
+                          // border: Border.all(),
+                        ),
+                      ),
                       data: instructionsMarkdown ?? '',
                       onTapLink: (text, href, title) {
                         if (href != null) {
