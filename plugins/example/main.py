@@ -11,6 +11,7 @@ from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_
 from llm import retrieve_books_to_buy, news_checker
 from models import Memory
 from notion_utils import store_memoy_in_db
+import templates
 
 app = FastAPI()
 
