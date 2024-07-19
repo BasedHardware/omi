@@ -358,7 +358,7 @@
     "name": "News checker",
     "author": "@josancamon19",
     "description": "Checks the news during conversations and provides insights.",
-    "image": "/assets/plugin_images/news-checker-logo",
+    "image": "/assets/plugin_images/news-checker-logo.png",
     "prompt": "",
     "memories": false,
     "chat": false,
