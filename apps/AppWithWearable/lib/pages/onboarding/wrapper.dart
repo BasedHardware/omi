@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/home/page.dart';
@@ -26,6 +27,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void initState() {
     _controller = TabController(length: 5, vsync: this);
     _controller!.addListener(() => setState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (await isSignedIn() && !SharedPreferencesUtil().onboardingCompleted) {
+        _goNext();
+      }
+    });
     super.initState();
   }
 
