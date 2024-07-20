@@ -192,6 +192,36 @@ structure:
 }
 ```
 
+### Models
+Structure of plugin data received. 
+
+```python
+# transcript_processed plugin
+class TranscriptSegment(BaseModel):
+    text: str
+    speaker: str
+    speaker_id: int
+    is_user: bool
+    start: float
+    end: float
+
+
+# memory_created plugin
+class Memory(BaseModel):
+    createdAt: datetime
+    startedAt: Optional[datetime] = None
+    finishedAt: Optional[datetime] = None
+    transcript: str = ''
+    transcriptSegments: List[TranscriptSegment] = []
+    photos: Optional[List[MemoryPhoto]] = []
+    recordingFilePath: Optional[str] = None
+    recordingFileBase64: Optional[str] = None
+    structured: Structured
+    pluginsResponse: List[PluginResponse] = []
+    discarded: bool
+
+```
+
 
 ### Submission Details
 
