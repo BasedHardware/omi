@@ -581,7 +581,7 @@ class CapturePageState extends State<CapturePage>
     if (recordingState == RecordingState.record) {
       await stopRecording(_processFileToTranscript, segments, () {
         _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: 10), () => _createMemory());
+        _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
       });
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
