@@ -11,6 +11,6 @@
 6. Set your integration secret, and your database id in the following [form](https://josancamon19--plugins-examples-plugins-app.modal.run/setup-notion-crm).
    ![Step 6](assets/step_6.png)
 
-#### -
+#### --
 
 > This is a experimental feature. It may not work as expected. If you have any feedback, please let us know at joan@basedhardware.com.
