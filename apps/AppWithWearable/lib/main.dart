@@ -12,7 +12,8 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
-import 'package:friend_private/firebase_options.dart';
+import 'package:friend_private/firebase_options_dev.dart' as dev;
+import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
@@ -32,9 +33,16 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  if (F.env == Environment.prod) {
+    await Firebase.initializeApp(
+      options: prod.DefaultFirebaseOptions.currentPlatform,
+    );
+  } else {
+    await Firebase.initializeApp(
+      options: dev.DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+
   listenAuthTokenChanges();
   bool isAuth = false;
   try {

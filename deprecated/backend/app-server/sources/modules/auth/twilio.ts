@@ -1,4 +1,4 @@
-import tw from 'twilio';
+import tw from 'sources/modules/auth/twilio';
 
 export const twilio = tw(
     process.env.TWILIO_ACCOUNT_SID,

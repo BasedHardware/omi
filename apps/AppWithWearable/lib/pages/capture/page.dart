@@ -24,6 +24,7 @@ import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/backups.dart';
+import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/rag.dart';
@@ -32,6 +33,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
+import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'phone_recorder_mixin.dart';
@@ -120,6 +122,7 @@ class CapturePageState extends State<CapturePage>
   InternetStatus? _internetStatus;
 
   late StreamSubscription<InternetStatus> _internetListener;
+  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -132,6 +135,7 @@ class CapturePageState extends State<CapturePage>
       SharedPreferencesUtil().transcriptSegments,
       null,
       retrievedFromCache: true,
+      sendMessageToChat: sendMessageToChat,
     ).then((m) {
       if (m != null && !m.discarded) executeBackupWithUid();
     });
@@ -257,7 +261,7 @@ class CapturePageState extends State<CapturePage>
           setState(() {});
           debugPrint('photos: ${photos.length}');
           setHasTranscripts(true);
-          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
+          // if (photos.length % 10 == 0) determinePhotosToKeep(photos);
         });
       }
     });
@@ -333,13 +337,14 @@ class CapturePageState extends State<CapturePage>
     setState(() => isTranscribing = true);
     List<TranscriptSegment> newSegments;
     if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
-      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+      newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
     }
     // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
+      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -410,6 +415,12 @@ class CapturePageState extends State<CapturePage>
     }
   }
 
+  void sendMessageToChat(Message message, Memory? memory) {
+    if (memory != null) message.memories.add(memory);
+    MessageProvider().saveMessage(message);
+    widget.refreshMessages();
+  }
+
   _createMemory({bool forcedCreation = false}) async {
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
@@ -432,6 +443,7 @@ class CapturePageState extends State<CapturePage>
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       photos: photos, // TODO: determinephotosToKeep(photos);
+      sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -441,10 +453,7 @@ class CapturePageState extends State<CapturePage>
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        var msg = Message(DateTime.now(), r, 'ai');
-        msg.memories.add(memory);
-        MessageProvider().saveMessage(msg);
-        widget.refreshMessages();
+        sendMessageToChat(Message(DateTime.now(), r, 'ai'), memory);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
@@ -464,6 +473,7 @@ class CapturePageState extends State<CapturePage>
     elapsedSeconds = 0;
     streamStartedAtSecond = 0;
     photos = [];
+    conversationId = const Uuid().v4();
   }
 
   setHasTranscripts(bool hasTranscripts) {
