@@ -329,7 +329,7 @@
     "author": "Nik Shevchenko",
     "description": "Nice and kind girlfriend",
     "prompt": "",
-    "image": "/assets/plugin_images/girlfriend.jpg",
+    "image": "/plugins/logos/girlfriend.jpg",
     "memories": false,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
@@ -345,7 +345,7 @@
     "author": "Nik Shevchenko",
     "description": "Loving boyfriend who gives compliments and asks questions",
     "prompt": "",
-    "image": "/assets/plugin_images/boyfriend.jpg",
+    "image": "/plugins/logos/boyfriend.jpg",
     "memories": false,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
@@ -360,7 +360,7 @@
     "name": "Notion Conversations CRM",
     "author": "@josancamon19",
     "description": "Stores all your conversations into a notion database",
-    "image": "/assets/plugin_images/notion-crm.png",
+    "image": "/plugins/logos/notion-crm.png",
     "prompt": "",
     "memories": false,
     "chat": false,
@@ -371,7 +371,7 @@
     "external_integration": {
       "triggers_on": "memory_creation",
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/notion-crm",
-      "setup_instructions_file_path": "/assets/external_plugins_instructions/notion-conversations-crm.md"
+      "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
     "deleted": false
   },
@@ -380,7 +380,7 @@
     "name": "News checker",
     "author": "@josancamon19",
     "description": "Checks the news during conversations and provides insights.",
-    "image": "/assets/plugin_images/news-checker-logo.png",
+    "image": "/plugins/logos/news-checker-logo.png",
     "prompt": "",
     "memories": false,
     "chat": false,
@@ -390,7 +390,7 @@
     "external_integration": {
       "triggers_on": "transcript_processed",
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/news-checker",
-      "setup_instructions_file_path": "/assets/external_plugins_instructions/news-checker.md"
+      "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md"
     },
     "deleted": false
   }
