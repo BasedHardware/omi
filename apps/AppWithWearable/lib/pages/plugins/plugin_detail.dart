@@ -28,10 +28,11 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   void initState() {
     if (widget.plugin.worksExternally()) {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
-        value = value.replaceAll('](assets/', '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/');
+        value = value.replaceAll('](assets/',
+            '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/');
         print(value);
         setState(() {
-          instructionsMarkdown =value;
+          instructionsMarkdown = value;
         });
       });
     }
@@ -209,8 +210,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                       ),
                       data: instructionsMarkdown ?? '',
                       imageBuilder: (uri, title, alt) {
-                        print(uri);
-                        return Image.network(uri.toString());
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Image.network(uri.toString()),
+                        );
                         // return Container();
                       },
                       onTapLink: (text, href, title) {
