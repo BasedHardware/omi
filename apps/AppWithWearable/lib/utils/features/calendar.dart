@@ -36,9 +36,13 @@ class CalendarUtil {
     bool hasAccess = await enableCalendarAccess();
     if (!hasAccess) return [];
 
-    final calendarsResult = await _calendarPlugin!.retrieveCalendars();
-    if (calendarsResult.isSuccess && calendarsResult.data != null) {
-      return calendarsResult.data!;
+    try {
+      final calendarsResult = await _calendarPlugin!.retrieveCalendars();
+      if (calendarsResult.isSuccess && calendarsResult.data != null) {
+        return calendarsResult.data!;
+      }
+    } catch (e) {
+      print('Failed to get calendars: $e');
     }
     return [];
   }
