@@ -371,7 +371,7 @@
     "external_integration": {
       "triggers_on": "memory_creation",
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/notion-crm",
-      "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
+      "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md"
     },
     "deleted": false
   },
@@ -390,7 +390,7 @@
     "external_integration": {
       "triggers_on": "transcript_processed",
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/news-checker",
-      "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md"
+      "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
     "deleted": false
   }
