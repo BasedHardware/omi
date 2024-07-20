@@ -30,7 +30,10 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint('Deepgram took: ${DateTime.now().difference(startTime).inSeconds} seconds');
+  debugPrint('Deepgram took: ${DateTime
+      .now()
+      .difference(startTime)
+      .inSeconds} seconds');
   var data = jsonDecode(res.json);
   // debugPrint('Response body: ${res.json}');
   var result = data['results']['channels'][0]['alternatives'][0];
@@ -97,6 +100,18 @@ Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
     body: '',
   );
   return response?.body ?? '';
+}
+
+Future<bool> isPluginSetupCompleted(String? url) async {
+  if (url == null || url.isEmpty) return true;
+  var response = await makeApiCall(
+    url: '$url?uid=${SharedPreferencesUtil().uid}',
+    method: 'GET',
+    headers: {},
+    body: '',
+  );
+  var data = jsonDecode(response?.body ?? '{}');
+  return data['is_setup_completed'] ?? false;
 }
 
 Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory) async {
