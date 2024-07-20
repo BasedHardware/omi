@@ -30,7 +30,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
         print(value);
         setState(() {
-          instructionsMarkdown = value;
+          instructionsMarkdown = value.replaceAll('](assets/', '](https://github.com/BasedHardware/Friend/tree/main/plugins/instructions/${widget.plugin.id}/assets/');
         });
       });
     }

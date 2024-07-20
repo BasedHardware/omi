@@ -356,7 +356,7 @@
     "deleted": false
   },
   {
-    "id": "notion-conversations-crm",
+    "id": "notion-crm",
     "name": "Notion Conversations CRM",
     "author": "@josancamon19",
     "description": "Stores all your conversations into a notion database",
