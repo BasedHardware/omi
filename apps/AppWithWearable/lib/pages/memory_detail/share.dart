@@ -199,9 +199,9 @@ void showShareBottomSheet(
                   ),
                   const SizedBox(height: 8),
                   Card(
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
-                    ),
+                    shape: memory.discarded
+                        ? null
+                        : const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                     child: Column(
                       children: [
                         _buildListTile(

@@ -93,22 +93,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
               ),
-              Expanded(child: Text(" ${structured.getEmoji()}")),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              Expanded(child: Text("${structured.getEmoji()}")),
               IconButton(
                 onPressed: () {
                   showShareBottomSheet(context, widget.memory, setState);
                 },
-                icon: const Icon(Icons.ios_share),
+                icon: const Icon(Icons.ios_share, size: 20),
               ),
               IconButton(
                 onPressed: () {
-                  showOptionsBottomSheet(
-                    context,
-                    setState,
-                    widget.memory,
-                    _reProcessMemory,
-                  );
+                  showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
                 },
                 icon: const Icon(Icons.more_horiz),
               ),
