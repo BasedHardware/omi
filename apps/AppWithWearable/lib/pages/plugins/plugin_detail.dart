@@ -28,6 +28,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   void initState() {
     if (widget.plugin.worksExternally()) {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
+        print(value);
         setState(() {
           instructionsMarkdown = value;
         });
