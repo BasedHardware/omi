@@ -1,5 +1,6 @@
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
@@ -45,7 +46,10 @@ getOnTranscriptSegmentReceivedEvents(List<TranscriptSegment> segment, String ses
   return await Future.wait(triggerPluginResult);
 }
 
-triggerMemoryCreatedEvents(Memory memory) async {
+triggerMemoryCreatedEvents(
+  Memory memory, {
+  Function(Message, Memory?)? sendMessageToChat,
+}) async {
   if (memory.discarded) return;
 
   devModeWebhookCall(memory).then((s) {
@@ -56,15 +60,32 @@ triggerMemoryCreatedEvents(Memory memory) async {
   for (var result in results) {
     if (result.item2.isNotEmpty) {
       createNotification(title: '${result.item1.name} says', body: result.item2, notificationId: result.item1.hashCode);
+      if (sendMessageToChat != null) {
+        sendMessageToChat(
+          Message(DateTime.now(), result.item2, 'ai', pluginId: result.item1.id, fromIntegration: true),
+          null,
+        );
+      }
     }
   }
 }
 
-triggerTranscriptSegmentReceivedEvents(List<TranscriptSegment> segments, String sessionId) async {
+triggerTranscriptSegmentReceivedEvents(
+  List<TranscriptSegment> segments,
+  String sessionId, {
+  Function(Message, Memory?)? sendMessageToChat,
+}) async {
   List<Tuple2<Plugin, String>> results = await getOnTranscriptSegmentReceivedEvents(segments, sessionId);
   for (var result in results) {
     if (result.item2.isNotEmpty) {
       createNotification(title: '${result.item1.name} says', body: result.item2, notificationId: result.item1.hashCode);
+      if (sendMessageToChat != null) {
+        // send memory to be created maybe
+        sendMessageToChat(
+          Message(DateTime.now(), result.item2, 'ai', pluginId: result.item1.id, fromIntegration: true),
+          null,
+        );
+      }
     }
   }
 }

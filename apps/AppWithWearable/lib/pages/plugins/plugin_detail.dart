@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/plugins/instructions.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -23,15 +23,27 @@ class PluginDetailPage extends StatefulWidget {
 
 class _PluginDetailPageState extends State<PluginDetailPage> {
   String? instructionsMarkdown;
+  bool setupCompleted = false;
+
+  checkSetupCompleted() {
+    isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
+      print('Setup completed: $value');
+      print(SharedPreferencesUtil().uid);
+      setState(() => setupCompleted = value);
+    });
+  }
 
   @override
   void initState() {
     if (widget.plugin.worksExternally()) {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
-        setState(() {
-          instructionsMarkdown = value;
-        });
+        value = value.replaceAll(
+          '](assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+        );
+        setState(() => instructionsMarkdown = value);
       });
+      checkSetupCompleted();
     }
 
     super.initState();
@@ -160,63 +172,39 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 : const SizedBox.shrink(),
             widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
             widget.plugin.worksExternally()
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
+                ? ListTile(
+                    onTap: () async {
+                      await routeToPage(
+                        context,
+                        PluginSetupInstructions(markdown: instructionsMarkdown ?? ''),
+                      );
+                      checkSetupCompleted();
+                    },
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 12.0),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 20,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    title: const Text(
                       'Integration Instructions',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
-                  )
-                : const SizedBox.shrink(),
-            widget.plugin.worksExternally() ? const SizedBox(height: 8) : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
+                    subtitle: Text(
                       'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
                       style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 16, left: 16, right: 20),
-                    child: MarkdownBody(
-                      shrinkWrap: true,
-                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                        a: const TextStyle(fontSize: 18, height: 1.2),
-                        p: const TextStyle(fontSize: 16, height: 1.2),
-                        blockquote: const TextStyle(
-                          fontSize: 16,
-                          height: 1.2,
-                          backgroundColor: Colors.transparent,
-                          color: Colors.black,
-                        ),
-                        blockquoteDecoration: BoxDecoration(
-                          color: Colors.grey.shade800,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        code: const TextStyle(
-                          fontSize: 16,
-                          height: 1.2,
-                          backgroundColor: Colors.transparent,
-                          decoration: TextDecoration.none,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      data: instructionsMarkdown ?? '',
-                      onTapLink: (text, href, title) {
-                        if (href != null) {
-                          if (href.contains('?')) {
-                            href += '&uid=${SharedPreferencesUtil().uid}';
-                          } else {
-                            href += '?uid=${SharedPreferencesUtil().uid}';
-                          }
-                          launchUrl(Uri.parse(href));
-                        }
-                      },
-                    ),
+            widget.plugin.worksExternally() && widget.plugin.externalIntegration?.setupCompletedUrl != null
+                ? CheckboxListTile(
+                    title: const Text('Setup Completed'),
+                    value: setupCompleted,
+                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    onChanged: (s) {},
+                    enabled: false,
                   )
                 : const SizedBox.shrink(),
             widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
