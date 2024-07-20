@@ -111,6 +111,7 @@ Future<bool> isPluginSetupCompleted(String? url) async {
     body: '',
   );
   var data = jsonDecode(response?.body ?? '{}');
+  print(data);
   return data['is_setup_completed'] ?? false;
 }
 
