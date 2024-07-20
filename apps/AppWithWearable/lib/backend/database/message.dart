@@ -19,7 +19,9 @@ class Message {
 
   String text;
   String sender;
+
   String? pluginId;
+  bool fromIntegration;
 
   set senderEnum(MessageSender sender) => this.sender = sender.toString().split('.').last;
 
@@ -33,7 +35,15 @@ class Message {
 
   final memories = ToMany<Memory>();
 
-  Message(this.createdAt, this.text, this.sender, {this.id = 0, this.type = 'text', this.pluginId});
+  Message(
+    this.createdAt,
+    this.text,
+    this.sender, {
+    this.id = 0,
+    this.type = 'text',
+    this.pluginId,
+    this.fromIntegration = false,
+  });
 
   static String getMessagesAsString(
     List<Message> messages, {
