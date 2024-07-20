@@ -93,7 +93,7 @@ def creds_notion_crm(uid: str = Form(...), api_key: str = Form(...), database_id
 def is_setup_completed(uid: str):
     notion_api_key = get_notion_crm_api_key(uid)
     notion_database_id = get_notion_database_id(uid)
-    return {'is_setup_completed': notion_api_key and notion_database_id}
+    return {'is_setup_completed': notion_api_key is not None and notion_database_id is not None}
 
 
 @app.post('/notion-crm')
