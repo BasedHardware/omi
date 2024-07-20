@@ -27,6 +27,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
   checkSetupCompleted() {
     isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
+      print('Setup completed: $value');
+      print(SharedPreferencesUtil().uid);
       setState(() => setupCompleted = value);
     });
   }
@@ -35,11 +37,11 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   void initState() {
     if (widget.plugin.worksExternally()) {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
-        value = value.replaceAll('](assets/',
-            '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/');
-        setState(() {
-          instructionsMarkdown = value;
-        });
+        value = value.replaceAll(
+          '](assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+        );
+        setState(() => instructionsMarkdown = value);
       });
       checkSetupCompleted();
     }
@@ -171,11 +173,12 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
             widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
             widget.plugin.worksExternally()
                 ? ListTile(
-                    onTap: () {
-                      routeToPage(
+                    onTap: () async {
+                      await routeToPage(
                         context,
                         PluginSetupInstructions(markdown: instructionsMarkdown ?? ''),
                       );
+                      checkSetupCompleted();
                     },
                     trailing: const Padding(
                       padding: EdgeInsets.only(right: 12.0),
@@ -195,7 +198,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
+            widget.plugin.worksExternally() && widget.plugin.externalIntegration?.setupCompletedUrl != null
                 ? CheckboxListTile(
                     title: const Text('Setup Completed'),
                     value: setupCompleted,
