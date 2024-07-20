@@ -7,11 +7,11 @@ from fastapi.templating import Jinja2Templates
 from modal import Image, App, Secret, asgi_app, mount
 from multion.client import MultiOn
 
+import templates
 from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id
 from llm import retrieve_books_to_buy, news_checker
 from models import Memory
 from notion_utils import store_memoy_in_db
-import templates
 
 app = FastAPI()
 
@@ -87,6 +87,13 @@ def creds_notion_crm(uid: str = Form(...), api_key: str = Form(...), database_id
     store_notion_crm_api_key(uid, api_key)
     store_notion_database_id(uid, database_id)
     return {'status': 'ok'}
+
+
+@app.get('/setup/notion-crm')
+def is_setup_completed(uid: str):
+    notion_api_key = get_notion_crm_api_key(uid)
+    notion_database_id = get_notion_database_id(uid)
+    return {'is_setup_completed': notion_api_key is not None and notion_database_id is not None}
 
 
 @app.post('/notion-crm')

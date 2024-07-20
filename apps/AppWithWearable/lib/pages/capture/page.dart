@@ -128,6 +128,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       SharedPreferencesUtil().transcriptSegments,
       null,
       retrievedFromCache: true,
+      sendMessageToChat: sendMessageToChat,
     ).then((m) {
       if (m != null && !m.discarded) executeBackupWithUid();
     });
@@ -253,7 +254,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           setState(() {});
           debugPrint('photos: ${photos.length}');
           setHasTranscripts(true);
-          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
+          // if (photos.length % 10 == 0) determinePhotosToKeep(photos);
         });
       }
     });
@@ -328,14 +329,14 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   _processFileToTranscript(File f) async {
     List<TranscriptSegment> newSegments;
     if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
-      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+      newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
     }
     // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
-      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId);
+      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
       SharedPreferencesUtil().transcriptSegments = segments;
       setState(() {});
       setHasTranscripts(true);
@@ -363,6 +364,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
+  void sendMessageToChat(Message message, Memory? memory) {
+    if (memory != null) message.memories.add(memory);
+    MessageProvider().saveMessage(message);
+    widget.refreshMessages();
+  }
+
   _createMemory({bool forcedCreation = false}) async {
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
@@ -385,6 +392,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       photos: photos, // TODO: determinephotosToKeep(photos);
+      sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
@@ -394,10 +402,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         // r = 'Hi there testing notifications stuff';
         debugPrint('Notification response: $r');
         if (r.isEmpty) return;
-        var msg = Message(DateTime.now(), r, 'ai');
-        msg.memories.add(memory);
-        MessageProvider().saveMessage(msg);
-        widget.refreshMessages();
+        sendMessageToChat(Message(DateTime.now(), r, 'ai'), memory);
         createNotification(
           notificationId: 2,
           title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
@@ -486,101 +491,5 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     );
   }
 
-  _recordingToggled() async {
-    if (_state == RecordState.record) {
-      _stopRecording();
-    } else {
-      _startRecording();
-    }
-  }
-
-  _printFileSize(File file) async {
-    int bytes = await file.length();
-    var i = (log(bytes) / log(1024)).floor();
-    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
-    debugPrint('File size: $size');
-  }
-
-  // final FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
-  // bool _mRecorderIsInited = false;
-  // StreamSubscription? _mRecordingDataSubscription;
-  // String? _mPath;
-
-  // Future<void> _openRecorder() async {
-  //   debugPrint('_openRecorder');
-  //   // var status = await Permission.microphone.request();
-  //   // if (status != PermissionStatus.granted) {
-  //   //   throw RecordingPermissionException('Microphone permission not granted');
-  //   // }
-  //   await _mRecorder.openRecorder();
-  //   debugPrint('Recorder opened');
-  //   final session = await AudioSession.instance;
-  //   await session.configure(AudioSessionConfiguration(
-  //     avAudioSessionCategory: AVAudioSessionCategory.record,
-  //     avAudioSessionCategoryOptions:
-  //         AVAudioSessionCategoryOptions.allowBluetooth | AVAudioSessionCategoryOptions.defaultToSpeaker,
-  //     avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-  //     avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
-  //     avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-  //     androidAudioAttributes: const AndroidAudioAttributes(
-  //       contentType: AndroidAudioContentType.speech,
-  //       flags: AndroidAudioFlags.none,
-  //       usage: AndroidAudioUsage.voiceCommunication,
-  //     ),
-  //     androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-  //     androidWillPauseWhenDucked: true,
-  //   ));
-  //
-  //   setState(() {
-  //     _mRecorderIsInited = true;
-  //   });
-  // }
-
-  // Future<IOSink> createFile() async {
-  //   var tempDir = await getTemporaryDirectory();
-  //   _mPath = '${tempDir.path}/flutter_sound_example.pcm';
-  //   var outputFile = File(_mPath!);
-  //   if (outputFile.existsSync()) {
-  //     await outputFile.delete();
-  //   }
-  //   return outputFile.openWrite();
-  // }
-
-  // ----------------------  Here is the code to record to a Stream ------------
-
-  _stopRecording() async {
-    // setState(() => _state = RecordState.stop);
-    // await _mRecorder.stopRecorder();
-    // _processPhoneMicAudioTimer?.cancel();
-    // if (segments.isNotEmpty) _createMemory();
-  }
-
-  _startRecording() async {
-    // if (!(await record.hasPermission())) return;
-    // await _openRecorder();
-    //
-    // assert(_mRecorderIsInited);
-    // var path = await getApplicationDocumentsDirectory();
-    // var filePath = '${path.path}/recording.pcm';
-    // setState(() => _state = RecordState.record);
-    // await _start(filePath);
-    // _processPhoneMicAudioTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-    //   await _mRecorder.stopRecorder();
-    //   var f = File(filePath);
-    //   // f.writeAsBytesSync([]);
-    //   // var fCopy = File('${path.path}/recording_copy.pcm');
-    //   // await f.copy(fCopy.path);
-    //   _processFileToTranscript(f);
-    // });
-  }
-
-  _start(String filePath) async {
-    // await _mRecorder.startRecorder(
-    //   codec: Codec.pcm16,
-    //   toFile: filePath,
-    //   sampleRate: 16000,
-    //   numChannels: 1,
-    // );
-  }
+  _recordingToggled() async {}
 }

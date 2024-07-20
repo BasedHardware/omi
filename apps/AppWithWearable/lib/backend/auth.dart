@@ -127,3 +127,18 @@ Future<void> signOut(BuildContext context) async {
   }
   // context.pushReplacementNamed('auth');
 }
+
+listenAuthStateChanges() {
+  FirebaseAuth.instance.authStateChanges().listen((User? user) {
+    if (user == null) {
+      debugPrint('User is currently signed out!');
+      SharedPreferencesUtil().onboardingCompleted = false;
+    } else {
+      debugPrint('User is signed in!');
+    }
+  });
+}
+
+Future isSignedIn() async {
+  return FirebaseAuth.instance.currentUser != null;
+}

@@ -39,11 +39,13 @@ class PluginReview {
 class ExternalIntegration {
   String triggersOn;
   String webhookUrl;
+  String? setupCompletedUrl;
   String setupInstructionsFilePath;
 
   ExternalIntegration({
     required this.triggersOn,
     required this.webhookUrl,
+    required this.setupCompletedUrl,
     required this.setupInstructionsFilePath,
   });
 
@@ -51,6 +53,7 @@ class ExternalIntegration {
     return ExternalIntegration(
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
+      setupCompletedUrl: json['setup_completed_url'],
       setupInstructionsFilePath: json['setup_instructions_file_path'],
     );
   }
@@ -70,6 +73,7 @@ class ExternalIntegration {
     return {
       'triggers_on': triggersOn,
       'webhook_url': webhookUrl,
+      'setup_completed_url': setupCompletedUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
     };
   }
@@ -95,6 +99,7 @@ class Plugin {
   int ratingCount;
 
   bool enabled = false;
+  bool deleted;
 
   Plugin({
     required this.id,
@@ -110,6 +115,7 @@ class Plugin {
     this.userReview,
     this.ratingAvg,
     required this.ratingCount,
+    required this.deleted,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -138,6 +144,7 @@ class Plugin {
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
+      deleted: json['deleted'] ?? false,
     );
   }
 
@@ -158,10 +165,13 @@ class Plugin {
       'rating_avg': ratingAvg,
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
+      'deleted': deleted,
     };
   }
 
   static List<Plugin> fromJsonList(List<dynamic> jsonList) {
+    // TODO: move me out of this, bad performance, every time .pluginList is read
+    // TODO: handle plugins that are deleted
     var pluginsId = SharedPreferencesUtil().pluginsEnabled;
     List<Plugin> plugins = jsonList.map((e) {
       var plugin = Plugin.fromJson(e);
