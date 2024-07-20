@@ -95,6 +95,7 @@ class Plugin {
   int ratingCount;
 
   bool enabled = false;
+  bool deleted;
 
   Plugin({
     required this.id,
@@ -110,6 +111,7 @@ class Plugin {
     this.userReview,
     this.ratingAvg,
     required this.ratingCount,
+    required this.deleted,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -138,6 +140,7 @@ class Plugin {
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
+      deleted: json['deleted'] ?? false,
     );
   }
 
@@ -158,10 +161,13 @@ class Plugin {
       'rating_avg': ratingAvg,
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
+      'deleted': deleted,
     };
   }
 
   static List<Plugin> fromJsonList(List<dynamic> jsonList) {
+    // TODO: move me out of this, bad performance, every time .pluginList is read
+    // TODO: handle plugins that are deleted
     var pluginsId = SharedPreferencesUtil().pluginsEnabled;
     List<Plugin> plugins = jsonList.map((e) {
       var plugin = Plugin.fromJson(e);

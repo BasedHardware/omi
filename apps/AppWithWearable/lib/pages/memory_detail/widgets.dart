@@ -13,7 +13,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -50,7 +50,7 @@ List<Widget> getSummaryWidgets(
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
-            structured.category[0].toUpperCase() + structured.category.substring(1),
+            structured.category.isEmpty ? ' ' : structured.category[0].toUpperCase() + structured.category.substring(1),
             style: Theme.of(context).textTheme.titleLarge,
           ),
         )

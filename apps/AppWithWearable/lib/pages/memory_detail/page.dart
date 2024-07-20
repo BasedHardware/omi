@@ -1,13 +1,13 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
-import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
@@ -93,16 +93,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
               ),
-              Expanded(child: Text(" ${structured.getEmoji()}")),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              Expanded(child: Text("${structured.getEmoji()}")),
               IconButton(
                 onPressed: () {
-                  showOptionsBottomSheet(
-                    context,
-                    setState,
-                    widget.memory,
-                    _reProcessMemory,
-                  );
+                  showShareBottomSheet(context, widget.memory, setState);
+                },
+                icon: const Icon(Icons.ios_share, size: 20),
+              ),
+              IconButton(
+                onPressed: () {
+                  showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
                 },
                 icon: const Icon(Icons.more_horiz),
               ),

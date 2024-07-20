@@ -1,10 +1,22 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+
+Future<String> getAuthHeader() async {
+  if (SharedPreferencesUtil().authToken == '') {
+    SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+  }
+  if (SharedPreferencesUtil().authToken == '') {
+    throw Exception('No auth token found');
+  }
+  return 'Bearer ${SharedPreferencesUtil().authToken}';
+}
 
 Future<http.Response?> makeApiCall({
   required String url,
@@ -20,6 +32,9 @@ Future<http.Response?> makeApiCall({
       debugPrint('No internet connection, aborting $method $url');
       return null;
     }
+    // if (url.contains(Env.apiBaseUrl!)) {
+    // }
+    headers['Authorization'] = await getAuthHeader();
 
     final client = InstabugHttpClient();
 

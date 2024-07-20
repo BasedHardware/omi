@@ -170,7 +170,7 @@
     },
     {
       "id": "5:3905873968765933532",
-      "lastPropertyId": "6:3615800576746497622",
+      "lastPropertyId": "7:2294662025678668284",
       "name": "Message",
       "properties": [
         {
@@ -205,6 +205,11 @@
           "id": "6:3615800576746497622",
           "name": "pluginId",
           "type": 9
+        },
+        {
+          "id": "7:2294662025678668284",
+          "name": "fromIntegration",
+          "type": 1
         }
       ],
       "relations": [
