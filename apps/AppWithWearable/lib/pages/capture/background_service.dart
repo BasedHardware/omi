@@ -55,13 +55,11 @@ void onStart(ServiceInstance service) async {
   await SharedPreferencesUtil.init();
   var record = AudioRecorder();
   var path = await getApplicationDocumentsDirectory();
-  if (service is AndroidServiceInstance) {
-    var files = Directory(path.path).listSync();
-    for (var file in files) {
-      if (file.path.endsWith('.wav')) {
-        debugPrint('deleting file: ${file.path}');
-        file.deleteSync();
-      }
+  var files = Directory(path.path).listSync();
+  for (var file in files) {
+    if (file.path.contains('recording_') && !file.path.contains('recording_0')) {
+      debugPrint('deleting file: ${file.path}');
+      file.deleteSync();
     }
   }
   var filePath = '${path.path}/recording_$count.wav';

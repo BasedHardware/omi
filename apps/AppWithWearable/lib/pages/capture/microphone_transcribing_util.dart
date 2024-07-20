@@ -15,6 +15,11 @@ Future transcribeAfterStopiOS({
   required List<TranscriptSegment> segments,
 }) async {
   var path = await getApplicationDocumentsDirectory();
+  var initalFile = File('${path.path}/recording_0.wav');
+  if (initalFile.existsSync()) {
+    // emptying the file instead of deleting incase if the user presses on start recording again after stopping
+    initalFile.writeAsBytesSync([]);
+  }
   var filePaths = [];
   var files = path.listSync();
   for (var file in files) {
@@ -38,6 +43,11 @@ Future transcribeAfterStopiOS({
     Future.forEach(filePathsToProcess, (f) async {
       debugPrint('Processing file: $f');
       await processFileToTranscript(File(f));
+      final file = File(f);
+      if (file.existsSync()) {
+        file.deleteSync();
+        debugPrint('file deleted: $f');
+      }
     }).then((value) async {
       debugPrint('All files processed in iOS');
       SharedPreferencesUtil().recordingPaths = [];
@@ -83,6 +93,11 @@ Future transcribeAfterStopAndroid(
     Future.forEach(filePathsToProcess, (f) async {
       debugPrint('Processing file: $f');
       await processFileToTranscript(File(f));
+      final file = File(f);
+      if (file.existsSync()) {
+        file.deleteSync();
+        debugPrint('file deleted: $f');
+      }
     }).then((value) async {
       debugPrint('All files processed in Android');
       SharedPreferencesUtil().recordingPaths = [];
@@ -112,7 +127,7 @@ Future iosBgCallback({
     if (await file.exists()) {
       // Get the current length of the file
       final currentLength = await file.length();
-
+      debugPrint('Current length: $currentLength and last offset: $lastOffset');
       if (currentLength > lastOffset) {
         // Read the new content from the file
         final content = await file.openRead(lastOffset, currentLength).toList();
@@ -127,7 +142,7 @@ Future iosBgCallback({
         var header = WavBytesUtil.getWavHeader(newContent.length, 44100, channelCount: 2);
         newContent = [...header, ...newContent];
         await newFile.writeAsBytes((newContent));
-        debugPrint('Fired content written to $newFilePath');
+        debugPrint('Triggered content written to $newFilePath');
         if (shouldTranscribe) {
           await processFileToTranscript(newFile);
           var paths = SharedPreferencesUtil().recordingPaths;

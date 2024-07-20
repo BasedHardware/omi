@@ -33,27 +33,36 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     }
     await Permission.microphone.request();
     await initializeBackgroundService();
-    // if (backgroundTranscriptTimer != null && !backgroundTranscriptTimer!.isActive) {
-    //   debugPrint('Timer is not active');
-    //   if (recordingState == RecordingState.record) {
-    //     if (Platform.isIOS) {
-    //       setState(() {
-    //         iosDuration = 30;
-    //       });
-    //       await iosBgTranscribing(
-    //         Duration(seconds: iosDuration),
-    //         true,
-    //         processFileToTranscript,
-    //       );
-    //     } else if (Platform.isAndroid) {
-    //       setState(() {
-    //         androidDuration = 30;
-    //       });
-    //       await androidBgTranscribing(
-    //           Duration(seconds: androidDuration), AppLifecycleState.resumed, processFileToTranscript);
-    //     }
-    //   }
-    // }
+    debugPrint('Timer is not active and null');
+    await waitForTimerToFinish();
+    Future.delayed(const Duration(seconds: 2), () async {
+      debugPrint('Recording state is record');
+      setState(() {
+        iosDuration = 30;
+        androidDuration = 30;
+      });
+      if (Platform.isIOS) {
+        await iosBgTranscribing(
+          Duration(seconds: iosDuration),
+          true,
+          processFileToTranscript,
+        );
+      } else if (Platform.isAndroid) {
+        await androidBgTranscribing(
+          Duration(seconds: androidDuration),
+          AppLifecycleState.resumed,
+          processFileToTranscript,
+        );
+      }
+    });
+  }
+
+  Future<void> waitForTimerToFinish() async {
+    while (backgroundTranscriptTimer?.isActive ?? false) {
+      debugPrint('Waiting for timer to finish...');
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    debugPrint('Timer finished');
   }
 
   Future<void> waitForTranscriptionToFinish() async {
@@ -89,6 +98,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
       backgroundTranscriptTimer?.cancel();
       setState(() {
         partNumber = 1;
+        lastOffset = 0;
       });
     } else if (Platform.isAndroid) {
       backgroundTranscriptTimer?.cancel();
@@ -192,7 +202,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
             setState(() {
               lastOffset = currentLength;
               partNumber++;
-              iosDuration = 10;
+              iosDuration = 30;
               isTranscribing = false;
             });
           },
