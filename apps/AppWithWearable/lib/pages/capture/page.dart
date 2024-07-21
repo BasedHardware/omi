@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
@@ -12,7 +11,6 @@ import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -28,12 +26,11 @@ import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:location/location.dart';
-import 'package:friend_private/utils/websockets.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:location/location.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
@@ -113,8 +110,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
-
-  Geolocation? geolocationData;
   bool shouldAskPermissionAgain = true;
 
   // ----
@@ -125,7 +120,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   late StreamSubscription<InternetStatus> _internetListener;
   String conversationId = const Uuid().v4(); // used only for transcript segment plugins
-
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -384,8 +378,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
-    geolocationData = await LocationService().getGeolocationDetails();
-    debugPrint('Location data: $geolocationData');
     String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
@@ -403,8 +395,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: geolocationData,
-      photos: photos, // TODO: determinephotosToKeep(photos);
+      geolocation: await LocationService().getGeolocationDetails(),
+      photos: photos,
+      // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
