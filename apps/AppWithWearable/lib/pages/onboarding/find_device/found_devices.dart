@@ -33,7 +33,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
-      var battery = await retrieveBatteryLevel(btDevice);
+      var battery = await retrieveBatteryLevel(btDevice.id);
       setState(() {
         batteryPercentage = battery;
         _isConnected = true;

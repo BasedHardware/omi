@@ -7,11 +7,11 @@ from fastapi.templating import Jinja2Templates
 from modal import Image, App, Secret, asgi_app, mount
 from multion.client import MultiOn
 
+import templates
 from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id
 from llm import retrieve_books_to_buy, news_checker
 from models import Memory
 from notion_utils import store_memoy_in_db
-import templates
 
 app = FastAPI()
 
@@ -79,14 +79,21 @@ async def setup_notion_crm(request: Request, uid: str):
     return templates.TemplateResponse("setup_notion_crm.html", {"request": request, "uid": uid})
 
 
-@app.post('/creds/notion-crm')
-def creds_notion_crm(uid: str = Form(...), api_key: str = Form(...), database_id: str = Form(...)):
+@app.post('/creds/notion-crm', response_class=HTMLResponse)
+def creds_notion_crm(request: Request, uid: str = Form(...), api_key: str = Form(...), database_id: str = Form(...)):
     if not api_key or not database_id:
         raise HTTPException(status_code=400, detail='API Key and Database ID are required')
     print({'uid': uid, 'api_key': api_key, 'database_id': database_id})
     store_notion_crm_api_key(uid, api_key)
     store_notion_database_id(uid, database_id)
-    return {'status': 'ok'}
+    return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
+
+
+@app.get('/setup/notion-crm')
+def is_setup_completed(uid: str):
+    notion_api_key = get_notion_crm_api_key(uid)
+    notion_database_id = get_notion_database_id(uid)
+    return {'is_setup_completed': notion_api_key is not None and notion_database_id is not None}
 
 
 @app.post('/notion-crm')

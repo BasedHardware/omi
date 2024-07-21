@@ -28,7 +28,7 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 
 iOS app beta on [TestFlight](https://testflight.apple.com/join/Ie8VQ847)
 
-Latest firmware: [v1.0.2](https://github.com/BasedHardware/Friend/releases/download/v1.0.2-Firmware/friend-firmware.uf2)
+Latest firmware: [v1.0.3](https://github.com/BasedHardware/Friend/releases/tag/v1.0.3-firmware)
 
 There are also alternative apps and firmware compatible with Friend:
 

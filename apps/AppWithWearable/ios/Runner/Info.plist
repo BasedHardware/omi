@@ -6,6 +6,7 @@
 		<array>
 			<string>daily-summary</string>
 			<string>com.friend-app-with-wearable.ios12.daily-summary</string>
+      		<string>dev.flutter.background.refresh</string>
 		</array>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
@@ -60,6 +61,7 @@
 		<true/>
 		<key>UIBackgroundModes</key>
 		<array>
+      		<string>audio</string>
 			<string>bluetooth-central</string>
 			<string>fetch</string>
 			<string>processing</string>
@@ -95,5 +97,18 @@
 		<string>Access contacts for event attendee editing.</string>
 		<key>NSCalendarsFullAccessUsageDescription</key>
 		<string>Access most functions for calendar viewing and editing.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+    		<string>Need location when in use</string>
+    		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    		<string>Always and when in use!</string>
+    		<key>NSLocationUsageDescription</key>
+    		<string>Older devices need location.</string>
+    		<!-- <key>NSLocationAlwaysUsageDescription</key>
+    		<string>Can I have location always?</string> -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+    			<string>comgooglemaps</string>
+    			<string>iosamap</string>
+		</array>
 	</dict>
 </plist>
