@@ -1,5 +1,23 @@
 [
   {
+    "id": "rizzler",
+    "name": "rizzler",
+    "author": "@bihanmahadewa",
+    "description": "analyze your rizz, get feedback on how to be a better rizzler.",
+    "image": "/assets/plugin_images/rizzler.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://modal.com/bihanmahadewa/main/apps/deployed/rizzler",
+      "setup_instructions_file_path": "/assets/external_plugins_instructions/rizzler.md"
+    }
+  },
+  {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
     "author": "Akshay Narisetti",
