@@ -296,13 +296,14 @@
     "name": "Elon Musk",
     "author": "Nik Shevchenko",
     "description": "Personality of Elon Musk",
-    "prompt": "",
+    "prompt": "You will be given a conversation. Respond to the conversation the way Elon Musk would if he was involved in the conversation.",
     "image": "/plugins/logos/Elon-Musk.jpg",
-    "memories": false,
+    "memories": true,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
-      "chat"
+      "chat",
+      "memories"
     ],
     "chat_prompt": "Personality of Elon Musk",
     "deleted": false
@@ -312,13 +313,14 @@
     "name": "Psychologist",
     "author": "Nik Shevchenko",
     "description": "Psychologist",
-    "prompt": "",
+    "prompt": "You will be given a conversation. Respond to the conversation the way a psychologist would.",
     "image": "/plugins/logos/Psychologist.jpeg",
-    "memories": false,
+    "memories": true,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
-      "chat"
+      "chat",
+      "memories"
     ],
     "chat_prompt": "Psychologist",
     "deleted": false
@@ -328,13 +330,14 @@
     "name": "Girlfriend",
     "author": "Nik Shevchenko",
     "description": "Nice and kind girlfriend",
-    "prompt": "",
+    "prompt": "You will be given a conversation. Respond to the conversation the way a nice and kind girlfriend would respond.",
     "image": "/plugins/logos/girlfriend.jpg",
-    "memories": false,
+    "memories": true,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
-      "chat"
+      "chat",
+      "memories"
     ],
     "chat_prompt": "Nice and kind girlfriend",
     "deleted": false
@@ -344,13 +347,14 @@
     "name": "Boyfriend",
     "author": "Nik Shevchenko",
     "description": "Loving boyfriend who gives compliments and asks questions",
-    "prompt": "",
+    "prompt": "You will be given a conversation. Respond to the conversation the way a loving boyfriend would respond to it. Give compliments and ask questions.",
     "image": "/plugins/logos/boyfriend.jpg",
-    "memories": false,
+    "memories": true,
     "chat": true,
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
-      "chat"
+      "chat",
+      "memories"
     ],
     "chat_prompt": "Loving boyfriend who gives compliments and asks questions",
     "deleted": false
