@@ -17,7 +17,7 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
   final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/transcribe?language=${SharedPreferencesUtil().recordingsLanguage}'),
+    Uri.parse('${Env.apiBaseUrl}v1/transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=${SharedPreferencesUtil().uid}'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
@@ -95,7 +95,7 @@ Future<bool> uploadSample(File file, String uid) async {
 
 Future<void> uploadBackupApi(String backup) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'data': backup}),
@@ -105,7 +105,7 @@ Future<void> uploadBackupApi(String backup) async {
 
 Future<String> downloadBackupApi(String uid) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
+    url: '${Env.apiBaseUrl}v1/backups?uid=$uid',
     headers: {},
     method: 'GET',
     body: '',
@@ -117,7 +117,7 @@ Future<String> downloadBackupApi(String uid) async {
 
 Future<bool> deleteBackupApi() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -128,7 +128,12 @@ Future<bool> deleteBackupApi() async {
 }
 
 Future<List<Plugin>> retrievePlugins() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/plugins', headers: {}, body: '', method: 'GET');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
   if (response?.statusCode == 200) {
     try {
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
@@ -145,7 +150,7 @@ Future<List<Plugin>> retrievePlugins() async {
 
 Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$pluginId&uid=${SharedPreferencesUtil().uid}',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'score': score, review: review}),
