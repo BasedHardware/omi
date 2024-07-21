@@ -159,6 +159,8 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 
 #define BATTERY_REFRESH_INTERVAL 15000 // 15 seconds
 
+void broadcast_battery_level(struct k_work *work_item);
+
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item) {
