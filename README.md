@@ -33,12 +33,12 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 - [Build the device](https://docs.basedhardware.com/assembly/Build_the_device/)
 - [Install firmware](https://docs.basedhardware.com/assembly/Install_firmware/)
 
-## To start developing:
+## Contribute
 
 * Check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/) 
-* Check [current tasks](https://github.com/BasedHardware/Friend/issues)
-* Check paid bounties [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
-* Join [Discord](https://discord.gg/ZutWMTJnwA)
+* Check out the [current tasks](https://github.com/BasedHardware/Friend/issues)
+* Earn from contributing! Check the paid bounties [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+* Join the [Discord](https://discord.gg/ZutWMTJnwA)
 
 ## Get the app
 
@@ -48,9 +48,8 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 ## More links:
 
 - [Contributing](https://docs.basedhardware.com/developer/Contribution/)
-- [Roadmap and Tasks](https://github.com/BasedHardware/Friend/issues)
 - [Support](https://docs.basedhardware.com/info/Support/)
-- [Our bluetooth Protocol Standard](https://docs.basedhardware.com/developer/Protocol/)
+- [BLE Protocol](https://docs.basedhardware.com/developer/Protocol/)
 - [Plugins](https://docs.basedhardware.com/developer/Plugins/)
 
 ## Made by the Community, with -❤️-:
