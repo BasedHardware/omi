@@ -410,5 +410,22 @@
     "memory_prompt": "You will be given a conversation transcript. Identify and extract any statements that sound like personal notes, reminders, or ideas the user wants to remember. These might be prefaced with phrases like 'Note to self', 'I should remember', 'Don't forget', etc., but may also be implicit based on context. Compile these into a list of concise, actionable notes. If no such statements are found, return an empty list.",
     "chat_prompt": "I am your personal note-taking assistant. I can help you capture and organize thoughts, ideas, and reminders from our conversation. Just say 'Note to self' or similar phrases when you want me to remember something important.",
     "deleted": false
+  },
+  {
+    "id": "better-communicator",
+    "name": "Better Communicator",
+    "author": "Hitarth Sharma",
+    "description": "Analyzes conversations in real-time to provide feedback on speaking clarity, effectiveness, and overall communication skills.",
+    "prompt": "Analyze the given conversation transcript for communication effectiveness. Evaluate factors such as clarity, conciseness, engagement, active listening, and overall impact. Provide specific feedback on strengths and areas for improvement, along with actionable suggestions for enhancing communication skills.",
+    "image": "/assets/plugin_images/better-communicator.jpg",
+    "memories": true,
+    "chat": true,
+    "capabilities": [
+      "memories",
+      "chat"
+    ],
+    "memory_prompt": "Analyze the given conversation transcript for communication effectiveness. For each speaker, evaluate factors such as clarity, conciseness, engagement, active listening, and overall impact. Provide specific feedback on strengths and areas for improvement, along with actionable suggestions for enhancing communication skills. If analyzing multiple conversations over time, track improvements and persistent challenges.",
+    "chat_prompt": "I'm your Better Communicator assistant. I can provide real-time feedback on your communication style and offer suggestions for improvement. Feel free to ask me about specific aspects of your communication or for general tips on effective speaking.",
+    "deleted": false
   }
 ]
