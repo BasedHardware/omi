@@ -258,8 +258,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         });
       }
     });
-    await cameraStopPhotoController(btDevice!);
-    await cameraStartPhotoController(btDevice!);
+    await cameraStopPhotoController(btDevice!.id);
+    await cameraStartPhotoController(btDevice!.id);
   }
 
   bool isGlasses = false;
@@ -271,7 +271,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
     if (isGlasses) return await openGlassProcessing();
 
-    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
       // TODO: disconnect and show error
     }
