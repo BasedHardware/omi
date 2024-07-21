@@ -47,12 +47,12 @@ int main(void)
 	bool is_on = true;
 	set_led_blue(false);
 	set_led_red(is_on);
-	while (1)
-	{
-		is_on = !is_on;
-		set_led_red(is_on);
-		k_msleep(500);
-	}
+	// while (1)
+	// {
+	// 	is_on = !is_on;
+	// 	set_led_red(is_on);
+	// 	k_msleep(500);
+	// }
 
 	// Unreachable
 	return 0;
