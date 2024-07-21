@@ -72,7 +72,7 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streaming
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
 }) async {
-  BleAudioCodec codec = await getDeviceCodec(btDevice.id);
+  BleAudioCodec codec = await getAudioCodec(btDevice.id);
   WavBytesUtil wavBytesUtil = WavBytesUtil(codec: codec);
 
   try {
