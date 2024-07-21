@@ -57,7 +57,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   Future<void> startRecording() async {
     audioBytesStream?.cancel();
     if (widget.btDevice == null) return;
-    audioStorage = WavBytesUtil(codec: await getDeviceCodec(widget.btDevice!.id));
+    audioStorage = WavBytesUtil(codec: await getAudioCodec(widget.btDevice!.id));
 
     audioBytesStream = await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
@@ -173,14 +173,14 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
                         )
                       : uploadingSample
                           ? const Center(
-                            child: SizedBox(
+                              child: SizedBox(
                                 height: 24,
                                 width: 24,
                                 child: CircularProgressIndicator(
                                   color: Colors.white,
                                 ),
                               ),
-                          )
+                            )
                           : IconButton(
                               onPressed: widget.goNext,
                               icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
