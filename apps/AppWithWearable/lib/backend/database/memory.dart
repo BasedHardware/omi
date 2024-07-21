@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:objectbox/objectbox.dart';
 
@@ -34,6 +35,8 @@ class Memory {
 
   @Index()
   bool discarded;
+
+  final geolocation = ToOne<Geolocation>();
 
   Memory(
     this.createdAt,
