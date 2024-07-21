@@ -652,7 +652,7 @@ class CapturePageState extends State<CapturePage>
         //         ),
         //       )
         //     : const SizedBox(),
-        getPhoneMicRecordingButton(_recordingToggled, recordingState)
+        // getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
   }
