@@ -12,12 +12,22 @@ The official app discovers the device by scanning for BLE devices with the name 
 
 ## BLE Services and Characteristics
 
-The Friend wearable device implements 2 services:
+The Friend wearable device implements several services:
 
 ### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)
 
 The service uses the official UUID of 0x180F and exposes the standard Battery Level characteristic with UUID 0x2A19.  
-The characteristic supports notification to provide regulat updates of the level (this does not work with firmware 1.0 and requires at least v1.5).
+The characteristic supports notification to provide regular updates of the level (this does not work with firmware 1.0.x and requires at least v1.5).
+
+### the standard BLE [Device Information Service](https://www.bluetooth.com/specifications/specs/device-information-service/)
+
+**Available since firmware version 1.0.3**
+
+The service uses the official UUID of 0x180A and exposes the following characteristics:
+- Manufacturer Name String (0x2A29) : "Based Hardware"
+- Model Number String (0x2A24) : "Friend"
+- Hardware Revision String (0x2A27): "Seeed Xiao BLE Sense"
+- Firmware Revision String (0x2A26) : the firmware version e.g. "1.0.3"
 
 ### one BLE service to stream the audio data to the app
 
@@ -34,7 +44,7 @@ The possible values for the codec type are:
 - 11: Mu-law 8-bit, 8kHz, mono
 - 20: Opus 16-bit, 16kHz, mono
 
-The device default is PCM 16-bit, 8kHz, mono.
+Starting with version 1.0.3 of the firmware, the device default is Opus. On earlier versions it was PCM 16-bit, 8kHz, mono.
 
 ### Audio Data
 
