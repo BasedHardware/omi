@@ -28,7 +28,6 @@ import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
-import 'package:friend_private/utils/rag.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -57,14 +56,14 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin {
-
+class CapturePageState extends State<CapturePage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin {
   @override
   bool get wantKeepAlive => true;
 
   bool _hasTranscripts = false;
   final record = AudioRecorder();
+
   // RecordingState _state = RecordingState.stop;
   static const quietSecondsForMemoryCreation = 120;
 
@@ -99,7 +98,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 // Speaker 1: i haven't seen anyone explain what it means outside of kinda words which pack a lot make it good make it desirable make it something they don't regret but how do you specifically formalize those notions how do you program them in i haven't seen anyone make progress on that so far
 //
 // Speaker 0: but isn't that optimization journey that we're doing as a human civilization we're looking at geopolitics nations are in a state of anarchy with each other they start wars there's conflict and oftentimes they have a very different to that so we're essentially trying to solve the value on the problem with humans right but the examples you gave some for example 2 different religions saying this is our holy site and we are not willing to compromise it in any way if you can make 2 holy sites in virtual worlds you solve the problem but if you only have 1 it's not divisible you're kinda stuck there
-//
+//'
 // Speaker 1: but what if we want to be a tension with each other and that through that tension we understand ourselves and we understand the world so that that's the intellectual journey we're on we're on as a human civilization it will create into
 //
 // Speaker 0: and physical conflict and through that figure stuff out if we go back to that idea of simulation and this is entertainment kinda giving meaning to us the question is how much suffering is reasonable for a video game so yeah i don't mind you know a video game where i get haptic feedback there's a little bit of shaking unethical at least by our human standards it's possible to remove suffering if we're looking at human civilization as an optimization problem
@@ -114,6 +113,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   // Timer? _backgroundTranscriptTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
+
   // bool isTranscribing = false;
 
   DateTime? currentTranscriptStartedAt;
@@ -307,7 +307,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
           Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
           try {
-            await _processFileToTranscript(data.item1);
+            await _processFileToTranscript(data.item1, forceDeepgramTranscription: false);
             if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
             if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
             if (segments.isNotEmpty && !firstTranscriptMade) {
@@ -337,10 +337,20 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
-  _processFileToTranscript(File f) async {
+  _printFileSize(File file) async {
+    int bytes = await file.length();
+    var i = (log(bytes) / log(1024)).floor();
+    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+    debugPrint('File size: $size');
+  }
+
+  _processFileToTranscript(File f, {bool forceDeepgramTranscription = true}) async {
     setState(() => isTranscribing = true);
+    print('transcribing file: ${f.path}');
+    await _printFileSize(f);
     List<TranscriptSegment> newSegments;
-    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true && !forceDeepgramTranscription) {
       newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
@@ -493,7 +503,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
-      await phonerecorderInit(_processFileToTranscript);
+      await phoneRecorderInit(_processFileToTranscript);
       _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
       WavBytesUtil.clearTempWavFiles();
       debugPrint('SchedulerBinding.instance');
@@ -619,29 +629,29 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             getWebsocketErrorWidget(),
           const SizedBox(height: 16)
         ]),
-        isTranscribing
-            ? const Padding(
-                padding: EdgeInsets.only(bottom: 176),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        height: 8,
-                        width: 8,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text('Transcribing...', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                ),
-              )
-            : const SizedBox(),
+        // isTranscribing
+        //     ? const Padding(
+        //         padding: EdgeInsets.only(bottom: 176),
+        //         child: Align(
+        //           alignment: Alignment.bottomCenter,
+        //           child: Row(
+        //             mainAxisAlignment: MainAxisAlignment.center,
+        //             children: [
+        //               SizedBox(
+        //                 height: 8,
+        //                 width: 8,
+        //                 child: CircularProgressIndicator(
+        //                   strokeWidth: 2,
+        //                   color: Colors.white,
+        //                 ),
+        //               ),
+        //               SizedBox(width: 8),
+        //               Text('Transcribing...', style: TextStyle(color: Colors.white)),
+        //             ],
+        //           ),
+        //         ),
+        //       )
+        //     : const SizedBox(),
         getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
@@ -656,16 +666,21 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
-      setState(() => recordingState = RecordingState.initialising);
-      await startRecording(_processFileToTranscript);
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () async {
+            setState(() => recordingState = RecordingState.initialising);
+            await startRecording(_processFileToTranscript);
+            Navigator.pop(context);
+          },
+          'Limited Capabilities',
+          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
+          okButtonText: 'Ok, I understand',
+        ),
+      );
     }
-  }
-
-  _printFileSize(File file) async {
-    int bytes = await file.length();
-    var i = (log(bytes) / log(1024)).floor();
-    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
-    debugPrint('File size: $size');
   }
 }
