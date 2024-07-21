@@ -187,9 +187,7 @@ class WavBytesUtil {
     return byteData.buffer.asUint8List();
   }
 
-  static Uint8List getWavHeader(int dataLength, int sampleRate, {int sampleWidth = 2}) {
-    int channelCount = 1;
-
+  static Uint8List getWavHeader(int dataLength, int sampleRate, {int sampleWidth = 2, int channelCount = 1}) {
     final byteData = ByteData(44);
     final size = dataLength + 36;
 

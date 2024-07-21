@@ -6,6 +6,7 @@
 		<array>
 			<string>daily-summary</string>
 			<string>com.friend-app-with-wearable.ios12.daily-summary</string>
+      		<string>dev.flutter.background.refresh</string>
 		</array>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
@@ -60,6 +61,7 @@
 		<true/>
 		<key>UIBackgroundModes</key>
 		<array>
+      		<string>audio</string>
 			<string>bluetooth-central</string>
 			<string>fetch</string>
 			<string>processing</string>

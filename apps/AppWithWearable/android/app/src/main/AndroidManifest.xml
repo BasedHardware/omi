@@ -52,6 +52,8 @@
     <!-- In the permission part of your manifest, these permission are needed if you target Android 14 phones -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
@@ -67,6 +69,9 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice"
             android:stopWithTask="true" />
+         <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="microphone"/>
 
         <service
             android:name=".NotificationOnKillService"
