@@ -7,6 +7,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
@@ -249,10 +250,10 @@ getTranscriptWidget(
   return TranscriptWidget(segments: segments);
 }
 
-getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
+getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
-    visible: false,
+    visible: true,
     child: Padding(
       padding: const EdgeInsets.only(bottom: 128),
       child: Align(
@@ -262,19 +263,30 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
             borderRadius: BorderRadius.circular(12),
             // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
           ),
-          onPressed: recordingToggled,
+          onPressed: state == RecordingState.initialising ? null : recordingToggled,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                state == RecordState.record
-                    ? const Icon(Icons.stop, color: Colors.red, size: 24)
-                    : const Icon(Icons.mic),
+                state == RecordingState.initialising
+                    ? const SizedBox(
+                        height: 8,
+                        width: 8,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : (state == RecordingState.record
+                        ? const Icon(Icons.stop, color: Colors.red, size: 24)
+                        : const Icon(Icons.mic)),
                 const SizedBox(width: 8),
                 Text(
-                  state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic',
+                  state == RecordingState.initialising
+                      ? 'Initialising Recorder'
+                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),
