@@ -90,7 +90,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
           setState(() {
             lastOffset = currentLength;
             partNumber++;
-            iosDuration = 10;
+            iosDuration = 5;
             isTranscribing = false;
           });
         },
@@ -132,6 +132,22 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
           segments: segments,
         );
       });
+    }
+  }
+
+  Future onAppIsResumed(Function processTranscript) async {
+    FlutterBackgroundService service = FlutterBackgroundService();
+    await bgServiceNotifier();
+    if (await service.isRunning()) {
+      setState(() {
+        iosDuration = 10;
+        androidDuration = 10;
+      });
+      if (Platform.isAndroid) {
+        await androidBgTranscribing(Duration(seconds: androidDuration), AppLifecycleState.resumed, processTranscript);
+      } else if (Platform.isIOS) {
+        await iosBgTranscribing(Duration(seconds: iosDuration), true, processTranscript);
+      }
     }
   }
 
