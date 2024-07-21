@@ -97,6 +97,9 @@ android {
             minifyEnabled true
             shrinkResources true
         }
+        debug{
+            minifyEnabled true
+        }
     }
 
 }

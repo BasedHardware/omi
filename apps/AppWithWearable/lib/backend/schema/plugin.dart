@@ -39,11 +39,13 @@ class PluginReview {
 class ExternalIntegration {
   String triggersOn;
   String webhookUrl;
+  String? setupCompletedUrl;
   String setupInstructionsFilePath;
 
   ExternalIntegration({
     required this.triggersOn,
     required this.webhookUrl,
+    required this.setupCompletedUrl,
     required this.setupInstructionsFilePath,
   });
 
@@ -51,6 +53,7 @@ class ExternalIntegration {
     return ExternalIntegration(
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
+      setupCompletedUrl: json['setup_completed_url'],
       setupInstructionsFilePath: json['setup_instructions_file_path'],
     );
   }
@@ -70,6 +73,7 @@ class ExternalIntegration {
     return {
       'triggers_on': triggersOn,
       'webhook_url': webhookUrl,
+      'setup_completed_url': setupCompletedUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
     };
   }

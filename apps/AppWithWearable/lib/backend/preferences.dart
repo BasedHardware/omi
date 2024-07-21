@@ -102,7 +102,11 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
-  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? true;
+  List<String> get recordingPaths => getStringList('recordingPaths') ?? [];
+
+  set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
+
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
@@ -272,6 +276,10 @@ class SharedPreferencesUtil {
 // String get userName => getString('userName') ?? givenName; // the one the users sets
 //
 // set userName(String value) => saveString('userName', value);
+
+  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
+
+  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>

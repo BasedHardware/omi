@@ -4,9 +4,9 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
@@ -19,20 +19,26 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:location/location.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
+
+import 'phone_recorder_mixin.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -50,13 +56,15 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin {
   @override
   bool get wantKeepAlive => true;
 
   bool _hasTranscripts = false;
   final record = AudioRecorder();
-  RecordState _state = RecordState.stop;
+
+  // RecordingState _state = RecordingState.stop;
   static const quietSecondsForMemoryCreation = 120;
 
   bool _streamingTranscriptEnabled = false;
@@ -90,7 +98,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 // Speaker 1: i haven't seen anyone explain what it means outside of kinda words which pack a lot make it good make it desirable make it something they don't regret but how do you specifically formalize those notions how do you program them in i haven't seen anyone make progress on that so far
 //
 // Speaker 0: but isn't that optimization journey that we're doing as a human civilization we're looking at geopolitics nations are in a state of anarchy with each other they start wars there's conflict and oftentimes they have a very different to that so we're essentially trying to solve the value on the problem with humans right but the examples you gave some for example 2 different religions saying this is our holy site and we are not willing to compromise it in any way if you can make 2 holy sites in virtual worlds you solve the problem but if you only have 1 it's not divisible you're kinda stuck there
-//
+//'
 // Speaker 1: but what if we want to be a tension with each other and that through that tension we understand ourselves and we understand the world so that that's the intellectual journey we're on we're on as a human civilization it will create into
 //
 // Speaker 0: and physical conflict and through that figure stuff out if we go back to that idea of simulation and this is entertainment kinda giving meaning to us the question is how much suffering is reasonable for a video game so yeah i don't mind you know a video game where i get haptic feedback there's a little bit of shaking unethical at least by our human standards it's possible to remove suffering if we're looking at human civilization as an optimization problem
@@ -102,8 +110,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
 
+  // Timer? _backgroundTranscriptTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
+
+  // bool isTranscribing = false;
 
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
@@ -254,12 +265,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           setState(() {});
           debugPrint('photos: ${photos.length}');
           setHasTranscripts(true);
-          // if (photos.length % 10 == 0) determinephotosToKeep(photos);
+          // if (photos.length % 10 == 0) determinePhotosToKeep(photos);
         });
       }
     });
-    await cameraStopPhotoController(btDevice!);
-    await cameraStartPhotoController(btDevice!);
+    await cameraStopPhotoController(btDevice!.id);
+    await cameraStartPhotoController(btDevice!.id);
   }
 
   bool isGlasses = false;
@@ -271,7 +282,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
     if (isGlasses) return await openGlassProcessing();
 
-    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {
       // TODO: disconnect and show error
     }
@@ -296,7 +307,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
           Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
           try {
-            await _processFileToTranscript(data.item1);
+            await _processFileToTranscript(data.item1, forceDeepgramTranscription: false);
             if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
             if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
             if (segments.isNotEmpty && !firstTranscriptMade) {
@@ -326,10 +337,21 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
-  _processFileToTranscript(File f) async {
+  _printFileSize(File file) async {
+    int bytes = await file.length();
+    var i = (log(bytes) / log(1024)).floor();
+    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+    debugPrint('File size: $size');
+  }
+
+  _processFileToTranscript(File f, {bool forceDeepgramTranscription = true}) async {
+    setState(() => isTranscribing = true);
+    print('transcribing file: ${f.path}');
+    await _printFileSize(f);
     List<TranscriptSegment> newSegments;
-    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
-      newSegments = await transcribe(f, SharedPreferencesUtil().uid);
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true && !forceDeepgramTranscription) {
+      newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
     }
@@ -346,7 +368,50 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
       currentTranscriptFinishedAt = DateTime.now();
     }
+    // _doProcessingOfInstructions();
+    setState(() => isTranscribing = false);
   }
+
+  Map<int, int> processedSegments = {};
+
+  // Merge conflict. Doesn't exist in the latest commit on the main branch. Should be removed?
+  // _doProcessingOfInstructions() async {
+  //   for (var element in segments) {
+  //     var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
+  //     for (var option in hotWords) {
+  //       if (element.text.toLowerCase().contains(option)) {
+  //         debugPrint('Hey Friend detected');
+  //         var index = element.text.lastIndexOf(option);
+  //         if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
+
+  //         var substring = element.text.substring(index + option.length);
+  //         var words = substring.split(' ');
+  //         if (words.length >= 5) {
+  //           debugPrint('Hey Friend detected and 10 words after');
+  //           String message = await executeGptPrompt('''
+  //         The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
+  //         Extract the only the instruction the user is asking in 5 to 10 words.
+
+  //         ${element.text.substring(index)}''');
+  //           debugPrint('Message: $message');
+
+  //           MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
+  //           widget.refreshMessages();
+  //           dynamic ragInfo = await retrieveRAGContext(message);
+  //           String ragContext = ragInfo[0];
+  //           List<Memory> memories = ragInfo[1].cast<Memory>();
+  //           String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
+  //           var response = await executeGptPrompt(body);
+  //           var aiMessage = Message(DateTime.now(), response, 'ai');
+  //           aiMessage.memories.addAll(memories);
+  //           MessageProvider().saveMessage(aiMessage);
+  //           widget.refreshMessages();
+  //           processedSegments[element.id] = index;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
@@ -391,7 +456,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      photos: photos, // TODO: determinephotosToKeep(photos);
+      geolocation: await LocationService().getGeolocationDetails(),
+      photos: photos,
+      // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
@@ -433,14 +500,33 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
-    _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
-    WavBytesUtil.clearTempWavFiles();
+    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      debugPrint('SchedulerBinding.instance');
+      await phoneRecorderInit(_processFileToTranscript);
+      _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
+      WavBytesUtil.clearTempWavFiles();
       debugPrint('SchedulerBinding.instance');
       if (_streamingTranscriptEnabled) {
         initiateBytesStreamingProcessing();
       } else {
         initiateBytesProcessing();
+      }
+      if (await LocationService().displayPermissionsDialog()) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.of(context).pop(),
+            () async {
+              Navigator.of(context).pop();
+              await requestLocationPermission();
+            },
+            'Enable Location Services?  🌍',
+            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.',
+            singleButton: false,
+          ),
+        );
       }
     });
     _processCachedTranscript();
@@ -451,8 +537,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           break;
         case InternetStatus.disconnected:
           _internetStatus = InternetStatus.disconnected;
-          _memoryCreationTimer
-              ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          _memoryCreationTimer?.cancel();
           break;
       }
     });
@@ -462,12 +548,71 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     record.dispose();
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _wsChannel?.sink.close(1000);
     _internetListener.cancel();
     super.dispose();
+  }
+
+  Future requestLocationPermission() async {
+    LocationService locationService = LocationService();
+    bool serviceEnabled = await locationService.enableService();
+    if (!serviceEnabled) {
+      debugPrint('Location service not enabled');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location services are disabled. Enable them for a better experience.',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        );
+      }
+    } else {
+      PermissionStatus permissionGranted = await locationService.requestPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        debugPrint('Location permission not granted');
+      } else if (permissionGranted == PermissionStatus.deniedForever) {
+        debugPrint('Location permission denied forever');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'If you change your mind, you can enable location services in your device settings.',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    final backgroundService = FlutterBackgroundService();
+    if (state == AppLifecycleState.paused) {
+      backgroundTranscriptTimer?.cancel();
+      if (await backgroundService.isRunning()) {
+        _memoryCreationTimer?.cancel();
+      }
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (await backgroundService.isRunning()) {
+        await onAppIsResumed(_processFileToTranscript);
+        // if (Platform.isAndroid) {
+        //   await androidBgTranscribing(Duration(seconds: androidDuration), state, _processFileToTranscript);
+        // } else if (Platform.isIOS) {
+        //   await iosBgTranscribing(Duration(seconds: iosDuration), true, _processFileToTranscript);
+        // }
+      }
+    }
+    super.didChangeAppLifecycleState(state);
   }
 
   @override
@@ -475,117 +620,67 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     // super.build(context);
     return Stack(
       children: [
-        ListView(
-          children: [
-            speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
-            ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-            getTranscriptWidget(memoryCreating, segments, photos, widget.device),
-            if (wsConnectionState == WebsocketConnectionStatus.error ||
-                wsConnectionState == WebsocketConnectionStatus.failed)
-              getWebsocketErrorWidget(),
-            const SizedBox(height: 16),
-          ],
-        ),
-        getPhoneMicRecordingButton(_recordingToggled, _state)
+        ListView(children: [
+          speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+          getTranscriptWidget(memoryCreating, segments, photos, widget.device),
+          if (wsConnectionState == WebsocketConnectionStatus.error ||
+              wsConnectionState == WebsocketConnectionStatus.failed)
+            getWebsocketErrorWidget(),
+          const SizedBox(height: 16)
+        ]),
+        // isTranscribing
+        //     ? const Padding(
+        //         padding: EdgeInsets.only(bottom: 176),
+        //         child: Align(
+        //           alignment: Alignment.bottomCenter,
+        //           child: Row(
+        //             mainAxisAlignment: MainAxisAlignment.center,
+        //             children: [
+        //               SizedBox(
+        //                 height: 8,
+        //                 width: 8,
+        //                 child: CircularProgressIndicator(
+        //                   strokeWidth: 2,
+        //                   color: Colors.white,
+        //                 ),
+        //               ),
+        //               SizedBox(width: 8),
+        //               Text('Transcribing...', style: TextStyle(color: Colors.white)),
+        //             ],
+        //           ),
+        //         ),
+        //       )
+        //     : const SizedBox(),
+        // getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
   }
 
   _recordingToggled() async {
-    if (_state == RecordState.record) {
-      _stopRecording();
+    if (recordingState == RecordingState.record) {
+      await stopRecording(_processFileToTranscript, segments, () {
+        _memoryCreationTimer?.cancel();
+        _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
+      });
+    } else if (recordingState == RecordingState.initialising) {
+      debugPrint('initialising, have to wait');
     } else {
-      _startRecording();
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () async {
+            setState(() => recordingState = RecordingState.initialising);
+            await startRecording(_processFileToTranscript);
+            Navigator.pop(context);
+          },
+          'Limited Capabilities',
+          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
+          okButtonText: 'Ok, I understand',
+        ),
+      );
     }
-  }
-
-  _printFileSize(File file) async {
-    int bytes = await file.length();
-    var i = (log(bytes) / log(1024)).floor();
-    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
-    debugPrint('File size: $size');
-  }
-
-  // final FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
-  // bool _mRecorderIsInited = false;
-  // StreamSubscription? _mRecordingDataSubscription;
-  // String? _mPath;
-
-  // Future<void> _openRecorder() async {
-  //   debugPrint('_openRecorder');
-  //   // var status = await Permission.microphone.request();
-  //   // if (status != PermissionStatus.granted) {
-  //   //   throw RecordingPermissionException('Microphone permission not granted');
-  //   // }
-  //   await _mRecorder.openRecorder();
-  //   debugPrint('Recorder opened');
-  //   final session = await AudioSession.instance;
-  //   await session.configure(AudioSessionConfiguration(
-  //     avAudioSessionCategory: AVAudioSessionCategory.record,
-  //     avAudioSessionCategoryOptions:
-  //         AVAudioSessionCategoryOptions.allowBluetooth | AVAudioSessionCategoryOptions.defaultToSpeaker,
-  //     avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-  //     avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
-  //     avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-  //     androidAudioAttributes: const AndroidAudioAttributes(
-  //       contentType: AndroidAudioContentType.speech,
-  //       flags: AndroidAudioFlags.none,
-  //       usage: AndroidAudioUsage.voiceCommunication,
-  //     ),
-  //     androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-  //     androidWillPauseWhenDucked: true,
-  //   ));
-  //
-  //   setState(() {
-  //     _mRecorderIsInited = true;
-  //   });
-  // }
-
-  // Future<IOSink> createFile() async {
-  //   var tempDir = await getTemporaryDirectory();
-  //   _mPath = '${tempDir.path}/flutter_sound_example.pcm';
-  //   var outputFile = File(_mPath!);
-  //   if (outputFile.existsSync()) {
-  //     await outputFile.delete();
-  //   }
-  //   return outputFile.openWrite();
-  // }
-
-  // ----------------------  Here is the code to record to a Stream ------------
-
-  _stopRecording() async {
-    // setState(() => _state = RecordState.stop);
-    // await _mRecorder.stopRecorder();
-    // _processPhoneMicAudioTimer?.cancel();
-    // if (segments.isNotEmpty) _createMemory();
-  }
-
-  _startRecording() async {
-    // if (!(await record.hasPermission())) return;
-    // await _openRecorder();
-    //
-    // assert(_mRecorderIsInited);
-    // var path = await getApplicationDocumentsDirectory();
-    // var filePath = '${path.path}/recording.pcm';
-    // setState(() => _state = RecordState.record);
-    // await _start(filePath);
-    // _processPhoneMicAudioTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-    //   await _mRecorder.stopRecorder();
-    //   var f = File(filePath);
-    //   // f.writeAsBytesSync([]);
-    //   // var fCopy = File('${path.path}/recording_copy.pcm');
-    //   // await f.copy(fCopy.path);
-    //   _processFileToTranscript(f);
-    // });
-  }
-
-  _start(String filePath) async {
-    // await _mRecorder.startRecorder(
-    //   codec: Codec.pcm16,
-    //   toFile: filePath,
-    //   sampleRate: 16000,
-    //   numChannels: 1,
-    // );
   }
 }
