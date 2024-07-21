@@ -115,4 +115,5 @@ docs/_site/
 
 /apps/AppWithWearable/lib/env/dev_env.g.dart
 /apps/AppWithWearable/lib/env/prod_env.g.dart
+/apps/AppWithWearable/lib/objectbox.g.dart
 *.jks
