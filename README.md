@@ -78,7 +78,7 @@ Download the iOS app in [App Store](https://apps.apple.com/us/app/friend-ai-wear
 
 iOS app beta on [TestFlight](https://testflight.apple.com/join/Ie8VQ847)
 
-Latest firmware: [v1.0.2](https://github.com/BasedHardware/Friend/releases/download/v1.0.2-Firmware/friend-firmware.uf2)
+Latest firmware: [v1.0.3](https://github.com/BasedHardware/Friend/releases/tag/v1.0.3-firmware)
 
 Or you can build your own app from the sources in `apps/AppWithWearable` and firmware from `firmware` folders.
 
