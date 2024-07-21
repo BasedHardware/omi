@@ -14,6 +14,12 @@ const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d1
 const String batteryServiceUuid = '0000180f-0000-1000-8000-00805f9b34fb';
 const String batteryLevelCharacteristicUuid = '00002a19-0000-1000-8000-00805f9b34fb';
 
+const String deviceInformationServiceUuid = '0000180a-0000-1000-8000-00805f9b34fb';
+const String modelNumberCharacteristicUuid = '00002a24-0000-1000-8000-00805f9b34fb';
+const String firmwareRevisionCharacteristicUuid = '00002a26-0000-1000-8000-00805f9b34fb';
+const String hardwareRevisionCharacteristicUuid = '00002a27-0000-1000-8000-00805f9b34fb';
+const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805f9b34fb';
+
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
