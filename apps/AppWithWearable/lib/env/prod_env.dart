@@ -53,4 +53,8 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
   final String? growthbookApiKey = _ProdEnv.growthbookApiKey;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
+  final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
 }

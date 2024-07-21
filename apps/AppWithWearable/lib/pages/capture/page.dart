@@ -12,6 +12,7 @@ import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -19,6 +20,7 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -26,6 +28,9 @@ import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:location/location.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -50,7 +55,7 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -108,6 +113,10 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
+
+  Geolocation? geolocationData;
+  bool shouldAskPermissionAgain = true;
+
   // ----
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
@@ -116,6 +125,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   late StreamSubscription<InternetStatus> _internetListener;
   String conversationId = const Uuid().v4(); // used only for transcript segment plugins
+
 
   _processCachedTranscript() async {
     debugPrint('_processCachedTranscript');
@@ -374,6 +384,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
+    geolocationData = await LocationService().getGeolocationDetails();
+    debugPrint('Location data: $geolocationData');
     String transcript = TranscriptSegment.segmentsAsString(segments);
     debugPrint('_createMemory transcript: \n$transcript');
     File? file;
@@ -391,6 +403,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
+      geolocation: geolocationData,
       photos: photos, // TODO: determinephotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
@@ -433,6 +446,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    WidgetsBinding.instance.addObserver(this);
     _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
     WavBytesUtil.clearTempWavFiles();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -441,6 +455,31 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         initiateBytesStreamingProcessing();
       } else {
         initiateBytesProcessing();
+      }
+      if (await LocationService().isServiceEnabled() == false ||
+          await LocationService().permissionStatus() != PermissionStatus.granted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () {
+              setState(() {
+                shouldAskPermissionAgain = false;
+              });
+              Navigator.of(context).pop();
+            },
+            () async {
+              Navigator.of(context).pop();
+              setState(() {
+                shouldAskPermissionAgain = true;
+              });
+              await requestLocationPermission();
+            },
+            'Know where your memories were created! 🌍',
+            '\nWe can use your location to add a location tag to your memories. This will help you remember where you were when you created them.\n\nWould you like to enable location services?',
+            singleButton: false,
+          ),
+        );
       }
     });
     _processCachedTranscript();
@@ -461,13 +500,74 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      if (await LocationService().isServiceEnabled() &&
+          (await LocationService().permissionStatus() == PermissionStatus.deniedForever ||
+              await LocationService().permissionStatus() == PermissionStatus.denied)) {
+        if (shouldAskPermissionAgain) {
+          setState(() {
+            shouldAskPermissionAgain = false;
+          });
+          await requestLocationPermission();
+        }
+      }
+    }
+    super.didChangeAppLifecycleState(state);
+  }
+
+  @override
   void dispose() {
     record.dispose();
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _wsChannel?.sink.close(1000);
     _internetListener.cancel();
     super.dispose();
+  }
+
+  Future requestLocationPermission() async {
+    LocationService locationService = LocationService();
+    bool serviceEnabled = await locationService.enableService();
+    if (!serviceEnabled) {
+      debugPrint('Location service not enabled');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location services are disabled. Please enable them to add a location tag to your memories.',
+              style: TextStyle(
+                color: Color.fromARGB(255, 255, 255, 255),
+                fontSize: 12.0,
+              ),
+            ),
+            duration: Duration(milliseconds: 2000),
+          ),
+        );
+      }
+    } else {
+      PermissionStatus permissionGranted = await locationService.requestPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        debugPrint('Location permission not granted');
+      } else if (permissionGranted == PermissionStatus.deniedForever) {
+        debugPrint('Location permission denied forever');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'If you change your mind, you can enable location services in your device settings.',
+                style: TextStyle(
+                  color: Color.fromARGB(255, 255, 255, 255),
+                  fontSize: 12.0,
+                ),
+              ),
+              duration: Duration(milliseconds: 2000),
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
