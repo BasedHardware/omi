@@ -10,15 +10,68 @@ Follow these steps to get started with your Friend. Don't want to bother with co
 
 ### Install the app
 
-1. Clone the repo `git clone https://github.com/BasedHardware/friend.git`
-3. Install [Flutter](https://docs.flutter.dev/get-started/install/macos/mobile-ios?tab=download) and [CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
-4. Install your environment variables for `apps/AppWithWearable`:
-   - You can copy .env.template file as .env and add your keys to it
-   - Or you can set the api keys needed on the mobile App from the settings page itself (enable Developer mode)
-5. Build targets:
-   - iOS: Download/install [XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) then navigate to the iOS folder. You might need to launch Xcode to select a team and specify a bundle identifier.
-   - Android: Download/install [Android Studio](https://developer.android.com/studio) then navigate to the Android folder.
-6. Run `flutter clean ` then `flutter pub get` then `pod install`.
-7. When everything is installed, run `flutter run `, this should run your app on the selected device (iOS or Android).
+Before starting, make sure you have the following installed:
 
+- Flutter SDK
+- Dart SDK
+- Xcode (for iOS)
+- Android Studio (for Android)
+- CocoaPods (for iOS dependencies)
+
+### Setup Instructions
+
+1. **Upgrade Flutter**:
+   Before proceeding, make sure your Flutter SDK is up to date:
+    ```
+    flutter upgrade
+    ```
+
+2. **Get Flutter Dependencies**:
+   From within `apps/AppWithWearable`, install flutter packages:
+    ```
+    flutter pub get
+    ```
+
+3. **Install iOS Pods**:
+   Navigate to the iOS directory and install the CocoaPods dependencies:
+    ```
+    cd ios
+    pod install
+    pod repo update
+    ```
+
+4. **Environment Configuration**:
+   Create `.env` using template `.env.template`
+    ```
+    cd ..
+    cat .env.template > .env
+    ```
+
+5. **API Keys**:
+   Add your API keys to the `.env` file. (Sentry is not needed)
+
+6. **Run Build Runner**:
+   Generate necessary files with Build Runner:
+    ```
+    dart run build_runner build
+    ```
+
+7. **Setup Firebase**:
+   - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
+   - Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
+
+      ```
+      flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=com.friend-app-with-wearable.ios12 --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
+      ```
+   - Similarly for dev environment
+
+      ```
+      flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.develop --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/
+      ```
+   - Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
+
+
+8. **Run the App**:
+    - Select your target device in Xcode or Android Studio.
+    - Run the app.
 [Next Step: Buying Guide →](/assembly/Buying_Guide/){: .btn .btn-purple }
