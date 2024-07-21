@@ -42,10 +42,10 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 
 ## Contributions
 
-* Check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/) 
-* Check out the [current tasks](https://github.com/BasedHardware/Friend/issues)
-* Earn from contributing! Check the paid bounties [here](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
-* Join the [Discord](https://discord.gg/ZutWMTJnwA)
+* Check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/).
+* Check out the [current tasks](https://github.com/BasedHardware/Friend/issues).
+* Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
+* Join the [Discord](https://discord.gg/ZutWMTJnwA).
 
 [//]: # (## More links:)
 
