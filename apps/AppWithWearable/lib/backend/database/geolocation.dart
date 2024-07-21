@@ -2,6 +2,7 @@ import 'package:objectbox/objectbox.dart';
 
 @Entity()
 class Geolocation {
+  // TODO: location should be the place the memory starts
   @Id()
   int id = 0;
 
@@ -9,11 +10,17 @@ class Geolocation {
   double? longitude;
   double? altitude;
   double? accuracy;
+
   @Property(type: PropertyType.date)
   DateTime? time;
+
   String? googlePlaceId;
   String? address;
   String? locationType;
+
+  // TODO: eventually locations could map to multiple memories
+  // @Backlink('memory')
+  // final memories = ToMany<Memory>();
 
   Geolocation({
     this.latitude,
@@ -26,16 +33,6 @@ class Geolocation {
     this.locationType,
     this.id = 0,
   });
-
-  static String GeolocationsToString(List<Geolocation> Geolocations) => Geolocations.map((e) => '''
-      ${e.time!.toIso8601String().split('.')[0]}
-      Latitude: ${e.latitude}
-      Longitude: ${e.longitude}
-      Altitude: ${e.altitude}
-      Accuracy: ${e.accuracy}
-      Address: ${e.address}
-      Geolocation Type: ${e.locationType}
-      ''').join('\n\n');
 
   static Geolocation fromJson(Map<String, dynamic> json) {
     var geolocation = Geolocation(
