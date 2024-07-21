@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:location/location.dart';
 import 'package:http/http.dart' as http;
+import 'package:location/location.dart';
 
 class LocationService {
   Location location = Location();
@@ -23,9 +23,7 @@ class LocationService {
     }
   }
 
-  Future<bool> isServiceEnabled() async {
-    return await location.serviceEnabled();
-  }
+  Future<bool> isServiceEnabled() => location.serviceEnabled();
 
   Future<PermissionStatus> requestPermission() async {
     PermissionStatus permissionGranted = await location.hasPermission();
@@ -35,23 +33,22 @@ class LocationService {
     return permissionGranted;
   }
 
-  Future<PermissionStatus> permissionStatus() async {
-    return await location.hasPermission();
-  }
+  Future<PermissionStatus> permissionStatus() => location.hasPermission();
 
-  Future hasPermission() async {
-    return await location.hasPermission() == PermissionStatus.granted;
-  }
+  Future hasPermission() async => (await location.hasPermission()) == PermissionStatus.granted;
 
   Future<Geolocation?> getGeolocationDetails() async {
     if (await hasPermission()) {
       LocationData locationData = await location.getLocation();
       var res = await http.get(
         Uri.parse(
-            "https://maps.googleapis.com/maps/api/geocode/json?latlng=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}"),
+          "https://maps.googleapis.com/maps/api/geocode/json?latlng"
+          "=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}",
+        ),
       );
       if (res.statusCode == 200) {
         var data = json.decode(res.body);
+        print(data);
         Geolocation geolocation = Geolocation(
           latitude: locationData.latitude,
           longitude: locationData.longitude,
@@ -61,10 +58,7 @@ class LocationService {
         );
         return geolocation;
       }
-      return Geolocation(
-        latitude: locationData.latitude,
-        longitude: locationData.longitude,
-      );
+      return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
     } else {
       return null;
     }
