@@ -396,4 +396,22 @@
     },
     "deleted": false
   }
+  {
+  "id": "Sapiento",
+  "name": "Sapiento - Logical Fallacy Fact Checker",
+  "author": "@wisdomifode+@adamajroudi",
+  "description": "Detects and corrects logical fallacies, Fact Check using MultiOn",
+  "image": "/assets/plugin_images/notion-crm.png",
+  "prompt": "",
+  "memories": false,
+  "chat": false,
+  "capabilities": [
+    "external_integration"
+  ],
+  "external_integration": {
+    "triggers_on": "transcript_processed",
+    "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
+    "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
+  }
+}
 ]
