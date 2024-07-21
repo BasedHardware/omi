@@ -490,14 +490,12 @@ class CapturePageState extends State<CapturePage>
       await phonerecorderInit(_processFileToTranscript);
       _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
       WavBytesUtil.clearTempWavFiles();
-      SchedulerBinding.instance.addPostFrameCallback((_) async {
-        debugPrint('SchedulerBinding.instance');
-        if (_streamingTranscriptEnabled) {
-          initiateBytesStreamingProcessing();
-        } else {
-          initiateBytesProcessing();
-        }
-      });
+      debugPrint('SchedulerBinding.instance');
+      if (_streamingTranscriptEnabled) {
+        initiateBytesStreamingProcessing();
+      } else {
+        initiateBytesProcessing();
+      }
       _processCachedTranscript();
       _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
         switch (status) {
@@ -532,14 +530,18 @@ class CapturePageState extends State<CapturePage>
     final backgroundService = FlutterBackgroundService();
     if (state == AppLifecycleState.paused) {
       backgroundTranscriptTimer?.cancel();
+      if (await backgroundService.isRunning()) {
+        _memoryCreationTimer?.cancel();
+      }
     }
     if (state == AppLifecycleState.resumed) {
       if (await backgroundService.isRunning()) {
-        if (Platform.isAndroid) {
-          await androidBgTranscribing(Duration(seconds: androidDuration), state, _processFileToTranscript);
-        } else if (Platform.isIOS) {
-          await iosBgTranscribing(Duration(seconds: iosDuration), true, _processFileToTranscript);
-        }
+        await onAppIsResumed(_processFileToTranscript);
+        // if (Platform.isAndroid) {
+        //   await androidBgTranscribing(Duration(seconds: androidDuration), state, _processFileToTranscript);
+        // } else if (Platform.isIOS) {
+        //   await iosBgTranscribing(Duration(seconds: iosDuration), true, _processFileToTranscript);
+        // }
       }
     }
     super.didChangeAppLifecycleState(state);
