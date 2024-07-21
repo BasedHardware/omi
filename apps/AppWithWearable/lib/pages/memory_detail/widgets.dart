@@ -331,44 +331,45 @@ List<Widget> getPluginsWidgets(
 }
 
 List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
-  return memory.geolocation.target == null
+  return memory.geolocation.target == null || memory.discarded
       ? []
       : [
-          memory.discarded
-              ? const SizedBox.shrink()
-              : Text(
-                  'Place of Memory',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                ),
+          Text(
+            'Taken at',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+          ),
           const SizedBox(height: 8),
-          memory.discarded
-              ? const SizedBox.shrink()
-              : ((memory.geolocation.target != null)
-                  ? GestureDetector(
-                      onTap: () {
-                        MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
-                      },
-                      child: CachedNetworkImage(
-                        imageBuilder: (context, imageProvider) {
-                          return Container(
-                            margin: const EdgeInsets.only(top: 10, bottom: 8),
-                            height: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              image: DecorationImage(
-                                image: imageProvider,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          );
-                        },
-                        imageUrl: MapsUtil.getMapImageUrl(
-                          memory.geolocation.target!.latitude!,
-                          memory.geolocation.target!.longitude!,
+          Text(
+            '${memory.geolocation.target!.address}',
+            style: TextStyle(color: Colors.grey.shade300),
+          ),
+          const SizedBox(height: 8),
+          memory.geolocation.target != null
+              ? GestureDetector(
+                  onTap: () {
+                    MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      ),
-                    )
-                  : const SizedBox.shrink()),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      memory.geolocation.target!.latitude!,
+                      memory.geolocation.target!.longitude!,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
           const SizedBox(height: 8),
         ];
 }
