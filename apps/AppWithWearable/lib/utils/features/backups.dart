@@ -50,6 +50,8 @@ List<dynamic> decodeJson(String encryptedJson, String password) {
 
 Future<bool> executeBackupWithUid({String? uid}) async {
   if (!SharedPreferencesUtil().backupsEnabled) return false;
+  print('executeBackupWithUid: $uid');
+
   var memories = MemoryProvider().getMemories();
   if (memories.isEmpty) return true;
   var encoded = encodeJson(memories.map((e) => e.toJson()).toList(), uid ?? SharedPreferencesUtil().uid);
@@ -59,6 +61,7 @@ Future<bool> executeBackupWithUid({String? uid}) async {
 }
 
 Future<List<Memory>> retrieveBackup(String uid) async {
+  print('retrieveBackup: $uid');
   var retrieved = await downloadBackupApi(uid);
   if (retrieved == '') return [];
   var memories = await getDecodedMemories(retrieved, uid);

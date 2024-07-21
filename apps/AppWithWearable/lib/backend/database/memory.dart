@@ -75,9 +75,13 @@ class Memory {
     );
     memory.structured.target = Structured.fromJson(json['structured']);
     if (json['pluginsResponse'] != null) {
-      for (String response in json['pluginsResponse']) {
+      for (dynamic response in json['pluginsResponse']) {
         if (response.isEmpty) continue;
-        memory.pluginsResponse.add(PluginResponse(response));
+        if (response is String) {
+          memory.pluginsResponse.add(PluginResponse(response));
+        } else {
+          memory.pluginsResponse.add(PluginResponse.fromJson(response));
+        }
       }
     }
 
@@ -85,6 +89,13 @@ class Memory {
       for (dynamic segment in json['transcriptSegments']) {
         if (segment.isEmpty) continue;
         memory.transcriptSegments.add(TranscriptSegment.fromJson(segment));
+      }
+    }
+
+    if (json['photos'] != null) {
+      for (dynamic photo in json['photos']) {
+        if (photo.isEmpty) continue;
+        memory.photos.add(MemoryPhoto.fromJson(photo));
       }
     }
 
@@ -108,11 +119,15 @@ class Memory {
     return {
       'id': id,
       'createdAt': createdAt.toIso8601String(),
+      'startedAt': startedAt?.toIso8601String(),
+      'finishedAt': finishedAt?.toIso8601String(),
       'transcript': transcript,
       'recordingFilePath': recordingFilePath,
       'structured': structured.target!.toJson(),
-      'pluginsResponse': pluginsResponse.map<String>((response) => response.content).toList(),
+      'pluginsResponse': pluginsResponse.map<Map<String, String?>>((response) => response.toJson()).toList(),
       'discarded': discarded,
+      'transcriptSegments': transcriptSegments.map((segment) => segment.toJson()).toList(),
+      'photos': photos.map((photo) => photo.toJson()).toList(),
     };
   }
 }
@@ -222,6 +237,17 @@ class PluginResponse {
   final memory = ToOne<Memory>();
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
+
+  toJson() {
+    return {
+      'pluginId': pluginId,
+      'content': content,
+    };
+  }
+
+  factory PluginResponse.fromJson(Map<String, dynamic> json) {
+    return PluginResponse(json['content'], pluginId: json['pluginId']);
+  }
 }
 
 @Entity()
@@ -261,4 +287,15 @@ class MemoryPhoto {
   final memory = ToOne<Memory>();
 
   MemoryPhoto(this.base64, this.description, {this.id = 0});
+
+  factory MemoryPhoto.fromJson(Map<String, dynamic> json) {
+    return MemoryPhoto(json['base64'], json['description']);
+  }
+
+  toJson() {
+    return {
+      'base64': base64,
+      'description': description,
+    };
+  }
 }

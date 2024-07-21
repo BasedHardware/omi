@@ -1,3 +1,5 @@
+import 'package:friend_private/backend/preferences.dart';
+
 class PluginReview {
   String uid;
   DateTime ratedAt;
@@ -34,40 +36,97 @@ class PluginReview {
   }
 }
 
+class ExternalIntegration {
+  String triggersOn;
+  String webhookUrl;
+  String? setupCompletedUrl;
+  String setupInstructionsFilePath;
+
+  ExternalIntegration({
+    required this.triggersOn,
+    required this.webhookUrl,
+    required this.setupCompletedUrl,
+    required this.setupInstructionsFilePath,
+  });
+
+  factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
+    return ExternalIntegration(
+      triggersOn: json['triggers_on'],
+      webhookUrl: json['webhook_url'],
+      setupCompletedUrl: json['setup_completed_url'],
+      setupInstructionsFilePath: json['setup_instructions_file_path'],
+    );
+  }
+
+  String getTriggerOnString() {
+    switch (triggersOn) {
+      case 'memory_creation':
+        return 'Memory Creation';
+      case 'transcript_processed':
+        return 'Transcript Segment Processed (every 30 seconds during conversation)';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  toJson() {
+    return {
+      'triggers_on': triggersOn,
+      'webhook_url': webhookUrl,
+      'setup_completed_url': setupCompletedUrl,
+      'setup_instructions_file_path': setupInstructionsFilePath,
+    };
+  }
+}
+
 class Plugin {
   String id;
   String name;
   String author;
   String description;
-  String prompt;
-  bool isEnabled = false;
   String image;
+  Set<String> capabilities;
+
+  String? memoryPrompt;
+  String? chatPrompt;
+  ExternalIntegration? externalIntegration;
 
   // can be used for
-  bool memories;
-  bool chat;
 
   List<PluginReview> reviews;
   PluginReview? userReview;
   double? ratingAvg;
   int ratingCount;
 
+  bool enabled = false;
+  bool deleted;
+
   Plugin({
     required this.id,
     required this.name,
     required this.author,
     required this.description,
-    required this.prompt,
     required this.image,
-    required this.memories,
-    required this.chat,
+    required this.capabilities,
+    this.memoryPrompt,
+    this.chatPrompt,
+    this.externalIntegration,
     this.reviews = const [],
     this.userReview,
     this.ratingAvg,
     required this.ratingCount,
+    required this.deleted,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
+
+  bool hasCapability(String capability) => capabilities.contains(capability);
+
+  bool worksWithMemories() => hasCapability('memories');
+
+  bool worksWithChat() => hasCapability('chat');
+
+  bool worksExternally() => hasCapability('external_integration');
 
   factory Plugin.fromJson(Map<String, dynamic> json) {
     return Plugin(
@@ -75,18 +134,21 @@ class Plugin {
       name: json['name'],
       author: json['author'],
       description: json['description'],
-      prompt: json['prompt'],
       image: json['image'],
+      chatPrompt: json['chat_prompt'],
+      memoryPrompt: json['memory_prompt'],
+      externalIntegration:
+          json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
       reviews: PluginReview.fromJsonList(json['reviews'] ?? []),
       userReview: json['user_review'] != null ? PluginReview.fromJson(json['user_review']) : null,
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
-      memories: json['memories'] ?? true,
-      chat: json['chat'] ?? false,
+      capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
+      deleted: json['deleted'] ?? false,
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Friend/main/$image';
+  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Friend/main$image';
 
   Map<String, dynamic> toJson() {
     return {
@@ -94,18 +156,35 @@ class Plugin {
       'name': name,
       'author': author,
       'description': description,
-      'prompt': prompt,
       'image': image,
+      'capabilities': capabilities.toList(),
+      'memory_prompt': memoryPrompt,
+      'chat_prompt': chatPrompt,
+      'external_integration': externalIntegration?.toJson(),
       'reviews': reviews.map((e) => e.toJson()).toList(),
       'rating_avg': ratingAvg,
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
-      'memories': memories,
-      'chat': chat,
+      'deleted': deleted,
     };
   }
 
   static List<Plugin> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => Plugin.fromJson(e)).toList();
+    // TODO: move me out of this, bad performance, every time .pluginList is read
+    // TODO: handle plugins that are deleted
+    var pluginsId = SharedPreferencesUtil().pluginsEnabled;
+    List<Plugin> plugins = jsonList.map((e) {
+      var plugin = Plugin.fromJson(e);
+      plugin.enabled = pluginsId.contains(plugin.id);
+      return plugin;
+    }).toList();
+    plugins.sort((a, b) {
+      var aRating = a.ratingAvg ?? 0;
+      var bRating = b.ratingAvg ?? 0;
+      var aCount = a.ratingCount;
+      var bCount = b.ratingCount;
+      return (aRating * aCount).compareTo(bRating * bCount);
+    });
+    return plugins.reversed.toList();
   }
 }

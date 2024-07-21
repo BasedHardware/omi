@@ -1,10 +1,10 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,25 +24,16 @@ class _PluginsPageState extends State<PluginsPage> {
 
   bool filterChat = true;
   bool filterMemories = true;
-
-  Future<void> _fetchPlugins() async {
-    var prefs = SharedPreferencesUtil();
-    var pluginsList = prefs.pluginsList;
-    var pluginsId = prefs.pluginsEnabled;
-    for (var plugin in pluginsList) {
-      plugin.isEnabled = pluginsId.contains(plugin.id);
-    }
-    plugins = pluginsList.sortedBy((plugin) => plugin.ratingCount * (plugin.ratingAvg ?? 0)).reversed.toList();
-    setState(() => isLoading = false);
-  }
+  bool filterExternal = true;
 
   @override
   void initState() {
     if (widget.filterChatOnly) {
       filterChat = true;
       filterMemories = false;
+      filterExternal = false;
     }
-    _fetchPlugins();
+    plugins = SharedPreferencesUtil().pluginsList;
     super.initState();
   }
 
@@ -55,16 +46,21 @@ class _PluginsPageState extends State<PluginsPage> {
       prefs.disablePlugin(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
-    _fetchPlugins();
+    setState(() => plugins = SharedPreferencesUtil().pluginsList);
   }
 
   List<Plugin> _filteredPlugins() {
+    var plugins = this
+        .plugins
+        .where((p) =>
+            (p.worksWithChat() && filterChat) ||
+            (p.worksWithMemories() && filterMemories) ||
+            (p.worksExternally() && filterExternal))
+        .toList();
+
     return searchQuery.isEmpty
-        ? plugins.where((p) => (p.chat && filterChat) || (p.memories && filterMemories)).toList()
-        : plugins
-            .where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase()))
-            .where((p) => (p.chat && filterChat) || (p.memories && filterMemories))
-            .toList();
+        ? plugins
+        : plugins.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
   }
 
   @override
@@ -206,7 +202,28 @@ class _PluginsPageState extends State<PluginsPage> {
                           style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
-                    )
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          filterExternal = !filterExternal;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: filterExternal ? Colors.deepPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border:
+                              filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                        ),
+                        child: const Text(
+                          'Integration',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -227,8 +244,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   child: ListTile(
                     onTap: () async {
                       await routeToPage(context, PluginDetailPage(plugin: plugin));
-                      _fetchPlugins();
-                      // refresh plugins
+                      setState(() => plugins = SharedPreferencesUtil().pluginsList);
                     },
                     leading: CircleAvatar(
                       backgroundColor: Colors.white,
@@ -267,7 +283,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            plugin.memories
+                            plugin.worksWithMemories()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
@@ -281,8 +297,8 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                   )
                                 : const SizedBox.shrink(),
-                            const SizedBox(width: 8),
-                            plugin.chat
+                            SizedBox(width: plugin.worksWithChat() ? 8 : 0),
+                            plugin.worksWithChat()
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
@@ -296,17 +312,50 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                   )
                                 : const SizedBox.shrink(),
+                            SizedBox(width: plugin.worksExternally() ? 8 : 0),
+                            plugin.worksExternally()
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Integration',
+                                      style: TextStyle(
+                                          color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ],
                         )
                       ],
                     ),
                     trailing: IconButton(
                       icon: Icon(
-                        plugin.isEnabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: plugin.isEnabled ? Colors.white : Colors.grey,
+                        plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        _togglePlugin(plugin.id.toString(), !plugin.isEnabled);
+                        if (plugin.worksExternally() && !plugin.enabled) {
+                          showDialog(
+                            context: context,
+                            builder: (c) => getDialog(
+                              context,
+                              () => Navigator.pop(context),
+                              () async {
+                                Navigator.pop(context);
+                                await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                setState(() => plugins = SharedPreferencesUtil().pluginsList);
+                              },
+                              'Authorize External Plugin',
+                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              okButtonText: 'Confirm',
+                            ),
+                          );
+                        } else {
+                          _togglePlugin(plugin.id.toString(), !plugin.enabled);
+                        }
                       },
                     ),
                     // trailing: Switch(
@@ -320,6 +369,7 @@ class _PluginsPageState extends State<PluginsPage> {
                 );
               },
               childCount: filteredPlugins.length,
+              // TODO: integration plugins should have a "auth" completed button or smth.
             )),
             // Expanded(
             //   child: ListView.builder(
