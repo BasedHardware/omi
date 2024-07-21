@@ -12,6 +12,10 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'microphone_transcribing_util.dart';
 
+// TODO: to be fixed.
+// - handle errors processing, no internet or anything
+// - Fix backend, use multichannel instead of single channel when recorded from device
+
 mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
   int lastOffset = 0;
   int partNumber = 1;
@@ -151,7 +155,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  Future phonerecorderInit(Function processTranscript) async {
+  Future phoneRecorderInit(Function processTranscript) async {
     FlutterBackgroundService service = FlutterBackgroundService();
     await bgServiceNotifier();
     if (await service.isRunning()) {
