@@ -346,7 +346,14 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
           const SizedBox(height: 8),
           memory.geolocation.target != null
               ? GestureDetector(
-                  onTap: () {
+                  onTap: () async {
+                    // TODO: open google maps URL if available
+                    // if (await canLaunchUrl(
+                    //         Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!))) ==
+                    //     true) {
+                    //   await launchUrl(
+                    //       Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!)));
+                    // }
                     MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
                   },
                   child: CachedNetworkImage(
