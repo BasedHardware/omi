@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
@@ -19,6 +18,7 @@ import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -27,8 +27,10 @@ import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:location/location.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
@@ -50,7 +52,7 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -391,7 +393,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      photos: photos, // TODO: determinephotosToKeep(photos);
+      geolocation: await LocationService().getGeolocationDetails(),
+      photos: photos,
+      // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
@@ -433,6 +437,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     btDevice = widget.device;
+    WidgetsBinding.instance.addObserver(this);
     _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
     WavBytesUtil.clearTempWavFiles();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -441,6 +446,22 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         initiateBytesStreamingProcessing();
       } else {
         initiateBytesProcessing();
+      }
+      if (await LocationService().displayPermissionsDialog()) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.of(context).pop(),
+            () async {
+              Navigator.of(context).pop();
+              await requestLocationPermission();
+            },
+            'Enable Location Services?  🌍',
+            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.',
+            singleButton: false,
+          ),
+        );
       }
     });
     _processCachedTranscript();
@@ -451,8 +472,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           break;
         case InternetStatus.disconnected:
           _internetStatus = InternetStatus.disconnected;
-          _memoryCreationTimer
-              ?.cancel(); // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
+          _memoryCreationTimer?.cancel();
           break;
       }
     });
@@ -465,9 +486,45 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     record.dispose();
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _wsChannel?.sink.close(1000);
     _internetListener.cancel();
     super.dispose();
+  }
+
+  Future requestLocationPermission() async {
+    LocationService locationService = LocationService();
+    bool serviceEnabled = await locationService.enableService();
+    if (!serviceEnabled) {
+      debugPrint('Location service not enabled');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location services are disabled. Enable them for a better experience.',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        );
+      }
+    } else {
+      PermissionStatus permissionGranted = await locationService.requestPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        debugPrint('Location permission not granted');
+      } else if (permissionGranted == PermissionStatus.deniedForever) {
+        debugPrint('Location permission denied forever');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'If you change your mind, you can enable location services in your device settings.',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'maps_util.dart';
 
 List<Widget> getSummaryWidgets(
   BuildContext context,
@@ -63,6 +66,9 @@ List<Widget> getSummaryWidgets(
             'Overview',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
           ),
+    memory.discarded
+        ? const SizedBox.shrink()
+        : ((memory.geolocation.target != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
@@ -192,9 +198,10 @@ _getEditTextField(Memory memory, TextEditingController controller, bool enabled,
         )
       : SelectionArea(
           child: Text(
-          controller.text,
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-        ));
+            controller.text,
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+          ),
+        );
 }
 
 List<Widget> getPluginsWidgets(
@@ -321,6 +328,57 @@ List<Widget> getPluginsWidgets(
     ],
     const SizedBox(height: 8)
   ];
+}
+
+List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
+  return memory.geolocation.target == null || memory.discarded
+      ? []
+      : [
+          Text(
+            'Taken at',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${memory.geolocation.target!.address}',
+            style: TextStyle(color: Colors.grey.shade300),
+          ),
+          const SizedBox(height: 8),
+          memory.geolocation.target != null
+              ? GestureDetector(
+                  onTap: () async {
+                    // TODO: open google maps URL if available
+                    // if (await canLaunchUrl(
+                    //         Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!))) ==
+                    //     true) {
+                    //   await launchUrl(
+                    //       Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!)));
+                    // }
+                    MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      memory.geolocation.target!.latitude!,
+                      memory.geolocation.target!.longitude!,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+          const SizedBox(height: 8),
+        ];
 }
 
 showOptionsBottomSheet(

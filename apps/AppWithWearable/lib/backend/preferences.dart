@@ -272,6 +272,10 @@ class SharedPreferencesUtil {
 // String get userName => getString('userName') ?? givenName; // the one the users sets
 //
 // set userName(String value) => saveString('userName', value);
+
+  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
+
+  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>
