@@ -401,7 +401,7 @@
     "name": "Note to Self",
     "author": "Hitarth Sharma",
     "description": "Captures personal notes and reminders from conversations",
-    "image": "/assets/plugin_images/note-to-self.png",
+    "image": "/plugins/logos/note-to-self.png",
     "prompt": "You will be given a conversation transcript. Identify and extract any statements that sound like personal notes, reminders, or ideas the user wants to remember. These might be prefaced with phrases like 'Note to self', 'I should remember', 'Don't forget', etc., but may also be implicit based on context. Compile these into a list of concise, actionable notes. If no such statements are found, return an empty list.",
     "memories": true,
     "chat": true,
@@ -419,7 +419,7 @@
     "author": "Hitarth Sharma",
     "description": "Analyzes conversations in real-time to provide feedback on speaking clarity, effectiveness, and overall communication skills.",
     "prompt": "Analyze the given conversation transcript for communication effectiveness. Evaluate factors such as clarity, conciseness, engagement, active listening, and overall impact. Provide specific feedback on strengths and areas for improvement, along with actionable suggestions for enhancing communication skills.",
-    "image": "/assets/plugin_images/better-communicator.jpg",
+    "image": "/plugins/logos/better-communicator.jpg",
     "memories": true,
     "chat": true,
     "capabilities": [
