@@ -82,7 +82,7 @@ Future<SummaryResult> summarizeMemory(
 Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
   final pluginsList = SharedPreferencesUtil().pluginsList;
   final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
-  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id)).toList();
+  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id) && e.worksWithMemories()).toList();
   // TODO: include memory details parsed already as extra context?
   // TODO: improve plugin result, include result + id to map it to.
   List<Future<Tuple2<Plugin, String>>> pluginPrompts = enabledPlugins.map((plugin) async {
@@ -92,7 +92,7 @@ Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
         Your are an AI with the following characteristics:
         Name: ${plugin.name}, 
         Description: ${plugin.description},
-        Task: ${plugin.prompt}
+        Task: ${plugin.memoryPrompt}
         
         Note: It is possible that the conversation you are given, has nothing to do with your task, \
         in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
@@ -304,8 +304,8 @@ Future<String> getInitialPluginPrompt(Plugin? plugin) async {
   return '''
         Your are an AI with the following characteristics:
         Name: ${plugin.name}, 
-        Personality/Description: ${plugin.description},
-        Task: ${plugin.prompt}
+        Personality/Description: ${plugin.chatPrompt},
+        Task: ${plugin.memoryPrompt}
         
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -331,8 +331,8 @@ Future<String> getPhotoDescription(Uint8List data) async {
     },
   ];
   return await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
-
 }
+
 // TODO: another thought is to ask gpt for a list of "scenes", so each one could be stored independently in vectors
 Future<List<int>> determineImagesToKeep(List<Tuple2<Uint8List, String>> images) async {
   // was thinking here to take all images, and based on description, filter the ones that do not have repeated descriptions.

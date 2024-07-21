@@ -29,6 +29,8 @@ build/
 **/android/**/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/app/google-services.json
+**/android/app/src/dev/google-services.json
+**/android/app/src/prod/google-services.json
 
 # iOS specific
 **/ios/**/Pods/
@@ -42,6 +44,8 @@ build/
 **/ios/**/GeneratedPluginRegistrant.*
 **/ios/**/xcuserdata
 **/ios/Runner/GoogleService-Info.plist
+**/ios/Config/*
+**/ios/Config/**/*
 
 # macOS specific
 **/macos/**/Pods/
@@ -87,8 +91,9 @@ backend/app-server/dist
 src/recordings
 
 # Apps
-apps/AppStandalone/lib/firebase_options.dart
-apps/AppStandalone/firebase.json
+apps/AppWithWearable/lib/firebase_options.dart
+apps/AppWithWearable/lib/firebase_options_*.dart
+apps/AppWithWearable/firebase.json
 
 # Solidworks models
 *.SLDPRT
@@ -104,10 +109,11 @@ apps/AppStandalone/firebase.json
 # test output
 test/recordings
 
-#Flutter
+# Flutter
 env.g.dart
 */upload-keystore.jks
 */key.properties
+*.jks
 
 # Jekyll
 docs/_site/
@@ -117,3 +123,5 @@ docs/_site/
 /apps/AppWithWearable/lib/env/prod_env.g.dart
 /apps/AppWithWearable/lib/objectbox.g.dart
 *.jks
+/apps/AppWithWearable/lib/firebase_options.dart
+/apps/AppWithWearable/firebase.json

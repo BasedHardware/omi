@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
@@ -24,6 +25,7 @@ Future<Memory?> processTranscriptContent(
   DateTime? finishedAt,
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos = const [],
+  Function(Message, Memory?)? sendMessageToChat,
 }) async {
   if (transcript.isNotEmpty || photos.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
@@ -37,8 +39,8 @@ Future<Memory?> processTranscriptContent(
       geolocation,
       photos,
     );
-    devModeWebhookCall(memory);
     MemoryProvider().saveMemory(memory);
+    triggerMemoryCreatedEvents(memory, sendMessageToChat: sendMessageToChat);
     return memory;
   }
   return null;
