@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message.dart';
@@ -22,6 +23,7 @@ Future<Memory?> processTranscriptContent(
   bool retrievedFromCache = false,
   DateTime? startedAt,
   DateTime? finishedAt,
+  Geolocation? geolocation,
   List<Tuple2<String, String>> photos = const [],
   Function(Message, Memory?)? sendMessageToChat,
 }) async {
@@ -34,6 +36,7 @@ Future<Memory?> processTranscriptContent(
       retrievedFromCache,
       startedAt,
       finishedAt,
+      geolocation,
       photos,
     );
     MemoryProvider().saveMemory(memory);
@@ -80,6 +83,7 @@ Future<Memory> memoryCreationBlock(
   bool retrievedFromCache,
   DateTime? startedAt,
   DateTime? finishedAt,
+  Geolocation? geolocation,
   List<Tuple2<String, String>> photos,
 ) async {
   SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache);
@@ -122,6 +126,7 @@ Future<Memory> memoryCreationBlock(
     startedAt,
     finishedAt,
     structured.title.isEmpty,
+    geolocation,
     photos,
   );
   debugPrint('Memory created: ${memory.id}');
@@ -157,6 +162,7 @@ Future<Memory> finalizeMemoryRecord(
   DateTime? startedAt,
   DateTime? finishedAt,
   bool discarded,
+  Geolocation? geolocation,
   List<Tuple2<String, String>> photos,
 ) async {
   var memory = Memory(
@@ -167,6 +173,9 @@ Future<Memory> finalizeMemoryRecord(
     startedAt: startedAt,
     finishedAt: finishedAt,
   );
+  if (geolocation != null) {
+    memory.geolocation.target = geolocation;
+  }
   memory.transcriptSegments.addAll(transcriptSegments);
   memory.structured.target = structured;
 
