@@ -16,7 +16,7 @@ getDialog(
       ? [
           TextButton(
             onPressed: () => onCancel(),
-            child: Text(okButtonText, style: TextStyle(color: Colors.white)),
+            child: Text(okButtonText, style: const TextStyle(color: Colors.white)),
           )
         ]
       : [
