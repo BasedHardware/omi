@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
@@ -22,6 +23,7 @@ import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
@@ -35,6 +37,8 @@ import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
+
+import 'phone_recorder_mixin.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -52,13 +56,15 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+class CapturePageState extends State<CapturePage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin {
   @override
   bool get wantKeepAlive => true;
 
   bool _hasTranscripts = false;
   final record = AudioRecorder();
-  RecordState _state = RecordState.stop;
+
+  // RecordingState _state = RecordingState.stop;
   static const quietSecondsForMemoryCreation = 120;
 
   bool _streamingTranscriptEnabled = false;
@@ -92,7 +98,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 // Speaker 1: i haven't seen anyone explain what it means outside of kinda words which pack a lot make it good make it desirable make it something they don't regret but how do you specifically formalize those notions how do you program them in i haven't seen anyone make progress on that so far
 //
 // Speaker 0: but isn't that optimization journey that we're doing as a human civilization we're looking at geopolitics nations are in a state of anarchy with each other they start wars there's conflict and oftentimes they have a very different to that so we're essentially trying to solve the value on the problem with humans right but the examples you gave some for example 2 different religions saying this is our holy site and we are not willing to compromise it in any way if you can make 2 holy sites in virtual worlds you solve the problem but if you only have 1 it's not divisible you're kinda stuck there
-//
+//'
 // Speaker 1: but what if we want to be a tension with each other and that through that tension we understand ourselves and we understand the world so that that's the intellectual journey we're on we're on as a human civilization it will create into
 //
 // Speaker 0: and physical conflict and through that figure stuff out if we go back to that idea of simulation and this is entertainment kinda giving meaning to us the question is how much suffering is reasonable for a video game so yeah i don't mind you know a video game where i get haptic feedback there's a little bit of shaking unethical at least by our human standards it's possible to remove suffering if we're looking at human civilization as an optimization problem
@@ -104,8 +110,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
 
+  // Timer? _backgroundTranscriptTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
+
+  // bool isTranscribing = false;
 
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
@@ -298,7 +307,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
           Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
           try {
-            await _processFileToTranscript(data.item1);
+            await _processFileToTranscript(data.item1, forceDeepgramTranscription: false);
             if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
             if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
             if (segments.isNotEmpty && !firstTranscriptMade) {
@@ -328,9 +337,20 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     }
   }
 
-  _processFileToTranscript(File f) async {
+  _printFileSize(File file) async {
+    int bytes = await file.length();
+    var i = (log(bytes) / log(1024)).floor();
+    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+    debugPrint('File size: $size');
+  }
+
+  _processFileToTranscript(File f, {bool forceDeepgramTranscription = true}) async {
+    setState(() => isTranscribing = true);
+    print('transcribing file: ${f.path}');
+    await _printFileSize(f);
     List<TranscriptSegment> newSegments;
-    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true) {
+    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true && !forceDeepgramTranscription) {
       newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
@@ -348,7 +368,50 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
       currentTranscriptFinishedAt = DateTime.now();
     }
+    // _doProcessingOfInstructions();
+    setState(() => isTranscribing = false);
   }
+
+  Map<int, int> processedSegments = {};
+
+  // Merge conflict. Doesn't exist in the latest commit on the main branch. Should be removed?
+  // _doProcessingOfInstructions() async {
+  //   for (var element in segments) {
+  //     var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
+  //     for (var option in hotWords) {
+  //       if (element.text.toLowerCase().contains(option)) {
+  //         debugPrint('Hey Friend detected');
+  //         var index = element.text.lastIndexOf(option);
+  //         if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
+
+  //         var substring = element.text.substring(index + option.length);
+  //         var words = substring.split(' ');
+  //         if (words.length >= 5) {
+  //           debugPrint('Hey Friend detected and 10 words after');
+  //           String message = await executeGptPrompt('''
+  //         The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
+  //         Extract the only the instruction the user is asking in 5 to 10 words.
+
+  //         ${element.text.substring(index)}''');
+  //           debugPrint('Message: $message');
+
+  //           MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
+  //           widget.refreshMessages();
+  //           dynamic ragInfo = await retrieveRAGContext(message);
+  //           String ragContext = ragInfo[0];
+  //           List<Memory> memories = ragInfo[1].cast<Memory>();
+  //           String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
+  //           var response = await executeGptPrompt(body);
+  //           var aiMessage = Message(DateTime.now(), response, 'ai');
+  //           aiMessage.memories.addAll(memories);
+  //           MessageProvider().saveMessage(aiMessage);
+  //           widget.refreshMessages();
+  //           processedSegments[element.id] = index;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
@@ -438,9 +501,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   void initState() {
     btDevice = widget.device;
     WidgetsBinding.instance.addObserver(this);
-    _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
-    WavBytesUtil.clearTempWavFiles();
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      debugPrint('SchedulerBinding.instance');
+      await phoneRecorderInit(_processFileToTranscript);
+      _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
+      WavBytesUtil.clearTempWavFiles();
       debugPrint('SchedulerBinding.instance');
       if (_streamingTranscriptEnabled) {
         initiateBytesStreamingProcessing();
@@ -483,6 +548,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     record.dispose();
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
@@ -528,25 +594,93 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    final backgroundService = FlutterBackgroundService();
+    if (state == AppLifecycleState.paused) {
+      backgroundTranscriptTimer?.cancel();
+      if (await backgroundService.isRunning()) {
+        _memoryCreationTimer?.cancel();
+      }
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (await backgroundService.isRunning()) {
+        await onAppIsResumed(_processFileToTranscript);
+        // if (Platform.isAndroid) {
+        //   await androidBgTranscribing(Duration(seconds: androidDuration), state, _processFileToTranscript);
+        // } else if (Platform.isIOS) {
+        //   await iosBgTranscribing(Duration(seconds: iosDuration), true, _processFileToTranscript);
+        // }
+      }
+    }
+    super.didChangeAppLifecycleState(state);
+  }
+
+  @override
   Widget build(BuildContext context) {
     // super.build(context);
     return Stack(
       children: [
-        ListView(
-          children: [
-            speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
-            ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
-            getTranscriptWidget(memoryCreating, segments, photos, widget.device),
-            if (wsConnectionState == WebsocketConnectionStatus.error ||
-                wsConnectionState == WebsocketConnectionStatus.failed)
-              getWebsocketErrorWidget(),
-            const SizedBox(height: 16),
-          ],
-        ),
-        getPhoneMicRecordingButton(_recordingToggled, _state)
+        ListView(children: [
+          speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+          getTranscriptWidget(memoryCreating, segments, photos, widget.device),
+          if (wsConnectionState == WebsocketConnectionStatus.error ||
+              wsConnectionState == WebsocketConnectionStatus.failed)
+            getWebsocketErrorWidget(),
+          const SizedBox(height: 16)
+        ]),
+        // isTranscribing
+        //     ? const Padding(
+        //         padding: EdgeInsets.only(bottom: 176),
+        //         child: Align(
+        //           alignment: Alignment.bottomCenter,
+        //           child: Row(
+        //             mainAxisAlignment: MainAxisAlignment.center,
+        //             children: [
+        //               SizedBox(
+        //                 height: 8,
+        //                 width: 8,
+        //                 child: CircularProgressIndicator(
+        //                   strokeWidth: 2,
+        //                   color: Colors.white,
+        //                 ),
+        //               ),
+        //               SizedBox(width: 8),
+        //               Text('Transcribing...', style: TextStyle(color: Colors.white)),
+        //             ],
+        //           ),
+        //         ),
+        //       )
+        //     : const SizedBox(),
+        // getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
   }
 
-  _recordingToggled() async {}
+  _recordingToggled() async {
+    if (recordingState == RecordingState.record) {
+      await stopRecording(_processFileToTranscript, segments, () {
+        _memoryCreationTimer?.cancel();
+        _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
+      });
+    } else if (recordingState == RecordingState.initialising) {
+      debugPrint('initialising, have to wait');
+    } else {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () async {
+            setState(() => recordingState = RecordingState.initialising);
+            await startRecording(_processFileToTranscript);
+            Navigator.pop(context);
+          },
+          'Limited Capabilities',
+          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
+          okButtonText: 'Ok, I understand',
+        ),
+      );
+    }
+  }
 }

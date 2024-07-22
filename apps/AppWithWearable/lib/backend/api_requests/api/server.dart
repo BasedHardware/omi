@@ -17,10 +17,10 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
   final client = InstabugHttpClient();
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=${SharedPreferencesUtil().uid}'),
+    Uri.parse(
+        '${Env.apiBaseUrl}v1/transcribe?language=${SharedPreferencesUtil().recordingsLanguage}&uid=${SharedPreferencesUtil().uid}'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-
   request.headers.addAll({
     'Authorization': await getAuthHeader(),
   });
