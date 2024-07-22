@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/find.dart';
-import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'found_devices.dart';
@@ -42,7 +44,35 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   }
 
   Future<void> _scanDevices() async {
-    // TODO: validate bluetooth turned on
+    // check if bluetooth is enabled on Android
+    if (Platform.isAndroid) {
+      if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
+        try {
+          await FlutterBluePlus.turnOn();
+        } catch (e) {
+          if (e is FlutterBluePlusException) {
+            if (e.code == 11) {
+              if (mounted) {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.of(context).pop();
+                    },
+                    () {},
+                    'Enable Bluetooth',
+                    'Friend needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
+                    singleButton: true,
+                  ),
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () => setState(() => enableInstructions = true));
     // Update foundDevicesMap with new devices and remove the ones not found anymore
     Map<String, BTDeviceStruct> foundDevicesMap = {};
