@@ -35,7 +35,10 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
       .difference(startTime)
       .inSeconds} seconds');
   var data = jsonDecode(res.json);
-  // debugPrint('Response body: ${res.json}');
+  if (data['results'] == null || data['results']['channels'] == null) {
+    print('Deepgram error: ${data['error']}');
+    return [];
+  }
   var result = data['results']['channels'][0]['alternatives'][0];
   List<TranscriptSegment> segments = [];
   for (var word in result['words']) {

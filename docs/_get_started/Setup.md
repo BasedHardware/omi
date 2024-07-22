@@ -74,4 +74,6 @@ Before starting, make sure you have the following installed:
 8. **Run the App**:
     - Select your target device in Xcode or Android Studio.
     - Run the app.
+
+
 [Next Step: Buying Guide →](/assembly/Buying_Guide/){: .btn .btn-purple }
