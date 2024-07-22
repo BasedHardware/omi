@@ -430,4 +430,22 @@
     "chat_prompt": "I'm your Better Communicator assistant. I can provide real-time feedback on your communication style and offer suggestions for improvement. Feel free to ask me about specific aspects of your communication or for general tips on effective speaking.",
     "deleted": false
   }
+  {
+  "id": "Sapiento",
+  "name": "Sapiento - Logical Fallacy Fact Checker",
+  "author": "@wisdomifode+@adamajroudi",
+  "description": "Detects and corrects logical fallacies, Fact Check using MultiOn",
+  "image": "/assets/plugin_images/notion-crm.png",
+  "prompt": "",
+  "memories": false,
+  "chat": false,
+  "capabilities": [
+    "external_integration"
+  ],
+  "external_integration": {
+    "triggers_on": "transcript_processed",
+    "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
+    "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
+  }
+}
 ]
