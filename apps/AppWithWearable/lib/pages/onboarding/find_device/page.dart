@@ -44,7 +44,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   }
 
   Future<void> _scanDevices() async {
-    // check if bluetooth is on on Android
+    // check if bluetooth is enabled on Android
     if (Platform.isAndroid) {
       if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
         try {
