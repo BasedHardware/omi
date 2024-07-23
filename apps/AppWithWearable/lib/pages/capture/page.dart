@@ -494,11 +494,11 @@ class CapturePageState extends State<CapturePage>
       children: [
         ListView(children: [
           speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device,wsConnectionState,_internetStatus),
           getTranscriptWidget(memoryCreating, segments, photos, widget.device),
           if (wsConnectionState == WebsocketConnectionStatus.error ||
               wsConnectionState == WebsocketConnectionStatus.failed)
-            getWebsocketErrorWidget(),
+            // getWebsocketErrorWidget(),
           const SizedBox(height: 16)
         ]),
         // getPhoneMicRecordingButton(_recordingToggled, recordingState)
