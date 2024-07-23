@@ -6,18 +6,27 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/device_widget.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:record/record.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:lottie/lottie.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStruct? device) {
+getConnectionStateWidgets(
+  BuildContext context,
+  bool hasTranscripts,
+  BTDeviceStruct? device,
+  WebsocketConnectionStatus wsConnectionState,
+  InternetStatus? internetStatus,
+) {
   if (hasTranscripts) return [];
   if (device == null) {
     return [
@@ -30,52 +39,91 @@ getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStr
             ),
     ];
   }
+
+  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
+  bool isWebsocketError =
+      wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
+
   return [
     const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
-    Center(
-        child: Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(width: 24),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            const Text(
-              'Listening',
-              style: TextStyle(
-                  fontFamily: 'SF Pro Display',
-                  color: Colors.white,
-                  fontSize: 29.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2),
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16.0,
-                fontWeight: FontWeight.w500,
-                height: 1.5,
+    GestureDetector(
+      onTap: isWifiDisconnected || isWebsocketError
+          ? () {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () => Navigator.pop(context),
+                  () => Navigator.pop(context),
+                  isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
+                  isWifiDisconnected
+                      ? 'Your device is offline. Transcription is paused until connection is restored.'
+                      : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
+                  okButtonText: 'Ok',
+                  singleButton: true,
+                ),
+              );
+            }
+          : null,
+      child: Center(
+          child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(width: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                isWifiDisconnected
+                    ? 'No Internet'
+                    : isWebsocketError
+                        ? 'Server Issue'
+                        : 'Listening',
+                style: TextStyle(
+                    fontFamily: 'SF Pro Display',
+                    color: Colors.white,
+                    fontSize: isWifiDisconnected
+                        ? 29
+                        : isWebsocketError
+                            ? 29
+                            : 29,
+                    letterSpacing: 0.0,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            )
-          ],
-        ),
-        const SizedBox(width: 24),
-        Container(
-          width: 10,
-          height: 10,
-          decoration: const BoxDecoration(
-            color: Color.fromARGB(255, 0, 255, 8),
-            shape: BoxShape.circle,
+              Text(
+                '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w500,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              )
+            ],
           ),
-        ),
-      ],
-    )),
+          const SizedBox(width: 24),
+          isWifiDisconnected
+              ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+              : isWebsocketError
+                  // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
+                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+                  // TODO: find a better animation for server
+                  : Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color.fromARGB(255, 0, 255, 9),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+        ],
+      )),
+    ),
     const SizedBox(height: 8),
     // const Row(
     //   crossAxisAlignment: CrossAxisAlignment.center,
@@ -224,28 +272,6 @@ getTranscriptWidget(
     );
   }
 
-  if (segments.isEmpty && photos.isEmpty) {
-    // && !GrowthbookUtil().hasTranscriptServerFeatureOn()) {
-    return btDevice != null
-        ? const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(height: 80),
-              Align(
-                alignment: Alignment.center,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32.0),
-                  child: Text(
-                    textAlign: TextAlign.center,
-                    'Your transcripts will start appearing\nhere after 30 seconds.',
-                    style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
-                  ),
-                ),
-              )
-            ],
-          )
-        : const SizedBox.shrink();
-  }
   if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
   return TranscriptWidget(segments: segments);
 }

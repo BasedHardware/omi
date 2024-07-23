@@ -61,6 +61,7 @@ mixin WebSocketMixin {
           _reconnectionAttempts = 0;
           _isConnecting = false;
           onConnectionSuccess();
+          clearNotification(2); // clear connection server conn issue?
         },
         onWebsocketConnectionFailed: (err) {
           debugPrint('WebSocket connection failed: $err');
@@ -222,9 +223,9 @@ mixin WebSocketMixin {
     clearNotification(2);
     createNotification(
       notificationId: 2,
-      title: 'Connection Issue',
-      body:
-          'Unable to connect to the transcription service. Please check your internet connection and restart the app if the problem persists.',
+      title: 'Connection Issue 🚨',
+      body: 'Unable to connect to the transcript service.'
+          ' Please restart the app or contact support if the problem persists.',
     );
   } // TODO: should trigger a connection restored? as with internet?
 
