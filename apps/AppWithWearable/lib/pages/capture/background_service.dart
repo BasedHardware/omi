@@ -57,12 +57,12 @@ void onStart(ServiceInstance service) async {
   var path = await getApplicationDocumentsDirectory();
   var files = Directory(path.path).listSync();
   for (var file in files) {
-    if (file.path.contains('recording_') && !file.path.contains('recording_0')) {
+    if (file.path.contains('mic_recording_') && !file.path.contains('mic_recording_0')) {
       debugPrint('deleting file: ${file.path}');
       file.deleteSync();
     }
   }
-  var filePath = '${path.path}/recording_$count.wav';
+  var filePath = '${path.path}/mic_recording_$count.wav';
   service.invoke("stateUpdate", {"state": 'recording'});
   await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
   // timerUpdate is only invoked on Android
@@ -79,7 +79,7 @@ void onStart(ServiceInstance service) async {
       var paths = SharedPreferencesUtil().recordingPaths;
       SharedPreferencesUtil().recordingPaths = [...paths, filePath];
       count++;
-      filePath = '${path.path}/recording_$count.wav';
+      filePath = '${path.path}/mic_recording_$count.wav';
       record = AudioRecorder();
       await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
       debugPrint("recording started again file: $filePath");
@@ -97,7 +97,7 @@ Future streamRecording(ServiceInstance service) async {
   var record = AudioRecorder();
   var path = await getApplicationDocumentsDirectory();
   int count = 0;
-  var filePath = '${path.path}/recording_$count.m4a';
+  var filePath = '${path.path}/mic_recording_$count.m4a';
   service.invoke("stateUpdate", {"state": 'recording'});
   var stream = await record.startStream(const RecordConfig(encoder: AudioEncoder.pcm16bits));
   var audioData = <int>[];

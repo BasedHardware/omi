@@ -94,8 +94,13 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
           setState(() {
             lastOffset = currentLength;
             partNumber++;
-            iosDuration = 5;
+
             isTranscribing = false;
+          });
+        },
+        updateTimer: () {
+          setState(() {
+            iosDuration = 5;
           });
         },
       );
@@ -209,7 +214,7 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     backgroundTranscriptTimer = Timer.periodic(interval, (timer) async {
       debugPrint('timer triggered at ${DateTime.now()}');
       var path = await getApplicationDocumentsDirectory();
-      var filePath = '${path.path}/recording_0.wav';
+      var filePath = '${path.path}/mic_recording_0.wav';
       try {
         debugPrint('isTranscribing: $isTranscribing');
         if (isTranscribing) return;
@@ -222,8 +227,12 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
             setState(() {
               lastOffset = currentLength;
               partNumber++;
-              iosDuration = 30;
               isTranscribing = false;
+            });
+          },
+          updateTimer: () {
+            setState(() {
+              iosDuration = 30;
             });
           },
         );

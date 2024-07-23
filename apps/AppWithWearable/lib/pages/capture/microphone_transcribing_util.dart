@@ -15,7 +15,7 @@ Future transcribeAfterStopiOS({
   required List<TranscriptSegment> segments,
 }) async {
   var path = await getApplicationDocumentsDirectory();
-  var initalFile = File('${path.path}/recording_0.wav');
+  var initalFile = File('${path.path}/mic_recording_0.wav');
   if (initalFile.existsSync()) {
     // emptying the file instead of deleting incase if the user presses on start recording again after stopping
     initalFile.writeAsBytesSync([]);
@@ -24,7 +24,7 @@ Future transcribeAfterStopiOS({
   var files = path.listSync();
   for (var file in files) {
     if (file is File) {
-      if (!file.path.contains('recording_0')) {
+      if (!file.path.contains('mic_recording_0') && file.path.contains('mic_recording_')) {
         filePaths.add(file.path);
       }
     }
@@ -72,7 +72,7 @@ Future transcribeAfterStopAndroid(
   var files = path.listSync();
   for (var file in files) {
     if (file is File) {
-      if (file.path.contains('recording_')) {
+      if (file.path.contains('mic_recording_')) {
         if (!SharedPreferencesUtil().recordingPaths.contains(file.path)) {
           filePaths.add(file.path);
         }
@@ -118,13 +118,15 @@ Future iosBgCallback({
   required int partNumber,
   required Function processFileToTranscript,
   required Function(int) updateState,
+  required Function updateTimer,
 }) async {
   try {
     var path = await getApplicationDocumentsDirectory();
-    var filePath = '${path.path}/recording_0.wav';
+    var filePath = '${path.path}/mic_recording_0.wav';
     final file = File(filePath);
 
     if (await file.exists()) {
+      updateTimer();
       // Get the current length of the file
       final currentLength = await file.length();
       debugPrint('Current length: $currentLength and last offset: $lastOffset');
@@ -137,7 +139,7 @@ Future iosBgCallback({
 
         // Write the new content to a new file
         var path = await getApplicationDocumentsDirectory();
-        final newFilePath = '${path.path}/recording_$partNumber.wav';
+        final newFilePath = '${path.path}/mic_recording_$partNumber.wav';
         final newFile = File(newFilePath);
         var header = WavBytesUtil.getWavHeader(newContent.length, 44100, channelCount: 2);
         newContent = [...header, ...newContent];
@@ -169,7 +171,7 @@ Future androidBgCallback({
   required Function processFileToTranscript,
 }) async {
   var path = await getApplicationDocumentsDirectory();
-  var filePath = '${path.path}/recording_$fileCount.wav';
+  var filePath = '${path.path}/mic_recording_$fileCount.wav';
   var file = File(filePath);
   backgroundService.invoke('timerUpdate', {'time': '0'});
   if (file.existsSync()) {
