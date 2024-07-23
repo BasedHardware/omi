@@ -489,16 +489,13 @@ class CapturePageState extends State<CapturePage>
 
   @override
   Widget build(BuildContext context) {
-    // super.build(context);
+    super.build(context);
     return Stack(
       children: [
         ListView(children: [
           speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device,wsConnectionState,_internetStatus),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device, wsConnectionState, _internetStatus),
           getTranscriptWidget(memoryCreating, segments, photos, widget.device),
-          if (wsConnectionState == WebsocketConnectionStatus.error ||
-              wsConnectionState == WebsocketConnectionStatus.failed)
-            // getWebsocketErrorWidget(),
           const SizedBox(height: 16)
         ]),
         // getPhoneMicRecordingButton(_recordingToggled, recordingState)
