@@ -19,7 +19,11 @@ mixin WebSocketMixin {
 
   final int _initialReconnectDelay = 1;
   final int _maxReconnectDelay = 60;
-  final int _maxReconnectionAttempts = 3;
+  bool _isConnecting = false;
+
+  // final int _maxReconnectionAttempts = 3;
+  bool _hasNotifiedUser = false;
+  bool _internetListenerSetup = false;
 
   Future<void> initWebSocket({
     required Function onConnectionSuccess,
@@ -28,42 +32,42 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
   }) async {
-    _setupInternetListener(
-      onConnectionSuccess: onConnectionSuccess,
-      onConnectionFailed: onConnectionFailed,
-      onConnectionClosed: onConnectionClosed,
-      onConnectionError: onConnectionError,
-      onMessageReceived: onMessageReceived,
-    );
+    if (_isConnecting) return;
+    _isConnecting = true;
+
+    if (!_internetListenerSetup) {
+      _setupInternetListener(
+        onConnectionSuccess: onConnectionSuccess,
+        onConnectionFailed: onConnectionFailed,
+        onConnectionClosed: onConnectionClosed,
+        onConnectionError: onConnectionError,
+        onMessageReceived: onMessageReceived,
+      );
+      _internetListenerSetup = true;
+    }
 
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('No internet connection. Waiting for connection to be restored.');
+      _isConnecting = false;
       return;
     }
 
-    websocketChannel = await streamingTranscript(
-      onWebsocketConnectionSuccess: () {
-        wsConnectionState = WebsocketConnectionStatus.connected;
-        websocketReconnecting = false;
-        _reconnectionAttempts = 0;
-        onConnectionSuccess();
-      },
-      onWebsocketConnectionFailed: (err) {
-        wsConnectionState = WebsocketConnectionStatus.failed;
-        websocketReconnecting = false;
-        onConnectionFailed(err);
-        _scheduleReconnection(
-          onConnectionSuccess: onConnectionSuccess,
-          onConnectionFailed: onConnectionFailed,
-          onConnectionClosed: onConnectionClosed,
-          onConnectionError: onConnectionError,
-          onMessageReceived: onMessageReceived,
-        );
-      },
-      onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
-        wsConnectionState = WebsocketConnectionStatus.closed;
-        onConnectionClosed(closeCode, closeReason);
-        if (closeCode != 1000) {
+    try {
+      websocketChannel = await streamingTranscript(
+        onWebsocketConnectionSuccess: () {
+          debugPrint('WebSocket connected successfully');
+          wsConnectionState = WebsocketConnectionStatus.connected;
+          websocketReconnecting = false;
+          _reconnectionAttempts = 0;
+          _isConnecting = false;
+          onConnectionSuccess();
+        },
+        onWebsocketConnectionFailed: (err) {
+          debugPrint('WebSocket connection failed: $err');
+          wsConnectionState = WebsocketConnectionStatus.failed;
+          websocketReconnecting = false;
+          _isConnecting = false;
+          onConnectionFailed(err);
           _scheduleReconnection(
             onConnectionSuccess: onConnectionSuccess,
             onConnectionFailed: onConnectionFailed,
@@ -71,22 +75,43 @@ mixin WebSocketMixin {
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
           );
-        }
-      },
-      onWebsocketConnectionError: (err) {
-        wsConnectionState = WebsocketConnectionStatus.error;
-        websocketReconnecting = false;
-        onConnectionError(err);
-        _scheduleReconnection(
-          onConnectionSuccess: onConnectionSuccess,
-          onConnectionFailed: onConnectionFailed,
-          onConnectionClosed: onConnectionClosed,
-          onConnectionError: onConnectionError,
-          onMessageReceived: onMessageReceived,
-        );
-      },
-      onMessageReceived: onMessageReceived,
-    );
+        },
+        onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
+          debugPrint('WebSocket connection closed: $closeCode, $closeReason');
+          wsConnectionState = WebsocketConnectionStatus.closed;
+          _isConnecting = false;
+          onConnectionClosed(closeCode, closeReason);
+          if (closeCode != 1000 && !websocketReconnecting) {
+            _scheduleReconnection(
+              onConnectionSuccess: onConnectionSuccess,
+              onConnectionFailed: onConnectionFailed,
+              onConnectionClosed: onConnectionClosed,
+              onConnectionError: onConnectionError,
+              onMessageReceived: onMessageReceived,
+            );
+          }
+        },
+        onWebsocketConnectionError: (err) {
+          debugPrint('WebSocket connection error: $err');
+          wsConnectionState = WebsocketConnectionStatus.error;
+          websocketReconnecting = false;
+          _isConnecting = false;
+          onConnectionError(err);
+          _scheduleReconnection(
+            onConnectionSuccess: onConnectionSuccess,
+            onConnectionFailed: onConnectionFailed,
+            onConnectionClosed: onConnectionClosed,
+            onConnectionError: onConnectionError,
+            onMessageReceived: onMessageReceived,
+          );
+        },
+        onMessageReceived: onMessageReceived,
+      );
+    } catch (e) {
+      debugPrint('Error in initWebSocket: $e');
+      _isConnecting = false;
+      onConnectionFailed(e);
+    }
   }
 
   void _setupInternetListener({
@@ -101,20 +126,25 @@ mixin WebSocketMixin {
       switch (status) {
         case InternetStatus.connected:
           debugPrint('Internet connection restored. Attempting to reconnect WebSocket.');
-          _reconnectionTimer?.cancel();
-          _reconnectionAttempts = 0; // Reset attempts when internet is restored
-          _attemptReconnection(
-            onConnectionSuccess: onConnectionSuccess,
-            onConnectionFailed: onConnectionFailed,
-            onConnectionClosed: onConnectionClosed,
-            onConnectionError: onConnectionError,
-            onMessageReceived: onMessageReceived,
-          );
+          if (wsConnectionState != WebsocketConnectionStatus.connected && !_isConnecting) {
+            _notifyInternetRestored();
+            _reconnectionTimer?.cancel();
+            _reconnectionAttempts = 0;
+            _attemptReconnection(
+              onConnectionSuccess: onConnectionSuccess,
+              onConnectionFailed: onConnectionFailed,
+              onConnectionClosed: onConnectionClosed,
+              onConnectionError: onConnectionError,
+              onMessageReceived: onMessageReceived,
+            );
+          }
           break;
         case InternetStatus.disconnected:
           debugPrint('Internet connection lost. Disconnecting WebSocket.');
+          _notifyInternetLost();
           websocketChannel?.sink.close(1000, 'Internet connection lost');
           _reconnectionTimer?.cancel();
+          wsConnectionState = WebsocketConnectionStatus.notConnected;
           onConnectionClosed(1000, 'Internet connection lost');
           break;
       }
@@ -128,16 +158,18 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
   }) {
-    if (websocketReconnecting || _internetStatus == InternetStatus.disconnected) return;
+    if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
     websocketReconnecting = true;
     _reconnectionAttempts++;
 
-    if (_reconnectionAttempts > _maxReconnectionAttempts) {
-      debugPrint('Max reconnection attempts reached');
-      _notifyReconnectionFailure();
-      return;
-    }
+    // if reconnection limits
+    // if (_reconnectionAttempts > _maxReconnectionAttempts) {
+    //   debugPrint('Max reconnection attempts reached');
+    //   _notifyReconnectionFailure();
+    //   websocketReconnecting = false;
+    //   return;
+    // }
 
     int delaySeconds = _calculateReconnectDelay();
     debugPrint('Scheduling reconnection attempt $_reconnectionAttempts in $delaySeconds seconds');
@@ -152,6 +184,10 @@ mixin WebSocketMixin {
         onMessageReceived: onMessageReceived,
       );
     });
+    if (_reconnectionAttempts == 4 && !_hasNotifiedUser) {
+      _notifyReconnectionFailure();
+      _hasNotifiedUser = true;
+    }
   }
 
   int _calculateReconnectDelay() {
@@ -189,6 +225,24 @@ mixin WebSocketMixin {
       title: 'Connection Issue',
       body:
           'Unable to connect to the transcription service. Please check your internet connection and restart the app if the problem persists.',
+    );
+  } // TODO: should trigger a connection restored? as with internet?
+
+  void _notifyInternetLost() {
+    clearNotification(3);
+    createNotification(
+      notificationId: 3,
+      title: 'Internet Connection Lost',
+      body: 'Your device is offline. Transcription is paused until connection is restored.',
+    );
+  }
+
+  void _notifyInternetRestored() {
+    clearNotification(3);
+    createNotification(
+      notificationId: 3,
+      title: 'Internet Connection Restored',
+      body: 'Your device is back online. Transcription will resume shortly.',
     );
   }
 
