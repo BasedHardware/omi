@@ -25,6 +25,44 @@ void bt_ctlr_assert_handle(char *name, int type)
 	}
 }
 
+bool is_connected = false;
+bool is_charging = false;
+
+void set_led_state()
+{
+	// Recording and connected state - BLUE
+	if (is_connected)
+	{
+		set_led_red(false);
+		set_led_green(false);
+		set_led_blue(true);
+		return;
+	}
+
+	// Recording but lost connection - RED
+	if (!is_connected)
+	{
+		set_led_red(true);
+		set_led_green(false);
+		set_led_blue(false);
+		return;
+	}
+
+	// Not recording, but charging - WHITE
+	if (is_charging)
+	{
+		set_led_red(true);
+		set_led_green(true);
+		set_led_blue(true);
+		return;
+	}
+
+	// Not recording - OFF
+	set_led_red(false);
+	set_led_green(false);
+	set_led_blue(false);
+}
+
 // Main loop
 int main(void)
 {
@@ -43,16 +81,11 @@ int main(void)
 	set_mic_callback(mic_handler);
 	ASSERT_OK(mic_start());
 
-	// Blink LED
-	bool is_on = true;
-	set_led_blue(false);
-	set_led_red(is_on);
-	// while (1)
-	// {
-	// 	is_on = !is_on;
-	// 	set_led_red(is_on);
-	// 	k_msleep(500);
-	// }
+	while (1)
+	{
+		set_led_state();
+		k_msleep(500);
+	}
 
 	// Unreachable
 	return 0;
