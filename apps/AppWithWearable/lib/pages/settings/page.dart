@@ -191,7 +191,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  GrowthbookUtil().hasTranscriptServerFeatureOn()
+                  SharedPreferencesUtil().useTranscriptServer
                       ? getItemAddOn('Speech Profile', () {
                           routeToPage(context, const SpeakerIdPage());
                         }, icon: Icons.multitrack_audio)

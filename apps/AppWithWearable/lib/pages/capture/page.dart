@@ -18,6 +18,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
+import 'package:friend_private/pages/capture/logic/chunks_mixin.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
@@ -29,11 +30,9 @@ import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:record/record.dart';
-import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
 import 'logic/websocket_mixin.dart';
@@ -56,7 +55,13 @@ class CapturePage extends StatefulWidget {
 }
 
 class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        WidgetsBindingObserver,
+        PhoneRecorderMixin,
+        WebSocketMixin,
+        OpenGlassMixin,
+        AudioChunksMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -200,58 +205,28 @@ class CapturePageState extends State<CapturePage>
     if (isGlasses) return await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
 
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    if (codec == BleAudioCodec.unknown) {
-      // TODO: disconnect and show error
-    }
+    if (codec == BleAudioCodec.unknown) {} // TODO: disconnect and show error
 
     bool firstTranscriptMade = SharedPreferencesUtil().firstTranscriptMade;
 
-    WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
     audioStorage = WavBytesUtil(codec: codec);
-    _bleBytesStream = await getBleAudioBytesListener(
+    await initiateChunksProcessing(
       btDevice!.id,
-      onAudioBytesReceived: (List<int> value) async {
-        if (value.isEmpty) return;
-
-        toProcessBytes2.storeFramePacket(value);
-        audioStorage!.storeFramePacket(value);
-        if (toProcessBytes2.hasFrames() && toProcessBytes2.frames.length % 3000 == 0) {
-          if (_internetStatus == InternetStatus.disconnected) {
-            debugPrint('No internet connection, not processing audio');
-            return;
-          }
-          if (await WavBytesUtil.tempWavExists()) return; // wait til that one is fully processed
-
-          Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
-          try {
-            await _processFileToTranscript(data.item1, forceDeepgramTranscription: false);
-            if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: data.item2.length ~/ 100);
-            if (segments.isNotEmpty) elapsedSeconds += data.item2.length ~/ 100;
-            if (segments.isNotEmpty && !firstTranscriptMade) {
-              SharedPreferencesUtil().firstTranscriptMade = true;
-              MixpanelManager().firstTranscriptMade();
-              firstTranscriptMade = true;
-            }
-
-            // uploadFile(data.item1, prefixTimestamp: true);
-          } catch (e, stacktrace) {
-            debugPrint('Error processing 30 seconds frame');
-            print(e); // don't change this to debugPrint
-            CrashReporting.reportHandledCrash(
-              e,
-              stacktrace,
-              level: NonFatalExceptionLevel.warning,
-              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()},
-            );
-            toProcessBytes2.insertAudioBytes(data.item2);
-          }
-          WavBytesUtil.deleteTempWav();
+      codec,
+      audioStorage,
+      (newSegments, processedBytes) {
+        _handleNewSegments(newSegments);
+        if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: processedBytes.length ~/ 100);
+        if (segments.isNotEmpty) elapsedSeconds += processedBytes.length ~/ 100;
+        if (segments.isNotEmpty && !firstTranscriptMade) {
+          SharedPreferencesUtil().firstTranscriptMade = true;
+          MixpanelManager().firstTranscriptMade();
+          firstTranscriptMade = true;
         }
       },
+      (bool value) => setState(() => isTranscribing = value),
+      _internetStatus,
     );
-    if (_bleBytesStream == null) {
-      // TODO: error out and disconnect
-    }
   }
 
   _printFileSize(File file) async {
@@ -267,12 +242,16 @@ class CapturePageState extends State<CapturePage>
     print('transcribing file: ${f.path}');
     await _printFileSize(f);
     List<TranscriptSegment> newSegments;
-    if (GrowthbookUtil().hasTranscriptServerFeatureOn() == true && !forceDeepgramTranscription) {
+    if (SharedPreferencesUtil().useTranscriptServer && !forceDeepgramTranscription) {
       newSegments = await transcribe(f);
     } else {
       newSegments = await deepgramTranscribe(f);
     }
-    // debugPrint('newSegments: ${newSegments.length} + elapsedSeconds: $elapsedSeconds');
+    _handleNewSegments(newSegments);
+    setState(() => isTranscribing = false);
+  }
+
+  void _handleNewSegments(List<TranscriptSegment> newSegments) {
     TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
       triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
@@ -286,7 +265,7 @@ class CapturePageState extends State<CapturePage>
       currentTranscriptFinishedAt = DateTime.now();
     }
     // _doProcessingOfInstructions();
-    setState(() => isTranscribing = false);
+    // setState(() => isTranscribing = false);
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
