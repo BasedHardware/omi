@@ -1,33 +1,47 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
-import 'package:tuple/tuple.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
 
 mixin WebSocketMixin {
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
-  IOWebSocketChannel? _wsChannel;
+  IOWebSocketChannel? websocketChannel;
   int _reconnectionAttempts = 0;
+  Timer? _reconnectionTimer;
+  late StreamSubscription<InternetStatus> _internetListener;
+  InternetStatus _internetStatus = InternetStatus.connected;
 
-  Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> initWebSocket({
+  final int _initialReconnectDelay = 1;
+  final int _maxReconnectDelay = 60;
+  final int _maxReconnectionAttempts = 3;
+
+  Future<void> initWebSocket({
     required Function onConnectionSuccess,
     required Function(dynamic) onConnectionFailed,
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
-    required BTDeviceStruct btDevice,
-    required BleAudioCodec audioCodec,
   }) async {
-    Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await streamingTranscript(
-      btDevice: btDevice,
-      deviceCodec: audioCodec,
+    _setupInternetListener(
+      onConnectionSuccess: onConnectionSuccess,
+      onConnectionFailed: onConnectionFailed,
+      onConnectionClosed: onConnectionClosed,
+      onConnectionError: onConnectionError,
+      onMessageReceived: onMessageReceived,
+    );
+
+    if (_internetStatus == InternetStatus.disconnected) {
+      debugPrint('No internet connection. Waiting for connection to be restored.');
+      return;
+    }
+
+    websocketChannel = await streamingTranscript(
       onWebsocketConnectionSuccess: () {
         wsConnectionState = WebsocketConnectionStatus.connected;
         websocketReconnecting = false;
@@ -38,28 +52,24 @@ mixin WebSocketMixin {
         wsConnectionState = WebsocketConnectionStatus.failed;
         websocketReconnecting = false;
         onConnectionFailed(err);
-        _reconnectWebSocket(
+        _scheduleReconnection(
           onConnectionSuccess: onConnectionSuccess,
           onConnectionFailed: onConnectionFailed,
           onConnectionClosed: onConnectionClosed,
           onConnectionError: onConnectionError,
           onMessageReceived: onMessageReceived,
-          btDevice: btDevice,
-          audioCodec: audioCodec,
         );
       },
       onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
         wsConnectionState = WebsocketConnectionStatus.closed;
         onConnectionClosed(closeCode, closeReason);
         if (closeCode != 1000) {
-          _reconnectWebSocket(
+          _scheduleReconnection(
             onConnectionSuccess: onConnectionSuccess,
             onConnectionFailed: onConnectionFailed,
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
-            btDevice: btDevice,
-            audioCodec: audioCodec,
           );
         }
       },
@@ -67,93 +77,124 @@ mixin WebSocketMixin {
         wsConnectionState = WebsocketConnectionStatus.error;
         websocketReconnecting = false;
         onConnectionError(err);
-        _reconnectWebSocket(
+        _scheduleReconnection(
           onConnectionSuccess: onConnectionSuccess,
           onConnectionFailed: onConnectionFailed,
           onConnectionClosed: onConnectionClosed,
           onConnectionError: onConnectionError,
           onMessageReceived: onMessageReceived,
-          btDevice: btDevice,
-          audioCodec: audioCodec,
         );
       },
       onMessageReceived: onMessageReceived,
     );
-
-    _wsChannel = data.item1;
-    return data;
   }
 
-  //  Future<void> _reconnectWebSocket() async {
-  //     // TODO: fix function
-  //     // - we are closing so that this triggers a new reconnect, but maybe it shouldn't, as this will trigger error sometimes, and close
-  //     //   causing 4 up to 5 reconnect attempts, double notification, double memory creation and so on.
-  //     // if (websocketReconnecting) return;
-  //
-  //     if (_reconnectionAttempts >= 3) {
-  //       setState(() => websocketReconnecting = false);
-  //       // TODO: reset here to 0? or not, this could cause infinite loop if it's called in parallel from 2 distinct places
-  //       debugPrint('Max reconnection attempts reached');
-  //       clearNotification(2);
-  //       createNotification(
-  //         notificationId: 2,
-  //         title: 'Error Generating Transcription',
-  //         body: 'Check your internet connection and try again. If the problem persists, restart the app.',
-  //       );
-  //       resetState(restartBytesProcessing: false); // Should trigger this only once, and then disconnects websocket
-  //
-  //       return;
-  //     }
-  //     setState(() {
-  //       websocketReconnecting = true;
-  //     });
-  //     _reconnectionAttempts++;
-  //     await Future.delayed(const Duration(seconds: 3)); // Reconnect delay
-  //     debugPrint('Attempting to reconnect $_reconnectionAttempts time');
-  //     // _wsChannel?.
-  //     _bleBytesStream?.cancel();
-  //     _wsChannel?.sink.close(); // trigger one more reconnectWebSocket call
-  //     await initiateBytesStreamingProcessing();
-  //   }
-
-  Future<void> _reconnectWebSocket({
+  void _setupInternetListener({
     required Function onConnectionSuccess,
     required Function(dynamic) onConnectionFailed,
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
-    required BTDeviceStruct btDevice,
-    required BleAudioCodec audioCodec,
-  }) async {
-    if (_reconnectionAttempts >= 3) {
-      websocketReconnecting = false;
-      debugPrint('Max reconnection attempts reached');
-      clearNotification(2);
-      createNotification(
-        notificationId: 2,
-        title: 'Error Generating Transcription',
-        body: 'Check your internet connection and try again. If the problem persists, restart the app.',
-      );
-      return;
-    }
+  }) {
+    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+      _internetStatus = status;
+      switch (status) {
+        case InternetStatus.connected:
+          debugPrint('Internet connection restored. Attempting to reconnect WebSocket.');
+          _reconnectionTimer?.cancel();
+          _reconnectionAttempts = 0; // Reset attempts when internet is restored
+          _attemptReconnection(
+            onConnectionSuccess: onConnectionSuccess,
+            onConnectionFailed: onConnectionFailed,
+            onConnectionClosed: onConnectionClosed,
+            onConnectionError: onConnectionError,
+            onMessageReceived: onMessageReceived,
+          );
+          break;
+        case InternetStatus.disconnected:
+          debugPrint('Internet connection lost. Disconnecting WebSocket.');
+          websocketChannel?.sink.close(1000, 'Internet connection lost');
+          _reconnectionTimer?.cancel();
+          onConnectionClosed(1000, 'Internet connection lost');
+          break;
+      }
+    });
+  }
+
+  void _scheduleReconnection({
+    required Function onConnectionSuccess,
+    required Function(dynamic) onConnectionFailed,
+    required Function(int?, String?) onConnectionClosed,
+    required Function(dynamic) onConnectionError,
+    required Function(List<TranscriptSegment>) onMessageReceived,
+  }) {
+    if (websocketReconnecting || _internetStatus == InternetStatus.disconnected) return;
 
     websocketReconnecting = true;
     _reconnectionAttempts++;
-    await Future.delayed(const Duration(seconds: 3));
-    debugPrint('Attempting to reconnect $_reconnectionAttempts time');
-    _wsChannel?.sink.close();
+
+    if (_reconnectionAttempts > _maxReconnectionAttempts) {
+      debugPrint('Max reconnection attempts reached');
+      _notifyReconnectionFailure();
+      return;
+    }
+
+    int delaySeconds = _calculateReconnectDelay();
+    debugPrint('Scheduling reconnection attempt $_reconnectionAttempts in $delaySeconds seconds');
+
+    _reconnectionTimer?.cancel();
+    _reconnectionTimer = Timer(Duration(seconds: delaySeconds), () {
+      _attemptReconnection(
+        onConnectionSuccess: onConnectionSuccess,
+        onConnectionFailed: onConnectionFailed,
+        onConnectionClosed: onConnectionClosed,
+        onConnectionError: onConnectionError,
+        onMessageReceived: onMessageReceived,
+      );
+    });
+  }
+
+  int _calculateReconnectDelay() {
+    int delay = _initialReconnectDelay * pow(2, _reconnectionAttempts - 1).toInt();
+    return min(delay, _maxReconnectDelay);
+  }
+
+  Future<void> _attemptReconnection({
+    required Function onConnectionSuccess,
+    required Function(dynamic) onConnectionFailed,
+    required Function(int?, String?) onConnectionClosed,
+    required Function(dynamic) onConnectionError,
+    required Function(List<TranscriptSegment>) onMessageReceived,
+  }) async {
+    if (_internetStatus == InternetStatus.disconnected) {
+      debugPrint('Cannot attempt reconnection: No internet connection');
+      return;
+    }
+
+    debugPrint('Attempting reconnection');
+    websocketChannel?.sink.close(1000);
     await initWebSocket(
       onConnectionSuccess: onConnectionSuccess,
       onConnectionFailed: onConnectionFailed,
       onConnectionClosed: onConnectionClosed,
       onConnectionError: onConnectionError,
       onMessageReceived: onMessageReceived,
-      btDevice: btDevice,
-      audioCodec: audioCodec,
+    );
+  }
+
+  void _notifyReconnectionFailure() {
+    clearNotification(2);
+    createNotification(
+      notificationId: 2,
+      title: 'Connection Issue',
+      body:
+          'Unable to connect to the transcription service. Please check your internet connection and restart the app if the problem persists.',
     );
   }
 
   void closeWebSocket() {
-    _wsChannel?.sink.close(1000);
+    websocketChannel?.sink.close(1000);
+    _reconnectionTimer?.cancel();
+    _internetListener.cancel();
   }
 }

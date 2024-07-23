@@ -4,11 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:tuple/tuple.dart';
 import 'package:web_socket_channel/io.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
@@ -37,7 +33,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
           if (segments.isEmpty) return;
           onMessageReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
         } else {
-          debugPrint('pong');
+          debugPrint(event.toString());
         }
       },
       onError: (err, stackTrace) {
@@ -63,17 +59,13 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   return channel;
 }
 
-Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streamingTranscript({
-  required BTDeviceStruct btDevice,
-  required BleAudioCodec deviceCodec,
+Future<IOWebSocketChannel?> streamingTranscript({
   required VoidCallback onWebsocketConnectionSuccess,
   required void Function(dynamic) onWebsocketConnectionFailed,
   required void Function(int?, String?) onWebsocketConnectionClosed,
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
 }) async {
-  WavBytesUtil wavBytesUtil = WavBytesUtil(codec: deviceCodec);
-
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
       onMessageReceived,
@@ -81,23 +73,13 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streaming
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
-      deviceCodec == BleAudioCodec.pcm8 ? 8000 : 16000,
+      8000,
     );
 
-    StreamSubscription? stream = await getBleAudioBytesListener(
-      btDevice.id,
-      onAudioBytesReceived: (List<int> value) {
-        if (value.isEmpty) return;
-        wavBytesUtil.storeFramePacket(value);
-        value.removeRange(0, 3);
-        channel!.sink.add(value);
-      },
-    );
-    return Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>(channel, stream, wavBytesUtil);
+    return channel;
   } catch (e) {
     debugPrint('Error receiving data: $e');
   } finally {}
 
-  // return completer.future;
-  return Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>(null, null, wavBytesUtil);
+  return null;
 }
