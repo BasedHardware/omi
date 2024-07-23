@@ -47,6 +47,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
     );
   }).onError((err, stackTrace) {
     // no closing reason or code
+    print(err);
     CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
     onWebsocketConnectionFailed(err); // initial connection failed
   });
