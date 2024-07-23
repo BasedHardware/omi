@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -24,10 +23,10 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-  // https://38aa-190-25-123-167.ngrok-free.app
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse(
-        '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
+        // '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
+        'wss://5b37-107-3-134-29.ngrok-free.app/listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
   );
   channel.ready.then((_) {
     channel.stream.listen(
@@ -66,14 +65,14 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 
 Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streamingTranscript({
   required BTDeviceStruct btDevice,
+  required BleAudioCodec deviceCodec,
   required VoidCallback onWebsocketConnectionSuccess,
   required void Function(dynamic) onWebsocketConnectionFailed,
   required void Function(int?, String?) onWebsocketConnectionClosed,
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
 }) async {
-  BleAudioCodec codec = await getAudioCodec(btDevice.id);
-  WavBytesUtil wavBytesUtil = WavBytesUtil(codec: codec);
+  WavBytesUtil wavBytesUtil = WavBytesUtil(codec: deviceCodec);
 
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
@@ -82,7 +81,7 @@ Future<Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil>> streaming
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
-      codec == BleAudioCodec.pcm8 ? 8000 : 16000,
+      deviceCodec == BleAudioCodec.pcm8 ? 8000 : 16000,
     );
 
     StreamSubscription? stream = await getBleAudioBytesListener(
