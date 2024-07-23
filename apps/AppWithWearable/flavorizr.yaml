@@ -23,7 +23,7 @@ flavors:
       firebase:
         config: "apps/AppWithWearable/android/app/src/dev/google-services.json"
     ios:
-      bundleId: "com.friend-app-with-wearable.ios12.develop"
+      bundleId: "com.friend-app-with-wearable.ios12.development"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "apps/AppWithWearable/ios/Config/Dev/GoogleService-Info.plist"
