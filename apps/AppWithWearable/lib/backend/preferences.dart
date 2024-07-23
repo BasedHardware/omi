@@ -42,7 +42,7 @@ class SharedPreferencesUtil {
 
   set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
 
-  bool get useTranscriptServer => getBool('useTranscriptServer') ?? true;
+  bool get useTranscriptServer => Env.growthbookApiKey == null ? false : getBool('useTranscriptServer') ?? true;
 
   set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
 

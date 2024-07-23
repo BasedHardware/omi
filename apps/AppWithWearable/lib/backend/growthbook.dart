@@ -32,32 +32,16 @@ class GrowthbookUtil {
       hostURL: 'https://cdn.growthbook.io/',
       qaMode: true,
       gbFeatures: {
-        'server-transcript': GBFeature(defaultValue: true),
+        // 'server-transcript': GBFeature(defaultValue: true),
         'streaming-transcript': GBFeature(defaultValue: false),
       },
     ).initialize();
     _gb!.setAttributes(attr);
   }
 
-  bool hasTranscriptServerFeatureOn() {
-    // return true;
-    // print('hasTranscriptServerFeatureOn');
-    // print(Env.growthbookApiKey);
-    // print(SharedPreferencesUtil().useTranscriptServer);
-    if (Env.growthbookApiKey == null) return false;
-    if (!SharedPreferencesUtil().useTranscriptServer) return false;
-
-    var feature = _gb!.feature('server-transcript');
-    // print(feature);
-    var enabled = feature.on; // TODO: starts as false on first run? shouldn't
-    // print(enabled);
-    return enabled;
-  }
-
   bool hasStreamingTranscriptFeatureOn() {
-    return true;
-    if (!hasTranscriptServerFeatureOn()) return false;
-
+    return false;
+    if (!SharedPreferencesUtil().useTranscriptServer) return false;
     var feature = _gb!.feature('streaming-transcript');
     var enabled = feature.on;
     return enabled;

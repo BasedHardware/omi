@@ -206,7 +206,7 @@ _getNoFriendConnectedYet(BuildContext context) {
 }
 
 speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
-  return !SharedPreferencesUtil().hasSpeakerProfile && GrowthbookUtil().hasTranscriptServerFeatureOn()
+  return !SharedPreferencesUtil().hasSpeakerProfile && SharedPreferencesUtil().useTranscriptServer
       ? Stack(
           children: [
             GestureDetector(
