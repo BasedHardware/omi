@@ -36,31 +36,31 @@ class _DeviceInfo {
 
     String deviceId = device.id;
 
-    var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
-    if (deviceInformationService != null) {
-      var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
-      if (modelNumberCharacteristic != null) {
-        modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
-      }
-
-      var firmwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
-      if (firmwareRevisionCharacteristic != null) {
-        firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
-      }
-
-      var hardwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
-      if (hardwareRevisionCharacteristic != null) {
-        hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
-      }
-
-      var manufacturerNameCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
-      if (manufacturerNameCharacteristic != null) {
-        manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
-      }
-    }
+    // var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
+    // if (deviceInformationService != null) {
+    //   var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
+    //   if (modelNumberCharacteristic != null) {
+    //     modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
+    //   }
+    //
+    //   var firmwareRevisionCharacteristic =
+    //       getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
+    //   if (firmwareRevisionCharacteristic != null) {
+    //     firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
+    //   }
+    //
+    //   var hardwareRevisionCharacteristic =
+    //       getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
+    //   if (hardwareRevisionCharacteristic != null) {
+    //     hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
+    //   }
+    //
+    //   var manufacturerNameCharacteristic =
+    //       getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
+    //   if (manufacturerNameCharacteristic != null) {
+    //     manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
+    //   }
+    // }
 
     return _DeviceInfo(
       modelNumber,

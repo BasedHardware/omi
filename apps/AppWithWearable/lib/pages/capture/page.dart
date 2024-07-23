@@ -35,7 +35,6 @@ import 'package:location/location.dart';
 import 'package:record/record.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
-import 'package:web_socket_channel/io.dart';
 
 import 'logic/websocket_mixin.dart';
 import 'phone_recorder_mixin.dart';
@@ -113,7 +112,6 @@ class CapturePageState extends State<CapturePage>
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
-  IOWebSocketChannel? _wsChannel;
   InternetStatus? _internetStatus;
 
   late StreamSubscription<InternetStatus> _internetListener;
@@ -142,20 +140,10 @@ class CapturePageState extends State<CapturePage>
   int elapsedSeconds = 0;
   double streamStartedAtSecond = 0;
 
-  Future<void> initiateBytesStreamingProcessing() async {
-    if (btDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-
-    Tuple3<IOWebSocketChannel?, StreamSubscription?, WavBytesUtil> data = await initWebSocket(
-      btDevice: btDevice!,
-      audioCodec: codec,
-
-      onConnectionSuccess: () {
-        setState(() {});
-      },
-      onConnectionFailed: (err) {
-        setState(() {});
-      },
+  Future<void> initiateWebsocket() async {
+    await initWebSocket(
+      onConnectionSuccess: () => setState(() {}),
+      onConnectionFailed: (err) => setState(() {}),
       onConnectionClosed: (int? closeCode, String? closeReason) {
         // connection was closed, either on resetState, or by backend, or by some other reason.
         setState(() {});
@@ -186,10 +174,23 @@ class CapturePageState extends State<CapturePage>
         setState(() {});
       },
     );
+  }
 
-    _wsChannel = data.item1;
-    _bleBytesStream = data.item2;
-    audioStorage = data.item3;
+  Future<void> initiateBytesStreamingProcessing() async {
+    if (btDevice == null) return;
+    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+    audioStorage = WavBytesUtil(codec: codec); // TODO: this will not store the whole audio properly on resets
+    _bleBytesStream = await getBleAudioBytesListener(
+      btDevice!.id,
+      onAudioBytesReceived: (List<int> value) {
+        if (value.isEmpty) return;
+        audioStorage!.storeFramePacket(value);
+        value.removeRange(0, 3);
+        if (wsConnectionState == WebsocketConnectionStatus.connected) {
+          websocketChannel?.sink.add(value);
+        }
+      },
+    );
   }
 
   Future<void> initiateBytesProcessing() async {
@@ -288,52 +289,11 @@ class CapturePageState extends State<CapturePage>
     setState(() => isTranscribing = false);
   }
 
-  Map<int, int> processedSegments = {};
-
-  // Merge conflict. Doesn't exist in the latest commit on the main branch. Should be removed?
-  // _doProcessingOfInstructions() async {
-  //   for (var element in segments) {
-  //     var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
-  //     for (var option in hotWords) {
-  //       if (element.text.toLowerCase().contains(option)) {
-  //         debugPrint('Hey Friend detected');
-  //         var index = element.text.lastIndexOf(option);
-  //         if (processedSegments.containsKey(element.id) && processedSegments[element.id] == index) continue;
-
-  //         var substring = element.text.substring(index + option.length);
-  //         var words = substring.split(' ');
-  //         if (words.length >= 5) {
-  //           debugPrint('Hey Friend detected and 10 words after');
-  //           String message = await executeGptPrompt('''
-  //         The following is an instruction the user sent as a voice message by saying "Hey Friend" + instruction.
-  //         Extract the only the instruction the user is asking in 5 to 10 words.
-
-  //         ${element.text.substring(index)}''');
-  //           debugPrint('Message: $message');
-
-  //           MessageProvider().saveMessage(Message(DateTime.now(), message, 'human'));
-  //           widget.refreshMessages();
-  //           dynamic ragInfo = await retrieveRAGContext(message);
-  //           String ragContext = ragInfo[0];
-  //           List<Memory> memories = ragInfo[1].cast<Memory>();
-  //           String body = qaStreamedBody(ragContext, await MessageProvider().retrieveMostRecentMessages(limit: 10));
-  //           var response = await executeGptPrompt(body);
-  //           var aiMessage = Message(DateTime.now(), response, 'ai');
-  //           aiMessage.memories.addAll(memories);
-  //           MessageProvider().saveMessage(aiMessage);
-  //           widget.refreshMessages();
-  //           processedSegments[element.id] = index;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    _wsChannel?.sink.close(1000);
+    // websocketChannel?.sink.close(1000);
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
@@ -424,6 +384,7 @@ class CapturePageState extends State<CapturePage>
       WavBytesUtil.clearTempWavFiles();
       debugPrint('SchedulerBinding.instance');
       if (_streamingTranscriptEnabled) {
+        initiateWebsocket();
         initiateBytesStreamingProcessing();
       } else {
         initiateBytesProcessing();
@@ -469,7 +430,7 @@ class CapturePageState extends State<CapturePage>
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _wsChannel?.sink.close(1000);
+    closeWebSocket();
     _internetListener.cancel();
     super.dispose();
   }
@@ -521,11 +482,6 @@ class CapturePageState extends State<CapturePage>
     if (state == AppLifecycleState.resumed) {
       if (await backgroundService.isRunning()) {
         await onAppIsResumed(_processFileToTranscript);
-        // if (Platform.isAndroid) {
-        //   await androidBgTranscribing(Duration(seconds: androidDuration), state, _processFileToTranscript);
-        // } else if (Platform.isIOS) {
-        //   await iosBgTranscribing(Duration(seconds: iosDuration), true, _processFileToTranscript);
-        // }
       }
     }
     super.didChangeAppLifecycleState(state);
