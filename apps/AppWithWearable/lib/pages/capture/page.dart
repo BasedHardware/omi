@@ -167,6 +167,7 @@ class CapturePageState extends State<CapturePage>
           toRemoveSeconds: streamStartedAtSecond ?? 0,
           toAddSeconds: secondsMissedOnReconnect ?? 0,
         );
+        triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
         SharedPreferencesUtil().transcriptSegments = segments;
         setHasTranscripts(true);
         debugPrint('Memory creation timer restarted');

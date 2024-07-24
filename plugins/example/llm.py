@@ -6,7 +6,14 @@ from langchain_openai import ChatOpenAI
 
 from models import Memory
 
-chat = ChatOpenAI(model='gpt-4o')
+chat = ChatOpenAI(model='gpt-4o', temperature=0)
+
+
+# chat = ChatGroq(
+#     temperature=0,
+#     model="llama-3.1-70b-versatile",
+#     # model='llama3-groq-8b-8192-tool-use-preview',
+# )
 
 
 class BooksToBuy(BaseModel):
@@ -65,19 +72,19 @@ def news_checker(conversation: list[dict]) -> str:
     # TODO: use chains instead
     chat_with_parser = chat.with_structured_output(NewsCheck)
     conversation_str = segments_as_string(conversation)
-    # print(conversation_str)
+    print(conversation_str)
     result: NewsCheck = chat_with_parser.invoke(f'''
     You will be given a segment of an ongoing conversation.
     
     Your task is to determine if the conversation specifically discusses facts that appear conspiratorial, unscientific, or super biased.
-    Only if the topic is of significant importance and urgency for the user to be aware of, provide a question to be asked to a news search engine.
+    Only if the topic is of significant importance and urgency for the user to be aware of, provide a question to be asked to a news search engine, in order to debunk the conversation in process.
     Otherwise, output an empty question.
     
     Transcript:
     {conversation_str}
     ''')
     print('News Query:', result.query)
-    if result.query == '':
+    if len(result.query) < 5:
         return ''
 
     tool = AskNewsSearch(max_results=2)
@@ -91,7 +98,9 @@ def news_checker(conversation: list[dict]) -> str:
     The conversation is:
     {conversation_str}
     
-    Your task is to provide a 15 words summary to help guide the bias or not accurate facts in the conversation.
+    Your task is to provide a 15 words summary to help debunk and contradict the obvious bias and conspiranoic conversation going. If you don't find anything like this, just output an empty string.
     ''')
     print('Output', result.content)
+    if len(result.content) < 5:
+        return ''
     return result.content

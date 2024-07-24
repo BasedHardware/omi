@@ -8,8 +8,9 @@ from modal import Image, App, Secret, asgi_app, mount
 from multion.client import MultiOn
 
 import templates
-from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id
-from llm import retrieve_books_to_buy, news_checker
+from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id, \
+    clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
+from llm import news_checker
 from models import Memory
 from notion_utils import store_memoy_in_db
 
@@ -46,22 +47,6 @@ def call_multion(books: List[str]):
         local=True,
     )
     return response.message
-
-
-# *****************************************
-# ************ Webhook Example ************
-# *****************************************
-
-@app.post("/webhook")
-def webhook1(memory: Memory):
-    # ONLY WORKS locally ~ multion amazon is not yet available with local=False
-    # when that happens this could be a plugin
-    if memory.transcript == '':
-        return {'message': ''}
-    books = retrieve_books_to_buy(memory)
-    if books:
-        return {'message': call_multion(books)}
-    return {'message': ''}
 
 
 # **************************************************
@@ -114,8 +99,16 @@ def notion_crm(memory: Memory, uid: str):
 @app.post('/news-checker')
 def news_checker_endpoint(uid: str, data: dict):
     session_id = data['session_id']  # use session id in case your plugin needs the whole conversation context
-    segments = data['segments']
-    # This is an example, probably not production ready, is interesting anyway.
-    # clean_all_transcripts_except(uid, session_id)
-    # transcript: list[dict] = append_segment_to_transcript(uid, session_id, new_segments)
-    return {'message': news_checker(segments)}
+    new_segments = data['segments']
+    clean_all_transcripts_except(uid, session_id)
+
+    transcript: list[dict] = append_segment_to_transcript(uid, session_id, new_segments)
+    message = news_checker(transcript)
+
+    if message:
+        # so that in the next call with already triggered stuff, it doesn't trigger again
+        remove_transcript(uid, session_id)
+
+    return {'message': message}
+
+# https://e604-107-3-134-29.ngrok-free.app/news-checker
