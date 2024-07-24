@@ -40,7 +40,7 @@ class GrowthbookUtil {
   }
 
   bool hasStreamingTranscriptFeatureOn() {
-    return false;
+    return true;
     if (!SharedPreferencesUtil().useTranscriptServer) return false;
     var feature = _gb!.feature('streaming-transcript');
     var enabled = feature.on;

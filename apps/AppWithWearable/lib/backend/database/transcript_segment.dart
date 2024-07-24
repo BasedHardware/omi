@@ -91,21 +91,22 @@ class TranscriptSegment {
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {
-    int elapsedSeconds = 0, // chunks
-    double streamStartedAtSecond = 0, // streamed
+    int toAddSeconds = 0,
+    double toRemoveSeconds = 0,
   }) {
     if (newSegments.isEmpty) return;
+    // print('toAddSeconds: $toAddSeconds toRemoveSeconds: $toRemoveSeconds');
 
     for (var segment in newSegments) {
-      segment.start -= streamStartedAtSecond;
-      segment.end -= streamStartedAtSecond;
+      segment.start -= toRemoveSeconds;
+      segment.end -= toRemoveSeconds;
+
+      segment.start += toAddSeconds;
+      segment.end += toAddSeconds;
     }
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
-      newSegment.start += elapsedSeconds;
-      newSegment.end += elapsedSeconds;
-
       if (joinedSimilarSegments.isNotEmpty &&
           (joinedSimilarSegments.last.speaker == newSegment.speaker ||
               (joinedSimilarSegments.last.isUser && newSegment.isUser))) {

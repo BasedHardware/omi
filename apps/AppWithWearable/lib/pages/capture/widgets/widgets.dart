@@ -205,7 +205,7 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState, Function reset) {
+speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
   return !SharedPreferencesUtil().hasSpeakerProfile && SharedPreferencesUtil().useTranscriptServer
       ? Stack(
           children: [
@@ -216,7 +216,10 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function reset) 
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
-                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) reset();
+                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) {
+                  restartWebSocket();
+
+                }
               },
               child: Container(
                 decoration: BoxDecoration(

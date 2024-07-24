@@ -50,30 +50,27 @@ class LocationService {
     if (await hasPermission()) {
       LocationData locationData = await location.getLocation();
       // TODO: move http requests to other.dart
-      var res = await http.get(
-        Uri.parse(
-          "https://maps.googleapis.com/maps/api/geocode/json?latlng"
-          "=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}",
-        ),
-      );
-      if (res.statusCode == 200) {
-        try {
-          var data = json.decode(res.body);
-          print(data);
-          Geolocation geolocation = Geolocation(
-            latitude: locationData.latitude,
-            longitude: locationData.longitude,
-            address: data['results'][0]['formatted_address'],
-            locationType: data['results'][0]['types'][0],
-            googlePlaceId: data['results'][0]['place_id'],
-          );
-          return geolocation;
-        } catch (e) {
-          print(e);
-          return null;
-        }
+
+      try {
+        var res = await http.get(
+          Uri.parse(
+            "https://maps.googleapis.com/maps/api/geocode/json?latlng"
+            "=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}",
+          ),
+        );
+
+        var data = json.decode(res.body);
+        Geolocation geolocation = Geolocation(
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          address: data['results'][0]['formatted_address'],
+          locationType: data['results'][0]['types'][0],
+          googlePlaceId: data['results'][0]['place_id'],
+        );
+        return geolocation;
+      } catch (e) {
+        return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
       }
-      return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
     } else {
       return null;
     }

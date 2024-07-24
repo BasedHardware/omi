@@ -126,8 +126,8 @@ mixin WebSocketMixin {
       _internetStatus = status;
       switch (status) {
         case InternetStatus.connected:
-          debugPrint('Internet connection restored. Attempting to reconnect WebSocket.');
           if (wsConnectionState != WebsocketConnectionStatus.connected && !_isConnecting) {
+            debugPrint('Internet connection restored. Attempting to reconnect WebSocket.');
             _notifyInternetRestored();
             _reconnectionTimer?.cancel();
             _reconnectionAttempts = 0;
