@@ -522,7 +522,7 @@ class CapturePageState extends State<CapturePage>
       await stopStreamRecording(wsConnectionState, websocketChannel);
       setState(() => recordingState = RecordingState.stop);
       _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
+      _memoryCreationTimer = Timer(const Duration(milliseconds: 500), () => _createMemory());
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
