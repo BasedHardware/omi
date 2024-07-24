@@ -446,7 +446,8 @@
       "triggers_on": "transcript_processed",
       "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
       "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
-    }
+    },
+    "deleted": false
   },
   {
     "id": "longevity-coach",
