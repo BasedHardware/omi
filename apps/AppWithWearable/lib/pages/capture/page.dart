@@ -200,9 +200,11 @@ class CapturePageState extends State<CapturePage>
 
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
+    // OPEN GLASS LOGIC
     if (btDevice == null) return;
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
     if (isGlasses) return await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+    // closeWebSocket(); IF OPEN GLASS, then just return;
 
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
     if (codec == BleAudioCodec.unknown) {} // TODO: disconnect and show error
