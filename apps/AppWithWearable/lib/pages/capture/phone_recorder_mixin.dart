@@ -37,40 +37,45 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
 
   startStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
     await Permission.microphone.request();
-
-    var stream = await record
-        .startStream(const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1));
+    debugPrint("input device: ${await record.listInputDevices()}");
+    InputDevice? inputDevice;
+    if (Platform.isIOS) {
+      inputDevice = const InputDevice(id: "Built-In Microphone", label: "iPhone Microphone");
+    } else {}
+    var stream = await record.startStream(
+        RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1, device: inputDevice));
     setState(() => recordingState = RecordingState.record);
     stream.listen((data) async {
       if (wsConnectionState == WebsocketConnectionStatus.connected) {
-        audioChunks.add(data);
-        totalBytes += data.length;
+        // audioChunks.add(data);
+        // totalBytes += data.length;
+        websocketChannel?.sink.add(data);
       }
+      // Timer isn't needed for this implementation
+      //     timer = Timer.periodic(
+      //   const Duration(seconds: 30),
+      //   (timer) {
+      //     debugPrint('Timer triggered at ${DateTime.now()}');
+      //     if (audioChunks.isNotEmpty) {
+      //       // Combine all chunks into a single Uint8List
+      //       Uint8List combinedChunk = Uint8List(totalBytes);
+      //       int offset = 0;
+      //       for (var chunk in audioChunks) {
+      //         combinedChunk.setRange(offset, offset + chunk.length, chunk);
+      //         offset += chunk.length;
+      //       }
+      //       // Send combined chunk through WebSocket
+      //       if (wsConnectionState == WebsocketConnectionStatus.connected) {
+      //         debugPrint('Sending chunk of size ${combinedChunk.length} bytes');
+      //         websocketChannel?.sink.add(combinedChunk);
+      //         // Clear the chunks and reset total bytes
+      //         audioChunks.clear();
+      //         totalBytes = 0;
+      //       }
+      //     }
+      //   },
+      // );
     });
-    timer = Timer.periodic(
-      const Duration(seconds: 30),
-      (timer) {
-        debugPrint('Timer triggered at ${DateTime.now()}');
-        if (audioChunks.isNotEmpty) {
-          // Combine all chunks into a single Uint8List
-          Uint8List combinedChunk = Uint8List(totalBytes);
-          int offset = 0;
-          for (var chunk in audioChunks) {
-            combinedChunk.setRange(offset, offset + chunk.length, chunk);
-            offset += chunk.length;
-          }
-
-          // Send combined chunk through WebSocket
-          if (wsConnectionState == WebsocketConnectionStatus.connected) {
-            debugPrint('Sending chunk of size ${combinedChunk.length} bytes');
-            websocketChannel?.sink.add(combinedChunk);
-            // Clear the chunks and reset total bytes
-            audioChunks.clear();
-            totalBytes = 0;
-          }
-        }
-      },
-    );
   }
 
   stopStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
