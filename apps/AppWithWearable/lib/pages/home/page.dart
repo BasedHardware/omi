@@ -491,7 +491,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
                       (language != SharedPreferencesUtil().recordingsLanguage ||
                           hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
-                    capturePageKey.currentState?.resetState(restartBytesProcessing: true);
+                    capturePageKey.currentState?.restartWebSocket();
                   }
                   setState(() {});
                 },

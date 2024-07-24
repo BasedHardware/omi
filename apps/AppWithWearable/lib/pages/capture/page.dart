@@ -123,31 +123,20 @@ class CapturePageState extends State<CapturePage>
   bool isGlasses = false;
   String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
-  _processCachedTranscript() async {
-    debugPrint('_processCachedTranscript');
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
-    processTranscriptContent(
-      context,
-      transcript,
-      SharedPreferencesUtil().transcriptSegments,
-      null,
-      retrievedFromCache: true,
-      sendMessageToChat: sendMessageToChat,
-    ).then((m) {
-      if (m != null && !m.discarded) executeBackupWithUid();
-    });
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
-  }
-
-  int elapsedSeconds = 0;
-  double streamStartedAtSecond = 0;
+  double? streamStartedAtSecond;
+  DateTime? firstStreamReceivedAt;
+  int? secondsMissedOnReconnect;
 
   Future<void> initiateWebsocket() async {
     await initWebSocket(
-      onConnectionSuccess: () => setState(() {}),
+      onConnectionSuccess: () {
+        if (segments.isNotEmpty) {
+          // means that it was a reconnection, so we need to reset
+          streamStartedAtSecond = null;
+          secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
+        }
+        setState(() {});
+      },
       onConnectionFailed: (err) => setState(() {}),
       onConnectionClosed: (int? closeCode, String? closeReason) {
         // connection was closed, either on resetState, or by backend, or by some other reason.
@@ -158,24 +147,31 @@ class CapturePageState extends State<CapturePage>
         setState(() {});
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
-        if (segments.isEmpty && newSegments.isNotEmpty) {
-          debugPrint('newSegments: ${newSegments.last} ${audioStorage!.frames.length ~/ 100}');
+        if (newSegments.isEmpty) return;
+
+        if (segments.isEmpty) {
+          debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug
           // - When memory i is created, newSegment.start will still contain the whole websocket time,
           //   so we are removing all audio here, first phrase/ word will be lost from created audio.
           audioStorage?.removeFramesRange(fromSecond: 0, toSecond: max((newSegments.last.end - 1).toInt(), 0));
-          streamStartedAtSecond = newSegments[0].start;
+          firstStreamReceivedAt = DateTime.now();
         }
-        TranscriptSegment.combineSegments(segments, newSegments, streamStartedAtSecond: streamStartedAtSecond);
-        if (newSegments.isNotEmpty) {
-          SharedPreferencesUtil().transcriptSegments = segments;
-          setHasTranscripts(true);
-          debugPrint('Memory creation timer restarted');
-          _memoryCreationTimer?.cancel();
-          _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
-          currentTranscriptStartedAt ??= DateTime.now();
-          currentTranscriptFinishedAt = DateTime.now();
-        }
+        streamStartedAtSecond ??= newSegments[0].start;
+
+        TranscriptSegment.combineSegments(
+          segments,
+          newSegments,
+          toRemoveSeconds: streamStartedAtSecond ?? 0,
+          toAddSeconds: secondsMissedOnReconnect ?? 0,
+        );
+        SharedPreferencesUtil().transcriptSegments = segments;
+        setHasTranscripts(true);
+        debugPrint('Memory creation timer restarted');
+        _memoryCreationTimer?.cancel();
+        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+        currentTranscriptStartedAt ??= DateTime.now();
+        currentTranscriptFinishedAt = DateTime.now();
         setState(() {});
       },
     );
@@ -197,6 +193,8 @@ class CapturePageState extends State<CapturePage>
       },
     );
   }
+
+  int elapsedSeconds = 0;
 
   Future<void> initiateBytesProcessing() async {
     debugPrint('initiateBytesProcessing: $btDevice');
@@ -252,7 +250,7 @@ class CapturePageState extends State<CapturePage>
   }
 
   void _handleNewSegments(List<TranscriptSegment> newSegments) {
-    TranscriptSegment.combineSegments(segments, newSegments, elapsedSeconds: elapsedSeconds); // combines b into a
+    TranscriptSegment.combineSegments(segments, newSegments, toAddSeconds: elapsedSeconds); // combines b into a
     if (newSegments.isNotEmpty) {
       triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
       SharedPreferencesUtil().transcriptSegments = segments;
@@ -265,14 +263,13 @@ class CapturePageState extends State<CapturePage>
       currentTranscriptFinishedAt = DateTime.now();
     }
     // _doProcessingOfInstructions();
-    // setState(() => isTranscribing = false);
+    setState(() => isTranscribing = false);
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    // websocketChannel?.sink.close(1000);
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
@@ -282,6 +279,11 @@ class CapturePageState extends State<CapturePage>
         initiateBytesProcessing();
       }
     }
+  }
+
+  void restartWebSocket() {
+    closeWebSocket();
+    initiateWebsocket();
   }
 
   void sendMessageToChat(Message message, Memory? memory) {
@@ -342,7 +344,10 @@ class CapturePageState extends State<CapturePage>
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
     elapsedSeconds = 0;
-    streamStartedAtSecond = 0;
+
+    streamStartedAtSecond = null;
+    firstStreamReceivedAt = null;
+    secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
   }
@@ -350,6 +355,25 @@ class CapturePageState extends State<CapturePage>
   setHasTranscripts(bool hasTranscripts) {
     if (_hasTranscripts == hasTranscripts) return;
     setState(() => _hasTranscripts = hasTranscripts);
+  }
+
+  _processCachedTranscript() async {
+    debugPrint('_processCachedTranscript');
+    var segments = SharedPreferencesUtil().transcriptSegments;
+    if (segments.isEmpty) return;
+    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
+    processTranscriptContent(
+      context,
+      transcript,
+      SharedPreferencesUtil().transcriptSegments,
+      null,
+      retrievedFromCache: true,
+      sendMessageToChat: sendMessageToChat,
+    ).then((m) {
+      if (m != null && !m.discarded) executeBackupWithUid();
+    });
+    SharedPreferencesUtil().transcriptSegments = [];
+    // TODO: include created at and finished at for this cached transcript
   }
 
   @override
@@ -472,7 +496,7 @@ class CapturePageState extends State<CapturePage>
     return Stack(
       children: [
         ListView(children: [
-          speechProfileWidget(context, setState, () => resetState(restartBytesProcessing: true)),
+          speechProfileWidget(context, setState, restartWebSocket),
           ...getConnectionStateWidgets(context, _hasTranscripts, widget.device, wsConnectionState, _internetStatus),
           getTranscriptWidget(memoryCreating, segments, photos, widget.device),
           const SizedBox(height: 16)
