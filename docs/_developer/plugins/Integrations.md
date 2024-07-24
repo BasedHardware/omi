@@ -1,25 +1,18 @@
 ---
+title: Integrations
 layout: default
-title: Community Plugins
-nav_order: 1
+parent: Plugins
+nav_order: 3
 ---
 
-# Community Plugins
 
-Community Plugins allow modification of prompts that process audio transcriptions into structured data for a multitude of use cases.
+# Building Integrations Plugins
 
-## Contribution Process
+This guide explains how to create plugins that can work as a standalone app on top of FRIEND infrastructure. There are
+three main ways to integrate with the app:
 
-To add your plugin to the community list, create a pull request on the [community-plugins.json](https://github.com/BasedHardware/Friend/blob/main/community-plugins.json) file on GitHub, appending your plugin at the end.
-
-# Building Integration Plugins for Our App
-
-This guide explains how to create and integrate plugins for our app. There are three main ways to integrate with the
-app:
-
-1. Webhooks (for approved developers only)
-2. On Memory Created plugins
-3. On Transcript Received plugins
+1. On Memory Created plugins
+2. On Transcript Received plugins
 
 ## Table of Contents
 
@@ -27,24 +20,18 @@ app:
 2. [Plugin Structure](#plugin-structure)
 3. [Setting Up the Environment](#setting-up-the-environment)
 4. [Creating a Plugin](#creating-a-plugin)
-5. [Webhook Example](#webhook-example)
-6. [On Memory Created Plugin Example](#on-memory-created-plugin-example)
-7. [On Transcript Received Plugin Example](#on-transcript-received-plugin-example)
-8. [Submitting Your Plugin](#submitting-your-plugin)
+5. [On Memory Created Plugin Example](#on-memory-created-plugin-example)
+6. [On Transcript Received Plugin Example](#on-transcript-received-plugin-example)
+7. [Submitting Your Plugin](#submitting-your-plugin)
 
 ## Plugin Types
 
-### 1. Webhooks
-
-Webhooks are triggered every time a new memory is created. These are only available for approved developers and are not
-publicly accessible.
-
-### 2. On Memory Created Plugins
+### 1. On Memory Created Plugins
 
 These plugins are triggered when a new memory is created, similar to webhooks. However, these can be installed by all
 users.
 
-### 3. On Transcript Received Plugins
+### 2. On Transcript Received Plugins
 
 These plugins listen for conversation transcripts and are processed every 30 seconds. The current set of new transcripts
 is sent to the plugin for processing.
@@ -74,69 +61,7 @@ Plugins are defined using a JSON structure. Here's an example:
 }
 ```
 
-## Setting Up the Environment
-
-Before creating a plugin, ensure you have the following environment variables set:
-
-```
-OPENAI_API_KEY=
-MULTION_API_KEY=
-REDIS_DB_HOST=
-REDIS_DB_PORT=
-REDIS_DB_PASSWORD=
-ASKNEWS_CLIENT_ID=
-ASKNEWS_CLIENT_SECRET=
-```
-
 ## Creating a Plugin
-
-To create a plugin, you can start from the example using a FastAPI app deployed on [Modal](https://modal.com/)
-
-```python
-from fastapi import FastAPI, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from modal import Image, App, Secret, asgi_app, mount
-
-app = FastAPI()
-
-modal_app = App(
-    name='plugins_examples',
-    secrets=[Secret.from_dotenv('.env')],
-    mounts=[
-        mount.Mount.from_local_dir('templates/', remote_path='templates/'),
-    ]
-)
-
-
-@modal_app.function(
-    image=Image.debian_slim().pip_install_from_requirements('requirements.txt'),
-    keep_warm=1,
-    memory=(1024, 2048),
-    cpu=4,
-    allow_concurrent_inputs=10,
-)
-@asgi_app()
-def plugins_app():
-    return app
-
-# Implement your plugin endpoints here
-```
-
-## Webhook Example
-
-Here's an example of a webhook implementation:
-
-```python
-@app.post("/webhook")
-def webhook1(memory: Memory):
-    if memory.transcript == '':
-        return {'message': ''}
-    books = retrieve_books_to_buy(memory)
-    if books:
-        return {'message': call_multion(books)}
-    return {'message': ''}
-```
 
 ## On Memory Created Plugin Example
 
@@ -193,7 +118,8 @@ structure:
 ```
 
 ### Models
-Structure of plugin data received. 
+
+Structure of plugin data received.
 
 ```python
 # transcript_processed plugin
@@ -222,13 +148,13 @@ class Memory(BaseModel):
 
 ```
 
-
 ### Submission Details
 
 1. Fork the repository.
 2. Create a feature branch.
 3. Add your plugin entry to `community-plugins.json`.
-4. Create an image for your plugin and place it in the `/assets/plugin_images` directory with the name `{plugin_id}.png`.
+4. Create an image for your plugin and place it in the `/assets/plugin_images` directory with the
+   name `{plugin_id}.png`.
 5. Commit with a message like "Add [PluginName] to community plugins."
 6. Open a pull request with a clear plugin description.
 
@@ -237,5 +163,8 @@ Plugin submissions will be reviewed for integration into the main repository.
 ## How Community Plugins are Pulled
 
 1. **Adding Your Plugin**: Submit your plugin by adding it to the `community-plugins.json` list via a pull request.
-2. **Approval**: The Based Hardware team will review your plugin entry for completeness, coherence, and functionality. We will also review the included image for appropriateness and adherence to the specified format and size.
-3. **Marketplace Availability**: Once approved, your plugin will be listed in the FRIEND mobile app's Plugins marketplace, where users can easily browse and install it. The provided image will be displayed alongside your plugin's name and description.
+2. **Approval**: The Based Hardware team will review your plugin entry for completeness, coherence, and functionality.
+   We will also review the included image for appropriateness and adherence to the specified format and size.
+3. **Marketplace Availability**: Once approved, your plugin will be listed in the FRIEND mobile app's Plugins
+   marketplace, where users can easily browse and install it. The provided image will be displayed alongside your
+   plugin's name and description.
