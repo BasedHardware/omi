@@ -454,8 +454,8 @@
     "name": "Longevity Coach",
     "author": "Claude AI",
     "description": "Your personal AI coach for maximizing health and lifespan",
-    "prompt": "",
     "image": "/plugins/logos/longevity-coach.png",
+    "prompt": "",
     "memories": false,
     "chat": true,
     "capabilities": [
