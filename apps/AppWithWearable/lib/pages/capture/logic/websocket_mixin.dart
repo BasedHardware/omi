@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -31,6 +32,7 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    BleAudioCodec codec = BleAudioCodec.pcm8,
   }) async {
     if (_isConnecting) return;
     _isConnecting = true;
@@ -42,6 +44,7 @@ mixin WebSocketMixin {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        codec: codec,
       );
       _internetListenerSetup = true;
     }
@@ -54,6 +57,7 @@ mixin WebSocketMixin {
 
     try {
       websocketChannel = await streamingTranscript(
+        codec: codec,
         onWebsocketConnectionSuccess: () {
           debugPrint('WebSocket connected successfully');
           wsConnectionState = WebsocketConnectionStatus.connected;
@@ -75,6 +79,7 @@ mixin WebSocketMixin {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            codec: codec,
           );
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
@@ -89,6 +94,7 @@ mixin WebSocketMixin {
               onConnectionClosed: onConnectionClosed,
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
+              codec: codec,
             );
           }
         },
@@ -104,6 +110,7 @@ mixin WebSocketMixin {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            codec: codec,
           );
         },
         onMessageReceived: onMessageReceived,
@@ -121,6 +128,7 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    required BleAudioCodec codec,
   }) {
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
       _internetStatus = status;
@@ -137,6 +145,7 @@ mixin WebSocketMixin {
               onConnectionClosed: onConnectionClosed,
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
+              codec: codec,
             );
           }
           break;
@@ -158,6 +167,7 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    required BleAudioCodec codec,
   }) {
     if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
@@ -183,6 +193,7 @@ mixin WebSocketMixin {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        codec: codec,
       );
     });
     if (_reconnectionAttempts == 4 && !_hasNotifiedUser) {
@@ -202,6 +213,7 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    required BleAudioCodec codec,
   }) async {
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('Cannot attempt reconnection: No internet connection');
@@ -216,6 +228,7 @@ mixin WebSocketMixin {
       onConnectionClosed: onConnectionClosed,
       onConnectionError: onConnectionError,
       onMessageReceived: onMessageReceived,
+      codec: codec,
     );
   }
 
