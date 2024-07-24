@@ -54,13 +54,13 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
-  String get webhookUrl => getString('webhookUrl') ?? '';
+  String get webhookOnMemoryCreated => getString('webhookUrl') ?? '';
 
-  set webhookUrl(String value) => saveString('webhookUrl', value);
+  set webhookOnMemoryCreated(String value) => saveString('webhookUrl', value);
 
-  String get transcriptServerUrl => getString('transcriptServerUrl') ?? '';
+  String get webhookOnTranscriptReceived => getString('transcriptServerUrl') ?? '';
 
-  set transcriptServerUrl(String value) => saveString('transcriptServerUrl', value);
+  set webhookOnTranscriptReceived(String value) => saveString('transcriptServerUrl', value);
 
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 

@@ -30,10 +30,7 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   });
 
   DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint('Deepgram took: ${DateTime
-      .now()
-      .difference(startTime)
-      .inSeconds} seconds');
+  debugPrint('Deepgram took: ${DateTime.now().difference(startTime).inSeconds} seconds');
   var data = jsonDecode(res.json);
   if (data['results'] == null || data['results']['channels'] == null) {
     print('Deepgram error: ${data['error']}');
@@ -67,10 +64,15 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   return segments;
 }
 
-Future<String> devModeWebhookCall(Memory? memory) async {
+Future<String> webhookOnMemoryCreatedCall(Memory? memory) async {
   if (memory == null) return '';
   debugPrint('devModeWebhookCall: $memory');
-  return triggerMemoryRequestAtEndpoint(SharedPreferencesUtil().webhookUrl, memory);
+  return triggerMemoryRequestAtEndpoint(SharedPreferencesUtil().webhookOnMemoryCreated, memory);
+}
+
+Future<String> webhookOnTranscriptReceivedCall(List<TranscriptSegment> segments, String sessionId) async {
+  debugPrint('webhookOnTranscriptReceivedCall: $segments');
+  return triggerTranscriptSegmentsRequest(SharedPreferencesUtil().webhookOnTranscriptReceived, sessionId, segments);
 }
 
 Future<String?> wavToBase64(String filePath) async {
@@ -121,6 +123,11 @@ Future<bool> isPluginSetupCompleted(String? url) async {
 Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory) async {
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   if (url.isEmpty) return '';
+  if (url.contains('?')) {
+    url += '&uid=${SharedPreferencesUtil().uid}';
+  } else {
+    url += '?uid=${SharedPreferencesUtil().uid}';
+  }
   var data = memory.toJson();
   data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
   try {
@@ -146,6 +153,11 @@ Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory) async {
 Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, List<TranscriptSegment> segments) async {
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   if (url.isEmpty) return '';
+  if (url.contains('?')) {
+    url += '&uid=${SharedPreferencesUtil().uid}';
+  } else {
+    url += '?uid=${SharedPreferencesUtil().uid}';
+  }
   try {
     var response = await makeApiCall(
       url: url,
