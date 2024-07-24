@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:web_socket_channel/io.dart';
@@ -23,10 +24,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
   var params = '?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate&codec=$codec';
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
-    Uri.parse(
-      // '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
-      'wss://5b37-107-3-134-29.ngrok-free.app/listen$params',
-    ),
+    Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
   );
   channel.ready.then((_) {
     channel.stream.listen(
