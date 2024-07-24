@@ -447,5 +447,20 @@
       "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
       "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
     }
+  },
+  {
+    "id": "longevity-coach",
+    "name": "Longevity Coach",
+    "author": "Claude AI",
+    "description": "Your personal AI coach for maximizing health and lifespan",
+    "prompt": "",
+    "image": "/plugins/logos/longevity-coach.png",
+    "memories": false,
+    "chat": true,
+    "capabilities": [
+      "chat"
+    ],
+    "chat_prompt": "You are an expert longevity coach with deep knowledge of nutrition, exercise, sleep optimization, stress management, and cutting-edge longevity research. Provide personalized advice to help users maximize their healthspan and lifespan. Be encouraging, scientifically accurate, and ready to explain complex concepts in simple terms. Offer practical tips and be prepared to discuss topics like intermittent fasting, supplements, biomarkers, and lifestyle interventions for longevity.",
+    "deleted": false
   }
 ]
