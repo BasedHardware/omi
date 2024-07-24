@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -16,13 +17,16 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(int?, String?) onWebsocketConnectionClosed,
   void Function(dynamic) onWebsocketConnectionError,
   int sampleRate,
+  String codec,
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
+  var params = '?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate&codec=$codec';
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse(
-        // '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
-        'wss://5b37-107-3-134-29.ngrok-free.app/listen?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate'),
+      // '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
+      'wss://5b37-107-3-134-29.ngrok-free.app/listen$params',
+    ),
   );
   channel.ready.then((_) {
     channel.stream.listen(
@@ -66,6 +70,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
   required void Function(int?, String?) onWebsocketConnectionClosed,
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
+  required BleAudioCodec codec,
 }) async {
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
@@ -74,7 +79,8 @@ Future<IOWebSocketChannel?> streamingTranscript({
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
-      8000,
+      codec == BleAudioCodec.opus ? 16000 : 8000,
+      codec == BleAudioCodec.opus ? 'opus' : 'pcm8',
     );
 
     return channel;

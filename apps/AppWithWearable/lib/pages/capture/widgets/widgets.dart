@@ -218,7 +218,6 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function restart
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
                     GrowthbookUtil().hasStreamingTranscriptFeatureOn()) {
                   restartWebSocket();
-
                 }
               },
               child: Container(
@@ -279,6 +278,64 @@ getTranscriptWidget(
   return TranscriptWidget(segments: segments);
 }
 
+connectionStatusWidgets(
+  BuildContext context,
+  List<TranscriptSegment> segments,
+  WebsocketConnectionStatus wsConnectionState,
+  InternetStatus? internetStatus,
+) {
+  if (segments.isEmpty) return [];
+
+  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
+  bool isWebsocketError =
+      wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
+  if (!isWifiDisconnected && !isWebsocketError) return [];
+  return [
+    GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.pop(context),
+            () => Navigator.pop(context),
+            isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
+            isWifiDisconnected
+                ? 'Your device is offline. Transcription is paused until connection is restored.'
+                : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
+            okButtonText: 'Ok',
+            singleButton: true,
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Text(
+              isWifiDisconnected ? 'No Internet' : 'Server Issue',
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                fontSize: 20,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(width: 16),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: isWifiDisconnected
+                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 48, width: 48)
+                  : Lottie.asset('assets/lottie_animations/no_internet.json', height: 48, width: 48),
+            )
+          ],
+        ),
+      ),
+    )
+  ];
+}
+
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
@@ -323,19 +380,6 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
             ),
           ),
         ),
-      ),
-    ),
-  );
-}
-
-getWebsocketErrorWidget() {
-  return const Padding(
-    padding: EdgeInsets.only(top: 80),
-    child: Center(
-      child: Text(
-        'Error connecting to the server. Please check your internet connection.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
       ),
     ),
   );

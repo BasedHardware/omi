@@ -128,7 +128,10 @@ class CapturePageState extends State<CapturePage>
   int? secondsMissedOnReconnect;
 
   Future<void> initiateWebsocket() async {
+    // TODO: this will not work with opus for now, more complexity, unneeded rn
+    BleAudioCodec codec = btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id);
     await initWebSocket(
+      codec: codec,
       onConnectionSuccess: () {
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
@@ -151,10 +154,9 @@ class CapturePageState extends State<CapturePage>
 
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
-          // TODO: small bug
-          // - When memory i is created, newSegment.start will still contain the whole websocket time,
-          //   so we are removing all audio here, first phrase/ word will be lost from created audio.
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: max((newSegments.last.end - 1).toInt(), 0));
+          // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
+          //  losing from the audio the first part of the recording. All other parts are fine.
+          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
           firstStreamReceivedAt = DateTime.now();
         }
         streamStartedAtSecond ??= newSegments[0].start;
@@ -180,7 +182,7 @@ class CapturePageState extends State<CapturePage>
   Future<void> initiateBytesStreamingProcessing() async {
     if (btDevice == null) return;
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    audioStorage = WavBytesUtil(codec: codec); // TODO: this will not store the whole audio properly on resets
+    audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) {
@@ -274,6 +276,7 @@ class CapturePageState extends State<CapturePage>
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       if (_streamingTranscriptEnabled) {
+        // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
         initiateBytesStreamingProcessing();
       } else {
         initiateBytesProcessing();
@@ -499,6 +502,7 @@ class CapturePageState extends State<CapturePage>
           speechProfileWidget(context, setState, restartWebSocket),
           ...getConnectionStateWidgets(context, _hasTranscripts, widget.device, wsConnectionState, _internetStatus),
           getTranscriptWidget(memoryCreating, segments, photos, widget.device),
+          ...connectionStatusWidgets(context, segments, wsConnectionState, _internetStatus),
           const SizedBox(height: 16)
         ]),
         // getPhoneMicRecordingButton(_recordingToggled, recordingState)
