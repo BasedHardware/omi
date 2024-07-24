@@ -127,11 +127,12 @@ class CapturePageState extends State<CapturePage>
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
 
-  Future<void> initiateWebsocket() async {
+  Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     // TODO: this will not work with opus for now, more complexity, unneeded rn
-    BleAudioCodec codec = btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id);
+    BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
     await initWebSocket(
       codec: codec,
+      sampleRate: sampleRate,
       onConnectionSuccess: () {
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
@@ -507,17 +508,21 @@ class CapturePageState extends State<CapturePage>
           ...connectionStatusWidgets(context, segments, wsConnectionState, _internetStatus),
           const SizedBox(height: 16)
         ]),
-        // getPhoneMicRecordingButton(_recordingToggled, recordingState)
+        getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
   }
 
   _recordingToggled() async {
     if (recordingState == RecordingState.record) {
-      await stopRecording(_processFileToTranscript, segments, () {
-        _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
-      });
+      //  await stopRecording(_processFileToTranscript, segments, () {
+      //   _memoryCreationTimer?.cancel();
+      //   _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
+      // });
+      await stopStreamRecording(wsConnectionState, websocketChannel);
+      setState(() => recordingState = RecordingState.stop);
+      _memoryCreationTimer?.cancel();
+      _memoryCreationTimer = Timer(const Duration(seconds: 5), () => _createMemory());
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
@@ -527,9 +532,13 @@ class CapturePageState extends State<CapturePage>
           context,
           () => Navigator.pop(context),
           () async {
-            setState(() => recordingState = RecordingState.initialising);
-            await startRecording(_processFileToTranscript);
             Navigator.pop(context);
+            setState(() => recordingState = RecordingState.initialising);
+            // service.invoke("stateUpdate", {"state": 'recording'});
+            // await startRecording(_processFileToTranscript);
+            closeWebSocket();
+            await initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            await startStreamRecording(wsConnectionState, websocketChannel);
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
