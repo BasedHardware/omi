@@ -25,7 +25,6 @@ import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
-import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 import 'logic/websocket_mixin.dart';
@@ -155,7 +154,9 @@ class CapturePageState extends State<CapturePage>
     if (btDevice == null) return;
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
     debugPrint('startOpenGlass isGlasses: $isGlasses');
-    if (isGlasses) await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+    if (!isGlasses) return;
+
+    await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();
   }
 
