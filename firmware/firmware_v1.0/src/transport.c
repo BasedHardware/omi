@@ -14,6 +14,8 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 
+extern bool is_connected;
+
 //
 // Internal
 //
@@ -157,7 +159,11 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 // Battery Service Handlers
 //
 
-struct k_work battery_work;
+#define BATTERY_REFRESH_INTERVAL 15000 // 15 seconds
+
+void broadcast_battery_level(struct k_work *work_item);
+
+K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item) {
     uint16_t battery_millivolt;
@@ -176,6 +182,8 @@ void broadcast_battery_level(struct k_work *work_item) {
     } else {
         printk("Failed to read battery level\n");
     }
+
+    k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 }
 
 //
@@ -200,11 +208,15 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
-    k_work_submit(&battery_work);
+    k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+
+    is_connected = true;
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
+    is_connected = false;
+
     printk("Disconnected\n");
     bt_conn_unref(conn);
     current_connection = NULL;
@@ -468,8 +480,6 @@ int transport_start()
 	{
 		  printk("Battery initialized\n");
 	}
-
-    k_work_init(&battery_work, broadcast_battery_level);
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);

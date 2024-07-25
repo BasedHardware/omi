@@ -25,8 +25,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   final TextEditingController gcpBucketNameController = TextEditingController();
   final TextEditingController deepgramAPIKeyController = TextEditingController();
   final TextEditingController openAIKeyController = TextEditingController();
-  final TextEditingController webhookUrlController = TextEditingController();
-  final TextEditingController transcriptServerUrlController = TextEditingController();
+  final TextEditingController webhookOnMemoryCreated = TextEditingController();
+  final TextEditingController webhookOnTranscriptReceived = TextEditingController();
 
   bool savingSettingsLoading = false;
   bool useTranscriptServer = false;
@@ -41,8 +41,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-    webhookUrlController.text = SharedPreferencesUtil().webhookUrl;
-    transcriptServerUrlController.text = SharedPreferencesUtil().transcriptServerUrl;
+    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
+    webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     super.initState();
   }
 
@@ -167,64 +167,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 title: const Text('Transcript Server Enabled'),
                 checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                height: 2,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Advanced Mode',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                  GestureDetector(
-                      onTap: () {
-                        launchUrl(Uri.parse(
-                            'https://github.com/BasedHardware/Friend/blob/main/apps/AppWithWearable/lib/pages/settings/advanced_mode.md'));
-                        MixpanelManager().advancedModeDocsOpened();
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text(
-                          'Docs',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ))
-                ],
-              ),
-              const SizedBox(height: 16),
-              _getText('Webhooks: Every time a new memory gets created, send the details to your own server.'),
-              TextField(
-                controller: webhookUrlController,
-                obscureText: false,
-                autocorrect: false,
-                enabled: true,
-                enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Webhook URL'),
-                style: const TextStyle(color: Colors.white),
-              ),
-              // const SizedBox(height: 16),
-              // _getText('Transcript Server URL: Send your audio files to your own server.'),
-              // TextField(
-              //   controller: transcriptServerUrlController,
-              //   obscureText: false,
-              //   autocorrect: false,
-              //   enabled: true,
-              //   enableSuggestions: false,
-              //   decoration: _getTextFieldDecoration('Transcript Server URL'),
-              //   style: const TextStyle(color: Colors.white),
-              // ),
-              const SizedBox(height: 32),
               SharedPreferencesUtil().devModeEnabled
                   ? ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -313,6 +255,78 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       },
                     )
                   : Container(),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Plugin Integrations Testing',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  GestureDetector(
+                      onTap: () {
+                        launchUrl(Uri.parse('https://docs.basedhardware.com/developer/plugins/Integrations/'));
+                        MixpanelManager().advancedModeDocsOpened();
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text(
+                          'Docs',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ))
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'On Memory Created:',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Triggered when FRIEND creates a new memory.',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              TextField(
+                controller: webhookOnMemoryCreated,
+                obscureText: false,
+                autocorrect: false,
+                enabled: true,
+                enableSuggestions: false,
+                decoration: _getTextFieldDecoration('Endpoint URL'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Real-Time Transcript Processing:',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Triggered as the transcript is being received.',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              TextField(
+                controller: webhookOnTranscriptReceived,
+                obscureText: false,
+                autocorrect: false,
+                 enabled: true,
+                enableSuggestions: false,
+                decoration: _getTextFieldDecoration('Endpoint URL'),
+                style: const TextStyle(color: Colors.white),
+              ),
               const SizedBox(height: 64),
             ],
           ),
@@ -383,8 +397,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
     prefs.openAIApiKey = openAIKeyController.text.trim();
     prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
-    prefs.webhookUrl = webhookUrlController.text.trim();
-    prefs.transcriptServerUrl = transcriptServerUrlController.text.trim();
+    prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
+    prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
     prefs.useTranscriptServer = useTranscriptServer;
 
     MixpanelManager().settingsSaved();

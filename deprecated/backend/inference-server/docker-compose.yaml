@@ -1,0 +1,9 @@
+version: '3'
+services:
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    runtime: nvidia
+    ports:
+      - 5000:5000

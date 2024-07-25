@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.18+51
+version: 1.0.19+61
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -26,6 +26,7 @@ dependencies:
 
   flutter_localizations:
     sdk: flutter
+  archive: ^3.6.1
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
@@ -36,6 +37,7 @@ dependencies:
   intl: ^0.19.0
   mime_type: 1.0.0
   page_transition: 2.1.0
+  pdf: ^3.11.0
   permission_handler: ^11.3.1
   share_plus: ^9.0.0
   shared_preferences: ^2.2.3
@@ -86,13 +88,9 @@ dependencies:
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
-  record: ^5.1.1
-  record_android: ^1.2.2
-  record_platform_interface: ^1.1.0
-  record_darwin: ^1.1.0
-  flutter_sound: ^9.6.0
-  audio_session: ^0.1.19
+  record: ^5.1.2
   onesignal_flutter: ^5.1.2
+  flutter_background_service: ^5.0.6
   opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
   just_waveform: ^0.0.5
@@ -107,7 +105,13 @@ dependencies:
   firebase_core: ^3.2.0
   firebase_auth: ^5.1.2
   google_sign_in: ^6.2.1
+  location: ^7.0.0
+  cached_network_image: ^3.3.1
+  map_launcher: ^3.3.1
   internet_connection_checker_plus: ^2.5.0
+  
+  docx_template: ^0.4.0
+
 
 
 dependency_overrides:
@@ -128,6 +132,7 @@ dev_dependencies:
   objectbox_generator: any
   flutter_flavorizr: ^2.2.3
 
+
 flutter_launcher_icons:
   android: true
   ios: true
@@ -145,6 +150,7 @@ flutter:
     - assets/images/herologo.png
     - assets/images/backbutton.svg
     - assets/fonts/
+    - assets/documents/
     - assets/images/
     - assets/videos/
     - assets/audios/

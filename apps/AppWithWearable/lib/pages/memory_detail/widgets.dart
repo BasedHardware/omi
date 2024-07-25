@@ -1,21 +1,27 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
+import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/exapandable_text.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'maps_util.dart';
 
 List<Widget> getSummaryWidgets(
   BuildContext context,
@@ -50,7 +56,7 @@ List<Widget> getSummaryWidgets(
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
-            structured.category[0].toUpperCase() + structured.category.substring(1),
+            structured.category.isEmpty ? ' ' : structured.category[0].toUpperCase() + structured.category.substring(1),
             style: Theme.of(context).textTheme.titleLarge,
           ),
         )
@@ -63,6 +69,9 @@ List<Widget> getSummaryWidgets(
             'Overview',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
           ),
+    memory.discarded
+        ? const SizedBox.shrink()
+        : ((memory.geolocation.target != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
@@ -192,9 +201,10 @@ _getEditTextField(Memory memory, TextEditingController controller, bool enabled,
         )
       : SelectionArea(
           child: Text(
-          controller.text,
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-        ));
+            controller.text,
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+          ),
+        );
 }
 
 List<Widget> getPluginsWidgets(
@@ -323,6 +333,57 @@ List<Widget> getPluginsWidgets(
   ];
 }
 
+List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
+  return memory.geolocation.target == null || memory.discarded
+      ? []
+      : [
+          Text(
+            'Taken at',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${memory.geolocation.target!.address}',
+            style: TextStyle(color: Colors.grey.shade300),
+          ),
+          const SizedBox(height: 8),
+          memory.geolocation.target != null
+              ? GestureDetector(
+                  onTap: () async {
+                    // TODO: open google maps URL if available
+                    // if (await canLaunchUrl(
+                    //         Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!))) ==
+                    //     true) {
+                    //   await launchUrl(
+                    //       Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!)));
+                    // }
+                    MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      memory.geolocation.target!.latitude!,
+                      memory.geolocation.target!.longitude!,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+          const SizedBox(height: 8),
+        ];
+}
+
 showOptionsBottomSheet(
   BuildContext context,
   StateSetter setState,
@@ -330,6 +391,11 @@ showOptionsBottomSheet(
   Function(BuildContext, StateSetter, Memory, Function) reprocessMemory,
 ) async {
   bool loadingReprocessMemory = false;
+  bool displayDevTools = false;
+  bool displayMemoryPromptField = false;
+  bool loadingPluginIntegrationTest = false;
+  TextEditingController controller = TextEditingController();
+
   var result = await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -340,7 +406,7 @@ showOptionsBottomSheet(
       ),
       builder: (context) => StatefulBuilder(builder: (context, setModalState) {
             return Container(
-              height: 216,
+              height: SharedPreferencesUtil().devModeEnabled ? 280 : 216,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: const BorderRadius.only(
@@ -350,69 +416,148 @@ showOptionsBottomSheet(
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
-                children: [
-                  ListTile(
-                    title: const Text('Share memory'),
-                    leading: const Icon(Icons.send),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () {
-                            // share loading
-                            MixpanelManager().memoryShareButtonClick(memory);
-                            Share.share(memory.structured.target!.toString());
-                            HapticFeedback.lightImpact();
+                children: displayDevTools
+                    ? [
+                        ListTile(
+                          title: const Text('Trigger Memory Created Integration'),
+                          leading: loadingPluginIntegrationTest
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.send_to_mobile_outlined),
+                          onTap: () {
+                            setModalState(() => loadingPluginIntegrationTest = true);
+                            // TODO: if not set, show dialog to set URL or take them to settings.
+
+                            webhookOnMemoryCreatedCall(memory, returnRawBody: true).then((response) {
+                              showDialog(
+                                context: context,
+                                builder: (c) => getDialog(
+                                  context,
+                                  () => Navigator.pop(context),
+                                  () => Navigator.pop(context),
+                                  'Result:',
+                                  response,
+                                  okButtonText: 'Ok',
+                                  singleButton: true,
+                                ),
+                              );
+                              setModalState(() => loadingPluginIntegrationTest = false);
+                            });
                           },
-                  ),
-                  ListTile(
-                    title: const Text('Re-summarize'),
-                    leading: loadingReprocessMemory
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                            ))
-                        : const Icon(Icons.refresh, color: Colors.deepPurple),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () => reprocessMemory(context, setModalState, memory, () {
-                              setModalState(() {
-                                loadingReprocessMemory = !loadingReprocessMemory;
-                              });
-                            }),
-                  ),
-                  ListTile(
-                    title: const Text('Delete'),
-                    leading: const Icon(
-                      Icons.delete,
-                      color: Colors.red,
-                    ),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (dialogContext) {
-                                return Dialog(
-                                  elevation: 0,
-                                  insetPadding: EdgeInsets.zero,
-                                  backgroundColor: Colors.transparent,
-                                  alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                  child: ConfirmDeletionWidget(
-                                      memory: memory,
-                                      onDelete: () {
-                                        Navigator.pop(context, true);
-                                        Navigator.pop(context, true);
-                                      }),
-                                );
-                              },
-                            );
+                        ),
+                        ListTile(
+                          title: const Text('Test a Memory Prompt'),
+                          leading: const Icon(Icons.chat),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                          onTap: () {
+                            routeToPage(context, TestPromptsPage(memory: memory));
                           },
-                  )
-                ],
+                        ),
+                      ]
+                    : [
+                        ListTile(
+                          title: const Text('Share memory'),
+                          leading: const Icon(Icons.send),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () {
+                                  // share loading
+                                  MixpanelManager().memoryShareButtonClick(memory);
+                                  Share.share(memory.structured.target!.toString());
+                                  HapticFeedback.lightImpact();
+                                },
+                        ),
+                        ListTile(
+                          title: const Text('Re-summarize'),
+                          leading: loadingReprocessMemory
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                                  ))
+                              : const Icon(Icons.refresh, color: Colors.deepPurple),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () => reprocessMemory(context, setModalState, memory, () {
+                                    setModalState(() {
+                                      loadingReprocessMemory = !loadingReprocessMemory;
+                                    });
+                                  }),
+                        ),
+                        ListTile(
+                          title: const Text('Delete'),
+                          leading: const Icon(
+                            Icons.delete,
+                            color: Colors.red,
+                          ),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (dialogContext) {
+                                      return Dialog(
+                                        elevation: 0,
+                                        insetPadding: EdgeInsets.zero,
+                                        backgroundColor: Colors.transparent,
+                                        alignment:
+                                            const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                        child: ConfirmDeletionWidget(
+                                            memory: memory,
+                                            onDelete: () {
+                                              Navigator.pop(context, true);
+                                              Navigator.pop(context, true);
+                                            }),
+                                      );
+                                    },
+                                  );
+                                },
+                        ),
+                        SharedPreferencesUtil().devModeEnabled
+                            ? ListTile(
+                                onTap: () {
+                                  setModalState(() {
+                                    displayDevTools = !displayDevTools;
+                                  });
+                                },
+                                title: const Text('Developer Tools'),
+                                leading: const Icon(
+                                  Icons.developer_mode,
+                                  color: Colors.white,
+                                ),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                              )
+                            : const SizedBox.shrink(),
+                      ],
               ),
             );
           }));
   if (result == true) setState(() {});
   debugPrint('showBottomSheet result: $result');
+}
+
+_getMemoryPromptDialogContent(BuildContext context, TextEditingController controller) {
+  return SizedBox(
+    height: 200,
+    child: Column(
+      children: [
+        TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter the prompt',
+            border: OutlineInputBorder(borderSide: BorderSide.none),
+            contentPadding: EdgeInsets.all(0),
+          ),
+          keyboardType: TextInputType.multiline,
+          maxLines: 8,
+        ),
+      ],
+    ),
+  );
 }

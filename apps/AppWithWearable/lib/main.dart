@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
@@ -12,7 +13,8 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
-import 'package:friend_private/firebase_options.dart';
+import 'package:friend_private/firebase_options_dev.dart' as dev;
+import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
@@ -32,19 +34,26 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  listenAuthTokenChanges();
-  bool isAuth = false;
-  try {
-    isAuth = (await getIdToken()) != null;
-  } catch (e) {} // if no connect this will fail
+  if (F.env == Environment.prod) {
+    await Firebase.initializeApp(
+      options: prod.DefaultFirebaseOptions.currentPlatform,
+    );
+  } else {
+    await Firebase.initializeApp(
+      options: dev.DefaultFirebaseOptions.currentPlatform,
+    );
+  }
 
   await initializeNotifications();
   await SharedPreferencesUtil.init();
   await ObjectBoxUtil.init();
   await MixpanelManager.init();
+
+  listenAuthTokenChanges();
+  bool isAuth = false;
+  try {
+    isAuth = (await getIdToken()) != null;
+  } catch (e) {} // if no connect this will fail
 
   if (isAuth) MixpanelManager().identify();
 
@@ -66,6 +75,13 @@ void main() async {
           token: Env.instabugApiKey!,
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
         );
+        if (isAuth) {
+          Instabug.identifyUser(
+            FirebaseAuth.instance.currentUser?.email ?? '',
+            SharedPreferencesUtil().fullName,
+            SharedPreferencesUtil().uid,
+          );
+        }
         FlutterError.onError = (FlutterErrorDetails details) {
           Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };

@@ -22,37 +22,26 @@ class GrowthbookUtil {
       'device': Platform.isAndroid ? 'android' : 'ios',
     };
     _gb = await GBSDKBuilderApp(
-            apiKey: Env.growthbookApiKey!,
-            backgroundSync: true,
-            enable: true,
-            attributes: attr,
-            growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
-              debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
-            },
-            hostURL: 'https://cdn.growthbook.io/',
-            qaMode: true
-            // gbFeatures: {
-            //   'server-transcript': GBFeature(),
-            // },
-            )
-        .initialize();
+      apiKey: Env.growthbookApiKey!,
+      backgroundSync: true,
+      enable: true,
+      attributes: attr,
+      growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
+        debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
+      },
+      hostURL: 'https://cdn.growthbook.io/',
+      qaMode: true,
+      gbFeatures: {
+        // 'server-transcript': GBFeature(defaultValue: true),
+        'streaming-transcript': GBFeature(defaultValue: false),
+      },
+    ).initialize();
     _gb!.setAttributes(attr);
   }
 
-  bool hasTranscriptServerFeatureOn() {
-    // return true;
-    if (Env.growthbookApiKey == null) return false;
-    if (!SharedPreferencesUtil().useTranscriptServer) return false;
-
-    var feature = _gb!.feature('server-transcript');
-    var enabled = feature.on;
-    return enabled;
-  }
-
   bool hasStreamingTranscriptFeatureOn() {
-    return false;
-    if (!hasTranscriptServerFeatureOn()) return false;
-
+    return true;
+    if (!SharedPreferencesUtil().useTranscriptServer) return false;
     var feature = _gb!.feature('streaming-transcript');
     var enabled = feature.on;
     return enabled;
