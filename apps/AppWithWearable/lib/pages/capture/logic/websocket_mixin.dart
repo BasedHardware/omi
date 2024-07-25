@@ -33,6 +33,7 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
     BleAudioCodec codec = BleAudioCodec.pcm8,
+    int? sampleRate,
   }) async {
     if (_isConnecting) return;
     _isConnecting = true;
@@ -114,6 +115,7 @@ mixin WebSocketMixin {
           );
         },
         onMessageReceived: onMessageReceived,
+        sampleRate: sampleRate ?? (codec == BleAudioCodec.opus ? 16000 : 8000),
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');

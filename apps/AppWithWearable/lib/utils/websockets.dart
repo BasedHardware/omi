@@ -11,6 +11,19 @@ import 'package:web_socket_channel/io.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
 
+String mapCodecToName(BleAudioCodec codec) {
+  switch (codec) {
+    case BleAudioCodec.opus:
+      return 'opus';
+    case BleAudioCodec.pcm16:
+      return 'pcm16';
+    case BleAudioCodec.pcm8:
+      return 'pcm8';
+    default:
+      return 'pcm8';
+  }
+}
+
 Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(List<TranscriptSegment>) onMessageReceived,
   VoidCallback onWebsocketConnectionSuccess,
@@ -69,6 +82,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
   required BleAudioCodec codec,
+  required int sampleRate,
 }) async {
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
@@ -77,8 +91,8 @@ Future<IOWebSocketChannel?> streamingTranscript({
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
-      codec == BleAudioCodec.opus ? 16000 : 8000,
-      codec == BleAudioCodec.opus ? 'opus' : 'pcm8',
+      sampleRate,
+      mapCodecToName(codec),
     );
 
     return channel;
