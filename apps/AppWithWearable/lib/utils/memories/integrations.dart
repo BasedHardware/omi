@@ -11,6 +11,7 @@ getOnMemoryCreationEvents(Memory memory) async {
   var onMemoryCreationPlugins = SharedPreferencesUtil()
       .pluginsList
       .where((element) => element.externalIntegration?.triggersOn == 'memory_creation' && element.enabled)
+      .toSet()
       .toList();
   // print('onMemoryCreationPlugins: $onMemoryCreationPlugins');
   List<Future<Tuple2<Plugin, String>>> triggerPluginResult = onMemoryCreationPlugins.map((plugin) async {
@@ -26,6 +27,7 @@ getOnTranscriptSegmentReceivedEvents(List<TranscriptSegment> segment, String ses
   var plugins = SharedPreferencesUtil()
       .pluginsList
       .where((element) => element.externalIntegration?.triggersOn == 'transcript_processed' && element.enabled)
+      .toSet()
       .toList();
   List<Future<Tuple2<Plugin, String>>> triggerPluginResult = plugins.map((plugin) async {
     var url = plugin.externalIntegration!.webhookUrl;

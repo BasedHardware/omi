@@ -83,6 +83,7 @@ def is_setup_completed(uid: str):
 
 @app.post('/notion-crm')
 def notion_crm(memory: Memory, uid: str):
+    print(memory.dict())
     notion_api_key = get_notion_crm_api_key(uid)
     if not notion_api_key:
         return {'message': 'Your Notion CRM plugin is not setup properly. Check your plugin settings.'}

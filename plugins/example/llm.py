@@ -15,7 +15,6 @@ chat = ChatOpenAI(model='gpt-4o', temperature=0)
 #     # model='llama3-groq-8b-8192-tool-use-preview',
 # )
 
-
 class BooksToBuy(BaseModel):
     books: List[str] = Field(description="The list of titles of the books to buy", default=[], min_items=0)
 
