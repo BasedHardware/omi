@@ -4,15 +4,19 @@ layout: default
 parent: Plugins
 nav_order: 1
 ---
+
 # FRIEND Plugin Development: Expanding AI Capabilities
 
-Welcome to the FRIEND Plugin ecosystem. Here, developers can extend and enhance the functionality of the FRIEND AI assistant, creating powerful tools for a wide range of applications.
+Welcome to the FRIEND Plugin ecosystem. Here, developers can extend and enhance the functionality of the FRIEND AI
+assistant, creating powerful tools for a wide range of applications.
 
 ## What Are FRIEND Plugins?
 
-FRIEND plugins are modular extensions that augment the core functionality of the AI assistant. They can modify FRIEND's behavior, analyze conversations, and connect with external services.
+FRIEND plugins are modular extensions that augment the core functionality of the AI assistant. They can modify FRIEND's
+behavior, analyze conversations, and connect with external services.
 
 Plugins enable:
+
 - Customized AI personalities and knowledge bases
 - Extraction of specific information from conversations
 - Task automation and integration with third-party services
@@ -30,7 +34,8 @@ Plugins enable:
 
 [//]: # (- A health and fitness tracker that interprets discussions about diet and exercise)
 
-Plugins allow developers to tap into FRIEND's conversational abilities and combine them with external data and services, opening up a world of possibilities for AI-enhanced applications.
+Plugins allow developers to tap into FRIEND's conversational abilities and combine them with external data and services,
+opening up a world of possibilities for AI-enhanced applications.
 
 ## Plugin Types
 
@@ -47,21 +52,10 @@ These plugins modify how FRIEND processes and responds to information:
 
 These plugins allow FRIEND to interact with external services and process data in real-time:
 
-a) **Memory Creation Triggers**: Activated when FRIEND creates a new memory. These can be used to:
-
-- Update project management tools with conversation summaries
-- Create a personalized social platform that matches you with like-minded individuals based on your conversations and
-  interests
-- Generate a comprehensive knowledge graph of your interests, experiences, and relationships over time
-
-b) **Real-Time Transcript Processors**: These process conversation transcripts as they occur, enabling:
-
-- Live conversation coaching, providing feedback on communication skills and suggesting improvements in real-time
-- Handling trigger phrases like "Hey Friend, remind me to..." to set reminders or "Hey Friend, add to cart..." to update
-  your shopping lists
-- Performing real-time web searches or fact-checking during conversations
-- Analyzing emotional states and providing supportive responses or suggestions
-- Integrating with smart home systems to control devices based on conversational cues
+| Plugin Type                             | Description                                    | Use Cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Visualization                                                   |
+|-----------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| **👷 Memory Creation Triggers**         | Activated when FRIEND creates a new memory     | - Update project management tools with conversation summaries<br>- Create a personalized social platform that matches you with like-minded individuals based on your conversations and interests<br>- Generate a comprehensive knowledge graph of your interests, experiences, and relationships over time                                                                                                                                                                                                                | ![Memory trigger plugin](../../images/external-integration.gif) |
+| **🏎️ Real-Time Transcript Processors** | Process conversation transcripts as they occur | - Live conversation coaching, providing feedback on communication skills and suggesting improvements in real-time<br>- Handling trigger phrases like "Hey Friend, remind me to..." to set reminders or "Hey Friend, add to cart..." to update your shopping lists<br>- Performing real-time web searches or fact-checking during conversations<br>- Analyzing emotional states and providing supportive responses or suggestions<br>- Integrating with smart home systems to control devices based on conversational cues | ![Memory trigger plugin](../../images/realtime-processing.gif)  |
 
 ## Potential Applications
 

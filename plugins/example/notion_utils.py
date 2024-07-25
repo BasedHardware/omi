@@ -26,6 +26,6 @@ def store_memoy_in_db(notion_api_key: str, database_id: str, memory: Memory):
         'Accept': 'application/json',
         'Notion-Version': '2022-06-28'
     })
-    # print(resp.json())
+    print(resp.json())
     # TODO: after, write inside the page the transcript and everything else.
     return resp.status_code == 200
