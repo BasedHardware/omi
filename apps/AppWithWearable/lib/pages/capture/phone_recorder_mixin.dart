@@ -4,15 +4,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/pages/capture/background_service.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/pages/capture/background_service.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:record/record.dart';
 import 'package:web_socket_channel/io.dart';
+
 import 'microphone_transcribing_util.dart';
 
 // TODO: to be fixed.
@@ -47,34 +48,8 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     setState(() => recordingState = RecordingState.record);
     stream.listen((data) async {
       if (wsConnectionState == WebsocketConnectionStatus.connected) {
-        // audioChunks.add(data);
-        // totalBytes += data.length;
         websocketChannel?.sink.add(data);
       }
-      // Timer isn't needed for this implementation
-      //     timer = Timer.periodic(
-      //   const Duration(seconds: 30),
-      //   (timer) {
-      //     debugPrint('Timer triggered at ${DateTime.now()}');
-      //     if (audioChunks.isNotEmpty) {
-      //       // Combine all chunks into a single Uint8List
-      //       Uint8List combinedChunk = Uint8List(totalBytes);
-      //       int offset = 0;
-      //       for (var chunk in audioChunks) {
-      //         combinedChunk.setRange(offset, offset + chunk.length, chunk);
-      //         offset += chunk.length;
-      //       }
-      //       // Send combined chunk through WebSocket
-      //       if (wsConnectionState == WebsocketConnectionStatus.connected) {
-      //         debugPrint('Sending chunk of size ${combinedChunk.length} bytes');
-      //         websocketChannel?.sink.add(combinedChunk);
-      //         // Clear the chunks and reset total bytes
-      //         audioChunks.clear();
-      //         totalBytes = 0;
-      //       }
-      //     }
-      //   },
-      // );
     });
   }
 
