@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
@@ -14,6 +15,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:share_plus/share_plus.dart';
@@ -388,6 +390,8 @@ showOptionsBottomSheet(
   Function(BuildContext, StateSetter, Memory, Function) reprocessMemory,
 ) async {
   bool loadingReprocessMemory = false;
+  bool displayDevTools = false;
+  bool loadingPluginIntegrationTest = false;
   var result = await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -398,7 +402,7 @@ showOptionsBottomSheet(
       ),
       builder: (context) => StatefulBuilder(builder: (context, setModalState) {
             return Container(
-              height: 216,
+              height: SharedPreferencesUtil().devModeEnabled ? 280 : 216,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: const BorderRadius.only(
@@ -408,66 +412,117 @@ showOptionsBottomSheet(
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
-                children: [
-                  ListTile(
-                    title: const Text('Share memory'),
-                    leading: const Icon(Icons.send),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () {
-                            // share loading
-                            MixpanelManager().memoryShareButtonClick(memory);
-                            Share.share(memory.structured.target!.toString());
-                            HapticFeedback.lightImpact();
+                children: displayDevTools
+                    ? [
+                        ListTile(
+                          title: const Text('Trigger Integration Endpoint'),
+                          leading: loadingPluginIntegrationTest
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.send_to_mobile_outlined),
+                          onTap: () {
+                            setModalState(() => loadingPluginIntegrationTest = true);
+                            // TODO: if not set, show dialog to set URL or take them to settings.
+
+                            webhookOnMemoryCreatedCall(memory, returnRawBody: true).then((response) {
+                              showDialog(
+                                context: context,
+                                builder: (c) => getDialog(
+                                  context,
+                                  () => Navigator.pop(context),
+                                  () => Navigator.pop(context),
+                                  'Result:',
+                                  response,
+                                  okButtonText: 'Ok',
+                                  singleButton: true,
+                                ),
+                              );
+                              setModalState(() => loadingPluginIntegrationTest = false);
+                            });
                           },
-                  ),
-                  ListTile(
-                    title: const Text('Re-summarize'),
-                    leading: loadingReprocessMemory
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                            ))
-                        : const Icon(Icons.refresh, color: Colors.deepPurple),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () => reprocessMemory(context, setModalState, memory, () {
-                              setModalState(() {
-                                loadingReprocessMemory = !loadingReprocessMemory;
-                              });
-                            }),
-                  ),
-                  ListTile(
-                    title: const Text('Delete'),
-                    leading: const Icon(
-                      Icons.delete,
-                      color: Colors.red,
-                    ),
-                    onTap: loadingReprocessMemory
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (dialogContext) {
-                                return Dialog(
-                                  elevation: 0,
-                                  insetPadding: EdgeInsets.zero,
-                                  backgroundColor: Colors.transparent,
-                                  alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                  child: ConfirmDeletionWidget(
-                                      memory: memory,
-                                      onDelete: () {
-                                        Navigator.pop(context, true);
-                                        Navigator.pop(context, true);
-                                      }),
-                                );
-                              },
-                            );
-                          },
-                  )
-                ],
+                        )
+                      ]
+                    : [
+                        ListTile(
+                          title: const Text('Share memory'),
+                          leading: const Icon(Icons.send),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () {
+                                  // share loading
+                                  MixpanelManager().memoryShareButtonClick(memory);
+                                  Share.share(memory.structured.target!.toString());
+                                  HapticFeedback.lightImpact();
+                                },
+                        ),
+                        ListTile(
+                          title: const Text('Re-summarize'),
+                          leading: loadingReprocessMemory
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                                  ))
+                              : const Icon(Icons.refresh, color: Colors.deepPurple),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () => reprocessMemory(context, setModalState, memory, () {
+                                    setModalState(() {
+                                      loadingReprocessMemory = !loadingReprocessMemory;
+                                    });
+                                  }),
+                        ),
+                        ListTile(
+                          title: const Text('Delete'),
+                          leading: const Icon(
+                            Icons.delete,
+                            color: Colors.red,
+                          ),
+                          onTap: loadingReprocessMemory
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (dialogContext) {
+                                      return Dialog(
+                                        elevation: 0,
+                                        insetPadding: EdgeInsets.zero,
+                                        backgroundColor: Colors.transparent,
+                                        alignment:
+                                            const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                        child: ConfirmDeletionWidget(
+                                            memory: memory,
+                                            onDelete: () {
+                                              Navigator.pop(context, true);
+                                              Navigator.pop(context, true);
+                                            }),
+                                      );
+                                    },
+                                  );
+                                },
+                        ),
+                        SharedPreferencesUtil().devModeEnabled
+                            ? ListTile(
+                                onTap: () {
+                                  setModalState(() {
+                                    displayDevTools = !displayDevTools;
+                                  });
+                                },
+                                title: const Text('Developer Tools'),
+                                leading: const Icon(
+                                  Icons.developer_mode,
+                                  color: Colors.white,
+                                ),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                              )
+                            : const SizedBox.shrink(),
+                      ],
               ),
             );
           }));

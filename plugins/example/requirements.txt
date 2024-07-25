@@ -19,6 +19,7 @@ email_validator==2.2.0
 fastapi==0.111.0
 fastapi-cli==0.0.4
 frozenlist==1.4.1
+groq==0.9.0
 grpclib==0.4.7
 h11==0.14.0
 h2==4.1.0
@@ -35,6 +36,7 @@ jsonpointer==3.0.0
 langchain==0.2.8
 langchain-community==0.2.7
 langchain-core==0.2.20
+langchain-groq==0.1.6
 langchain-openai==0.1.17
 langchain-text-splitters==0.2.2
 langsmith==0.1.88

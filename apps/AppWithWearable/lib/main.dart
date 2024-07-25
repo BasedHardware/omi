@@ -43,16 +43,16 @@ void main() async {
     );
   }
 
+  await initializeNotifications();
+  await SharedPreferencesUtil.init();
+  await ObjectBoxUtil.init();
+  await MixpanelManager.init();
+
   listenAuthTokenChanges();
   bool isAuth = false;
   try {
     isAuth = (await getIdToken()) != null;
   } catch (e) {} // if no connect this will fail
-
-  await initializeNotifications();
-  await SharedPreferencesUtil.init();
-  await ObjectBoxUtil.init();
-  await MixpanelManager.init();
 
   if (isAuth) MixpanelManager().identify();
 
