@@ -114,18 +114,19 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 onPressed: () {
                   if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
                     showDialog(
-                        context: context,
-                        builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () {
-                                Navigator.pop(context);
-                                _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
-                              },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                              okButtonText: 'Confirm',
-                            ));
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () {
+                          Navigator.pop(context);
+                          _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                        },
+                        'Authorize External Plugin',
+                        'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                        okButtonText: 'Confirm',
+                      ),
+                    );
                   } else {
                     _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
                   }

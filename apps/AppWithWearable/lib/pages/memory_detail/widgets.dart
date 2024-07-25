@@ -11,6 +11,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
+import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -393,6 +394,7 @@ showOptionsBottomSheet(
   bool displayDevTools = false;
   bool displayMemoryPromptField = false;
   bool loadingPluginIntegrationTest = false;
+  TextEditingController controller = TextEditingController();
 
   var result = await showModalBottomSheet(
       context: context,
@@ -417,7 +419,7 @@ showOptionsBottomSheet(
                 children: displayDevTools
                     ? [
                         ListTile(
-                          title: const Text('Trigger Integration Endpoint'),
+                          title: const Text('Trigger Memory Created Integration'),
                           leading: loadingPluginIntegrationTest
                               ? const SizedBox(
                                   height: 24,
@@ -449,31 +451,14 @@ showOptionsBottomSheet(
                           },
                         ),
                         ListTile(
-                            title: const Text('Test a Memory Prompt'),
-                            leading: const Icon(Icons.chat),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                            onTap: () {
-                              print('onTap');
-                              setModalState(() {
-                                displayMemoryPromptField = true;
-                                displayDevTools = false;
-                              });
-                              print('onTap $displayMemoryPromptField');
-                            }),
+                          title: const Text('Test a Memory Prompt'),
+                          leading: const Icon(Icons.chat),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                          onTap: () {
+                            routeToPage(context, TestPromptsPage(memory: memory));
+                          },
+                        ),
                       ]
-                    // displayMemoryPromptField
-                    //                         ? [
-                    //                             const TextField(
-                    //                               decoration: InputDecoration(
-                    //                                 hintText: 'Enter a memory prompts',
-                    //                                 border: OutlineInputBorder(borderSide: BorderSide.none),
-                    //                                 contentPadding: EdgeInsets.all(16),
-                    //                               ),
-                    //                               keyboardType: TextInputType.multiline,
-                    //                               maxLines: null,
-                    //                             ),
-                    //                           ]
-                    //                         :
                     : [
                         ListTile(
                           title: const Text('Share memory'),
@@ -555,4 +540,24 @@ showOptionsBottomSheet(
           }));
   if (result == true) setState(() {});
   debugPrint('showBottomSheet result: $result');
+}
+
+_getMemoryPromptDialogContent(BuildContext context, TextEditingController controller) {
+  return SizedBox(
+    height: 200,
+    child: Column(
+      children: [
+        TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter the prompt',
+            border: OutlineInputBorder(borderSide: BorderSide.none),
+            contentPadding: EdgeInsets.all(0),
+          ),
+          keyboardType: TextInputType.multiline,
+          maxLines: 8,
+        ),
+      ],
+    ),
+  );
 }
