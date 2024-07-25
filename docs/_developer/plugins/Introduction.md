@@ -72,7 +72,7 @@ The FRIEND plugin system opens up a wide range of possibilities:
 
 To contribute your plugin to the FRIEND community, follow these steps based on the type of plugin you want to create:
 
-1. Read our [Prompt-Based Plugin Guide](PromptBased.md) or check our [Integration Plugin Guide](Integrations.md) to
+1. Read our [Prompt-Based Plugin Guide](./PromptBased.md) or check our [Integration Plugin Guide](./Integrations.md) to
    understand the process.
 2. Develop and test your plugin following the guidelines provided.
 3. Submit a pull request to
