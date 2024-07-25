@@ -4,22 +4,33 @@ layout: default
 parent: Plugins
 nav_order: 1
 ---
-
 # FRIEND Plugin Development: Expanding AI Capabilities
 
-Welcome to the FRIEND Plugin ecosystem. Here, developers can extend and enhance the functionality of the FRIEND AI
-assistant, creating powerful tools for productivity, analysis, and integration with external services.
+Welcome to the FRIEND Plugin ecosystem. Here, developers can extend and enhance the functionality of the FRIEND AI assistant, creating powerful tools for a wide range of applications.
 
 ## What Are FRIEND Plugins?
 
-FRIEND plugins are modular extensions that augment the core functionality of the AI assistant. They enable:
+FRIEND plugins are modular extensions that augment the core functionality of the AI assistant. They can modify FRIEND's behavior, analyze conversations, and connect with external services.
 
-- Task automation
-- Integration with third-party services
-- Addition of new features and capabilities
+Plugins enable:
+- Customized AI personalities and knowledge bases
+- Extraction of specific information from conversations
+- Task automation and integration with third-party services
+- Real-time conversation analysis and insights
 
-Plugins can transform FRIEND into a specialized tool for various applications, from productivity enhancement to data
-analysis and beyond.
+[//]: # (With plugins, FRIEND can be transformed into specialized tools such as:)
+
+[//]: # (- A personal productivity coach that extracts action items and updates task management systems)
+
+[//]: # (- An expert in any field, providing specialized knowledge and advice)
+
+[//]: # (- A real-time language translator and cultural advisor)
+
+[//]: # (- A personal CRM that analyzes conversations and maintains relationship histories)
+
+[//]: # (- A health and fitness tracker that interprets discussions about diet and exercise)
+
+Plugins allow developers to tap into FRIEND's conversational abilities and combine them with external data and services, opening up a world of possibilities for AI-enhanced applications.
 
 ## Plugin Types
 
@@ -27,11 +38,10 @@ analysis and beyond.
 
 These plugins modify how FRIEND processes and responds to information:
 
-a) **Chat Prompts**: Alter FRIEND's conversational style and knowledge base. For example, you could create a plugin that
-makes FRIEND communicate like a specific expert or professional in a given field.
-
-b) **Memory Prompts**: These plugins analyze conversations and extract specific information based on predefined
-criteria. They can be used for summarization, key point extraction, or identifying action items from discussions.
+| Type                  | Description                                                                          | Example                                                                                                | Visualization                               |
+|-----------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|---------------------------------------------|
+| **💬 Chat Prompts**   | Alter FRIEND's conversational style and knowledge base.                              | Create a plugin that makes FRIEND communicate like a specific expert or professional in a given field. | ![Chat plugin](../../images/chat.gif)       |
+| **🧠 Memory Prompts** | Analyze conversations and extract specific information based on predefined criteria. | Use for summarization, key point extraction, or identifying action items from discussions.             | ![Memory plugin](../../images/memories.gif) |
 
 ### 2. Integration Plugins: Connecting FRIEND to External Systems
 
