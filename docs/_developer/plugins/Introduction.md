@@ -8,11 +8,11 @@ nav_order: 1
 # FRIEND Plugin Development: Expanding AI Capabilities
 
 Welcome to the FRIEND Plugin ecosystem. Here, developers can extend and enhance the functionality of the FRIEND AI
-assistant, creating powerful tools for a wide range of applications.
+wearable, creating powerful tools for a wide range of applications.
 
 ## What Are FRIEND Plugins?
 
-FRIEND plugins are modular extensions that augment the core functionality of the AI assistant. They can modify FRIEND's
+FRIEND plugins are modular extensions that augment the core functionality of the AI wearable. They can modify FRIEND's
 behavior, analyze conversations, and connect with external services.
 
 Plugins enable:
