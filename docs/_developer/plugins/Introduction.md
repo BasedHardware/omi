@@ -70,15 +70,13 @@ The FRIEND plugin system opens up a wide range of possibilities:
 
 ## Getting Started
 
-To contribute your plugin to the FRIEND community:
+To contribute your plugin to the FRIEND community, follow these steps based on the type of plugin you want to create:
 
-1. Develop your plugin following our [Plugin Development Guide](#).
-2. Test your plugin thoroughly using our [Plugin Testing Framework](#).
+1. Read our [Prompt-Based Plugin Guide](PromptBased.md) or check our [Integration Plugin Guide](Integrations.md) to
+   understand the process.
+2. Develop and test your plugin following the guidelines provided.
 3. Submit a pull request to
    our [community-plugins.json](https://github.com/BasedHardware/Friend/blob/main/community-plugins.json) file on
    GitHub, appending your plugin details.
-
-For more detailed information, please refer to our guides on [Creating Prompt-Based Plugins](#)
-and [Building Integration Plugins](#).
 
 We're excited to see how you'll expand FRIEND's capabilities. Happy developing!
