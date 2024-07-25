@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
@@ -479,22 +478,22 @@ class CapturePageState extends State<CapturePage>
     }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) async {
-    final backgroundService = FlutterBackgroundService();
-    if (state == AppLifecycleState.paused) {
-      backgroundTranscriptTimer?.cancel();
-      if (await backgroundService.isRunning()) {
-        _memoryCreationTimer?.cancel();
-      }
-    }
-    if (state == AppLifecycleState.resumed) {
-      if (await backgroundService.isRunning()) {
-        await onAppIsResumed(_processFileToTranscript);
-      }
-    }
-    super.didChangeAppLifecycleState(state);
-  }
+  // @override
+  // void didChangeAppLifecycleState(AppLifecycleState state) async {
+  //   final backgroundService = FlutterBackgroundService();
+  //   if (state == AppLifecycleState.paused) {
+  //     backgroundTranscriptTimer?.cancel();
+  //     if (await backgroundService.isRunning()) {
+  //       _memoryCreationTimer?.cancel();
+  //     }
+  //   }
+  //   if (state == AppLifecycleState.resumed) {
+  //     if (await backgroundService.isRunning()) {
+  //       await onAppIsResumed(_processFileToTranscript);
+  //     }
+  //   }
+  //   super.didChangeAppLifecycleState(state);
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +521,8 @@ class CapturePageState extends State<CapturePage>
       await stopStreamRecording(wsConnectionState, websocketChannel);
       setState(() => recordingState = RecordingState.stop);
       _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(milliseconds: 500), () => _createMemory());
+      // _memoryCreationTimer = Timer(const Duration(milliseconds: 500), () => _createMemory());
+      _createMemory();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
