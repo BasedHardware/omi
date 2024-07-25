@@ -85,7 +85,7 @@ def is_setup_completed(uid: str):
 def notion_crm(memory: Memory, uid: str):
     notion_api_key = get_notion_crm_api_key(uid)
     if not notion_api_key:
-        return {'message': 'Your Notion CRM plugin is not enabled. Please enable it in the settings.'}
+        return {'message': 'Your Notion CRM plugin is not setup properly. Check your plugin settings.'}
 
     store_memoy_in_db(notion_api_key, get_notion_database_id(uid), memory)
     return {}

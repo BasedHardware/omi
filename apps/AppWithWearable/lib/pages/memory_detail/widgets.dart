@@ -391,7 +391,9 @@ showOptionsBottomSheet(
 ) async {
   bool loadingReprocessMemory = false;
   bool displayDevTools = false;
+  bool displayMemoryPromptField = false;
   bool loadingPluginIntegrationTest = false;
+
   var result = await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -445,8 +447,33 @@ showOptionsBottomSheet(
                               setModalState(() => loadingPluginIntegrationTest = false);
                             });
                           },
-                        )
+                        ),
+                        ListTile(
+                            title: const Text('Test a Memory Prompt'),
+                            leading: const Icon(Icons.chat),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                            onTap: () {
+                              print('onTap');
+                              setModalState(() {
+                                displayMemoryPromptField = true;
+                                displayDevTools = false;
+                              });
+                              print('onTap $displayMemoryPromptField');
+                            }),
                       ]
+                    // displayMemoryPromptField
+                    //                         ? [
+                    //                             const TextField(
+                    //                               decoration: InputDecoration(
+                    //                                 hintText: 'Enter a memory prompts',
+                    //                                 border: OutlineInputBorder(borderSide: BorderSide.none),
+                    //                                 contentPadding: EdgeInsets.all(16),
+                    //                               ),
+                    //                               keyboardType: TextInputType.multiline,
+                    //                               maxLines: null,
+                    //                             ),
+                    //                           ]
+                    //                         :
                     : [
                         ListTile(
                           title: const Text('Share memory'),
