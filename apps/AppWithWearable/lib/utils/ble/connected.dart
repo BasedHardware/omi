@@ -31,6 +31,7 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener({
       if (event.connectionState == BluetoothConnectionState.disconnected) {
         onDisconnected();
       } else if (event.connectionState == BluetoothConnectionState.connected) {
+        print('Connected to ${event.device.platformName}');
         onConnected(BTDeviceStruct(
           id: event.device.remoteId.str,
           name: event.device.platformName,

@@ -199,77 +199,80 @@ class CapturePageState extends State<CapturePage>
 
   int elapsedSeconds = 0;
 
-  Future<void> initiateBytesProcessing() async {
-    debugPrint('initiateBytesProcessing: $btDevice');
-    // OPEN GLASS LOGIC
+  Future<void> startOpenGlass() async {
     if (btDevice == null) return;
+    print(btDevice!.name);
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
-    if (isGlasses) return await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
-    // closeWebSocket(); IF OPEN GLASS, then just return;
-
-    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    if (codec == BleAudioCodec.unknown) {} // TODO: disconnect and show error
-
-    bool firstTranscriptMade = SharedPreferencesUtil().firstTranscriptMade;
-
-    audioStorage = WavBytesUtil(codec: codec);
-    await initiateChunksProcessing(
-      btDevice!.id,
-      codec,
-      audioStorage,
-      (newSegments, processedBytes) {
-        _handleNewSegments(newSegments);
-        if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: processedBytes.length ~/ 100);
-        if (segments.isNotEmpty) elapsedSeconds += processedBytes.length ~/ 100;
-        if (segments.isNotEmpty && !firstTranscriptMade) {
-          SharedPreferencesUtil().firstTranscriptMade = true;
-          MixpanelManager().firstTranscriptMade();
-          firstTranscriptMade = true;
-        }
-      },
-      (bool value) => setState(() => isTranscribing = value),
-      _internetStatus,
-    );
+    print('isGlasses: $isGlasses');
+    if (isGlasses) await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+    closeWebSocket();
   }
 
-  _printFileSize(File file) async {
-    int bytes = await file.length();
-    var i = (log(bytes) / log(1024)).floor();
-    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
-    debugPrint('File size: $size');
-  }
+  // Future<void> initiateBytesProcessing() async {
+  //   debugPrint('initiateBytesProcessing: $btDevice');
+  //   BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+  //   if (codec == BleAudioCodec.unknown) {} // TODO: disconnect and show error
+  //
+  //   bool firstTranscriptMade = SharedPreferencesUtil().firstTranscriptMade;
+  //
+  //   audioStorage = WavBytesUtil(codec: codec);
+  //   await initiateChunksProcessing(
+  //     btDevice!.id,
+  //     codec,
+  //     audioStorage,
+  //     (newSegments, processedBytes) {
+  //       _handleNewSegments(newSegments);
+  //       if (segments.isEmpty) audioStorage!.removeFramesRange(fromSecond: 0, toSecond: processedBytes.length ~/ 100);
+  //       if (segments.isNotEmpty) elapsedSeconds += processedBytes.length ~/ 100;
+  //       if (segments.isNotEmpty && !firstTranscriptMade) {
+  //         SharedPreferencesUtil().firstTranscriptMade = true;
+  //         MixpanelManager().firstTranscriptMade();
+  //         firstTranscriptMade = true;
+  //       }
+  //     },
+  //     (bool value) => setState(() => isTranscribing = value),
+  //     _internetStatus,
+  //   );
+  // }
 
-  _processFileToTranscript(File f, {bool forceDeepgramTranscription = true}) async {
-    setState(() => isTranscribing = true);
-    print('transcribing file: ${f.path}');
-    await _printFileSize(f);
-    List<TranscriptSegment> newSegments;
-    if (SharedPreferencesUtil().useTranscriptServer && !forceDeepgramTranscription) {
-      newSegments = await transcribe(f);
-    } else {
-      newSegments = await deepgramTranscribe(f);
-    }
-    _handleNewSegments(newSegments);
-    setState(() => isTranscribing = false);
-  }
+  // _printFileSize(File file) async {
+  //   int bytes = await file.length();
+  //   var i = (log(bytes) / log(1024)).floor();
+  //   const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+  //   var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+  //   debugPrint('File size: $size');
+  // }
 
-  void _handleNewSegments(List<TranscriptSegment> newSegments) {
-    TranscriptSegment.combineSegments(segments, newSegments, toAddSeconds: elapsedSeconds); // combines b into a
-    if (newSegments.isNotEmpty) {
-      triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
-      SharedPreferencesUtil().transcriptSegments = segments;
-      setState(() {});
-      setHasTranscripts(true);
-      debugPrint('Memory creation timer restarted');
-      _memoryCreationTimer?.cancel();
-      _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
-      currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
-      currentTranscriptFinishedAt = DateTime.now();
-    }
-    // _doProcessingOfInstructions();
-    setState(() => isTranscribing = false);
-  }
+  // _processFileToTranscript(File f, {bool forceDeepgramTranscription = true}) async {
+  //   setState(() => isTranscribing = true);
+  //   print('transcribing file: ${f.path}');
+  //   await _printFileSize(f);
+  //   List<TranscriptSegment> newSegments;
+  //   if (SharedPreferencesUtil().useTranscriptServer && !forceDeepgramTranscription) {
+  //     newSegments = await transcribe(f);
+  //   } else {
+  //     newSegments = await deepgramTranscribe(f);
+  //   }
+  //   _handleNewSegments(newSegments);
+  //   setState(() => isTranscribing = false);
+  // }
+
+  // void _handleNewSegments(List<TranscriptSegment> newSegments) {
+  //   TranscriptSegment.combineSegments(segments, newSegments, toAddSeconds: elapsedSeconds); // combines b into a
+  //   if (newSegments.isNotEmpty) {
+  //     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
+  //     SharedPreferencesUtil().transcriptSegments = segments;
+  //     setState(() {});
+  //     setHasTranscripts(true);
+  //     debugPrint('Memory creation timer restarted');
+  //     _memoryCreationTimer?.cancel();
+  //     _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+  //     currentTranscriptStartedAt ??= DateTime.now().subtract(const Duration(seconds: 30));
+  //     currentTranscriptFinishedAt = DateTime.now();
+  //   }
+  //   // _doProcessingOfInstructions();
+  //   setState(() => isTranscribing = false);
+  // }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
@@ -278,12 +281,13 @@ class CapturePageState extends State<CapturePage>
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
-      if (_streamingTranscriptEnabled) {
-        // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
-        initiateBytesStreamingProcessing();
-      } else {
-        initiateBytesProcessing();
-      }
+      startOpenGlass();
+      initiateBytesStreamingProcessing();
+      // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
+      // if (_streamingTranscriptEnabled) {
+      // } else {
+      //   initiateBytesProcessing();
+      // }
     }
   }
 
@@ -388,16 +392,18 @@ class CapturePageState extends State<CapturePage>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       debugPrint('SchedulerBinding.instance');
-      await phoneRecorderInit(_processFileToTranscript);
+      // await phoneRecorderInit(_processFileToTranscript);
       _streamingTranscriptEnabled = GrowthbookUtil().hasStreamingTranscriptFeatureOn();
       WavBytesUtil.clearTempWavFiles();
       debugPrint('SchedulerBinding.instance');
-      if (_streamingTranscriptEnabled) {
-        initiateWebsocket();
-        initiateBytesStreamingProcessing();
-      } else {
-        initiateBytesProcessing();
-      }
+
+      initiateWebsocket();
+      startOpenGlass();
+      initiateBytesStreamingProcessing();
+      // if (_streamingTranscriptEnabled) {
+      // } else {
+      //   initiateBytesProcessing();
+      // }
       if (await LocationService().displayPermissionsDialog()) {
         showDialog(
           context: context,
