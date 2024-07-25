@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/pages/capture/background_service.dart';
+import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/websockets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/pages/capture/background_service.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:record/record.dart';
+import 'package:web_socket_channel/io.dart';
 
 import 'microphone_transcribing_util.dart';
 
@@ -25,6 +29,44 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
   bool isTranscribing = false;
   RecordingState recordingState = RecordingState.stop;
   Timer? backgroundTranscriptTimer;
+
+  // stream related
+  List<Uint8List> audioChunks = [];
+  int totalBytes = 0;
+  Timer? timer;
+  var record = AudioRecorder();
+
+  startStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
+    await Permission.microphone.request();
+    debugPrint("input device: ${await record.listInputDevices()}");
+    InputDevice? inputDevice;
+    if (Platform.isIOS) {
+      inputDevice = const InputDevice(id: "Built-In Microphone", label: "iPhone Microphone");
+    } else {}
+    var stream = await record.startStream(
+        RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1, device: inputDevice));
+    setState(() => recordingState = RecordingState.record);
+    stream.listen((data) async {
+      if (wsConnectionState == WebsocketConnectionStatus.connected) {
+        websocketChannel?.sink.add(data);
+      }
+    });
+  }
+
+  stopStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
+    if (timer != null) {
+      timer?.cancel();
+    }
+    if (await record.isRecording()) {
+      await record.stop();
+    }
+
+    if (wsConnectionState == WebsocketConnectionStatus.connected) {
+      websocketChannel?.sink.close();
+    }
+
+    setState(() => recordingState = RecordingState.stop);
+  }
 
   startRecording(Function processFileToTranscript) async {
     setState(() {
@@ -199,8 +241,10 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
   }
 
   @override
-  void dispose() {
+  void dispose() async {
     backgroundTranscriptTimer?.cancel();
+    timer?.cancel();
+    await record.dispose();
     super.dispose();
   }
 

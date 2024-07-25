@@ -18,7 +18,7 @@ void stopBackgroundService() {
   service.invoke("stop");
 }
 
-Future<void> initializeBackgroundService() async {
+Future<void> initializeBackgroundService({bool isStream = false}) async {
   final service = FlutterBackgroundService();
   createNotification(
     title: 'Friend is listening in the background',
@@ -28,11 +28,15 @@ Future<void> initializeBackgroundService() async {
   await service.configure(
     iosConfiguration: IosConfiguration(
       autoStart: true,
-      onForeground: onStart,
+      onForeground: (service) {
+        onStart(service, isStream);
+      },
     ),
     androidConfiguration: AndroidConfiguration(
       autoStart: true,
-      onStart: onStart,
+      onStart: (service) {
+        onStart(service, isStream);
+      },
       isForegroundMode: true,
       autoStartOnBoot: true,
       notificationChannelId: 'channel',
@@ -42,55 +46,59 @@ Future<void> initializeBackgroundService() async {
 }
 
 @pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  if (service is AndroidServiceInstance) {
-    if (await service.isForegroundService()) {
-      service.setForegroundNotificationInfo(
-        title: 'Friend is running in background',
-        content: 'Friend is listening and transcribing your conversations in the background',
-      );
-    }
-  }
-  int count = 0;
-  await SharedPreferencesUtil.init();
-  var record = AudioRecorder();
-  var path = await getApplicationDocumentsDirectory();
-  var files = Directory(path.path).listSync();
-  for (var file in files) {
-    if (file.path.contains('recording_') && !file.path.contains('recording_0')) {
-      debugPrint('deleting file: ${file.path}');
-      file.deleteSync();
-    }
-  }
-  var filePath = '${path.path}/recording_$count.wav';
-  service.invoke("stateUpdate", {"state": 'recording'});
-  await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
-  // timerUpdate is only invoked on Android
-  service.on("timerUpdate").listen((event) async {
-    if (event!["time"] == '0') {
-      if (await record.isRecording()) {
-        await record.stop();
-        await record.dispose();
+void onStart(ServiceInstance service, bool isStream) async {
+  if (isStream) {
+    await streamRecording(service);
+  } else {
+    if (service is AndroidServiceInstance) {
+      if (await service.isForegroundService()) {
+        service.setForegroundNotificationInfo(
+          title: 'Friend is running in background',
+          content: 'Friend is listening and transcribing your conversations in the background',
+        );
       }
+    }
+    int count = 0;
+    await SharedPreferencesUtil.init();
+    var record = AudioRecorder();
+    var path = await getApplicationDocumentsDirectory();
+    var files = Directory(path.path).listSync();
+    for (var file in files) {
+      if (file.path.contains('recording_') && !file.path.contains('recording_0')) {
+        debugPrint('deleting file: ${file.path}');
+        file.deleteSync();
+      }
+    }
+    var filePath = '${path.path}/recording_$count.wav';
+    service.invoke("stateUpdate", {"state": 'recording'});
+    await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
+    // timerUpdate is only invoked on Android
+    service.on("timerUpdate").listen((event) async {
+      if (event!["time"] == '0') {
+        if (await record.isRecording()) {
+          await record.stop();
+          await record.dispose();
+        }
 
-      debugPrint("recording stopped");
-    }
-    if (event["time"] == '30') {
-      var paths = SharedPreferencesUtil().recordingPaths;
-      SharedPreferencesUtil().recordingPaths = [...paths, filePath];
-      count++;
-      filePath = '${path.path}/recording_$count.wav';
-      record = AudioRecorder();
-      await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
-      debugPrint("recording started again file: $filePath");
-    }
-  });
-  service.on("stop").listen((event) async {
-    await record.stop();
-    await record.dispose();
-    await service.stopSelf();
-    debugPrint("background process is now stopped");
-  });
+        debugPrint("recording stopped");
+      }
+      if (event["time"] == '30') {
+        var paths = SharedPreferencesUtil().recordingPaths;
+        SharedPreferencesUtil().recordingPaths = [...paths, filePath];
+        count++;
+        filePath = '${path.path}/recording_$count.wav';
+        record = AudioRecorder();
+        await record.start(const RecordConfig(encoder: AudioEncoder.wav), path: filePath);
+        debugPrint("recording started again file: $filePath");
+      }
+    });
+    service.on("stop").listen((event) async {
+      await record.stop();
+      await record.dispose();
+      await service.stopSelf();
+      debugPrint("background process is now stopped");
+    });
+  }
 }
 
 Future streamRecording(ServiceInstance service) async {
