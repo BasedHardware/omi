@@ -19,7 +19,7 @@ To submit your plugin to the FRIEND community:
 Your pull request should only contain the addition of your plugin's JSON to the `community-plugins.json` file. Once
 approved, your plugin will become available to the FRIEND community.
 
-We approve plugins weekly. I there is anything wrong with the plugin, we will specify in PR's comments
+We approve plugins on a weekly-basis. If there is anything wrong with the submission, we will specify in PR's comments.
 
 Note: Ensure your plugin adheres to our community guidelines and doesn't contain any sensitive or private information
 before submitting.
