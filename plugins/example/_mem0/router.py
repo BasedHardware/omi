@@ -32,4 +32,5 @@ def mem0_add(memory: Memory, uid: str):
     memories = mem0.search(messages, user_id=uid)
     response = [row["memory"] for row in memories]
     response_str = "\n".join(response)
+    # TODO: make response 10-15 words. This will be triggered as notification.
     return {"message": f"User memories: {response_str}"}
