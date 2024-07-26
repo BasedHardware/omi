@@ -2,7 +2,8 @@
 
 # **Friend**
 
-Meet Friend, the world’s leading open-source AI wearable that revolutionizes how you capture and manage conversations. Simply connect Friend to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.
+Meet Friend, the world’s leading open-source AI wearable that revolutionizes how you capture and manage conversations. Simply connect Friend to your mobile device and enjoy automatic, high-quality
+transcriptions of meetings, chats, and voice memos wherever you are.
 
 ![Friend Image](/docs/images/friend_banner.png)
 
@@ -24,6 +25,7 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 [//]: # (## Features)
 
 [//]: # ()
+
 [//]: # (- **Real-Time AI Audio Processing**: Leverage powerful on-device AI capabilities for real-time audio analysis.)
 
 [//]: # (- **Low-powered Bluetooth**: Capture audio for 24h+ on a small button battery)
@@ -39,6 +41,7 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 - [Buying Guide](https://docs.basedhardware.com/assembly/Buying_Guide/)
 - [Build the device](https://docs.basedhardware.com/assembly/Build_the_device/)
 - [Install firmware](https://docs.basedhardware.com/assembly/Install_firmware/)
+- [3rd Party Integrations](https://docs.basedhardware.com/developer/plugins/Introduction/).
 
 ## Contributions
 
@@ -46,10 +49,12 @@ Meet Friend, the world’s leading open-source AI wearable that revolutionizes h
 * Check out the [current tasks](https://github.com/BasedHardware/Friend/issues).
 * Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
 * Join the [Discord](https://discord.gg/ZutWMTJnwA).
+* Build your own [Plugins/Integrations](https://docs.basedhardware.com/developer/plugins/Introduction/).
 
 [//]: # (## More links:)
 
 [//]: # ()
+
 [//]: # (- [Contributing]&#40;https://docs.basedhardware.com/developer/Contribution/&#41;)
 
 [//]: # (- [Support]&#40;https://docs.basedhardware.com/info/Support/&#41;)
