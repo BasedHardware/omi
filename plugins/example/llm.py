@@ -4,8 +4,6 @@ from langchain_community.tools.asknews import AskNewsSearch
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
 
-from models import Memory
-
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
@@ -15,27 +13,9 @@ chat = ChatOpenAI(model='gpt-4o', temperature=0)
 #     # model='llama3-groq-8b-8192-tool-use-preview',
 # )
 
-class BooksToBuy(BaseModel):
-    books: List[str] = Field(description="The list of titles of the books to buy", default=[], min_items=0)
-
 
 class NewsCheck(BaseModel):
     query: str = Field(description="The query to ask a news search engine, can be empty.", default='')
-
-
-def retrieve_books_to_buy(memory: Memory) -> List[str]:
-    # has_user_set = any(filter(lambda x: x.is_user, memory.transcriptSegments))
-
-    chat_with_parser = chat.with_structured_output(BooksToBuy)
-    response: BooksToBuy = chat_with_parser.invoke(f'''
-    The following is the transcript of a conversation.
-    {memory.transcript}
-    
-    Your task is to determine is first to determine if the speakers talked about a book or suggested, recommended books to each other \
-    at some point during the conversation, and provide the titles of those.
-    ''')
-    print('Books to buy:', response.books)
-    return response.books
 
 
 def get_timestamp_string(start: float, end: float) -> str:

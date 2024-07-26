@@ -1,13 +1,11 @@
-import os
-from typing import List
-
 from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from modal import Image, App, Secret, asgi_app, mount
-from multion.client import MultiOn
 
 import templates
+from _mem0 import router as mem0_router
+from _multion import router as multion_router
 from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id, \
     clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
 from llm import news_checker
@@ -19,12 +17,8 @@ app = FastAPI()
 modal_app = App(
     name='plugins_examples',
     secrets=[Secret.from_dotenv('.env')],
-    mounts=[
-        mount.Mount.from_local_dir('templates/', remote_path='templates/'),
-    ]
+    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
 )
-
-multion = MultiOn(api_key=os.getenv('MULTION_API_KEY', '123'))
 
 
 @modal_app.function(
@@ -37,16 +31,6 @@ multion = MultiOn(api_key=os.getenv('MULTION_API_KEY', '123'))
 @asgi_app()
 def plugins_app():
     return app
-
-
-def call_multion(books: List[str]):
-    print('Buying books with MultiOn')
-    response = multion.browse(
-        cmd=f"Add to my cart the following books (in paperback version, or any physical version): {books}",
-        url="https://amazon.com",
-        local=True,
-    )
-    return response.message
 
 
 # **************************************************
@@ -112,4 +96,11 @@ def news_checker_endpoint(uid: str, data: dict):
 
     return {'message': message}
 
-# https://e604-107-3-134-29.ngrok-free.app/news-checker
+
+# ***********************************************
+# ************ EXTERNAL INTEGRATIONS ************
+# ***********************************************
+
+
+app.include_router(multion_router.router)
+app.include_router(mem0_router.router)
