@@ -1,3 +1,4 @@
+import json
 import os
 
 from fastapi import APIRouter
@@ -12,7 +13,8 @@ router = APIRouter()
 # ************ On Memory Created Plugin ************
 # **************************************************
 
-@router.post("/mem0", response_model=EndpointResponse, tags=['mem0'])
+
+@router.post("/mem0", response_model=EndpointResponse, tags=["mem0"])
 def mem0_add(memory: Memory, uid: str):
     transcript_segments = memory.transcriptSegments
     messages = []
@@ -29,7 +31,7 @@ def mem0_add(memory: Memory, uid: str):
 
     mem0 = MemoryClient(api_key=os.getenv("MEM0_API_KEY"))
     mem0.add(messages, user_id=uid)
-    memories = mem0.search(messages, user_id=uid)
+    memories = mem0.search(json.dumps(messages), user_id=uid)
     response = [row["memory"] for row in memories]
     response_str = "\n".join(response)
     # TODO: make response 10-15 words. This will be triggered as notification.
