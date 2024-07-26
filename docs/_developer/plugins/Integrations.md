@@ -46,7 +46,7 @@ purpose.
 
 ### Step 2: Set Up Your Endpoint 🔗
 
-Create an endpoint that can receive and process the data sent by FRIEND. The data structure will differ based on your
+Create an endpoint (webhook) that can receive and process the data sent by FRIEND. You can create a test webhook [here](https://webhook.site/). The data structure will differ based on your
 plugin type:
 
 #### For Memory Creation Triggers:
@@ -142,7 +142,7 @@ Time to put your plugin through its paces! Follow these steps to test both types
 
 #### For Memory Creation Triggers:
 
-4. Set your endpoint URL in the "Memory Creation Webhook" field.
+4. Set your endpoint URL in the "Memory Creation Webhook" field. If you don't have endpoint yet, create a test webhook [here](https://webhook.site/)
 5. To test without creating a new memory:
     - Go to any memory detail view.
     - Click on the top right corner (3 dots menu).
