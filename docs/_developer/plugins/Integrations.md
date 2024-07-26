@@ -178,11 +178,13 @@ Create a JSON object defining your plugin:
     "external_integration"
   ],
   "external_integration": {
+    // "memory_creation" | "transcript_processed"
     "triggers_on": "memory_creation",
-    // or "transcript_processed"
+    // a POST request with the memory object will be sent here as a JSON payload
     "webhook_url": "https://your-endpoint-url.com",
+    // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your plugin doesn't require setup, set to null.
     "setup_completed_url": "https://your-setup-completion-url.com",
-    // Optional
+    // Include a Readme with more details about your plugin in the PR 
     "setup_instructions_file_path": "/plugins/instructions/your-plugin/README.md"
   },
   "deleted": false
