@@ -101,6 +101,9 @@ expect:
 
 Your plugin should process this entire object and perform any necessary actions based on the full context of the memory.
 
+> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L85)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L359).
+
 **For Real-Time Transcript Processors:**
 
 Your endpoint will receive a JSON payload containing the most recently transcribed segments, with both session_id and
@@ -131,6 +134,9 @@ uid as query parameters. Here's the structure:
 5. Clear processed segments to prevent re-triggering on future calls.
 
 Remember to handle errors gracefully and consider performance, especially for lengthy conversations!
+
+> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L100)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L379).
 
 ### Step 3: Test Your Plugin 🧪
 
