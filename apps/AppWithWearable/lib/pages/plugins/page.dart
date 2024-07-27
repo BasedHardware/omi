@@ -77,7 +77,7 @@ class _PluginsPageState extends State<PluginsPage> {
         actions: [
           TextButton(
               onPressed: () {
-                launchUrl(Uri.parse('https://docs.basedhardware.com/developer/Plugins'));
+                launchUrl(Uri.parse('https://docs.basedhardware.com/developer/plugins/Introduction/'));
               },
               child: const Row(
                 children: [
