@@ -55,6 +55,7 @@ multion==1.3.4
 mypy-extensions==1.0.0
 numpy==1.26.4
 openai==1.35.14
+opencv-python==4.10.0.84
 orjson==3.10.5
 packaging==23.2
 portalocker==2.10.1

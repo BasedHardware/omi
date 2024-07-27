@@ -125,3 +125,4 @@ docs/_site/
 *.jks
 /apps/AppWithWearable/lib/firebase_options.dart
 /apps/AppWithWearable/firebase.json
+plugins/example/tmp/
