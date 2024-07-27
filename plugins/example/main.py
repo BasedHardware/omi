@@ -6,6 +6,7 @@ from modal import Image, App, Secret, asgi_app, mount
 import templates
 from _mem0 import router as mem0_router
 from _multion import router as multion_router
+from advanced import openglass as openglass_router
 from db import get_notion_crm_api_key, get_notion_database_id, store_notion_crm_api_key, store_notion_database_id, \
     clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
 from llm import news_checker
@@ -104,3 +105,4 @@ def news_checker_endpoint(uid: str, data: dict):
 
 app.include_router(multion_router.router)
 app.include_router(mem0_router.router)
+app.include_router(openglass_router.router)
