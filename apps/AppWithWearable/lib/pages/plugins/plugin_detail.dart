@@ -147,7 +147,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      utf8.decode((widget.plugin.memoryPrompt ?? '').codeUnits),
+                      String.fromCharCodes((widget.plugin.memoryPrompt ?? '').codeUnits),
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
