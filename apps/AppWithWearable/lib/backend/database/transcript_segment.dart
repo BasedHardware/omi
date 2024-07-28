@@ -144,7 +144,7 @@ class TranscriptSegment {
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
       // TODO: maybe store TranscriptSegment directly as utf8 decoded
-      var segmentText = utf8.decode(segment.text.trim().codeUnits);
+      var segmentText = String.fromCharCodes(segment.text.trim().codeUnits);
       var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
         transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
