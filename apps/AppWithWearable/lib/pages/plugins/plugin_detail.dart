@@ -39,7 +39,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+          '](https://raw.githubusercontent.com/DamienDeepgram/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
@@ -266,16 +266,30 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
                   widget.plugin.worksExternally()
                       ? Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Text(
-                            'Integration',
-                            style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        )
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.grey,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Text(
+                      'Integration',
+                      style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                  )
+                      : const SizedBox.shrink(),
+                  SizedBox(width: widget.plugin.worksWithVoice() ? 8 : 0),
+                  widget.plugin.worksWithVoice()
+                      ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.grey,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Text(
+                      'Voice',
+                      style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                  )
                       : const SizedBox.shrink(),
                 ],
               ),

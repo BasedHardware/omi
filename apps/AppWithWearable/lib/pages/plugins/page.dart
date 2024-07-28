@@ -25,6 +25,7 @@ class _PluginsPageState extends State<PluginsPage> {
   bool filterChat = true;
   bool filterMemories = true;
   bool filterExternal = true;
+  bool filterVoice = true;
 
   @override
   void initState() {
@@ -32,6 +33,7 @@ class _PluginsPageState extends State<PluginsPage> {
       filterChat = true;
       filterMemories = false;
       filterExternal = false;
+      filterVoice = false;
     }
     plugins = SharedPreferencesUtil().pluginsList;
     super.initState();
@@ -55,7 +57,8 @@ class _PluginsPageState extends State<PluginsPage> {
         .where((p) =>
             (p.worksWithChat() && filterChat) ||
             (p.worksWithMemories() && filterMemories) ||
-            (p.worksExternally() && filterExternal))
+            (p.worksExternally() && filterExternal) ||
+            (p.worksWithVoice() && filterVoice))
         .toList();
 
     return searchQuery.isEmpty
@@ -216,10 +219,31 @@ class _PluginsPageState extends State<PluginsPage> {
                           color: filterExternal ? Colors.deepPurple : Colors.transparent,
                           borderRadius: BorderRadius.circular(16),
                           border:
-                              filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                          filterExternal ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
                         ),
                         child: const Text(
                           'Integration',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          filterVoice = !filterVoice;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: filterVoice ? Colors.deepPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border:
+                          filterVoice ? Border.all(color: Colors.deepPurple) : Border.all(color: Colors.grey),
+                        ),
+                        child: const Text(
+                          'Voice',
                           style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -326,6 +350,21 @@ class _PluginsPageState extends State<PluginsPage> {
                                           color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
                                   )
+                                : const SizedBox.shrink(),
+                            SizedBox(width: plugin.worksWithVoice() ? 8 : 0),
+                            plugin.worksWithVoice()
+                                ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Text(
+                                'Voice',
+                                style: TextStyle(
+                                    color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            )
                                 : const SizedBox.shrink(),
                           ],
                         )

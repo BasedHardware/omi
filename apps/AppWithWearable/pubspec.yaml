@@ -18,12 +18,14 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.19+61
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
+  audioplayers: ^5.0.0
   flutter:
     sdk: flutter
-
+  flutter_sound: ^9.0.0  # Check for the latest version on pub.dev
+  flutter_sound_platform_interface: ^9.0.0  # Check for the latest version
   flutter_localizations:
     sdk: flutter
   archive: ^3.6.1
@@ -78,7 +80,10 @@ dependencies:
   objectbox: ^4.0.1
   objectbox_flutter_libs: any
   flutter_foreground_task: ^6.5.0
-  deepgram_speech_to_text: ^2.1.1
+  deepgram_speech_to_text:
+    git:
+      url: https://github.com/DamienDeepgram/deepgram_speech_to_text.git
+      ref: main
   upgrader: ^10.3.0
   workmanager:
     git:

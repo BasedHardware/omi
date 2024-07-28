@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
+import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
@@ -12,6 +13,7 @@ import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/chat/deepgram_service.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/utils/rag.dart';
@@ -36,12 +38,19 @@ class ChatPage extends StatefulWidget {
 class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   ScrollController scrollController = ScrollController();
+  DeepgramService deepgramService = DeepgramService();
+  late DeepgramLiveTranscriber _transcriber;
 
   var prefs = SharedPreferencesUtil();
   late List<Plugin> plugins;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool loading = false;
+  bool voiceEnabled = false;
+  bool voiceActive = false;
+  List<String> isFinals = [];
+
+  Plugin? _activePlugin;
 
   changeLoadingState() {
     setState(() {
@@ -97,8 +106,73 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       _moveListToBottom();
     });
     _initDailySummary();
-    if (MessageProvider().getMessagesCount() == 0) sendInitialPluginMessage(null);
+    if (MessageProvider().getMessagesCount() == 0) {
+      sendInitialPluginMessage(null);
+    } else {
+      String? pluginId = SharedPreferencesUtil().selectedChatPluginId ==
+          'no_selected'
+          ? null
+          : SharedPreferencesUtil().selectedChatPluginId;
+      _activePlugin = plugins.firstWhereOrNull((e) => e.id == pluginId);
+      if (_activePlugin?.worksWithVoice() == true) {
+        voiceEnabled = true;
+        deepgramService.init();
+      } else {
+        voiceEnabled = false;
+        deepgramService.stopTranscribing();
+      }
+    }
     super.initState();
+  }
+
+  void _onMicPressed() async {
+    if (_activePlugin?.worksWithVoice() == true) {
+      if(voiceActive) {
+        _stopRecording();
+        setState(() {
+          voiceActive = false;
+        });
+      } else {
+        _transcriber = await deepgramService.startTranscribing(_activePlugin?.voice?.listen.model,
+            _activePlugin?.voice?.listen.endpointing);
+        _transcriber.stream.listen((res) {
+          String type = res.map['type'];
+          if(type == 'Results') {
+            // print('Deepgram Websocket: $type');
+            if (res.map['is_final'] == true && res.transcript != '') {
+              isFinals.add(res.transcript);
+              if (res.map['speech_final'] == true && isFinals.isNotEmpty) {
+                textController.text = isFinals.join(' ');
+                _sendMessageUtil(textController.text);
+                isFinals = [];
+              }
+            } else {
+              textController.text =
+              '${isFinals.join(' ')} ${res.transcript} ';
+            }
+          } else if(type == 'UtteranceEnd') {
+            print('Deepgram Websocket: $type');
+            if(isFinals.isNotEmpty) {
+              textController.text = isFinals.join(' ');
+              _sendMessageUtil(textController.text);
+              isFinals = [];
+            }
+          } else {
+            print('Deepgram Websocket: Unhandled Type: $type');
+          }
+        });
+
+        setState(() {
+          voiceActive = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    if(_activePlugin?.worksWithVoice() == true) {
+      await deepgramService.stopTranscribing();
+    }
   }
 
   @override
@@ -129,12 +203,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
                 child: message.senderEnum == MessageSender.ai
                     ? AIMessage(
-                        message: message,
-                        sendMessage: _sendMessageUtil,
-                        displayOptions: widget.messages.length <= 1,
-                        memories: message.memories,
-                        pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
-                      )
+                  message: message,
+                  sendMessage: _sendMessageUtil,
+                  displayOptions: widget.messages.length <= 1,
+                  memories: message.memories,
+                  pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                )
                     : HumanMessage(message: message),
               );
             },
@@ -174,29 +248,37 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
                 focusedBorder: InputBorder.none,
                 enabledBorder: InputBorder.none,
+                prefixIcon: voiceEnabled
+                    ? IconButton(
+                  icon: Icon(
+                    Icons.mic,
+                    color: voiceActive ? Colors.green : Colors.grey.shade800,
+                  ),
+                  onPressed: _onMicPressed,
+                ) : const SizedBox.shrink(),
                 suffixIcon: IconButton(
                   splashColor: Colors.transparent,
                   splashRadius: 1,
                   onPressed: loading
                       ? null
                       : () async {
-                          String message = textController.text;
-                          if (message.isEmpty) return;
-                          _sendMessageUtil(message);
-                        },
+                    String message = textController.text;
+                    if (message.isEmpty) return;
+                    _sendMessageUtil(message);
+                  },
                   icon: loading
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
                       : const Icon(
-                          Icons.send_rounded,
-                          color: Color(0xFFF7F4F4),
-                          size: 24.0,
-                        ),
+                    Icons.send_rounded,
+                    color: Color(0xFFF7F4F4),
+                    size: 24.0,
+                  ),
                 ),
               ),
               // maxLines: 8,
@@ -221,20 +303,27 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     String ragContext = ragInfo[0];
     List<Memory> memories = ragInfo[1].cast<Memory>();
     debugPrint('RAG Context: $ragContext memories: ${memories.length}');
-
     MixpanelManager().chatMessageSent(message);
     var prompt = qaRagPrompt(
       ragContext,
       await MessageProvider().retrieveMostRecentMessages(limit: 10, pluginId: pluginId),
-      plugin: plugins.firstWhereOrNull((e) => e.id == pluginId),
+      plugin: _activePlugin,
     );
     await streamApiResponse(
       prompt,
       _callbackFunctionChatStreaming(aiMessage),
-      () {
+          () async {
         aiMessage.memories.addAll(memories);
         MessageProvider().updateMessage(aiMessage);
         widget.refreshMessages();
+
+        // If the plugin supports voice play the message
+        if(_activePlugin?.worksWithVoice() == true) {
+          deepgramService.pauseStream();
+          await deepgramService.playTTS(aiMessage.text, _activePlugin?.voice?.speak.model);
+          deepgramService.resumeStream();
+        }
+
         if (memories.isNotEmpty) _moveListToBottom(extra: (70 * memories.length).toDouble());
       },
     );
@@ -250,15 +339,32 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     streamApiResponse(
       await getInitialPluginPrompt(plugin),
       _callbackFunctionChatStreaming(ai),
-      () {
+          () {
         MessageProvider().updateMessage(ai);
         widget.refreshMessages();
+        // If the plugin supports voice play the message
+        if(_activePlugin?.worksWithVoice() == true) {
+          deepgramService.playTTS(ai.text, _activePlugin?.voice?.speak.model);
+        }
       },
     );
+
+    String? pluginId = SharedPreferencesUtil().selectedChatPluginId == 'no_selected'
+        ? null
+        : SharedPreferencesUtil().selectedChatPluginId;
+    _activePlugin = plugins.firstWhereOrNull((e) => e.id == pluginId);
+    if(_activePlugin?.worksWithVoice() == true) {
+      voiceEnabled = true;
+      deepgramService.init();
+    } else {
+      voiceEnabled = true;
+      deepgramService.stopTranscribing();
+    }
+
     changeLoadingState();
   }
 
-  _prepareStreaming(String text, {String? pluginId}) {
+  _prepareStreaming(String text, {String? pluginId}) async {
     textController.clear(); // setState if isolated
     var human = Message(DateTime.now(), text, 'human');
     var ai = Message(DateTime.now(), '', 'ai', pluginId: pluginId);

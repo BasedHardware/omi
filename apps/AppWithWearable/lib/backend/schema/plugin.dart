@@ -79,6 +79,66 @@ class ExternalIntegration {
   }
 }
 
+class Voice {
+  Speak speak;
+  Listen listen;
+
+  Voice({required this.speak, required this.listen});
+
+  factory Voice.fromJson(Map<String, dynamic> json) {
+    return Voice(
+      speak: Speak.fromJson(json['speak']),
+      listen: Listen.fromJson(json['listen']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'speak': speak.toJson(),
+      'listen': listen.toJson(),
+    };
+  }
+}
+
+class Speak {
+  String model;
+
+  Speak({required this.model});
+
+  factory Speak.fromJson(Map<String, dynamic> json) {
+    return Speak(
+      model: json['model'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'model': model,
+    };
+  }
+}
+
+class Listen {
+  String model;
+  int endpointing;
+
+  Listen({required this.model, required this.endpointing});
+
+  factory Listen.fromJson(Map<String, dynamic> json) {
+    return Listen(
+      model: json['model'],
+      endpointing: json['endpointing'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'model': model,
+      'endpointing': endpointing,
+    };
+  }
+}
+
 class Plugin {
   String id;
   String name;
@@ -90,6 +150,7 @@ class Plugin {
   String? memoryPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
+  Voice? voice;
 
   // can be used for
 
@@ -116,6 +177,7 @@ class Plugin {
     this.ratingAvg,
     required this.ratingCount,
     required this.deleted,
+    this.voice,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -125,6 +187,8 @@ class Plugin {
   bool worksWithMemories() => hasCapability('memories');
 
   bool worksWithChat() => hasCapability('chat');
+
+  bool worksWithVoice() => hasCapability('voice');
 
   bool worksExternally() => hasCapability('external_integration');
 
@@ -145,6 +209,7 @@ class Plugin {
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
+      voice: json['voice'] != null ? Voice.fromJson(json['voice']) : null,
     );
   }
 
@@ -166,6 +231,7 @@ class Plugin {
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
       'deleted': deleted,
+      'voice': voice?.toJson(),
     };
   }
 
