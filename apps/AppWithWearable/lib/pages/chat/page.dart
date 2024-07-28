@@ -115,10 +115,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           : SharedPreferencesUtil().selectedChatPluginId;
       _activePlugin = plugins.firstWhereOrNull((e) => e.id == pluginId);
       if (_activePlugin?.worksWithVoice() == true) {
-        voiceEnabled = true;
+        setState(() {
+          voiceEnabled = true;
+        });
         deepgramService.init();
       } else {
-        voiceEnabled = false;
+        setState(() {
+          voiceEnabled = false;
+        });
         deepgramService.stopTranscribing();
       }
     }
@@ -354,10 +358,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         : SharedPreferencesUtil().selectedChatPluginId;
     _activePlugin = plugins.firstWhereOrNull((e) => e.id == pluginId);
     if(_activePlugin?.worksWithVoice() == true) {
-      voiceEnabled = true;
+      setState(() {
+        voiceEnabled = true;
+      });
       deepgramService.init();
     } else {
-      voiceEnabled = true;
+      setState(() {
+        voiceEnabled = false;
+      });
       deepgramService.stopTranscribing();
     }
 
