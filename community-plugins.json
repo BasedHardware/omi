@@ -46,19 +46,20 @@
     "capabilities": [
       "memories",
       "chat",
-      "voice": {
-        "speak": {
-          "model": "aura-helios-en"
-        },
-        "listen": {
-          "model": "nova-2-general",
-          "endpointing": 300
-        }
-      }
+      "voice"
     ],
     "memory_prompt": "You will be given a conversation involving a startup founder seeking advice. Channeling Paul Graham, you are to provide mentorship styled in his approach. Include 1-2 applicable quotes from Paul Graham, offer succinct advice, and impart wisdom as if having a real, conversational exchange with the founder. Any rhetorical questions should provide direction and not expect an interactive response.",
     "chat_prompt": "Paul Graham, Founder of YCombinator. Startup advisor",
-    "deleted": false
+    "deleted": false,
+    "voice": {
+      "speak": {
+        "model": "aura-helios-en"
+      },
+      "listen": {
+        "model": "nova-2-general",
+        "endpointing": 300
+      }
+    }
   },
   {
     "id": "therapist-patient-notes",
