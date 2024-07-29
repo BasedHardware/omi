@@ -54,7 +54,7 @@ plugin type:
 Your endpoint will receive the entire memory object as a JSON payload, with a `uid` as a query parameter. Here's what to
 expect:
 
-`GET /your-endpoint?uid=user123`
+`POST /your-endpoint?uid=user123`
 
 ```json
 
@@ -109,7 +109,7 @@ Your plugin should process this entire object and perform any necessary actions 
 Your endpoint will receive a JSON payload containing the most recently transcribed segments, with both session_id and
 uid as query parameters. Here's the structure:
 
-`GET /your-endpoint?session_id=abc123&uid=user123`
+`POST /your-endpoint?session_id=abc123&uid=user123`
 
 ```json
 [
