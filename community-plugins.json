@@ -477,6 +477,26 @@
 
   "memory_prompt": "You are a dating coach. You will be given a conversation transcript. If the conversation contains anything simillar to a dating scene or pick up, give relevant feedback on how the user can increase their pick up chances. Be concrete and include examples.",
   "deleted": false
-}
-
+},
+    {
+    "id": "supermemory",
+    "name": "Supermemory friend integration",
+    "author": "@dhravyashah",
+    "description": "Store things to supermemory",
+    "image": "https://supermemory.ai/logo.svg",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://supermemory.ai/api/store/friend",
+      "setup_completed_url": "https://supermemory.ai/api/store/friend",
+      "setup_instructions_file_path": "https://git.new/memory"
+    },
+    "deleted": false
+  }
 ]
