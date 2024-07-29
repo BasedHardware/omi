@@ -22,6 +22,9 @@ def try_catch_decorator(func):
     return wrapper
 
 
+# **********************************************************
+# ************ BASIC AUTH PLUGIN (NOTION) UTILS ************
+# **********************************************************
 def store_notion_crm_api_key(uid: str, api_key: str):
     r.set(f'notion_crm_api_key:{uid}', api_key)
 
@@ -39,6 +42,10 @@ def get_notion_database_id(uid: str) -> str:
     val = r.get(f'notion_database_id:{uid}')
     return val.decode('utf-8') if val else None
 
+
+# *******************************************************
+# ************ ADVANCED REALTIME PLUGIN UTILS ***********
+# *******************************************************
 
 def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[dict]):
     key = f'transcript:{uid}:{session_id}'
