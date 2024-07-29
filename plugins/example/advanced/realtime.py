@@ -4,7 +4,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
 
 from plugins.example.db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
-from plugins.example.models import TranscriptSegment, RealtimePluginRequest
+from plugins.example.models import TranscriptSegment, RealtimePluginRequest, EndpointResponse
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
@@ -59,7 +59,7 @@ def news_checker(conversation: list[dict]) -> str:
     return result.content
 
 
-@router.post('/news-checker')
+@router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
     clean_all_transcripts_except(uid, data.session_id)
     transcript: list[dict] = append_segment_to_transcript(uid, data.session_id, data.get_segments())

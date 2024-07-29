@@ -1,13 +1,13 @@
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 
-from plugins.example.models import Memory
+from plugins.example.models import Memory, EndpointResponse
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
-@router.post('/feedback-mentor')
+@router.post('/feedback-mentor', tags=['basic', 'memory_created'], response_model=EndpointResponse)
 def feedback_mentor(memory: Memory):
     response = chat.invoke(f'''
       The following is the structuring from a transcript of a conversation that just finished.
@@ -21,4 +21,4 @@ def feedback_mentor(memory: Memory):
       Structured version:
       ${memory.structured.dict()}
     ''')
-    return {'message': '' if len(response) < 5 else response}
+    return {'message': '' if len(response.content) < 5 else response.content}
