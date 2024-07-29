@@ -1,19 +1,17 @@
 import re
 
 from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
 
-from plugins.example.models import TranscriptSegment, RealtimePluginRequest
+from plugins.example.models import *
 
 router = APIRouter()
-chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
 # *******************************************************
 # ************ On Transcript Received Plugin ************
 # *******************************************************
 
-@router.post('/cursing-checker')
+@router.post('/cursing-checker', tags=['basic', 'realtime'], response_model=EndpointResponse)
 def cursing_checker(data: RealtimePluginRequest):
     """
     This plugin checks if the transcript contains any curse words.

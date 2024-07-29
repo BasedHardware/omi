@@ -5,7 +5,7 @@ import os
 import cv2
 from fastapi import APIRouter
 
-from plugins.example.models import Memory
+from plugins.example.models import Memory, EndpointResponse
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def count_faces(image_path):
     return face_count
 
 
-@router.post('/openglass')
+@router.post('/openglass', tags=['advanced', 'openglass'], response_model=EndpointResponse)
 def open_glass_example(memory: Memory, uid: str):
     if not memory.photos:
         return {}
