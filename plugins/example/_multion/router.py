@@ -36,10 +36,13 @@ def call_multion(books: List[str]):
     response = multion.browse(
         cmd=f"Add to my cart the following books (in paperback version, or any physical version): {books}",
         url="https://amazon.com",
-        local=True,
+        local=False,
+        use_proxy=True,
     )
     return response.message
 
+
+# print(call_multion(['Cracking the code',]))
 
 # **************************************************
 # ************ On Memory Created Plugin ************

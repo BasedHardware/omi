@@ -77,27 +77,6 @@ def notion_crm(memory: Memory, uid: str):
     return {}
 
 
-# *******************************************************
-# ************ On Transcript Received Plugin ************
-# *******************************************************
-
-
-@app.post('/news-checker')
-def news_checker_endpoint(uid: str, data: dict):
-    session_id = data['session_id']  # use session id in case your plugin needs the whole conversation context
-    new_segments = data['segments']
-    clean_all_transcripts_except(uid, session_id)
-
-    transcript: list[dict] = append_segment_to_transcript(uid, session_id, new_segments)
-    message = news_checker(transcript)
-
-    if message:
-        # so that in the next call with already triggered stuff, it doesn't trigger again
-        remove_transcript(uid, session_id)
-
-    return {'message': message}
-
-
 # ***********************************************
 # ************ EXTERNAL INTEGRATIONS ************
 # ***********************************************

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,35 @@ class TranscriptSegment(BaseModel):
     start: float
     end: float
 
+    @staticmethod
+    def get_timestamp_string(start: float, end: float) -> str:
+        def format_duration(seconds: float) -> str:
+            total_seconds = int(seconds)
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            remaining_seconds = total_seconds % 60
+            return f"{hours:02}:{minutes:02}:{remaining_seconds:02}"
+
+        start_str = format_duration(start)
+        end_str = format_duration(end)
+
+        return f"{start_str} - {end_str}"
+
+    @staticmethod
+    def segments_as_string(segments: List[Dict]) -> str:
+        transcript = ''
+
+        for segment in segments:
+            segment_text = segment['text'].strip()
+            timestamp_str = f"[{TranscriptSegment.get_timestamp_string(segment['start'], segment['end'])}]"
+            if segment.get('is_user', False):
+                transcript += f"{timestamp_str} User: {segment_text} "
+            else:
+                transcript += f"{timestamp_str} Speaker {segment.get('speaker_id', '')}: {segment_text} "
+            transcript += '\n\n'
+
+        return transcript.strip()
+
 
 class Memory(BaseModel):
     createdAt: datetime
@@ -58,3 +87,11 @@ class Memory(BaseModel):
 
 class EndpointResponse(BaseModel):
     message: str = Field(description="A short message to be sent as notification to the user, if needed.", default='')
+
+
+class RealtimePluginRequest(BaseModel):
+    session_id: str
+    segments: List[TranscriptSegment]
+
+    def get_segments(self):
+        return list(map(lambda x: x.dict(), self.segments))
