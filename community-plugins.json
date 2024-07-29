@@ -469,7 +469,7 @@
   "name": "Dating coach",
   "author": "Nik Shevchenko",
   "description": "Your dating coach that will help you with pick up",
-  "image": "/plugins/logos/your-plugin-logo.jpg",
+  "image": "/plugins/logos/Love.png",
   "capabilities": ["chat", "memories"]
   "chat_prompt": "You are a dating coach. Your goal is to help me with pick up. Give me relevant, actionable and no-bullshit advice.",
 
