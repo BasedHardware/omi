@@ -82,6 +82,8 @@ submission. Here's a template:
   "author": "Your Name",
   "description": "A brief description of what your plugin does",
   "image": "/plugins/logos/your-plugin-logo.jpg",
+   "memories": false,
+    "chat": true,
   "capabilities": [
     "chat"
   ],
