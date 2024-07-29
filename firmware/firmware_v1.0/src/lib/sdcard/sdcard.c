@@ -167,11 +167,9 @@ int write_file(WriteParams params)
     uint8_buffer_to_char_data(params.data, buffer_length, data, sizeof(data));
 
 	if (!params.endBuffer) {
-        // Verifica si hay suficiente espacio en el buffer para agregar una coma y el terminador nulo
         if (strlen(data) < (sizeof(data) - 1)) {
             strcat(data, ",");
         } else {
-            // Manejo de errores si el buffer no tiene suficiente espacio
             printk("Buffer overflow error: Not enough space to add comma.\n");
             return -1;
         }

@@ -1,5 +1,8 @@
 #include <zephyr/kernel.h>
+//#include "lib/sdcard/sdcard.h"
+#include <zephyr/logging/log.h>
 #include "transport.h"
+#include "storage.h"
 #include "mic.h"
 #include "utils.h"
 #include "led.h"
@@ -32,6 +35,9 @@ int main(void)
 	ASSERT_OK(led_start());
 	set_led_blue(true);
 
+	// Storage start
+	ASSERT_OK(init_storage())
+
 	// Transport start
 	ASSERT_OK(transport_start());
 
@@ -45,8 +51,9 @@ int main(void)
 
 	// Blink LED
 	bool is_on = true;
-	set_led_blue(false);
+	//set_led_blue(false);
 	set_led_red(is_on);
+
 	while (1)
 	{
 		is_on = !is_on;

@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2022-2023 Marcin Niestroj
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ /dts-v1/;
+ #include "xiao_ble_common.dtsi"
+ #include <zephyr/dt-bindings/spi/spi.h>
+ #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
+ 
+ &spi2 {
+     compatible = "nordic,nrf-spi";
+     status = "okay";
+     sck-pin = <13>;    /* SPI clock pin */
+     mosi-pin = <15>;   /* SPI MOSI pin */
+     miso-pin = <14>;   /* SPI MISO pin */
+     cs-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;  /* SPI Chip Select pin */
+     pinctrl-0 = <&spi2_default>;
+     pinctrl-names = "default";
+ };
+ 
+ &pinctrl {
+	spi2_default: spi2_default {
+		pins = <NRF_P0_PIN(13) /* SCK */
+			NRF_P0_PIN(15) /* MOSI */
+			NRF_P0_PIN(14) /* MISO */
+			NRF_P0_PIN(12) /* CS */
+		>;
+	};
+};
