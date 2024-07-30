@@ -7,7 +7,7 @@ from multion.client import MultiOn
 from pydantic import Field
 from pydantic.v1 import BaseModel
 
-from plugins.example.models import Memory, EndpointResponse
+from models import Memory, EndpointResponse
 
 router = APIRouter()
 
