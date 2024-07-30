@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
@@ -20,7 +19,6 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -211,19 +209,7 @@ class CapturePageState extends State<CapturePage>
     debugPrint(memory.toString());
     // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
     if (memory != null && !memory.discarded) executeBackupWithUid();
-    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
-      postMemoryCreationNotification(memory).then((r) {
-        // TODO: this should be a plugin instead.
-        debugPrint('Notification response: $r');
-        if (r.isEmpty) return;
-        sendMessageToChat(Message(DateTime.now(), r, 'ai'), memory);
-        createNotification(
-          notificationId: 2,
-          title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
-          body: r,
-        );
-      });
-    }
+
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];

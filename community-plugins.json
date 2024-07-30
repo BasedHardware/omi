@@ -381,7 +381,7 @@
     "name": "News checker",
     "author": "@josancamon19",
     "description": "Checks the news during conversations and provides insights.",
-    "image": "/plugins/logos/news-checker-logo.png",
+    "image": "/plugins/logos/news-checker.png",
     "prompt": "",
     "memories": false,
     "chat": false,
@@ -431,25 +431,6 @@
     "deleted": false
   },
   {
-    "id": "Sapiento",
-    "name": "Sapiento - Logical Fallacy Fact Checker",
-    "author": "@wisdomifode+@adamajroudi",
-    "description": "Detects and corrects logical fallacies, Fact Check using MultiOn",
-    "image": "/assets/plugin_images/notion-crm.png",
-    "prompt": "",
-    "memories": false,
-    "chat": false,
-    "capabilities": [
-      "external_integration"
-    ],
-    "external_integration": {
-      "triggers_on": "transcript_processed",
-      "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
-      "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
-    },
-    "deleted": false
-  },
-  {
     "id": "longevity-coach",
     "name": "Longevity Coach",
     "author": "Claude AI",
@@ -469,7 +450,7 @@
     "name": "Dating coach",
     "author": "Nik Shevchenko",
     "description": "Your dating coach that will help you with pick up",
-    "image": "/plugins/logos/Love.png",
+    "image": "/plugins/logos/dating-coach.png",
     "memories": false,
     "chat": true,
     "capabilities": [
@@ -478,6 +459,25 @@
     ],
     "chat_prompt": "You are a dating coach. Your goal is to help me with pick up. Give me relevant, actionable and no-bullshit advice.",
     "memory_prompt": "You are a dating coach. You will be given a conversation transcript. If the conversation contains anything simillar to a dating scene or pick up, give relevant feedback on how the user can increase their pick up chances. Be concrete and include examples.",
+    "deleted": false
+  },
+  {
+    "id": "conversation-coach",
+    "name": "Conversation coach",
+    "author": "Based Hardware",
+    "description": "Your personal AI coach for improving conversational skills",
+    "image": "/plugins/logos/conversation-coach.png",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/conversation-feedback",
+      "setup_completed_url": null,
+      "setup_instructions_file_path": ""
+    },
     "deleted": false
   }
 ]
