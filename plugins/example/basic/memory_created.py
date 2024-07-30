@@ -7,8 +7,8 @@ router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
-@router.post('/feedback-mentor', tags=['basic', 'memory_created'], response_model=EndpointResponse)
-def feedback_mentor(memory: Memory):
+@router.post('/conversation-feedback', tags=['basic', 'memory_created'], response_model=EndpointResponse)
+def conversation_feedback(memory: Memory):
     response = chat.invoke(f'''
       The following is the structuring from a transcript of a conversation that just finished.
       First determine if there's crucial feedback to notify a busy entrepreneur about it.
