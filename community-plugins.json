@@ -477,6 +477,38 @@
 
   "memory_prompt": "You are a dating coach. You will be given a conversation transcript. If the conversation contains anything simillar to a dating scene or pick up, give relevant feedback on how the user can increase their pick up chances. Be concrete and include examples.",
   "deleted": false
-}
+},
+{
+  "id": "omniscience-papergen",
+  "name": "Omniscience Paper Generator",
+  "author": "Jeremy Nixon",
+  "description": "Create Paper prompts from conversation.",
+  "prompt": "Based on this transcript, recommend 5 descriptions of interesting research papers.",
+  "image": "https://i.imgur.com/G8etmUt.png",
+  "memories": true,
+  "chat": false,
+  "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+  "capabilities": [
+    "memories"
+  ],
+  "memory_prompt": "You will be given a conversation transcript. Your task is to create high quality research paper descriptions.",
+  "deleted": false
+},
+{
+  "id": "omniscience-bookgen",
+  "name": "Omniscience Book Generator",
+  "author": "Jeremy Nixon",
+  "description": "Create Book  prompts from conversation.",
+  "prompt": "Based on this transcript, recommend 5 descriptions of interesting books.",
+  "image": "https://i.imgur.com/G8etmUt.png",
+  "memories": true,
+  "chat": false,
+  "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+  "capabilities": [
+    "memories"
+  ],
+  "memory_prompt": "You will be given a conversation transcript. Your task is to create high quality book descriptions.",
+  "deleted": false
+},
 
 ]
