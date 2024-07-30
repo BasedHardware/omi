@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 
-from plugins.example.models import Memory, EndpointResponse
+from models import Memory, EndpointResponse
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)

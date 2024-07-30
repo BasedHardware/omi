@@ -3,8 +3,8 @@ from langchain_community.tools.asknews import AskNewsSearch
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
 
-from plugins.example.db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
-from plugins.example.models import TranscriptSegment, RealtimePluginRequest, EndpointResponse
+from db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
+from models import TranscriptSegment, RealtimePluginRequest, EndpointResponse
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)

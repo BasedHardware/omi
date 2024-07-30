@@ -465,18 +465,19 @@
     "deleted": false
   },
   {
-  "id": "dating-coach",
-  "name": "Dating coach",
-  "author": "Nik Shevchenko",
-  "description": "Your dating coach that will help you with pick up",
-  "image": "/plugins/logos/Love.png",
-       "memories": false,
+    "id": "dating-coach",
+    "name": "Dating coach",
+    "author": "Nik Shevchenko",
+    "description": "Your dating coach that will help you with pick up",
+    "image": "/plugins/logos/Love.png",
+    "memories": false,
     "chat": true,
-  "capabilities": ["chat", "memories"],
-  "chat_prompt": "You are a dating coach. Your goal is to help me with pick up. Give me relevant, actionable and no-bullshit advice.",
-
-  "memory_prompt": "You are a dating coach. You will be given a conversation transcript. If the conversation contains anything simillar to a dating scene or pick up, give relevant feedback on how the user can increase their pick up chances. Be concrete and include examples.",
-  "deleted": false
-}
-
+    "capabilities": [
+      "chat",
+      "memories"
+    ],
+    "chat_prompt": "You are a dating coach. Your goal is to help me with pick up. Give me relevant, actionable and no-bullshit advice.",
+    "memory_prompt": "You are a dating coach. You will be given a conversation transcript. If the conversation contains anything simillar to a dating scene or pick up, give relevant feedback on how the user can increase their pick up chances. Be concrete and include examples.",
+    "deleted": false
+  }
 ]

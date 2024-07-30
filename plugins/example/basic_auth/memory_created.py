@@ -3,9 +3,9 @@ from fastapi import HTTPException, Request, Form, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-import plugins.example.templates as templates
-from plugins.example.db import *
-from plugins.example.models import Memory
+import templates as templates
+from db import *
+from models import Memory
 
 router = APIRouter()
 # noinspection PyRedeclaration

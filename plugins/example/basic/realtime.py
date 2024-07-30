@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter
 
-from plugins.example.models import *
+from models import *
 
 router = APIRouter()
 
