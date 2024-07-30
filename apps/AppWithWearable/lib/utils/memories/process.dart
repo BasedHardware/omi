@@ -27,6 +27,7 @@ Future<Memory?> processTranscriptContent(
   List<Tuple2<String, String>> photos = const [],
   Function(Message, Memory?)? sendMessageToChat,
 }) async {
+  debugPrint('processTranscriptContent');
   if (transcript.isNotEmpty || photos.isNotEmpty) {
     Memory? memory = await memoryCreationBlock(
       context,
@@ -53,6 +54,7 @@ Future<SummaryResult?> _retrieveStructure(
   bool retrievedFromCache, {
   bool ignoreCache = false,
 }) async {
+  debugPrint('_retrieveStructure');
   SummaryResult summary;
   try {
     if (photos.isNotEmpty) {
@@ -86,6 +88,7 @@ Future<Memory> memoryCreationBlock(
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos,
 ) async {
+  debugPrint('memoryCreationBlock');
   SummaryResult? summarizeResult = await _retrieveStructure(context, transcript, photos, retrievedFromCache);
   bool failed = false;
   if (summarizeResult == null) {
@@ -165,6 +168,7 @@ Future<Memory> finalizeMemoryRecord(
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos,
 ) async {
+  debugPrint('finalizeMemoryRecord');
   var memory = Memory(
     DateTime.now(),
     transcript,

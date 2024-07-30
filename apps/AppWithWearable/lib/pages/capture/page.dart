@@ -25,8 +25,8 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:location/location.dart';
 import 'package:uuid/uuid.dart';
 
+import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
-import 'phone_recorder_mixin.dart';
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -78,6 +78,13 @@ class CapturePageState extends State<CapturePage>
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     // TODO: this will not work with opus for now, more complexity, unneeded rn
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
+    // WavBytesUtil.listFiles(await getLibraryDirectory());
+    // WavBytesUtil.listFiles(await getDownloadsDirectory());
+    // WavBytesUtil.listFiles(await getApplicationDocumentsDirectory());
+    // WavBytesUtil.listFiles(await getApplicationCacheDirectory());
+    // WavBytesUtil.listFiles(await getApplicationSupportDirectory());
+    // WavBytesUtil.listFiles(await getTemporaryDirectory());
+    // WavBytesUtil.printSharedPreferencesFileSize();
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
@@ -183,6 +190,7 @@ class CapturePageState extends State<CapturePage>
   }
 
   _createMemory({bool forcedCreation = false}) async {
+    debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return;
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
@@ -192,7 +200,9 @@ class CapturePageState extends State<CapturePage>
         var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
         file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
         uploadFile(file);
-      } catch (e) {} // in case was a local recording and not a BLE recording
+      } catch (e) {
+        print(e);
+      } // in case was a local recording and not a BLE recording
     }
     Memory? memory = await processTranscriptContent(
       context,
@@ -213,7 +223,6 @@ class CapturePageState extends State<CapturePage>
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
-    setState(() => memoryCreating = false);
     audioStorage?.clearAudioBytes();
     setHasTranscripts(false);
 
@@ -226,6 +235,7 @@ class CapturePageState extends State<CapturePage>
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
+    setState(() => memoryCreating = false);
   }
 
   setHasTranscripts(bool hasTranscripts) {

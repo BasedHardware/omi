@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -80,6 +79,68 @@ class WavBytesUtil {
 
   bool hasFrames() => frames.isNotEmpty;
 
+  static Future<void> printSharedPreferencesFileSize() async {
+    final file = File(
+        '/var/mobile/Containers/Data/Application/987446B3-3A14-4AE6-9EE7-3BBEFC4DBE04/Library/Preferences/com.friend-app-with-wearable.ios12.plist');
+
+    if (await file.exists()) {
+      final fileSize = await file.length();
+      print('SharedPreferences file size: ${formatBytes(fileSize)} bytes');
+    } else {
+      print('SharedPreferences file not found');
+    }
+  }
+
+  static Future<void> listFiles(Directory? directory) async {
+    if (directory == null) return;
+    final totalBytes = await _getDirectorySize(directory);
+
+    final totalSize = formatBytes(totalBytes);
+    debugPrint('Total size of $directory: $totalSize');
+  }
+
+  static Future<int> _getDirectorySize(Directory dir) async {
+    int totalBytes = 0;
+
+    try {
+      if (dir.existsSync()) {
+        final List<FileSystemEntity> entities = dir.listSync(recursive: true, followLinks: false);
+        for (var entity in entities) {
+          if (entity is File) {
+            // debugPrint('File: ${entity.path}');
+            totalBytes += await entity.length();
+            // if (entity.path.endsWith('.wav')) {
+            //   debugPrint('Removing file: ${entity.path}');
+            //   await entity.delete();
+            // }
+          } else if (entity is Directory) {
+            // debugPrint('Directory: ${entity.path}');
+            totalBytes += await _getDirectorySize(entity);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error calculating directory size: $e");
+    }
+
+    return totalBytes;
+  }
+
+  static Future<int> printFileSize(File file) async {
+    int bytes = await file.length();
+    final size = formatBytes(bytes);
+    debugPrint('File size: $size');
+    return bytes;
+  }
+
+  static String formatBytes(int bytes, {int decimals = 2}) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = (log(bytes) / log(1024)).floor();
+    var size = (bytes / pow(1024, i)).toStringAsFixed(decimals);
+    return "$size ${suffixes[i]}";
+  }
+
   static clearTempWavFiles() async {
     final directory = await getApplicationDocumentsDirectory();
     var file0 = File('${directory.path}/temp.wav');
@@ -120,7 +181,7 @@ class WavBytesUtil {
   }
 
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
-    // debugPrint('First frame size: ${frames[0].length} && Last frame size: ${frames.last.length}');
+    debugPrint('createWavFile $filename');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
       removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
@@ -296,31 +357,5 @@ class ImageBytesUtil {
     _buffer = Uint8List.fromList([..._buffer, ...data]);
     // debugPrint('Added to buffer, new size: ${_buffer.length}');
     return null;
-  }
-
-  static Future<File?> base64ToFile(String base64Str) async {
-    // Decode the base64 string
-    try {
-      Uint8List bytes = base64Decode(base64Str.split(',')[1]);
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/image_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await file.writeAsBytes(bytes);
-      return file;
-    } catch (e) {
-      print('Error saving image: $e');
-      return null;
-    }
-  }
-
-  static Future<File?> uint8ListToFile(Uint8List uint8list) async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/image_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await file.writeAsBytes(uint8list);
-      return file;
-    } catch (e) {
-      print('Error saving image: $e');
-      return null;
-    }
   }
 }

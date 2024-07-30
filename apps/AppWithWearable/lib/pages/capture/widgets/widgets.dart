@@ -268,6 +268,7 @@ getTranscriptWidget(
   BTDeviceStruct? btDevice,
 ) {
   if (memoryCreating) {
+    print('getTranscriptWidget: memoryCreating');
     return const Padding(
       padding: EdgeInsets.only(top: 80),
       child: Center(child: CircularProgressIndicator(color: Colors.white)),
