@@ -190,31 +190,6 @@ Future<List<String>> getSemanticSummariesForEmbedding(String transcript) async {
   return response.split('###').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 }
 
-Future<String> postMemoryCreationNotification(Memory memory) async {
-  if (memory.structured.target!.title.isEmpty) return '';
-  if (memory.structured.target!.actionItems.isEmpty) return '';
-
-  var userName = SharedPreferencesUtil().givenName;
-  var str = userName.isEmpty ? 'a busy entrepreneur' : '$userName (a busy entrepreneur)';
-  var prompt = '''
-  The following is the structuring from a transcript of a conversation that just finished.
-  First determine if there's crucial feedback to notify $str about it.
-  If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
-  Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
-   
-  Transcript:
-  ${memory.transcript}
-  
-  Structured version:
-  ${memory.structured.target!.toJson()}
-  ''';
-  debugPrint(prompt);
-  var result = await executeGptPrompt(prompt);
-  debugPrint('postMemoryCreationNotification result: $result');
-  if (result.contains('N/A') || result.split(' ').length < 5) return '';
-  return result.replaceAll('```', '').trim();
-}
-
 Future<String> dailySummaryNotifications(List<Memory> memories) async {
   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
   if (memories.isEmpty) return msg;
