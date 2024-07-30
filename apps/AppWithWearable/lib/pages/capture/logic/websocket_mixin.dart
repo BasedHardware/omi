@@ -26,6 +26,9 @@ mixin WebSocketMixin {
   bool _hasNotifiedUser = false;
   bool _internetListenerSetup = false;
 
+  // Timer? internetReconnectedNotificationDelay;
+  Timer? internetLostNotificationDelay;
+
   Future<void> initWebSocket({
     required Function onConnectionSuccess,
     required Function(dynamic) onConnectionFailed,
@@ -138,7 +141,7 @@ mixin WebSocketMixin {
         case InternetStatus.connected:
           if (wsConnectionState != WebsocketConnectionStatus.connected && !_isConnecting) {
             debugPrint('Internet connection restored. Attempting to reconnect WebSocket.');
-            _notifyInternetRestored();
+            internetLostNotificationDelay?.cancel();
             _reconnectionTimer?.cancel();
             _reconnectionAttempts = 0;
             _attemptReconnection(
@@ -153,7 +156,10 @@ mixin WebSocketMixin {
           break;
         case InternetStatus.disconnected:
           debugPrint('Internet connection lost. Disconnecting WebSocket.');
-          _notifyInternetLost();
+          internetLostNotificationDelay?.cancel();
+          internetLostNotificationDelay = Timer(const Duration(seconds: 10), () {
+            _notifyInternetLost();
+          });
           websocketChannel?.sink.close(1000, 'Internet connection lost');
           _reconnectionTimer?.cancel();
           wsConnectionState = WebsocketConnectionStatus.notConnected;
