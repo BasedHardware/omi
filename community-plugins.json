@@ -431,6 +431,25 @@
     "deleted": false
   },
   {
+    "id": "Sapiento",
+    "name": "Sapiento - Logical Fallacy Fact Checker",
+    "author": "@wisdomifode+@adamajroudi",
+    "description": "Detects and corrects logical fallacies, Fact Check using MultiOn",
+    "image": "/assets/plugin_images/notion-crm.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://sapiento-017469204869.herokuapp.com/examine-convo",
+      "setup_instructions_file_path": "/plugins/instructions/Sapiento - Logical Fallacy Fact Checker/Sapiento - Logical Fallacy Fact Checker.md"
+    },
+    "deleted": false
+  },
+  {
     "id": "longevity-coach",
     "name": "Longevity Coach",
     "author": "Claude AI",
@@ -462,22 +481,35 @@
     "deleted": false
   },
   {
-    "id": "conversation-coach",
-    "name": "Conversation coach",
-    "author": "Based Hardware",
-    "description": "Your personal AI coach for improving conversational skills",
-    "image": "/plugins/logos/conversation-coach.png",
-    "memories": false,
+    "id": "omniscience-papergen",
+    "name": "Omniscience Paper Generator",
+    "author": "Jeremy Nixon",
+    "description": "Create Paper prompts from conversation.",
+    "prompt": "Based on this transcript, recommend 5 descriptions of interesting research papers.",
+    "image": "https://i.imgur.com/G8etmUt.png",
+    "memories": true,
     "chat": false,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
-      "external_integration"
+      "memories"
     ],
-    "external_integration": {
-      "triggers_on": "memory_creation",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/conversation-feedback",
-      "setup_completed_url": null,
-      "setup_instructions_file_path": ""
-    },
+    "memory_prompt": "You will be given a conversation transcript. Your task is to create high quality research paper descriptions.",
+    "deleted": false
+  },
+  {
+    "id": "omniscience-bookgen",
+    "name": "Omniscience Book Generator",
+    "author": "Jeremy Nixon",
+    "description": "Create Book  prompts from conversation.",
+    "prompt": "Based on this transcript, recommend 5 descriptions of interesting books.",
+    "image": "https://i.imgur.com/G8etmUt.png",
+    "memories": true,
+    "chat": false,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "You will be given a conversation transcript. Your task is to create high quality book descriptions.",
     "deleted": false
   }
 ]
