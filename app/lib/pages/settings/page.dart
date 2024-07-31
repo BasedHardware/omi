@@ -128,31 +128,31 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                     backupsEnabled: backupsEnabled,
                     onBackupsClicked: () {
-                      setState(() {
-                        if (backupsEnabled) {
-                          showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                    context,
-                                    () => Navigator.of(context).pop(),
-                                    () {
-                                      backupsEnabled = false;
-                                      SharedPreferencesUtil().backupsEnabled = false;
-                                      MixpanelManager().backupsDisabled();
-                                      deleteBackupApi();
-                                      Navigator.of(context).pop();
-                                      setState(() {});
-                                    },
-                                    'Disable Automatic Backups',
-                                    'You will be responsible for backing up your own data. We will not be able to restore it automatically once you disable this feature. Are you sure?',
-                                  ));
-                        } else {
-                          SharedPreferencesUtil().backupsEnabled = true;
-                          setState(() => backupsEnabled = true);
-                          MixpanelManager().backupsEnabled();
-                          executeBackupWithUid();
-                        }
-                      });
+                      // setState(() {
+                      //   if (backupsEnabled) {
+                      //     showDialog(
+                      //         context: context,
+                      //         builder: (c) => getDialog(
+                      //               context,
+                      //               () => Navigator.of(context).pop(),
+                      //               () {
+                      //                 backupsEnabled = false;
+                      //                 SharedPreferencesUtil().backupsEnabled = false;
+                      //                 MixpanelManager().backupsDisabled();
+                      //                 deleteBackupApi();
+                      //                 Navigator.of(context).pop();
+                      //                 setState(() {});
+                      //               },
+                      //               'Disable Automatic Backups',
+                      //               'You will be responsible for backing up your own data. We will not be able to restore it automatically once you disable this feature. Are you sure?',
+                      //             ));
+                      //   } else {
+                      //     SharedPreferencesUtil().backupsEnabled = true;
+                      //     setState(() => backupsEnabled = true);
+                      //     MixpanelManager().backupsEnabled();
+                      //     executeBackupWithUid();
+                      //   }
+                      // });
                     },
                   ),
                   const SizedBox(height: 16),

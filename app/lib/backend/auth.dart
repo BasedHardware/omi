@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -105,21 +104,25 @@ Future<UserCredential> signInWithGoogle() async {
 
 listenAuthTokenChanges() {
   FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
-    SharedPreferencesUtil().authToken = '123:/';
-
-    // try {
-    //   var token = await getIdToken();
-    //   SharedPreferencesUtil().authToken = token ?? '';
-    // } catch (e) {
-    //   debugPrint('Error getting token: $e');
-    // }
+    // SharedPreferencesUtil().authToken = '123:/';
+    try {
+      var token = await getIdToken();
+      SharedPreferencesUtil().authToken = token ?? '';
+    } catch (e) {
+      debugPrint('Error getting token: $e');
+    }
   });
 }
 
 Future<String?> getIdToken() async {
-  IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
-  if (newToken?.token != null) SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
-  return newToken?.token;
+  try {
+    IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
+    if (newToken?.token != null) SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+    return newToken?.token;
+  } catch (e) {
+    print(e);
+    return SharedPreferencesUtil().authToken;
+  }
 }
 
 Future<void> signOut(BuildContext context) async {

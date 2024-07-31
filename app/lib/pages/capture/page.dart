@@ -210,8 +210,6 @@ class CapturePageState extends State<CapturePage>
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
-    // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
-    if (memory != null && !memory.discarded) executeBackupWithUid();
 
     await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
@@ -248,9 +246,7 @@ class CapturePageState extends State<CapturePage>
       null,
       retrievedFromCache: true,
       sendMessageToChat: sendMessageToChat,
-    ).then((m) {
-      if (m != null && !m.discarded) executeBackupWithUid();
-    });
+    );
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
   }
