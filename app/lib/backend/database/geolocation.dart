@@ -40,12 +40,14 @@ class Geolocation {
       longitude: json['longitude'],
       altitude: json['altitude'],
       accuracy: json['accuracy'],
+      // not in server
       time: json['time'] == null ? null : DateTime.parse(json['time']),
-      googlePlaceId: json['googlePlaceId'],
+      // google_place_id server
+      googlePlaceId: json['googlePlaceId'] ?? json['google_place_id'],
       address: json['address'],
-      locationType: json['locationType'],
+      // location_type server
+      locationType: json['locationType'] ?? json['location_type'],
     );
-    geolocation.id = json['id'];
     return geolocation;
   }
 
