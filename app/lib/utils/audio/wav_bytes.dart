@@ -134,29 +134,29 @@ class WavBytesUtil {
     return "$size ${suffixes[i]}";
   }
 
-  static Future<Directory> getDir() async {
-    return await getApplicationDocumentsDirectory();
-    // return await getTemporaryDirectory();
-  }
+  static Future<Directory> getDir() => getTemporaryDirectory();
 
   /*
   * FINISHED TESTING LOGIC
   * */
 
   static clearTempWavFiles() async {
-    final directory = await getDir();
-    var file0 = File('${directory.path}/temp.wav');
+    var file0 = File('${(await getDir()).path}/temp.wav');
     if (file0.existsSync()) file0.deleteSync();
 
-    // if (directory.existsSync()) {
-    //   final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
-    //   for (var entity in entities) {
-    //     if (entity is File && entity.path.endsWith('.wav')) {
-    //       debugPrint('Removing file: ${entity.path}');
-    //       await entity.delete();
-    //     }
-    //   }
-    // }
+    final directory = await getApplicationDocumentsDirectory();
+    file0 = File('${directory.path}/temp.wav');
+    if (file0.existsSync()) file0.deleteSync();
+
+    if (directory.existsSync()) {
+      final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
+      for (var entity in entities) {
+        if (entity is File && entity.path.endsWith('.wav')) {
+          debugPrint('Removing file: ${entity.path}');
+          await entity.delete();
+        }
+      }
+    }
 
     // for (var i = 1; i < 10; i++) {
     //   var file = File('${directory.path}/temp$i.wav');
