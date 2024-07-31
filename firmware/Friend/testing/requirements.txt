@@ -1,0 +1,4 @@
+bleak==0.21.1
+numpy==1.26.4
+scipy==1.12.0
+opuslib==3.0.1
