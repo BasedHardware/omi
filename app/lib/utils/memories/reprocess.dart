@@ -3,8 +3,6 @@ import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<Memory?> reProcessMemory(
   BuildContext context,
@@ -24,12 +22,13 @@ Future<Memory?> reProcessMemory(
     );
   } catch (err, stacktrace) {
     print(err);
-    var memoryReporting = MixpanelManager().getMemoryEventProperties(memory);
-    CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-      'memory_transcript_length': memoryReporting['transcript_length'].toString(),
-      'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
-      // 'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
-    });
+    // RESTORE ME
+    // var memoryReporting = MixpanelManager().getMemoryEventProperties(memory);
+    // CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+    //   'memory_transcript_length': memoryReporting['transcript_length'].toString(),
+    //   'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+    //   // 'memory_transcript_language': memoryReporting['transcript_language'], // TODO: this is incorrect
+    // });
     onFailedProcessing();
     changeLoadingState();
     return null;
@@ -68,6 +67,7 @@ Future<Memory?> reProcessMemory(
   MemoryProvider().updateMemory(memory);
   debugPrint('MemoryProvider().updateMemory');
   changeLoadingState();
-  MixpanelManager().reProcessMemory(memory);
+  // RESTORE ME
+  // MixpanelManager().reProcessMemory(memory);
   return memory;
 }
