@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/memory_detail/share.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
-import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
-  final Memory memory;
+  final ServerMemory memory;
 
   const MemoryDetailPage({super.key, required this.memory});
 
@@ -56,10 +54,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     _determineCanDisplaySeconds();
     // triggerMemoryCreatedEvents(widget.memory);
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
-    structured = widget.memory.structured.target!;
+    structured = widget.memory.structured;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
-    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResults.length, false);
     _controller = TabController(length: 2, vsync: this, initialIndex: 1);
     _controller!.addListener(() => setState(() {}));
     super.initState();
@@ -97,13 +95,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               Expanded(child: Text("${structured.getEmoji()}")),
               IconButton(
                 onPressed: () {
-                  showShareBottomSheet(context, widget.memory, setState);
+                  // showShareBottomSheet(context, widget.memory, setState);
                 },
                 icon: const Icon(Icons.ios_share, size: 20),
               ),
               IconButton(
                 onPressed: () {
-                  showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
+                  // showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
                 },
                 icon: const Icon(Icons.more_horiz),
               ),
@@ -123,7 +121,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     content: Text('Transcript copied to clipboard'),
                     duration: Duration(seconds: 1),
                   ));
-                  MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
+                  // MixpanelManager().copiedMemoryDetails(widget.memory, source: 'Transcript');
                 },
                 child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
               )
@@ -210,22 +208,22 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     return [PhotosGridComponent(photos: photos), const SizedBox(height: 32)];
   }
 
-  _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {
-    Memory? newMemory = await reProcessMemory(
-      context,
-      memory,
-      () => ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
-      changeLoadingState,
-    );
-
-    pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);
-    overviewController.text = newMemory!.structured.target!.overview;
-    titleController.text = newMemory.structured.target!.title;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
-    );
-    Navigator.pop(context, true);
-  }
+// _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {
+//   Memory? newMemory = await reProcessMemory(
+//     context,
+//     memory,
+//     () => ScaffoldMessenger.of(context)
+//         .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
+//     changeLoadingState,
+//   );
+//
+//   pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);
+//   overviewController.text = newMemory!.structured.overview;
+//   titleController.text = newMemory.structured.title;
+//
+//   ScaffoldMessenger.of(context).showSnackBar(
+//     const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
+//   );
+//   Navigator.pop(context, true);
+// }
 }

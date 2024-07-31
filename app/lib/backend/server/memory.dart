@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -31,6 +33,7 @@ class ServerMemory {
     this.deleted = false,
   });
 
+  MemoryType get type => transcript.isNotEmpty ? MemoryType.audio : MemoryType.image;
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
@@ -66,5 +69,17 @@ class ServerMemory {
       'discarded': discarded,
       'deleted': deleted,
     };
+  }
+
+  String getTranscript({int? maxCount, bool generate = false}) {
+    try {
+      var transcript = generate && transcriptSegments.isNotEmpty
+          ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
+          : this.transcript;
+      if (maxCount != null) return transcript.substring(0, min(maxCount, transcript.length));
+      return transcript;
+    } catch (e) {
+      return transcript;
+    }
   }
 }

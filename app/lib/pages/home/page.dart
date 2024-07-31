@@ -17,6 +17,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -51,7 +52,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
-  List<Memory> memories = [];
+  List<ServerMemory> memories = [];
   List<Message> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -69,7 +70,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
-    memories = MemoryProvider().getMemoriesOrdered(includeDiscarded: true).reversed.toList();
+    memories = await getMemories();
     setState(() {});
   }
 
@@ -118,9 +119,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    scriptMigrateMemoriesToBack();
-    // getMemories();
-    // _initiateMemories();
+    await scriptMigrateMemoriesToBack();
+    _initiateMemories();
   }
 
   ///Screens with respect to subpage
@@ -144,7 +144,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-    _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
