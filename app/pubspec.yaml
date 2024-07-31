@@ -146,12 +146,8 @@ flutter:
     - assets/images/herologo.png
     - assets/images/backbutton.svg
     - assets/fonts/
-    - assets/documents/
     - assets/images/
-    - assets/videos/
-    - assets/audios/
     - assets/lottie_animations/
-    - assets/rive_animations/
     - assets/pdfs/
     - assets/silero_vad.onnx
   fonts:
