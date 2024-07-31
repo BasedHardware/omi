@@ -1,14 +1,15 @@
+import hashlib
 import threading
 import uuid
-from datetime import datetime
-from typing import List, Union
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from database.vector import upsert_vector, delete_vector
-from models.memory import Memory, CreateMemory, PluginResult, CreateMemoryResponse
+from database.vector import upsert_vector, delete_vector, upsert_vectors
+from models.memory import *
 from models.plugin import Plugin
+from models.transcript_segment import TranscriptSegment
 from routers.plugins import get_plugins_data
 from utils import auth
 from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result
@@ -42,7 +43,7 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
     if not discarded:
         structured_str = str(structured)
         vector = generate_embedding(structured_str)
-        upsert_vector(memory.id, vector, uid, structured_str)  # TODO: should include more details in vector metadata?
+        upsert_vector(uid, memory, vector)
 
         plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
         filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
@@ -97,3 +98,123 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
+
+
+# ************************************************
+# ************ Migrate Local Memories ************
+# ************************************************
+
+
+def _get_structured(memory: dict):
+    category = memory['structured']['category']
+    if category not in CategoryEnum.__members__:
+        category = 'other'
+    emoji = memory['structured'].get('emoji')
+    return Structured(
+        title=memory['structured']['title'],
+        overview=memory['structured']['overview'],
+        emoji=emoji.encode('latin1').decode('utf-8') if emoji else None,
+        category=CategoryEnum[category],
+        action_items=[
+            ActionItem(description=description, completed=False) for description in
+            memory['structured']['actionItems']
+        ],
+        events=[
+            Event(
+                title=event['title'],
+                description=event['description'],
+                start=datetime.fromisoformat(event['startsAt']),
+                duration=event['duration'],
+                created=False,
+            ) for event in memory['structured']['events']
+        ],
+    )
+
+
+def _get_geolocation(memory: dict):
+    geolocation = memory.get('geoLocation', {})
+    if geolocation and geolocation.get('googlePlaceId'):
+        geolocation_obj = Geolocation(
+            google_place_id=geolocation['googlePlaceId'],
+            latitude=geolocation['latitude'],
+            longitude=geolocation['longitude'],
+            altitude=geolocation['altitude'],
+            accuracy=geolocation['accuracy'],
+            address=geolocation['address'],
+            location_type=geolocation['locationType'],
+        )
+    else:
+        geolocation_obj = None
+    return geolocation_obj
+
+
+def generate_uuid4_from_seed(seed):
+    # Use SHA-256 to hash the seed
+    hash_object = hashlib.sha256(seed.encode('utf-8'))
+    hash_digest = hash_object.hexdigest()
+    return uuid.UUID(hash_digest[:32])
+
+
+def upload_memory_vectors(uid: str, memories: List[Memory]):
+    if not memories:
+        return
+    vectors = [generate_embedding(str(memory.structured)) for memory in memories]
+    upsert_vectors(uid, vectors, memories)
+
+
+@router.post('/v1/migration/memories', tags=['v1'])
+def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_current_user_uid)):
+    if not memories:
+        return {'status': 'ok'}
+    memories_vectors = []
+    db_batch = memories_db.get_memories_batch_operation()
+    # TODO: migrate memories in other languages, need decode? try chinese, french, spanish
+    for i, memory in enumerate(memories):
+        structured_obj = _get_structured(memory)
+        # print(structured_obj)
+        memory_obj = Memory(
+            id=str(generate_uuid4_from_seed(f'{uid}-{memory["createdAt"]}')),
+            uid=uid,
+            structured=structured_obj,
+            created_at=datetime.fromisoformat(memory['createdAt']),
+            started_at=datetime.fromisoformat(memory['startedAt']) if memory['startedAt'] else None,
+            finished_at=datetime.fromisoformat(memory['finishedAt']) if memory['finishedAt'] else None,
+            transcript=memory['transcript'],
+            discarded=memory['discarded'],
+            transcript_segments=[
+                TranscriptSegment(
+                    text=segment['text'],
+                    start=segment['start'],
+                    end=segment['end'],
+                    speaker=segment['speaker'],
+                    speaker_id=segment['speaker_id'],
+                    is_user=segment['is_user'],
+                ) for segment in memory['transcriptSegments']
+            ],
+            plugins_results=[
+                PluginResult(plugin_id=result.get('pluginId'), content=result['content'])
+                for result in memory['pluginsResponse']
+            ],
+            photos=[
+                MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
+            ],
+            geolocation=_get_geolocation(memory),
+            deleted=False,
+        )
+        # print(memory_obj)
+        memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
+
+        if not memory_obj.discarded:
+            memories_vectors.append(memory_obj)
+
+        if i % 10 == 0:
+            threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
+            memories_vectors = []
+
+        if i % 100 == 0:
+            db_batch.commit()
+            db_batch = memories_db.get_memories_batch_operation()
+
+    db_batch.commit()
+    threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
+    return {}
