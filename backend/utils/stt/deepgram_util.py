@@ -136,7 +136,7 @@ async def process_audio_dg(
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
             if word.start < preseconds:
-                print('Skipping word', word.start)
+                # print('Skipping word', word.start)
                 continue
             if not segments:
                 segments.append({
