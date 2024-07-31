@@ -60,36 +60,36 @@ Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {
 }
 
 // Download file method
-Future<File?> downloadFile(String objectName, String saveFileName) async {
-  final directory = await getApplicationDocumentsDirectory();
-  String saveFilePath = '${directory.path}/$saveFileName';
-  if (File(saveFilePath).existsSync()) {
-    debugPrint('File already exists: $saveFileName');
-    return File(saveFilePath);
-  }
-
-  String bucketName = SharedPreferencesUtil().gcpBucketName;
-  if (bucketName.isEmpty) {
-    debugPrint('No bucket name found');
-    return null;
-  }
-
-  try {
-    var response = await http.get(
-      Uri.parse('https://storage.googleapis.com/storage/v1/b/$bucketName/o/$objectName?alt=media'),
-      headers: {'Authorization': 'Bearer ${authClient?.credentials.accessToken.data}'},
-    );
-
-    if (response.statusCode == 200) {
-      final file = File('${directory.path}/$saveFileName');
-      await file.writeAsBytes(response.bodyBytes);
-      debugPrint('Download successful: $saveFileName');
-      return file;
-    } else {
-      debugPrint('Failed to download: ${response.body}');
-    }
-  } catch (e) {
-    debugPrint('Error downloading file: $e');
-  }
-  return null;
-}
+// Future<File?> downloadFile(String objectName, String saveFileName) async {
+//   final directory = await getApplicationDocumentsDirectory();
+//   String saveFilePath = '${directory.path}/$saveFileName';
+//   if (File(saveFilePath).existsSync()) {
+//     debugPrint('File already exists: $saveFileName');
+//     return File(saveFilePath);
+//   }
+//
+//   String bucketName = SharedPreferencesUtil().gcpBucketName;
+//   if (bucketName.isEmpty) {
+//     debugPrint('No bucket name found');
+//     return null;
+//   }
+//
+//   try {
+//     var response = await http.get(
+//       Uri.parse('https://storage.googleapis.com/storage/v1/b/$bucketName/o/$objectName?alt=media'),
+//       headers: {'Authorization': 'Bearer ${authClient?.credentials.accessToken.data}'},
+//     );
+//
+//     if (response.statusCode == 200) {
+//       final file = File('${directory.path}/$saveFileName');
+//       await file.writeAsBytes(response.bodyBytes);
+//       debugPrint('Download successful: $saveFileName');
+//       return file;
+//     } else {
+//       debugPrint('Failed to download: ${response.body}');
+//     }
+//   } catch (e) {
+//     debugPrint('Error downloading file: $e');
+//   }
+//   return null;
+// }
