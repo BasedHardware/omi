@@ -4,10 +4,11 @@ import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:tuple/tuple.dart';
 
-getOnMemoryCreationEvents(Memory memory) async {
+getOnMemoryCreationEvents(ServerMemory memory) async {
   var onMemoryCreationPlugins = SharedPreferencesUtil()
       .pluginsList
       .where((element) => element.externalIntegration?.triggersOn == 'memory_creation' && element.enabled)
@@ -38,8 +39,8 @@ getOnTranscriptSegmentReceivedEvents(List<TranscriptSegment> segment, String ses
 }
 
 triggerMemoryCreatedEvents(
-  Memory memory, {
-  Function(Message, Memory?)? sendMessageToChat,
+  ServerMemory memory, {
+  Function(Message, ServerMemory?)? sendMessageToChat,
 }) async {
   if (memory.discarded) return;
 

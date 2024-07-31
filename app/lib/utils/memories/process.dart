@@ -41,7 +41,8 @@ Future<Memory?> processTranscriptContent(
       photos,
     );
     MemoryProvider().saveMemory(memory);
-    triggerMemoryCreatedEvents(memory, sendMessageToChat: sendMessageToChat);
+    // RESTORE ME
+    // triggerMemoryCreatedEvents(memory, sendMessageToChat: sendMessageToChat);
     return memory;
   }
   return null;
@@ -197,6 +198,7 @@ Future<Memory> finalizeMemoryRecord(
       upsertPineconeVector(memory.id.toString(), vector, memory.createdAt);
     });
   }
-  MixpanelManager().memoryCreated(memory);
+  // RESTORE ME
+  // MixpanelManager().memoryCreated(memory);
   return memory;
 }

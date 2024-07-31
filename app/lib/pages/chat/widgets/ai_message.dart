@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
@@ -91,7 +90,8 @@ class AIMessage extends StatelessWidget {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        MixpanelManager().chatMessageMemoryClicked(memory);
+                        // RESTORE ME
+                        // MixpanelManager().chatMessageMemoryClicked(memory);
                         // await Navigator.of(context)
                         //     .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
                         // TODO: maybe refresh memories here too

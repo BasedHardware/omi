@@ -5,7 +5,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/api_requests/api/other.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -20,7 +19,6 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'maps_util.dart';
 
@@ -306,7 +304,7 @@ List<Widget> getPluginsWidgets(
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text('Plugin response copied to clipboard'),
                           ));
-                          // MixpanelManager().copiedMemoryDetails(memory, source: 'Plugin Response');
+                          MixpanelManager().copiedMemoryDetails(memory, source: 'Plugin Response');
                         },
                       ),
                     )
@@ -316,7 +314,7 @@ List<Widget> getPluginsWidgets(
                 isExpanded: pluginResponseExpanded[i],
                 toggleExpand: () {
                   if (!pluginResponseExpanded[i]) {
-                    // MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
+                    MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
                   }
                   onItemToggled(i);
                 },
@@ -382,14 +380,12 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
 showOptionsBottomSheet(
   BuildContext context,
   StateSetter setState,
-  Memory memory,
-  Function(BuildContext, StateSetter, Memory, Function) reprocessMemory,
+  ServerMemory memory,
+  Function(BuildContext, StateSetter, ServerMemory, Function) reprocessMemory,
 ) async {
   bool loadingReprocessMemory = false;
   bool displayDevTools = false;
-  bool displayMemoryPromptField = false;
   bool loadingPluginIntegrationTest = false;
-  TextEditingController controller = TextEditingController();
 
   var result = await showModalBottomSheet(
       context: context,
@@ -455,18 +451,19 @@ showOptionsBottomSheet(
                         ),
                       ]
                     : [
-                        ListTile(
-                          title: const Text('Share memory'),
-                          leading: const Icon(Icons.send),
-                          onTap: loadingReprocessMemory
-                              ? null
-                              : () {
-                                  // share loading
-                                  MixpanelManager().memoryShareButtonClick(memory);
-                                  Share.share(memory.structured.target!.toString());
-                                  HapticFeedback.lightImpact();
-                                },
-                        ),
+                        // ListTile(
+                        //   title: const Text('Share memory'),
+                        //   leading: const Icon(Icons.send),
+                        //   onTap: loadingReprocessMemory
+                        //       ? null
+                        //       : () {
+                        //           // share loading
+                        //           MixpanelManager().memoryShareButtonClick(memory);
+                        //           // RESTORE ME
+                        //           Share.share(memory.structured.toString());
+                        //           HapticFeedback.lightImpact();
+                        //         },
+                        // ),
                         ListTile(
                           title: const Text('Re-summarize'),
                           leading: loadingReprocessMemory
@@ -535,24 +532,4 @@ showOptionsBottomSheet(
           }));
   if (result == true) setState(() {});
   debugPrint('showBottomSheet result: $result');
-}
-
-_getMemoryPromptDialogContent(BuildContext context, TextEditingController controller) {
-  return SizedBox(
-    height: 200,
-    child: Column(
-      children: [
-        TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter the prompt',
-            border: OutlineInputBorder(borderSide: BorderSide.none),
-            contentPadding: EdgeInsets.all(0),
-          ),
-          keyboardType: TextInputType.multiline,
-          maxLines: 8,
-        ),
-      ],
-    ),
-  );
 }

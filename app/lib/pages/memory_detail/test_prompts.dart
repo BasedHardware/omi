@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/prompt.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/server/memory.dart';
 
 class TestPromptsPage extends StatefulWidget {
-  final Memory memory;
+  final ServerMemory memory;
 
   const TestPromptsPage({super.key, required this.memory});
 

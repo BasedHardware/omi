@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
@@ -64,7 +64,7 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
   return segments;
 }
 
-Future<String> webhookOnMemoryCreatedCall(Memory? memory, {bool returnRawBody = false}) async {
+Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawBody = false}) async {
   if (memory == null) return '';
   debugPrint('devModeWebhookCall: $memory');
   return triggerMemoryRequestAtEndpoint(
@@ -103,7 +103,7 @@ Future<bool> isPluginSetupCompleted(String? url) async {
   return data['is_setup_completed'] ?? false;
 }
 
-Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory, {bool returnRawBody = false}) async {
+Future<String> triggerMemoryRequestAtEndpoint(String url, ServerMemory memory, {bool returnRawBody = false}) async {
   if (url.isEmpty) return '';
   if (url.contains('?')) {
     url += '&uid=${SharedPreferencesUtil().uid}';
@@ -112,7 +112,7 @@ Future<String> triggerMemoryRequestAtEndpoint(String url, Memory memory, {bool r
   }
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   var data = memory.toJson();
-  data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
+  // data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
   try {
     var response = await makeApiCall(
       url: url,
