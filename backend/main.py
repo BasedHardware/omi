@@ -3,14 +3,13 @@ import os
 import subprocess
 
 import firebase_admin
-import sentry_sdk
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, mount
 from routers import backups, chat, memories, plugins, proactivity, speech_profile, transcribe
 from utils.redis_utils import migrate_user_plugins_reviews
-from utils.stt.soniox_util import create_speaker_profile, uid_has_speech_profile
 from utils.storage import retrieve_all_samples
+from utils.stt.soniox_util import create_speaker_profile, uid_has_speech_profile
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -19,12 +18,6 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
     firebase_admin.initialize_app(credentials)
 else:
     firebase_admin.initialize_app()
-
-sentry_sdk.init(
-    dsn="https://7d42e299551a6105c0e0020361a036ae@o4507410632081408.ingest.us.sentry.io/4507410634113024",
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-)
 
 app = FastAPI()
 app.include_router(transcribe.router)
