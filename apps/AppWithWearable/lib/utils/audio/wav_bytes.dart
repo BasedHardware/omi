@@ -79,17 +79,21 @@ class WavBytesUtil {
 
   bool hasFrames() => frames.isNotEmpty;
 
-  static Future<void> printSharedPreferencesFileSize() async {
-    final file = File(
-        '/var/mobile/Containers/Data/Application/987446B3-3A14-4AE6-9EE7-3BBEFC4DBE04/Library/Preferences/com.friend-app-with-wearable.ios12.plist');
+  /*
+  * DOUBLE CHECKING STORE FILES
+  * */
 
-    if (await file.exists()) {
-      final fileSize = await file.length();
-      print('SharedPreferences file size: ${formatBytes(fileSize)} bytes');
-    } else {
-      print('SharedPreferences file not found');
-    }
-  }
+  // static Future<void> printSharedPreferencesFileSize() async {
+  //   final file = File(
+  //       '/var/mobile/Containers/Data/Application/987446B3-3A14-4AE6-9EE7-3BBEFC4DBE04/Library/Preferences/com.friend-app-with-wearable.ios12.plist');
+  //
+  //   if (await file.exists()) {
+  //     final fileSize = await file.length();
+  //     print('SharedPreferences file size: ${formatBytes(fileSize)} bytes');
+  //   } else {
+  //     print('SharedPreferences file not found');
+  //   }
+  // }
 
   static Future<void> listFiles(Directory? directory) async {
     if (directory == null) return;
@@ -109,10 +113,6 @@ class WavBytesUtil {
           if (entity is File) {
             // debugPrint('File: ${entity.path}');
             totalBytes += await entity.length();
-            // if (entity.path.endsWith('.wav')) {
-            //   debugPrint('Removing file: ${entity.path}');
-            //   await entity.delete();
-            // }
           } else if (entity is Directory) {
             // debugPrint('Directory: ${entity.path}');
             totalBytes += await _getDirectorySize(entity);
@@ -126,13 +126,6 @@ class WavBytesUtil {
     return totalBytes;
   }
 
-  static Future<int> printFileSize(File file) async {
-    int bytes = await file.length();
-    final size = formatBytes(bytes);
-    debugPrint('File size: $size');
-    return bytes;
-  }
-
   static String formatBytes(int bytes, {int decimals = 2}) {
     if (bytes <= 0) return "0 B";
     const suffixes = ["B", "KB", "MB", "GB", "TB"];
@@ -141,10 +134,29 @@ class WavBytesUtil {
     return "$size ${suffixes[i]}";
   }
 
+  static Future<Directory> getDir() async {
+    return await getApplicationDocumentsDirectory();
+    // return await getTemporaryDirectory();
+  }
+
+  /*
+  * FINISHED TESTING LOGIC
+  * */
+
   static clearTempWavFiles() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getDir();
     var file0 = File('${directory.path}/temp.wav');
     if (file0.existsSync()) file0.deleteSync();
+
+    // if (directory.existsSync()) {
+    //   final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
+    //   for (var entity in entities) {
+    //     if (entity is File && entity.path.endsWith('.wav')) {
+    //       debugPrint('Removing file: ${entity.path}');
+    //       await entity.delete();
+    //     }
+    //   }
+    // }
 
     // for (var i = 1; i < 10; i++) {
     //   var file = File('${directory.path}/temp$i.wav');
@@ -153,31 +165,15 @@ class WavBytesUtil {
   }
 
   static tempWavExists() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getDir();
     var file0 = File('${directory.path}/temp.wav');
     return file0.existsSync();
   }
 
   static deleteTempWav() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getDir();
     var file0 = File('${directory.path}/temp.wav');
     if (file0.existsSync()) file0.deleteSync();
-  }
-
-  static getTempWavName() async {
-    final directory = await getApplicationDocumentsDirectory();
-    var fileName = 'temp.wav';
-    // check if temp.wav exists, if so use temp1.wav, temp2.wav, etc.
-    var file = File('${directory.path}/$fileName');
-    if (file.existsSync()) {
-      var i = 1;
-      while (file.existsSync()) {
-        fileName = 'temp$i.wav';
-        file = File('${directory.path}/$fileName');
-        i++;
-      }
-    }
-    return fileName;
   }
 
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
@@ -221,7 +217,7 @@ class WavBytesUtil {
   }
 
   Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getDir();
     if (filename == null) {
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       filename = 'recording-$timestamp.wav';

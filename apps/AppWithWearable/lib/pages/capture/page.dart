@@ -78,13 +78,6 @@ class CapturePageState extends State<CapturePage>
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     // TODO: this will not work with opus for now, more complexity, unneeded rn
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
-    // WavBytesUtil.listFiles(await getLibraryDirectory());
-    // WavBytesUtil.listFiles(await getDownloadsDirectory());
-    // WavBytesUtil.listFiles(await getApplicationDocumentsDirectory());
-    // WavBytesUtil.listFiles(await getApplicationCacheDirectory());
-    // WavBytesUtil.listFiles(await getApplicationSupportDirectory());
-    // WavBytesUtil.listFiles(await getTemporaryDirectory());
-    // WavBytesUtil.printSharedPreferencesFileSize();
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
