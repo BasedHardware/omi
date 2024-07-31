@@ -1,4 +1,3 @@
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -7,14 +6,25 @@
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/drivers/gpio.h>
-#include "lib/battery/battery.h"
 #include <zephyr/sys/atomic.h>
+#include "lib/battery/battery.h"
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
 #include "btutils.h"
 
-static bool isFiles = false;
+
+#include "storage.h"
+#include "lib/sdcard/sdcard.h"
+
+static size_t pointer_frame_left;
+static bool pointer_lock = false;
+static size_t pointer_count;
+
+
+static uint32_t storage_action = 0;
+static int notification_value = 10;
+static bool verbose = false;
 
 //
 // Internal
@@ -26,83 +36,18 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-static bool notification_enabled = false;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+
+static ssize_t sd_storage_notify_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+static ssize_t get_storage_action(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static void sd_storage_notify_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 
 //
 // Service and Characteristic
 //
 
+// Dedicated to audio
 // Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
@@ -113,56 +58,15 @@ static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCO
 static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-static struct bt_uuid_128 sd_storage_notify_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x87654321, 0x4321, 0x8765, 0x4321, 0x1234567890ab));
+// Dedicated to storage
+// Storage service with UUID 87654321-4321-8765-4321-1234567890ab
+// - Storage characteristic notify (UUID 87654321-4321-8765-4321-1234567890ac)
+// - Storage characteristic read (UUID 87654321-4321-8765-4321-1234567890ad)
+static struct bt_uuid_128 sd_storage_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x87654321, 0x4321, 0x8765, 0x4321, 0x1234567890ab));
 static struct bt_uuid_128 sd_storage_notify_characteristic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x87654321, 0x4321, 0x8765, 0x4321, 0x1234567890ac));
+static struct bt_uuid_128 sd_storage_write_characteristic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x87654321, 0x4321, 0x8765, 0x4321, 0x1234567890ad)); // UUID para la característica de escritura
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Audio sttributes
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
@@ -171,6 +75,16 @@ static struct bt_gatt_attr audio_service_attr[] = {
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
+
+// Storage attributes
+static struct bt_gatt_attr sd_storage_notify_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&sd_storage_service_uuid),
+    BT_GATT_CHARACTERISTIC(&sd_storage_notify_characteristic_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, sd_storage_notify_read_characteristic, NULL, NULL),
+    BT_GATT_CCC(sd_storage_notify_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&sd_storage_write_characteristic_uuid.uuid, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL, get_storage_action, &storage_action),
+};
+
+static struct bt_gatt_service sd_storage_notify_service = BT_GATT_SERVICE(sd_storage_notify_service_attr);
 
 // Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
 // exposes following characteristics:
@@ -211,126 +125,64 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
-        printk("Client subscribed for notifications\n");
+        if(verbose) printk("Client subscribed for notifications\n");
     }
     else if (value == 0)
     {
-        printk("Client unsubscribed from notifications\n");
+        if(verbose) printk("Client unsubscribed from notifications\n");
     }
     else
     {
-        printk("Invalid CCC value: %u\n", value);
+        if(verbose) printk("Invalid CCC value: %u\n", value);
     }
 }
 
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("audio_data_read_characteristic\n");
+    if(verbose) printk("audio_data_read_characteristic\n");
     return bt_gatt_attr_read(conn, attr, buf, len, offset, NULL, 0);
 }
 
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("audio_codec_read_characteristic\n");
+    if(verbose) printk("audio_codec_read_characteristic\n");
     uint8_t value[1] = {CODEC_ID};
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+//
+// SD storage service Handler
+//
 
 static void sd_storage_notify_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
-        printk("Client subscribed for SD Storage notifications\n");
-        notification_enabled = true;
+        if(verbose) printk("Client subscribed for SD Storage notifications\n");
     }
     else if (value == 0)
     {
-        printk("Client unsubscribed from SD Storage notifications\n");
-        notification_enabled = false;
+        if(verbose) printk("Client unsubscribed from SD Storage notifications\n");
     }
     else
     {
-        printk("Invalid CCC value for SD Storage: %u\n", value);
+        if(verbose) printk("Invalid CCC value for SD Storage: %u\n", value);
     }
 }
 
 static ssize_t sd_storage_notify_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("sd_storage_notify_read_characteristic\n");
-    bool notification_value = false; // Cambia esto si quieres devolver otro valor por defecto
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &notification_value, sizeof(notification_value));
 }
 
-static struct bt_gatt_attr sd_storage_notify_service_attr[] = {
-    BT_GATT_PRIMARY_SERVICE(&sd_storage_notify_service_uuid),
-    BT_GATT_CHARACTERISTIC(&sd_storage_notify_characteristic_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, sd_storage_notify_read_characteristic, NULL, NULL),
-    BT_GATT_CCC(sd_storage_notify_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-};
-
-static void sd_storage_notify_send(bool value)
+static ssize_t get_storage_action(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) 
 {
-    if (current_connection && notification_enabled)
-    {
-        int err = bt_gatt_notify(current_connection, &sd_storage_notify_service_attr[1], &value, sizeof(value));
-        if (err)
-        {
-            printk("Failed to send SD Storage notification (err %d)\n", err);
-        }
-        else
-        {
-            printk("SD Storage notification sent\n");
-        }
+    if (len != sizeof(storage_action)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-    else
-    {
-        printk("No connection or SD Storage notifications not enabled\n");
-    }
+    storage_action = *(const uint16_t *)buf;
+    return len;
 }
-
-static struct bt_gatt_service sd_storage_notify_service = BT_GATT_SERVICE(sd_storage_notify_service_attr);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 //
 // DFU Service Handlers
@@ -340,21 +192,21 @@ static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
-        printk("Client subscribed for notifications\n");
+        if(verbose) printk("Client subscribed for notifications\n");
     }
     else if (value == 0)
     {
-        printk("Client unsubscribed from notifications\n");
+        if(verbose) printk("Client unsubscribed from notifications\n");
     }
     else
     {
-        printk("Invalid CCC value: %u\n", value);
+        if(verbose) printk("Invalid CCC value: %u\n", value);
     }
 }
 
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-    printk("dfu_control_point_write_handler\n");
+    if(verbose) printk("dfu_control_point_write_handler\n");
     if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
     {
         NRF_POWER->GPREGRET = 0xA8;
@@ -384,15 +236,15 @@ void broadcast_battery_level(struct k_work *work_item) {
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
-        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+        if(verbose) printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
         if (err) {
-            printk("Error updating battery level: %d\n", err);
+            if(verbose) printk("Error updating battery level: %d\n", err);
         }
     } else {
-        printk("Failed to read battery level\n");
+        if(verbose) printk("Failed to read battery level\n");
     }
 }
 
@@ -407,34 +259,35 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     err = bt_conn_get_info(conn, &info);
     if (err)
     {
-        printk("Failed to get connection info (err %d)\n", err);
+        if(verbose) printk("Failed to get connection info (err %d)\n", err);
         return;
     }
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
-    printk("Connected\n");
-    printk("Interval: %d, latency: %d, timeout: %d\n", info.le.interval, info.le.latency, info.le.timeout);
-    printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
-    printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
+    if(verbose) printk("Connected\n");
+    if(verbose) printk("Interval: %d, latency: %d, timeout: %d\n", info.le.interval, info.le.latency, info.le.timeout);
+    if(verbose) printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
+    if(verbose) printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_submit(&battery_work);
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
-    printk("Disconnected\n");
-    bt_conn_unref(conn);
+    if(verbose) printk("Disconnected\n");
     current_connection = NULL;
+    bt_conn_unref(conn);
+    storage_action = 0;
     current_mtu = 0;
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 {
-    printk("Connection parameters update request received.\n");
-    printk("Minimum interval: %d, Maximum interval: %d\n",
-           param->interval_min, param->interval_max);
-    printk("Latency: %d, Timeout: %d\n", param->latency, param->timeout);
+    if(verbose) printk("Connection parameters update request received.\n");
+    if(verbose) printk("Minimum interval: %d, Maximum interval: %d\n",
+                param->interval_min, param->interval_max);
+    if(verbose) printk("Latency: %d, Timeout: %d\n", param->latency, param->timeout);
 
     return true;
 }
@@ -442,25 +295,25 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
-    printk("Connection parameters updated.\n"
-           " interval: %d, latency: %d, timeout: %d\n",
-           interval, latency, timeout);
+    if(verbose) printk("Connection parameters updated.\n"
+                " interval: %d, latency: %d, timeout: %d\n",
+                interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
                             struct bt_conn_le_phy_info *param)
 {
-    printk("LE PHY updated: TX PHY %s, RX PHY %s\n",
-           phy2str(param->tx_phy), phy2str(param->rx_phy));
+    if(verbose) printk("LE PHY updated: TX PHY %s, RX PHY %s\n",
+                phy2str(param->tx_phy), phy2str(param->rx_phy));
 }
 
 static void _le_data_length_updated(struct bt_conn *conn,
                                     struct bt_conn_le_data_len_info *info)
 {
-    printk("LE data len updated: TX (len: %d time: %d)"
-           " RX (len: %d time: %d)\n",
-           info->tx_max_len,
-           info->tx_max_time, info->rx_max_len, info->rx_max_time);
+    if(verbose) printk("LE data len updated: TX (len: %d time: %d)"
+                " RX (len: %d time: %d)\n",
+                info->tx_max_len,
+                info->tx_max_time, info->rx_max_len, info->rx_max_time);
     current_mtu = info->tx_max_len;
 }
 
@@ -517,7 +370,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        printk("Failed to read from ring buffer %d\n", tx_buffer_size);
+        if(verbose) printk("Failed to read from ring buffer %d\n", tx_buffer_size);
         return false;
     }
 
@@ -545,7 +398,56 @@ static bool push_to_gatt(struct bt_conn *conn)
         return false;
     }
 
-    //sd_storage_notify_send(false); // SD STORAGE NOTIFY
+    // Push each frame
+    uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
+    uint32_t offset = 0;
+    uint8_t index = 0;
+    while (offset < tx_buffer_size)
+    {
+        // Recombine packet
+        uint32_t id = packet_next_index++;
+        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        pusher_temp_data[0] = id & 0xFF;
+        pusher_temp_data[1] = (id >> 8) & 0xFF;
+        pusher_temp_data[2] = index;
+        memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+        offset += packet_size;
+        index++;
+
+        if (storage_action != 1) break;
+
+        while (true)
+        {
+            int err = 0;
+
+            if(storage_action == 1)
+            {   
+                err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE); // Try send notification
+            } else
+            {
+                break;
+            }
+            
+            if (err == -EAGAIN || err == -ENOMEM)
+            {
+                continue;
+            }
+
+            // Break if success
+            break;
+        }
+    }
+
+    return true;
+}
+
+static bool push_to_storage(struct bt_conn *conn)
+{
+    // Read data from ring buffer
+    if (!read_from_tx_queue())
+    {
+        return false;
+    }
 
     // Push each frame
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
@@ -563,30 +465,16 @@ static bool push_to_gatt(struct bt_conn *conn)
         offset += packet_size;
         index++;
 
+        if (storage_action != 0) break;
+
         while (true)
         {
-            // Try send notification
-            int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-            
-            // Log failure
-            if (err)
+           
+            if (storage_action == 0)
             {
-                printk("bt_gatt_notify failed (err %d)\n", err);
-                printk("MTU: %d, packet_size: %d\n", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
-                k_sleep(K_MSEC(1));
-            }
+                save_audio_in_storage(pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+            } else break;
 
-            //int res = save_audio_in_storage(pusher_temp_data[2], packet_size + NET_BUFFER_HEADER_SIZE);
-
-            //printk("Data sended %d", pusher_temp_data[0]);
-
-            // Try to send more data if possible
-            if (err == -EAGAIN || err == -ENOMEM)
-            {
-                continue;
-            }
-
-            // Break if success
             break;
         }
     }
@@ -624,20 +512,25 @@ void pusher(void)
         }
 
         // If no valid mode exists - discard whole buffer
+        
         if (!valid)
         {
-            ring_buf_reset(&ring_buf);
-            k_sleep(K_MSEC(10));
+            if (storage_action < 0 || storage_action > 1)
+            {
+                ring_buf_reset(&ring_buf);
+                k_sleep(K_MSEC(10));
+            }
         }
 
-        // Handle GATT
+        // Handle GATT && STORAGE
         if (use_gatt && valid)
         {
             bool sent = push_to_gatt(conn);
-            if (!sent)
-            {
-                k_sleep(K_MSEC(50));
-            }
+            if (!sent) k_sleep(K_MSEC(50));
+        } else
+        {
+            bool sent = push_to_storage(conn);
+            if (!sent) k_sleep(K_MSEC(50));
         }
 
         if (conn)
@@ -660,24 +553,24 @@ int transport_start()
     int err = bt_enable(NULL);
     if (err)
     {
-        printk("Bluetooth init failed (err %d)\n", err);
+        if(verbose) printk("Bluetooth init failed (err %d)\n", err);
         return err;
     }
-    printk("Bluetooth initialized\n");
+    if(verbose) printk("Bluetooth initialized\n");
 
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-    bt_gatt_service_register(&sd_storage_notify_service);  // Registra el nuevo servicio
+    bt_gatt_service_register(&sd_storage_notify_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
-        printk("Advertising failed to start (err %d)\n", err);
+        if(verbose) printk("Advertising failed to start (err %d)\n", err);
         return err;
     }
     else
     {
-        printk("Advertising successfully started\n");
+        if(verbose) printk("Advertising successfully started\n");
     }
 
     int battErr = 0;
@@ -687,11 +580,11 @@ int transport_start()
 
 	if (battErr)
 	{
-		 printk("Battery init failed (err %d)\n", battErr);
+		if(verbose) printk("Battery init failed (err %d)\n", battErr);
 	}
 	else
 	{
-		  printk("Battery initialized\n");
+		if(verbose) printk("Battery initialized\n");
 	}
 
     k_work_init(&battery_work, broadcast_battery_level);
@@ -710,19 +603,9 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    if(current_connection == NULL)
+    while (!write_to_tx_queue(buffer, size))
     {
-        int ret = save_audio_in_storage(buffer, size);
-    } else
-    {
-        uint8_t *current_buffer = buffer;
-        size_t current_size = size;
-
-        while (!write_to_tx_queue(current_buffer, current_size))
-        {
-            k_sleep(K_MSEC(1));
-        }
+        k_sleep(K_MSEC(1));
     }
-    
     return 0;
 }

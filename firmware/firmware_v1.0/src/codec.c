@@ -12,6 +12,7 @@
 //
 
 static volatile codec_callback _callback = NULL;
+static bool verbose = false;
 
 void set_codec_callback(codec_callback callback)
 {
@@ -28,10 +29,9 @@ struct ring_buf codec_ring_buf;
 int codec_receive_pcm(int16_t *data, size_t len)
 {
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
-    printk("Rinf leng %d\n", written);
     if (written != len * 2)
     {
-        printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
+        if(verbose) printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
         return -1;
     }
     return 0;
