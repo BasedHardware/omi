@@ -41,7 +41,7 @@ class MemoryPhoto(BaseModel):
     description: str
 
 
-class PluginResponse(BaseModel):
+class PluginResult(BaseModel):
     plugin_id: Optional[str]
     content: str
 
@@ -92,7 +92,7 @@ class Memory(BaseModel):
     photos: List[MemoryPhoto] = []
     # recordingFilePath: Optional[str]
     structured: Structured
-    plugins_response: List[PluginResponse] = []
+    plugins_results: List[PluginResult] = []
     discarded: bool
 
     @staticmethod
