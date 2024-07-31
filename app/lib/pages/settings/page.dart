@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
-import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -9,7 +7,6 @@ import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
