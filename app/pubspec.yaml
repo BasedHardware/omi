@@ -108,6 +108,7 @@ dependencies:
   internet_connection_checker_plus: ^2.5.0
   
   docx_template: ^0.4.0
+  enum_to_string: ^2.0.1
 
 
 dependency_overrides:
