@@ -24,7 +24,6 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
-import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
@@ -118,9 +117,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    scriptMemoryVectorsExecuted();
+    // scriptMemoryVectorsExecuted();
     // await migrateMemoriesToObjectBox();
-    _initiateMemories();
+    // _initiateMemories();
   }
 
   ///Screens with respect to subpage
