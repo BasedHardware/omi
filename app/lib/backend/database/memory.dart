@@ -85,6 +85,8 @@ class Memory {
       }
     }
 
+    memory.geolocation.target = json['geoLocation'] == null ? null : Geolocation.fromJson(json['geoLocation']);
+
     if (json['transcriptSegments'] != null) {
       for (dynamic segment in json['transcriptSegments']) {
         if (segment.isEmpty) continue;
@@ -128,6 +130,7 @@ class Memory {
       'discarded': discarded,
       'transcriptSegments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
+      'geoLocation': geolocation.target?.toJson() ?? {},
     };
   }
 }

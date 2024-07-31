@@ -151,7 +151,6 @@ class _AuthComponentState extends State<AuthComponent> {
         }
         SharedPreferencesUtil().uid = newUid;
       } else {
-        await retrieveBackup(newUid);
         SharedPreferencesUtil().uid = newUid;
         MixpanelManager().identify();
       }

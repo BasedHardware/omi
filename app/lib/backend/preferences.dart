@@ -222,6 +222,10 @@ class SharedPreferencesUtil {
 
   bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
 
+  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack', value);
+
+  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack') ?? false;
+
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;

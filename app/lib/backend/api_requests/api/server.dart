@@ -103,6 +103,16 @@ Future<void> uploadBackupApi(String backup) async {
   debugPrint('uploadBackup: ${response?.body}');
 }
 
+Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/migration/memories',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode(memories),
+  );
+  debugPrint('migrateMemoriesToBackend: ${response?.body}');
+}
+
 Future<String> downloadBackupApi(String uid) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/backups?uid=$uid',

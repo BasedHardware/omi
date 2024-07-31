@@ -24,11 +24,11 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/scripts.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/features/backups.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
@@ -117,6 +117,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
+    scriptMigrateMemoriesToBack();
     // scriptMemoryVectorsExecuted();
     // await migrateMemoriesToObjectBox();
     // _initiateMemories();
@@ -136,7 +137,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
-    print('Selected: ${SharedPreferencesUtil().selectedChatPluginId}');
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -144,7 +144,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-    executeBackupWithUid();
     _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();
