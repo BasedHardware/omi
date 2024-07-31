@@ -126,3 +126,9 @@ docs/_site/
 /apps/AppWithWearable/lib/firebase_options.dart
 /apps/AppWithWearable/firebase.json
 plugins/example/tmp/
+
+backend/pretrained_models/
+/backend/scripts/
+/backend/pretrained_models/
+
+google-credentials.json
