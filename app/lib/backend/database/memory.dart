@@ -171,9 +171,13 @@ class Structured {
     );
     var aItems = json['actionItems'] ?? json['action_items'];
     if (aItems != null) {
-      for (String item in aItems) {
-        if (item.isEmpty) continue;
-        structured.actionItems.add(ActionItem(item));
+      for (dynamic item in aItems) {
+        if (item.runtimeType == String) {
+          if (item.isEmpty) continue;
+          structured.actionItems.add(ActionItem(item));
+        } else {
+          structured.actionItems.add(ActionItem.fromJson(item));
+        }
       }
     }
 
@@ -182,10 +186,10 @@ class Structured {
         if (event.isEmpty) continue;
         structured.events.add(Event(
           event['title'],
-          DateTime.parse(event['startsAt']),
+          DateTime.parse(event['startsAt'] ?? event['start']),
           event['duration'],
           description: event['description'] ?? '',
-          created: false,
+          created: event['created'] ?? false,
         ));
       }
     }
@@ -227,6 +231,12 @@ class ActionItem {
   final structured = ToOne<Structured>();
 
   ActionItem(this.description, {this.id = 0, this.completed = false});
+
+  static fromJson(Map<String, dynamic> json) {
+    return ActionItem(json['description'], completed: json['completed'] ?? false);
+  }
+
+  toJson() => {'description': description, 'completed': completed};
 }
 
 @Entity()
@@ -241,15 +251,10 @@ class PluginResponse {
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
 
-  toJson() {
-    return {
-      'pluginId': pluginId,
-      'content': content,
-    };
-  }
+  toJson() => {'pluginId': pluginId, 'content': content};
 
   factory PluginResponse.fromJson(Map<String, dynamic> json) {
-    return PluginResponse(json['content'], pluginId: json['pluginId']);
+    return PluginResponse(json['content'], pluginId: json['pluginId'] ?? json['plugin_id']);
   }
 }
 
