@@ -7,7 +7,6 @@ import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/features/backups.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
