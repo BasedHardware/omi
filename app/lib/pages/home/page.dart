@@ -119,9 +119,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _migrationScripts() async {
     scriptMigrateMemoriesToBack();
-    getMemories();
-    // scriptMemoryVectorsExecuted();
-    // await migrateMemoriesToObjectBox();
+    // getMemories();
     // _initiateMemories();
   }
 
