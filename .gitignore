@@ -132,3 +132,6 @@ backend/pretrained_models/
 /backend/pretrained_models/
 
 google-credentials.json
+
+
+startup-script.sh
