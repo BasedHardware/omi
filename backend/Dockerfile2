@@ -1,0 +1,25 @@
+FROM --platform=linux/amd64 nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+
+
+#set up environment
+RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y curl
+RUN apt-get install unzip
+RUN apt-get -y install python3
+RUN apt-get -y install python3-pip
+RUN apt-get -y install git
+RUN apt-get -y install ffmpeg
+
+# Copy our application code
+WORKDIR /var/app
+
+# . Here means current directory.
+COPY . .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port
+EXPOSE 8000
+
+# Run the application
+CMD ["fastapi", "run"]
+# test
