@@ -168,7 +168,6 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
         return {'status': 'ok'}
     memories_vectors = []
     db_batch = memories_db.get_memories_batch_operation()
-    # TODO: migrate memories in other languages, need decode? try chinese, french, spanish
     for i, memory in enumerate(memories):
         structured_obj = _get_structured(memory)
         # print(structured_obj)
@@ -196,12 +195,12 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
                 for result in memory['pluginsResponse']
             ],
             photos=[
+                # TODO: test migrating photos
                 MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
             ],
             geolocation=_get_geolocation(memory),
             deleted=False,
         )
-        # print(memory_obj)
         memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
 
         if not memory_obj.discarded:

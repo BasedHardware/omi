@@ -36,7 +36,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
         if (idx == widget.segments.length + 1) return const SizedBox(height: 64);
         final data = widget.segments[idx - 1];
-
+        print(data.text.toString());
         return Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
@@ -73,7 +73,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    utf8.decode(data.text.toString().codeUnits, allowMalformed: true),
+                    String.fromCharCodes(data.text.toString().codeUnits),
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),

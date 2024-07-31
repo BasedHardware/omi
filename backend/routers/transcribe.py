@@ -72,7 +72,7 @@ async def websocket_endpoint(
     await websocket.accept()
     transcript_socket2 = None
     try:
-        single_file_path, duration = get_speaker_audio_file(uid)
+        single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
         remove_downloaded_samples(uid)
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
