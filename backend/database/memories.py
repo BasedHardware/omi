@@ -4,7 +4,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 
 
-def upsert_memory(uid, memory_data):
+def upsert_memory(uid: str, memory_data: dict):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     memory_ref.set(memory_data)
@@ -50,3 +50,14 @@ def filter_memories_by_date(uid, start_date, end_date):
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     return [doc.to_dict() for doc in query.stream()]
+
+
+def get_memories_batch_operation():
+    batch = db.batch()
+    return batch
+
+
+def add_memory_to_batch(batch, uid, memory_data):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_data['id'])
+    batch.set(memory_ref, memory_data)

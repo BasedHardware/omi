@@ -82,18 +82,33 @@ class Structured(BaseModel):
         return result.strip()
 
 
+class Geolocation(BaseModel):
+    google_place_id: str
+    latitude: float
+    longitude: float
+    altitude: Optional[float] = None
+    accuracy: Optional[float] = None
+    address: str
+    location_type: str
+
+
 class Memory(BaseModel):
     id: str
     created_at: datetime
+    transcript: str
+    structured: Structured
+
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
-    transcript: str
+
     transcript_segments: List[TranscriptSegment] = []
-    photos: List[MemoryPhoto] = []
-    # recordingFilePath: Optional[str]
-    structured: Structured
     plugins_results: List[PluginResult] = []
-    discarded: bool
+    geolocation: Optional[Geolocation] = None
+
+    photos: List[MemoryPhoto] = []
+
+    discarded: bool = False
+    deleted: bool = False
 
     @staticmethod
     def memories_to_string(memories: List['Memory'], include_transcript: bool = False) -> str:

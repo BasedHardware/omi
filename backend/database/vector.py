@@ -4,6 +4,7 @@ from typing import List
 
 from pinecone import Pinecone
 
+from models.memory import Memory
 from utils.llm import embeddings
 
 if os.getenv('PINECONE_API_KEY') is not None:
@@ -13,15 +14,35 @@ else:
     index = None
 
 
-def upsert_vector(memory_id: str, vector: List[float], uid: str, content: str):
+def _get_data(uid: str, memory_id: str, vector: List[float], transcript: str, summary: str):
+    return {
+        "id": f'{uid}-{memory_id}',
+        "values": vector,
+        'metadata': {
+            'uid': uid,
+            'transcript': transcript,
+            'summary': summary,
+            'created_at': datetime.utcnow().timestamp() / 1000,
+        }
+    }
+
+
+def upsert_vector(uid: str, memory: Memory, vector: List[float]):
     res = index.upsert(
-        vectors=[{
-            "id": f'{uid}-{memory_id}',
-            "values": vector,
-            'metadata': {'uid': uid, 'content': content, 'created_at': datetime.utcnow().timestamp() / 1000}
-        }],
-        namespace="ns1"
+        vectors=[_get_data(uid, memory.id, vector, memory.transcript, memory.structured)], namespace="ns1"
     )
+    print('upsert_vector', res)
+
+
+def upsert_vectors(
+        uid: str, vectors: List[List[float]], memories: List[Memory]
+):
+    data = [
+        _get_data(uid, memory.id, vector, memory.transcript, str(memory.structured)) for memory, vector in
+        zip(memories, vectors)
+    ]
+    res = index.upsert(vectors=data, namespace="ns1")
+    print('upsert_vectors', res)
 
 
 def query_vectors(query: str, uid: str):
