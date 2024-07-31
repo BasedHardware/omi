@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:friend_private/backend/api_requests/api/memories.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -118,6 +119,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _migrationScripts() async {
     scriptMigrateMemoriesToBack();
+    getMemories();
     // scriptMemoryVectorsExecuted();
     // await migrateMemoriesToObjectBox();
     // _initiateMemories();
