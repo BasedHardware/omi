@@ -65,7 +65,7 @@ class Structured(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default='',
     )
-    emoji: Optional[str] = Field(description="An emoji to represent the memory", default='🧠')
+    emoji: str = Field(description="An emoji to represent the memory", default='🧠')
     category: CategoryEnum = Field(description="A category for this memory", default=CategoryEnum.other)
     action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
     events: List[Event] = Field(
