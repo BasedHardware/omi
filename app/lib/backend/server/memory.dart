@@ -1,8 +1,8 @@
-import 'package:friend_private/backend/server/photo.dart';
-import 'package:friend_private/backend/server/structured.dart';
-import 'package:friend_private/backend/server/transcript_segment.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
 
-class Memory {
+class ServerMemory {
   final String id;
   final DateTime createdAt;
   final String transcript;
@@ -10,13 +10,13 @@ class Memory {
   final DateTime? startedAt;
   final DateTime? finishedAt;
   final List<TranscriptSegment> transcriptSegments;
-  final List<PluginResult> pluginsResults;
+  final List<PluginResponse> pluginsResults;
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
   final bool discarded;
   final bool deleted;
 
-  Memory({
+  ServerMemory({
     required this.id,
     required this.createdAt,
     required this.transcript,
@@ -31,8 +31,8 @@ class Memory {
     this.deleted = false,
   });
 
-  factory Memory.fromJson(Map<String, dynamic> json) {
-    return Memory(
+  factory ServerMemory.fromJson(Map<String, dynamic> json) {
+    return ServerMemory(
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']),
       transcript: json['transcript'],
@@ -43,7 +43,7 @@ class Memory {
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
       pluginsResults:
-          ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => PluginResult.fromJson(result)).toList(),
+          ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => PluginResponse.fromJson(result)).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
@@ -65,74 +65,6 @@ class Memory {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-    };
-  }
-}
-
-class PluginResult {
-  final String? pluginId;
-  final String content;
-
-  PluginResult({
-    this.pluginId,
-    required this.content,
-  });
-
-  factory PluginResult.fromJson(Map<String, dynamic> json) {
-    return PluginResult(
-      pluginId: json['plugin_id'],
-      content: json['content'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'plugin_id': pluginId,
-      'content': content,
-    };
-  }
-}
-
-class Geolocation {
-  final String googlePlaceId;
-  final double latitude;
-  final double longitude;
-  final double? altitude;
-  final double? accuracy;
-  final String address;
-  final String locationType;
-
-  Geolocation({
-    required this.googlePlaceId,
-    required this.latitude,
-    required this.longitude,
-    this.altitude,
-    this.accuracy,
-    required this.address,
-    required this.locationType,
-  });
-
-  factory Geolocation.fromJson(Map<String, dynamic> json) {
-    return Geolocation(
-      googlePlaceId: json['google_place_id'],
-      latitude: json['latitude'],
-      longitude: json['longitude'],
-      altitude: json['altitude'],
-      accuracy: json['accuracy'],
-      address: json['address'],
-      locationType: json['location_type'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'google_place_id': googlePlaceId,
-      'latitude': latitude,
-      'longitude': longitude,
-      'altitude': altitude,
-      'accuracy': accuracy,
-      'address': address,
-      'location_type': locationType,
     };
   }
 }

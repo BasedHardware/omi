@@ -1,4 +1,5 @@
 import hashlib
+import random
 import threading
 import uuid
 from typing import Union
@@ -113,7 +114,7 @@ def _get_structured(memory: dict):
     return Structured(
         title=memory['structured']['title'],
         overview=memory['structured']['overview'],
-        emoji=emoji.encode('latin1').decode('utf-8') if emoji else None,
+        emoji=emoji.encode('latin1').decode('utf-8') if emoji else random.choice(['🧠', '🎉']),
         category=CategoryEnum[category],
         action_items=[
             ActionItem(description=description, completed=False) for description in
