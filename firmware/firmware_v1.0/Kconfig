@@ -1,5 +1,0 @@
-source "Kconfig.zephyr"
-
-config CODEC_OPUS
-    bool "Opus Audio Codec Support"
-    default n
