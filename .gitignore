@@ -91,9 +91,9 @@ backend/app-server/dist
 src/recordings
 
 # Apps
-apps/AppWithWearable/lib/firebase_options.dart
-apps/AppWithWearable/lib/firebase_options_*.dart
-apps/AppWithWearable/firebase.json
+/app/lib/firebase_options.dart
+/app/lib/firebase_options_*.dart
+/app/firebase.json
 
 # Solidworks models
 *.SLDPRT
@@ -119,12 +119,10 @@ env.g.dart
 docs/_site/
 .jekyll-metadata
 
-/apps/AppWithWearable/lib/env/dev_env.g.dart
-/apps/AppWithWearable/lib/env/prod_env.g.dart
-/apps/AppWithWearable/lib/objectbox.g.dart
+/app/lib/env/dev_env.g.dart
+/app/lib/env/prod_env.g.dart
+/app/lib/objectbox.g.dart
 *.jks
-/apps/AppWithWearable/lib/firebase_options.dart
-/apps/AppWithWearable/firebase.json
 plugins/example/tmp/
 
 backend/pretrained_models/
@@ -133,5 +131,6 @@ backend/pretrained_models/
 
 google-credentials.json
 
-
 startup-script.sh
+/app/lib/firebase_options_dev.dart
+/app/lib/firebase_options_prod.dart
