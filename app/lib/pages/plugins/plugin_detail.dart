@@ -147,7 +147,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      utf8.decode((widget.plugin.memoryPrompt ?? '').codeUnits),
+                      widget.plugin.memoryPrompt ?? '',
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -166,7 +166,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      utf8.decode((widget.plugin.chatPrompt!).codeUnits),
+                      widget.plugin.chatPrompt!,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
