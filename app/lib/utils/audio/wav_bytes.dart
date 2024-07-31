@@ -141,22 +141,22 @@ class WavBytesUtil {
   * */
 
   static clearTempWavFiles() async {
-    var file0 = File('${(await getDir()).path}/temp.wav');
-    if (file0.existsSync()) file0.deleteSync();
+    var dirs = [await getTemporaryDirectory(), await getApplicationDocumentsDirectory()];
+    for (var directory in dirs) {
+      var file0 = File('${(await getDir()).path}/temp.wav');
+      if (file0.existsSync()) file0.deleteSync();
 
-    final directory = await getApplicationDocumentsDirectory();
-    file0 = File('${directory.path}/temp.wav');
-    if (file0.existsSync()) file0.deleteSync();
-
-    if (directory.existsSync()) {
-      final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
-      for (var entity in entities) {
-        if (entity is File && entity.path.endsWith('.wav')) {
-          debugPrint('Removing file: ${entity.path}');
-          await entity.delete();
+      if (directory.existsSync()) {
+        final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
+        for (var entity in entities) {
+          if (entity is File && entity.path.endsWith('.wav')) {
+            debugPrint('Removing file: ${entity.path}');
+            await entity.delete();
+          }
         }
       }
     }
+
 
     // for (var i = 1; i < 10; i++) {
     //   var file = File('${directory.path}/temp$i.wav');
