@@ -1,7 +1,7 @@
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
@@ -101,7 +101,7 @@ class MixpanelManager {
     track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
   }
 
-  void pluginResultExpanded(Memory memory, String pluginId) {
+  void pluginResultExpanded(ServerMemory memory, String pluginId) {
     track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
   }
 
@@ -145,7 +145,7 @@ class MixpanelManager {
     };
   }
 
-  Map<String, dynamic> getMemoryEventProperties(Memory memory) {
+  Map<String, dynamic> getMemoryEventProperties(ServerMemory memory) {
     var properties = _getTranscriptProperties(memory.transcript);
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
@@ -154,23 +154,23 @@ class MixpanelManager {
     return properties;
   }
 
-  void memoryCreated(Memory memory) {
+  void memoryCreated(ServerMemory memory) {
     var properties = getMemoryEventProperties(memory);
     properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = memory.structured.target!.actionItems.length;
+    properties['action_items_count'] = memory.structured.actionItems.length;
     properties['transcript_language'] = _preferences.recordingsLanguage;
     track('Memory Created', properties: properties);
   }
 
-  void memoryListItemClicked(Memory memory, int idx) =>
+  void memoryListItemClicked(ServerMemory memory, int idx) =>
       track('Memory List Item Clicked', properties: getMemoryEventProperties(memory));
 
-  void memoryShareButtonClick(Memory memory) =>
+  void memoryShareButtonClick(ServerMemory memory) =>
       track('Memory Share Button Clicked', properties: getMemoryEventProperties(memory));
 
-  void memoryDeleted(Memory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
+  void memoryDeleted(ServerMemory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
 
-  void memoryEdited(Memory memory, {required String fieldEdited}) {
+  void memoryEdited(ServerMemory memory, {required String fieldEdited}) {
     var properties = getMemoryEventProperties(memory);
     properties['field_edited'] = fieldEdited;
     track('Memory Edited', properties: properties);
@@ -190,12 +190,12 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageMemoryClicked(Memory memory) =>
+  void chatMessageMemoryClicked(ServerMemory memory) =>
       track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
 
   void addManualMemoryClicked() => track('Add Manual Memory Clicked');
 
-  void manualMemoryCreated(Memory memory) =>
+  void manualMemoryCreated(ServerMemory memory) =>
       track('Manual Memory Created', properties: getMemoryEventProperties(memory));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
@@ -204,7 +204,7 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessMemory(Memory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
+  void reProcessMemory(ServerMemory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
   void backupsEnabled() {
     track('Backups Enabled');
@@ -242,7 +242,7 @@ class MixpanelManager {
 
   void joinDiscordClicked() => track('Join Discord Clicked');
 
-  void copiedMemoryDetails(Memory memory, {String source = ''}) =>
+  void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
