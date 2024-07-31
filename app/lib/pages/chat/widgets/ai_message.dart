@@ -5,7 +5,6 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 class AIMessage extends StatelessWidget {
@@ -77,7 +76,9 @@ class AIMessage extends StatelessWidget {
               message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
+                message.text.isEmpty
+                    ? '...'
+                    : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (message.id != 1) _getCopyButton(context),
@@ -91,8 +92,8 @@ class AIMessage extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () async {
                         MixpanelManager().chatMessageMemoryClicked(memory);
-                        await Navigator.of(context)
-                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
+                        // await Navigator.of(context)
+                        //     .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
                         // TODO: maybe refresh memories here too
                       },
                       child: Container(

@@ -10,6 +10,7 @@ import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -25,13 +26,13 @@ import 'maps_util.dart';
 
 List<Widget> getSummaryWidgets(
   BuildContext context,
-  Memory memory,
+  ServerMemory memory,
   TextEditingController overviewController,
   bool editingOverview,
   FocusNode focusOverviewField,
   StateSetter setState,
 ) {
-  var structured = memory.structured.target!;
+  var structured = memory.structured;
   String time = memory.startedAt == null
       ? dateTimeFormat('h:mm a', memory.createdAt)
       : '${dateTimeFormat('h:mm a', memory.startedAt)} to ${dateTimeFormat('h:mm a', memory.finishedAt)}';
@@ -71,7 +72,7 @@ List<Widget> getSummaryWidgets(
           ),
     memory.discarded
         ? const SizedBox.shrink()
-        : ((memory.geolocation.target != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
+        : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
@@ -94,7 +95,7 @@ List<Widget> getSummaryWidgets(
                       content: Text('Action items copied to clipboard'),
                       duration: Duration(seconds: 2),
                     ));
-                    MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
+                    // MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
                   },
                   icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
             ],
@@ -184,7 +185,7 @@ List<Widget> getSummaryWidgets(
   ];
 }
 
-_getEditTextField(Memory memory, TextEditingController controller, bool enabled, FocusNode focusNode) {
+_getEditTextField(ServerMemory memory, TextEditingController controller, bool enabled, FocusNode focusNode) {
   if (memory.discarded) return const SizedBox.shrink();
   return enabled
       ? TextField(
@@ -209,12 +210,12 @@ _getEditTextField(Memory memory, TextEditingController controller, bool enabled,
 
 List<Widget> getPluginsWidgets(
   BuildContext context,
-  Memory memory,
+  ServerMemory memory,
   List<Plugin> pluginsList,
   List<bool> pluginResponseExpanded,
   Function(int) onItemToggled,
 ) {
-  if (memory.pluginsResponse.isEmpty) {
+  if (memory.pluginsResults.isEmpty) {
     return [
       const SizedBox(height: 32),
       Text(
@@ -256,14 +257,14 @@ List<Widget> getPluginsWidgets(
   }
   return [
     // TODO: include a way to trigger specific plugins
-    if (memory.pluginsResponse.isNotEmpty && !memory.discarded) ...[
-      memory.structured.target!.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+    if (memory.pluginsResults.isNotEmpty && !memory.discarded) ...[
+      memory.structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
       Text(
         'Plugins 🧑‍💻',
         style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
       ),
       const SizedBox(height: 24),
-      ...memory.pluginsResponse.mapIndexed((i, pluginResponse) {
+      ...memory.pluginsResults.mapIndexed((i, pluginResponse) {
         if (pluginResponse.content.length < 5) return const SizedBox.shrink();
         Plugin? plugin = pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
         return Container(
@@ -305,7 +306,7 @@ List<Widget> getPluginsWidgets(
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text('Plugin response copied to clipboard'),
                           ));
-                          MixpanelManager().copiedMemoryDetails(memory, source: 'Plugin Response');
+                          // MixpanelManager().copiedMemoryDetails(memory, source: 'Plugin Response');
                         },
                       ),
                     )
@@ -315,7 +316,7 @@ List<Widget> getPluginsWidgets(
                 isExpanded: pluginResponseExpanded[i],
                 toggleExpand: () {
                   if (!pluginResponseExpanded[i]) {
-                    MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
+                    // MixpanelManager().pluginResultExpanded(memory, pluginResponse.pluginId ?? '');
                   }
                   onItemToggled(i);
                 },
@@ -333,8 +334,8 @@ List<Widget> getPluginsWidgets(
   ];
 }
 
-List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
-  return memory.geolocation.target == null || memory.discarded
+List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
+  return memory.geolocation == null || memory.discarded
       ? []
       : [
           Text(
@@ -343,21 +344,15 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
           ),
           const SizedBox(height: 8),
           Text(
-            '${memory.geolocation.target!.address}',
+            '${memory.geolocation!.address}',
             style: TextStyle(color: Colors.grey.shade300),
           ),
           const SizedBox(height: 8),
-          memory.geolocation.target != null
+          memory.geolocation != null
               ? GestureDetector(
                   onTap: () async {
                     // TODO: open google maps URL if available
-                    // if (await canLaunchUrl(
-                    //         Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!))) ==
-                    //     true) {
-                    //   await launchUrl(
-                    //       Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!)));
-                    // }
-                    MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                    MapsUtil.launchMap(memory.geolocation!.latitude!, memory.geolocation!.longitude!);
                   },
                   child: CachedNetworkImage(
                     imageBuilder: (context, imageProvider) {
@@ -374,8 +369,8 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
                       );
                     },
                     imageUrl: MapsUtil.getMapImageUrl(
-                      memory.geolocation.target!.latitude!,
-                      memory.geolocation.target!.longitude!,
+                      memory.geolocation!.latitude!,
+                      memory.geolocation!.longitude!,
                     ),
                   ),
                 )

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
@@ -8,7 +9,7 @@ import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
-  final List<Memory> memories;
+  final List<ServerMemory> memories;
   final Function refreshMemories;
   final FocusNode textFieldFocusNode;
 
@@ -43,30 +44,16 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
-  // void _onAddButtonPressed() {
-  //   MixpanelManager().addManualMemoryClicked();
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AddMemoryDialog(
-  //         onMemoryAdded: (Memory memory) {
-  //           widget.memories.insert(0, memory);
-  //           setState(() {});
-  //         },
-  //       );
-  //     },
-  //   );
-  // }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     var memories =
         displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
     memories = textController.text.isEmpty
         ? memories
         : memories
             .where(
-              (memory) => (memory.transcript + memory.structured.target!.title + memory.structured.target!.overview)
+              (memory) => (memory.transcript + memory.structured.title + memory.structured.overview)
                   .toLowerCase()
                   .contains(textController.text.toLowerCase()),
             )
@@ -146,13 +133,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // IconButton(
-                //     onPressed: _onAddButtonPressed,
-                //     icon: const Icon(
-                //       Icons.add_circle_outline,
-                //       size: 24,
-                //       color: Colors.white,
-                //     )),
                 const SizedBox(width: 1),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -196,7 +176,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 }
                 return MemoryListItem(
                   memoryIdx: index,
-                  memory: memoriesWithDates[index] as Memory,
+                  memory: memoriesWithDates[index] as ServerMemory,
                   loadMemories: widget.refreshMemories,
                 );
               },
