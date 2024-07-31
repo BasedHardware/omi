@@ -1,0 +1,6 @@
+/* Sort key: "!" */#include "../arch/common/rom_start_address.ld"
+/* Sort key: "$" */#include "../arch/common/fill_with_zeros.ld"
+/* Sort key: "0x0" */#include "../arch/common/rom_start_offset.ld"
+/* Sort key: "0x0vectors" */#include "../arch/arm/core/vector_table.ld"
+/* Sort key: "0x0vectors" */#include "zephyr/linker/irq-vector-table-section.ld"
+/* Sort key: "0x1vectors" */#include "../arch/arm/core/cortex_m/vector_table_pad.ld"

@@ -1,0 +1,24 @@
+mainmenu "Bubble Firmware"
+
+config BUBBLE_SOFT_BUTTON
+    bool "Enable soft mute button"
+    default y
+    help
+        Enable or disable soft mute button
+
+choice BUBBLE_CODEC
+    bool "Foo choice"
+    default BUBBLE_CODEC_OPUS
+
+config BUBBLE_CODEC_OPUS
+    bool "Opus Codec"
+
+config BUBBLE_CODEC_PCM
+    bool "PCM Codec"
+
+config BUBBLE_CODEC_MULAW
+    bool "Mu-law Codec"
+
+endchoice
+
+source "Kconfig.zephyr"
