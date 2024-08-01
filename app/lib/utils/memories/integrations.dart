@@ -1,5 +1,4 @@
 import 'package:friend_private/backend/api_requests/api/other.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -65,7 +64,7 @@ triggerMemoryCreatedEvents(
 triggerTranscriptSegmentReceivedEvents(
   List<TranscriptSegment> segments,
   String sessionId, {
-  Function(Message, Memory?)? sendMessageToChat,
+  Function(Message, ServerMemory?)? sendMessageToChat,
 }) async {
   webhookOnTranscriptReceivedCall(segments, sessionId).then((s) {
     if (s.isNotEmpty) createNotification(title: 'Developer: On Transcript Received', body: s, notificationId: 10);

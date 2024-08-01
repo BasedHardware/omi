@@ -4,12 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -175,10 +174,11 @@ class CapturePageState extends State<CapturePage>
     initiateWebsocket();
   }
 
-  void sendMessageToChat(Message message, Memory? memory) {
-    if (memory != null) message.memories.add(memory);
-    MessageProvider().saveMessage(message);
-    widget.refreshMessages();
+  void sendMessageToChat(Message message, ServerMemory? memory) {
+    // RESTORE ME
+    // if (memory != null) message.memories.add(memory);
+    // MessageProvider().saveMessage(message);
+    // widget.refreshMessages();
   }
 
   _createMemory({bool forcedCreation = false}) async {
@@ -196,7 +196,7 @@ class CapturePageState extends State<CapturePage>
         print(e);
       } // in case was a local recording and not a BLE recording
     }
-    Memory? memory = await processTranscriptContent(
+    ServerMemory? memory = await processTranscriptContent(
       context,
       TranscriptSegment.segmentsAsString(segments),
       segments,
@@ -210,7 +210,7 @@ class CapturePageState extends State<CapturePage>
     );
     debugPrint(memory.toString());
 
-    await widget.refreshMemories();
+    await widget.refreshMemories(); // TODO: append memory
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
