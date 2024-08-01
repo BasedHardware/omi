@@ -506,5 +506,21 @@
       "setup_instructions_file_path": ""
     },
     "deleted": false
+  },
+  {
+    "id": "emotional-supporter",
+    "name": "Emotional Supporter",
+    "author": "@discord",
+    "description": "Provides emotional support and guidance during conversations",
+    "image": "/plugins/logos/conversation-coach.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/emotional-support",
+      "setup_instructions_file_path": ""
+    },
+    "deleted": false
   }
 ]

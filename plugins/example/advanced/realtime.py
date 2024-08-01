@@ -4,7 +4,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
 
 from db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
-from models import TranscriptSegment, RealtimePluginRequest, EndpointResponse
+from models import RealtimePluginRequest, EndpointResponse, TranscriptSegment
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
@@ -70,3 +70,34 @@ def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
         remove_transcript(uid, data.session_id)
 
     return {'message': message}
+
+
+def emotional_support(conversation: list[dict]) -> str:
+    result = chat.invoke(f'''
+    You will be given a segment of an ongoing conversation.
+    Your task is to help the speakers as their emotionals supporter.
+    
+    Transcript:
+    {conversation}
+    
+    Please make sure that there's something valueable to say that will improve user's mood, otherwise output an empty string.
+    ''')
+    print('Output', result.content)
+    if len(result.content) < 5:
+        return ''
+    return result.content
+
+
+@router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
+def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
+    clean_all_transcripts_except(uid, data.session_id)
+    transcript: list[dict] = append_segment_to_transcript(uid, data.session_id, data.get_segments())
+    message = emotional_support(transcript)
+
+    if message:
+        # so that in the next call with already triggered stuff, it doesn't trigger again
+        remove_transcript(uid, data.session_id)
+
+    return {'message': message}
+
+# https://camel-lucky-reliably.ngrok-free.app
