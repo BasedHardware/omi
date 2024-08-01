@@ -17,16 +17,6 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
-Future<void> updatePineconeMemoryId(String memoryId, int newId) {
-  return pineconeApiCall(
-      urlSuffix: 'vectors/update',
-      body: jsonEncode({
-        'id': memoryId,
-        'setMetadata': {'memory_id': newId.toString()},
-        'namespace': Env.pineconeIndexNamespace,
-      }));
-}
-
 Future<bool> upsertPineconeVector(String memoryId, List<double> vectorList, DateTime createdAt) async {
   var body = jsonEncode({
     'vectors': [

@@ -79,6 +79,10 @@ class Structured(BaseModel):
             result += "Action Items:\n"
             for item in self.action_items:
                 result += f"- {item.description}\n"
+        if self.events:
+            result += "Events:\n"
+            for event in self.events:
+                result += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
         return result.strip()
 
 

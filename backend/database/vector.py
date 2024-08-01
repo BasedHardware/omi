@@ -20,8 +20,10 @@ def _get_data(uid: str, memory_id: str, vector: List[float], transcript: str, su
         "values": vector,
         'metadata': {
             'uid': uid,
+            'memory_id': memory_id,
             'transcript': transcript,
             'summary': summary,
+            # TODO: should store more raw fields? or any at all?
             'created_at': datetime.utcnow().timestamp() / 1000,
         }
     }
@@ -29,7 +31,7 @@ def _get_data(uid: str, memory_id: str, vector: List[float], transcript: str, su
 
 def upsert_vector(uid: str, memory: Memory, vector: List[float]):
     res = index.upsert(
-        vectors=[_get_data(uid, memory.id, vector, memory.transcript, memory.structured)], namespace="ns1"
+        vectors=[_get_data(uid, memory.id, vector, memory.get_transcript(), str(memory.structured))], namespace="ns1"
     )
     print('upsert_vector', res)
 

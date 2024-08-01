@@ -19,119 +19,6 @@ class SummaryResult {
   SummaryResult(this.structured, this.pluginsResponse);
 }
 
-Future<SummaryResult> summarizeMemory(
-  String transcript,
-  List<Memory> previousMemories, {
-  bool forceProcess = false,
-  bool ignoreCache = false,
-  DateTime? conversationDate,
-}) async {
-  debugPrint('summarizeMemory transcript length: ${transcript.length}');
-  if (transcript.isEmpty || transcript.split(' ').length < 7) {
-    return SummaryResult(Structured('', ''), []);
-  }
-  if (transcript.split(' ').length > 100) {
-    // TODO: try lower count?
-    forceProcess = true;
-  }
-
-  // TODO: try later with temperature 0
-  // NOTE: PROMPT IS VERY DELICATE, IT CAN DISCARD EVERYTHING IF NOT HANDLED PROPERLY
-  // The purpose for structuring this memory is to remember important conversations, decisions, and action items. If there's nothing like that in the transcript, output an empty title.
-
-  // TODO: Generate tags/topics relevant to better query?
-  // TODO: use name in any way?
-  // var extraStr = SharedPreferencesUtil().givenName.isEmpty ? '' : ' ${SharedPreferencesUtil().givenName}';
-  // Test and see if the action items say "name should do x thing" "speaker 0 should do y thing"
-
-  // Specify which speaker is responsible for each action item., to comment?
-  var prompt = '''Your task is to provide structure and clarity to the recording transcription of a conversation.
-    The conversation language is ${SharedPreferencesUtil().recordingsLanguage}. Use English for your response.
-
-    ${forceProcess ? "" : "It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items."}  
-    
-    For the title, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
-    For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
-    For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on ${(conversationDate ?? DateTime.now()).toIso8601String()}.
-        
-    Transcript: ```${transcript.trim()}```
-    
-    The output should be formatted as a JSON instance that conforms to the JSON schema below.
-    
-    As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
-    the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
-    
-    Here is the output schema:
-    ```
-    {"properties": {"title": {"title": "Title", "description": "A title/name for this conversation", "default": "", "type": "string"}, "overview": {"title": "Overview", "description": "A brief summary with the main topics discussed, make sure to capture the key details.", "default": "", "type": "string"}, "action_items": {"title": "Action Items", "description": "A list of action items from the conversation", "default": [], "type": "array", "items": {"type": "string"}}, "category": {"description": "A category for this memory", "default": "other", "allOf": [{"\$ref": "#/definitions/CategoryEnum"}]}, "emoji": {"title": "Emoji", "description": "An emoji to represent the memory", "default": "\ud83e\udde0", "type": "string"}, "events": {"title": "Events", "description": "A list of events extracted from the conversation, that the user must have on his calendar.", "default": [], "type": "array", "items": {"\$ref": "#/definitions/CalendarEvent"}}}, "definitions": {"CategoryEnum": {"title": "CategoryEnum", "description": "An enumeration.", "enum": ["personal", "education", "health", "finance", "legal", "phylosophy", "spiritual", "science", "entrepreneurship", "parenting", "romantic", "travel", "inspiration", "technology", "business", "social", "work", "other"], "type": "string"}, "CalendarEvent": {"title": "CalendarEvent", "type": "object", "properties": {"title": {"title": "Title", "description": "The title of the event", "type": "string"}, "description": {"title": "Description", "description": "A brief description of the event", "default": "", "type": "string"}, "startsAt": {"title": "Starts At", "description": "The start date and time of the event", "type": "string", "format": "date-time"}, "duration": {"title": "Duration", "description": "The duration of the event in minutes", "default": 30, "type": "integer"}}, "required": ["title", "startsAt"]}}}
-    ```
-    '''
-      .replaceAll('     ', '')
-      .replaceAll('    ', '')
-      .trim();
-  debugPrint(prompt);
-  var structuredResponse = extractJson(await executeGptPrompt(prompt, ignoreCache: ignoreCache));
-  var structured = Structured.fromJson(jsonDecode(structuredResponse));
-  if (structured.title.isEmpty) return SummaryResult(structured, []);
-  var pluginsResponse = await executePlugins(transcript);
-  return SummaryResult(structured, pluginsResponse);
-}
-
-Future<List<Tuple2<Plugin, String>>> executePlugins(String transcript) async {
-  final pluginsList = SharedPreferencesUtil().pluginsList;
-  final pluginsEnabled = SharedPreferencesUtil().pluginsEnabled;
-  final enabledPlugins = pluginsList.where((e) => pluginsEnabled.contains(e.id) && e.worksWithMemories()).toList();
-  // TODO: include memory details parsed already as extra context?
-  // TODO: improve plugin result, include result + id to map it to.
-  List<Future<Tuple2<Plugin, String>>> pluginPrompts = enabledPlugins.map(
-    (plugin) async {
-      try {
-        // TODO: tweak with user name in anyway?
-        String response = await executeGptPrompt('''
-        Your are an AI with the following characteristics:
-        Name: ${plugin.name}, 
-        Description: ${plugin.description},
-        Task: ${plugin.memoryPrompt}
-        
-        Note: It is possible that the conversation you are given, has nothing to do with your task, \
-        in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
-        
-        Conversation: ```${transcript.trim()}```,
-       
-        Output your response in plain text, without markdown.
-        Make sure to be concise and clear.
-        '''
-            .replaceAll('     ', '')
-            .replaceAll('    ', '')
-            .trim());
-        return Tuple2(plugin, response.replaceAll('```', '').replaceAll('""', '').trim());
-      } catch (e, stacktrace) {
-        CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-          'plugin': plugin.id,
-          'plugins_count': pluginsEnabled.length.toString(),
-          'transcript_length': transcript.length.toString(),
-        });
-        debugPrint('Error executing plugin ${plugin.id}');
-        return Tuple2(plugin, '');
-      }
-    },
-  ).toList();
-
-  Future<List<Tuple2<Plugin, String>>> allPluginResponses = Future.wait(pluginPrompts);
-  try {
-    var responses = await allPluginResponses;
-    return responses.where((e) => e.item2.length > 5).toList();
-  } catch (e, stacktrace) {
-    CrashReporting.reportHandledCrash(e, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-      'plugins_count': pluginsEnabled.length.toString(),
-      'transcript_length': transcript.length.toString(),
-    });
-    return [];
-  }
-}
-
 Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
   return await executeGptPrompt('''
         Your are an AI with the following characteristics:
@@ -355,6 +242,7 @@ Future<List<int>> determineImagesToKeep(List<Tuple2<Uint8List, String>> images) 
   return result['indices'];
 }
 
+// TODO: migrate openglass to backend
 Future<SummaryResult> summarizePhotos(List<Tuple2<String, String>> images) async {
   var prompt =
       '''The user took a series of pictures from his POV, and generated a description for each photo, and wants to create a memory from them.
