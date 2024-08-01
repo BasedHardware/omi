@@ -69,6 +69,7 @@ class LocationService {
         );
         return geolocation;
       } catch (e) {
+        print('getGeolocationDetails: $e');
         return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
       }
     } else {
