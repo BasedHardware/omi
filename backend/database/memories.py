@@ -61,3 +61,23 @@ def add_memory_to_batch(batch, uid, memory_data):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     batch.set(memory_ref, memory_data)
+
+
+def get_memories_by_id(uid, memory_ids):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = user_ref.collection('memories')
+
+    # Create a list of document references
+    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memory_ids]
+
+    # Get all documents in parallel
+    docs = db.get_all(doc_refs)
+
+    # Process the results
+    memories = []
+    for doc in docs:
+        if doc.exists:
+            memory = doc.to_dict()
+            memory['id'] = doc.id  # Add the document ID to the memory dict
+            memories.append(memory)
+    return memories
