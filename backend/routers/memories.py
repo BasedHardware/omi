@@ -68,6 +68,7 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
 def create_memory(create_memory: CreateMemory, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
     memory = _process_memory(uid, language_code, create_memory)
     results = trigger_external_integrations(uid, memory)  # TODO: include as part of plugin response
+    # TODO: include openglass photos as part of createMemory
     return CreateMemoryResponse(memory=memory, messages=results)
 
 
