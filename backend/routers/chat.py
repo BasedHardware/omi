@@ -5,54 +5,58 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 
 import database.chat as chat_db
-from models.chat import Message, SendMessageRequest
+from models.chat import Message, SendMessageRequest, MessageSender
 from utils import auth
 from utils.llm import qa_rag, initial_chat_message
-from utils.plugins import get_plugins_data
+from utils.plugins import get_plugin_by_id
 from utils.rag import retrieve_rag_context
 
 router = APIRouter()
 
 
+def filter_messages(messages, plugin_id):
+    print('filter_messages', len(messages), plugin_id)
+    collected = []
+    for message in messages:
+        if message.sender == MessageSender.ai and message.plugin_id != plugin_id:
+            break
+        collected.append(message)
+    print('filter_messages output:', len(collected))
+    return collected
+
+
 @router.post('/v1/messages', tags=['chat'], response_model=Message)
-def send_message(data: SendMessageRequest, uid: str = Depends(auth.get_current_user_uid)):
-    message = Message(
-        id=str(uuid.uuid4()),
-        text=data.text,
-        created_at=datetime.utcnow(),
-        sender='human',
-        plugin_id=None,
-        from_external_integration=False,
-        type='text',
-        memories=[],
-    )
+def send_message(
+        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.utcnow(), sender='human', type='text')
     chat_db.add_message(uid, message.dict())
 
-    # TODO: handle plugin selected and filter only for that plugin
+    plugin = get_plugin_by_id(plugin_id)
+    plugin_id = plugin.id if plugin else None
+
     messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
+    messages = filter_messages(messages, plugin_id)
+
     context_str, memories_id = retrieve_rag_context(uid, messages)
-    # print('context_str', context_str)
-    response: str = qa_rag(context_str, messages)
+    response: str = qa_rag(context_str, messages, plugin)
+
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=response,
         created_at=datetime.utcnow(),
         sender='ai',
-        plugin_id=None,
-        from_external_integration=False,
+        plugin_id=plugin_id,
         type='text',
-        memories=[],  # TODO: include sources used as memory.id reference
+        memories=[],
     )
-
+    # TODO: include sources used as memory.id reference
     chat_db.add_message(uid, ai_message.dict())
     return ai_message
 
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = None
-    if plugin_id:
-        plugins = get_plugins_data(uid)
-        plugin = next((p for p in plugins if p.id == plugin_id), None)
+    plugin = get_plugin_by_id(plugin_id)
 
     text = initial_chat_message(plugin)
     ai_message = Message(

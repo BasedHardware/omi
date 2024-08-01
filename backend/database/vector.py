@@ -7,14 +7,11 @@ from pinecone import Pinecone
 from models.memory import Memory
 from utils.llm import embeddings
 
-# if os.getenv('PINECONE_API_KEY') is not None:
-pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-print(pc.list_indexes())
-index = pc.Index(os.getenv('PINECONE_INDEX_NAME'))
-
-
-# else:
-#     index = None
+if os.getenv('PINECONE_API_KEY') is not None:
+    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
+    index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
+else:
+    index = None
 
 
 def _get_data(uid: str, memory_id: str, vector: List[float], transcript: str, summary: str):
@@ -55,10 +52,10 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
     if starts_at is not None:
         filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
 
-    print('filter_data', filter_data)
+    # print('filter_data', filter_data)
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=5, include_metadata=False, filter=filter_data, namespace="ns1")
-    print(xc)
+    # print(xc)
     return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
 
 
