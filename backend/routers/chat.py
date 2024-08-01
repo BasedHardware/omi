@@ -28,6 +28,7 @@ def send_message(data: SendMessageRequest, uid: str = Depends(auth.get_current_u
     )
     chat_db.add_message(uid, message.dict())
 
+    # TODO: handle plugin selected and filter only for that plugin
     messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
     context_str, memories_id = retrieve_rag_context(uid, messages)
     # print('context_str', context_str)
