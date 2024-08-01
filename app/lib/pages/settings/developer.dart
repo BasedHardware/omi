@@ -199,62 +199,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             },
                     )
                   : const SizedBox(),
-              SharedPreferencesUtil().devModeEnabled
-                  ? ListTile(
-                      title: const Text('Import Memories'),
-                      subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                      contentPadding: EdgeInsets.zero,
-                      trailing: loadingImportMemories
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.download),
-                      onTap: () async {
-                        if (loadingImportMemories) return;
-                        setState(() => loadingImportMemories = true);
-                        // open file picker
-                        var file = await FilePicker.platform.pickFiles(
-                          type: FileType.custom,
-                          allowedExtensions: ['json'],
-                        );
-                        MixpanelManager().importMemories();
-                        if (file == null) {
-                          setState(() => loadingImportMemories = false);
-                          return;
-                        }
-                        var xFile = file.files.first.xFile;
-                        try {
-                          var content = (await xFile.readAsString());
-                          var decoded = jsonDecode(content);
-                          List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
-                          MemoryProvider().storeMemories(memories);
-                          for (var i = 0; i < memories.length; i++) {
-                            var memory = memories[i];
-                            if (memory.structured.target == null || memory.discarded) continue;
-                            var f = getEmbeddingsFromInput(memory.structured.target.toString()).then((vector) {
-                              upsertPineconeVector(memory.id.toString(), vector, memory.createdAt);
-                            });
-                            if (i % 10 == 0) {
-                              await f; // "wait" for previous 10 requests to finish
-                              await Future.delayed(const Duration(seconds: 1));
-                              debugPrint('Processing Memory: $i');
-                            }
-                          }
-                          _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                          MixpanelManager().importedMemories();
-                        } catch (e) {
-                          debugPrint(e.toString());
-                          _snackBar('Make sure the file is a valid JSON file.');
-                        }
-                        setState(() => loadingImportMemories = false);
-                      },
-                    )
-                  : Container(),
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
