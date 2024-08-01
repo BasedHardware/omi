@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends
 import database.chat as chat_db
 from models.chat import Message, SendMessageRequest
 from utils import auth
-from utils.llm import ask_agent
+from utils.llm import qa_rag_prompt
+from utils.rag import retrieve_rag_context
 
 router = APIRouter()
 
 
-@router.post('/v1/messages', tags=['chat'])
+@router.post('/v1/messages', tags=['chat'], response_model=Message)
 async def send_message(data: SendMessageRequest, uid: str = Depends(auth.get_current_user_uid)):
     message = Message(
         id=str(uuid.uuid4()),
@@ -24,25 +25,27 @@ async def send_message(data: SendMessageRequest, uid: str = Depends(auth.get_cur
         type='text',
         memories=[],
     )
-    messages = [Message(**msg) for msg in chat_db.get_messages(uid)]
     chat_db.add_message(uid, message.dict())
 
-    # TODO: how to store the streamed response when completed?
-    response: str = ask_agent(data.text, messages)
-    if response:
-        chat_db.add_message(uid, Message(
-            id=str(uuid.uuid4()),
-            text=response,
-            created_at=datetime.utcnow(),
-            sender='ai',
-            plugin_id=None,
-            from_external_integration=False,
-            type='text',
-            memories=[],  # TODO: include sources used
-        ).dict())
-    return {}
+    messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
+    context_str, memories_id = retrieve_rag_context(uid, messages)
+    # print('context_str', context_str)
+    response: str = qa_rag_prompt(context_str, messages)
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=response,
+        created_at=datetime.utcnow(),
+        sender='ai',
+        plugin_id=None,
+        from_external_integration=False,
+        type='text',
+        memories=[],  # TODO: include sources used as memory.id reference
+    )
+
+    chat_db.add_message(uid, ai_message.dict())
+    return ai_message
 
 
-@router.get('/messages', response_model=List[Message], tags=['chat'])
+@router.get('/v1/messages', response_model=List[Message], tags=['chat'])
 def get_messages(uid: str = Depends(auth.get_current_user_uid)):
     return chat_db.get_messages(uid)

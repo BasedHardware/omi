@@ -35,18 +35,6 @@ Future<List<dynamic>> retrieveRAGContext(String message, {String? prevMessagesPl
     debugPrint('queryPineconeVectors memories from dates: ${memories.length}');
   }
 
-  // String context = '';
-  // for (var memory in memories) {
-  //   String transcript = memory.transcript;
-  //   if (transcript.split(' ').length > 2000) {
-  //     transcript = transcript.substring(0, 2000); // SHORTER GPT VERSION
-  //   }
-  //   context += '''
-  //     ${memory.createdAt.toIso8601String().split('.')[0]}
-  //     Transcript: $transcript
-  //     ''';
-  // }
-
   return [Memory.memoriesToString(memories), memories];
 }
 
