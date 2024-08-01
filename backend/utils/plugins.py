@@ -1,12 +1,19 @@
 import threading
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import requests
 
 from models.memory import Memory
 from models.plugin import Plugin
 from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
+
+
+def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
+    if not plugin_id:
+        return None
+    plugins = get_plugins_data('', include_reviews=False)
+    return next((p for p in plugins if p.id == plugin_id), None)
 
 
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:

@@ -306,8 +306,8 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     {context}
     ```
     Answer:
-    """
-
+    """.replace('    ', '').strip()
+    print(prompt)
     return llm.invoke(prompt).content
 
 

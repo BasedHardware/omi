@@ -22,7 +22,7 @@ class Message(BaseModel):
     text: str
     created_at: datetime
     sender: MessageSender
-    plugin_id: Optional[str]
+    plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
     memories: List[Memory] = []  # TODO: should be a smaller version of memory, id + title
