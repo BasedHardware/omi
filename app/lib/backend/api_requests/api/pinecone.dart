@@ -17,26 +17,6 @@ Future<dynamic> pineconeApiCall({required String urlSuffix, required String body
   return responseBody;
 }
 
-Future<bool> upsertPineconeVector(String memoryId, List<double> vectorList, DateTime createdAt) async {
-  var body = jsonEncode({
-    'vectors': [
-      {
-        'id': '${SharedPreferencesUtil().uid}-$memoryId',
-        'values': vectorList,
-        'metadata': {
-          'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
-          'memory_id': memoryId,
-          'uid': SharedPreferencesUtil().uid,
-        }
-      }
-    ],
-    'namespace': Env.pineconeIndexNamespace
-  });
-  var responseBody = await pineconeApiCall(urlSuffix: 'vectors/upsert', body: body);
-  debugPrint('upsertPineconeVector response: $responseBody');
-  return (responseBody['upserted_count'] ?? 0) > 0;
-}
-
 /// Queries Pinecone vectors and optionally filters results based on a date range.
 /// The startTimestamp and endTimestamp should be provided as UNIX epoch timestamps in seconds.
 /// For example: 1622520000 represents Jun 01 2021 10:00:00 UTC.
