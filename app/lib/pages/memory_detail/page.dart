@@ -7,6 +7,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
@@ -210,18 +211,23 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   _reProcessMemory(
-      BuildContext context, StateSetter setModalState, ServerMemory memory, Function changeLoadingState) async {
-    // Memory? newMemory = await reProcessMemory(
-    //   context,
-    //   memory,
-    //   () => ScaffoldMessenger.of(context)
-    //       .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
-    //   changeLoadingState,
-    // );
-    //
-    // pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);
-    // overviewController.text = newMemory!.structured.overview;
-    // titleController.text = newMemory.structured.title;
+    BuildContext context,
+    StateSetter setModalState,
+    ServerMemory memory,
+    Function changeLoadingState,
+  ) async {
+    ServerMemory? newMemory = await reProcessMemory(
+      context,
+      memory,
+      () => ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
+      changeLoadingState,
+    );
+    if (newMemory == null) return; // TODO: handle error
+
+    pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
+    overviewController.text = newMemory.structured.overview;
+    titleController.text = newMemory.structured.title;
     // RESTORE ME
 
     ScaffoldMessenger.of(context).showSnackBar(

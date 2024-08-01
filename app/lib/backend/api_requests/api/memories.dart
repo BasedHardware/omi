@@ -35,6 +35,7 @@ Future<ServerMemory?> createMemoryServer({
 }
 
 Future<List<ServerMemory>> getMemories() async {
+  // TODO: Add pagination
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/memories', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   debugPrint('getMemories: ${response.body}');
@@ -44,4 +45,19 @@ Future<List<ServerMemory>> getMemories() async {
     return memories;
   }
   return [];
+}
+
+Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess?language_code=${SharedPreferencesUtil().recordingsLanguage}',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getMemories: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerMemory.fromJson(jsonDecode(response.body));
+  }
+  return null;
 }

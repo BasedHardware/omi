@@ -84,7 +84,7 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     '''
 
     response = llm.invoke(prompt)
-    content = response.content.replace('```', '')
+    content = response.content.replace('```json', '').replace('```', '')
     if len(content) < 5:
         return ''
     return content
