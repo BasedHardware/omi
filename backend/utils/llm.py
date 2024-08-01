@@ -234,9 +234,9 @@ def ask_agent(message: str, messages: List[Message]):
     return output['output']
 
 
-# ****************************************************
-# ************* CHAT CURRENT BACK LOGIC **************
-# ****************************************************
+# ***************************************************
+# ************* CHAT CURRENT APP LOGIC **************
+# ***************************************************
 
 
 class ContextOutput(BaseModel):
@@ -284,7 +284,7 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
         return None
 
 
-def qa_rag_prompt(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -308,4 +308,33 @@ def qa_rag_prompt(context: str, messages: List[Message], plugin: Optional[Plugin
     Answer:
     """
 
+    return llm.invoke(prompt).content
+
+
+def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
+    if plugin is None:
+        prompt = '''
+        You are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    else:
+        prompt = f'''
+        You are an AI with the following characteristics:
+        Name: {plugin.name}, 
+        Personality/Description: {plugin.chat_prompt},
+        Task: {plugin.memory_prompt}
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    prompt = prompt.replace('    ', '').strip()
     return llm.invoke(prompt).content
