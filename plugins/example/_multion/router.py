@@ -42,7 +42,8 @@ def call_multion(books: List[str]):
     return response.message
 
 
-print(call_multion(['Cracking the code',]))
+print(call_multion(['Cracking the code', ]))
+
 
 # **************************************************
 # ************ On Memory Created Plugin ************
