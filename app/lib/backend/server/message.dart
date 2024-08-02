@@ -2,6 +2,33 @@ enum MessageSender { ai, human }
 
 enum MessageType { text, daySummary }
 
+class MessageMemoryStructured {
+  String title;
+  String emoji;
+
+  MessageMemoryStructured(this.title, this.emoji);
+
+  static MessageMemoryStructured fromJson(Map<String, dynamic> json) {
+    return MessageMemoryStructured(json['title'], json['emoji']);
+  }
+}
+
+class MessageMemory {
+  String id;
+  DateTime createdAt;
+  MessageMemoryStructured structured;
+
+  MessageMemory(this.id, this.createdAt, this.structured);
+
+  static MessageMemory fromJson(Map<String, dynamic> json) {
+    return MessageMemory(
+      json['id'],
+      DateTime.parse(json['created_at']),
+      MessageMemoryStructured.fromJson(json['structured']),
+    );
+  }
+}
+
 class ServerMessage {
   String id;
   DateTime createdAt;
@@ -12,7 +39,7 @@ class ServerMessage {
   String? pluginId;
   bool fromIntegration;
 
-  // List<String> memoriesId;
+  List<MessageMemory> memories;
 
   ServerMessage(
     this.id,
@@ -22,7 +49,7 @@ class ServerMessage {
     this.type,
     this.pluginId,
     this.fromIntegration,
-    // this.memoriesId = const [],
+    this.memories,
   );
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -34,7 +61,7 @@ class ServerMessage {
       MessageType.values.firstWhere((e) => e.toString().split('.').last == json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
-      // json['memories_id'].cast<String>(),
+      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),
     );
   }
 }

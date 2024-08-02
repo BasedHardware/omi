@@ -8,12 +8,14 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/backend/server/message.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:tuple/tuple.dart';
 
 Future<CreateMemoryResponse?> createMemoryServer({
   required DateTime startedAt,
   required DateTime finishedAt,
   required List<TranscriptSegment> transcriptSegments,
   Geolocation? geolocation,
+  List<Tuple2<String, String>> photos = const [],
 }) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories?language_code=${SharedPreferencesUtil().recordingsLanguage}',
@@ -24,6 +26,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
       'finished_at': finishedAt.toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
+      'photos': photos.map((photo) => {'base63': photo.item1, 'description': photo.item2}).toList(),
     }),
   );
   if (response == null) return null; // TODO: if fails should tell, do something

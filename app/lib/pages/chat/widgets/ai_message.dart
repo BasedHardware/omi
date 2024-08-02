@@ -1,7 +1,8 @@
+import 'dart:convert';
+
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/server/message.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -10,7 +11,6 @@ class AIMessage extends StatelessWidget {
   final ServerMessage message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final List<Memory> memories;
   final Plugin? pluginSender;
 
   const AIMessage({
@@ -18,12 +18,12 @@ class AIMessage extends StatelessWidget {
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    required this.memories,
     this.pluginSender,
   });
 
   @override
   Widget build(BuildContext context) {
+    var messageMemories = message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories;
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,15 +77,16 @@ class AIMessage extends StatelessWidget {
                   child: AutoSizeText(
                 message.text.isEmpty
                     ? '...'
-                    : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
+                    // : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
+                    : utf8.decode(message.text.codeUnits),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              if (message.id != 1) _getCopyButton(context),
-              if (message.id == 1 && displayOptions) const SizedBox(height: 8),
-              if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
-              if (memories.isNotEmpty) ...[
+              if (message.id != 1) _getCopyButton(context), // RESTORE ME
+              // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
+              // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
+              if (messageMemories.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                for (var memory in (memories.length > 3 ? memories.sublist(0, 3) : memories)) ...[
+                for (var memory in messageMemories) ...[
                   Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
@@ -107,7 +108,7 @@ class AIMessage extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                memory.structured.target!.title,
+                                memory.structured.title,
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

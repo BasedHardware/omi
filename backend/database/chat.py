@@ -4,6 +4,7 @@ from ._client import db
 
 
 def add_message(uid: str, message_data: dict):
+    del message_data['memories']
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
     return message_data
