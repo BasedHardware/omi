@@ -24,15 +24,18 @@ Future<ServerMemory?> processTranscriptContent(
   if (transcript.isEmpty && photos.isEmpty) return null;
   // TODO: handle connection errors, or anything
   // store locally first, with a flag of send to server once the app connects again to the internet.
-  ServerMemory? memory = await createMemoryServer(
+  CreateMemoryResponse? result = await createMemoryServer(
     startedAt: startedAt ?? DateTime.now(),
     finishedAt: finishedAt ?? DateTime.now(),
     transcriptSegments: transcriptSegments,
     geolocation: geolocation,
   );
-  // TODO: include photos
+  if (result == null) return null;
+  ServerMemory? memory = result.memory;
+  if (memory == null) return null;
 
-  if (memory != null) triggerMemoryCreatedEvents(memory, sendMessageToChat: sendMessageToChat);
+  // TODO: include photos
+  triggerMemoryCreatedEvents(memory);
+  // TODO: use result.messages to add them to the chat manually
   return memory;
-  return null;
 }

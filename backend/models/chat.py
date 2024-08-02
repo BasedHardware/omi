@@ -4,8 +4,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from models.memory import Memory
-
 
 class MessageSender(str, Enum):
     ai = 'ai'
@@ -14,7 +12,7 @@ class MessageSender(str, Enum):
 
 class MessageType(str, Enum):
     text = 'text'
-    daySummary = 'daySummary'
+    day_summary = 'day_summary'
 
 
 class Message(BaseModel):
@@ -25,7 +23,8 @@ class Message(BaseModel):
     plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
-    memories: List[Memory] = []  # TODO: should be a smaller version of memory, id + title
+
+    # memories: List[Memory] = []  # TODO: should be a smaller version of memory, id + title
 
     @staticmethod
     def get_messages_as_string(

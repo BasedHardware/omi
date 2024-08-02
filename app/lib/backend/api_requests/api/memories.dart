@@ -6,9 +6,10 @@ import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/backend/server/message.dart';
 import 'package:friend_private/env/env.dart';
 
-Future<ServerMemory?> createMemoryServer({
+Future<CreateMemoryResponse?> createMemoryServer({
   required DateTime startedAt,
   required DateTime finishedAt,
   required List<TranscriptSegment> transcriptSegments,
@@ -28,8 +29,7 @@ Future<ServerMemory?> createMemoryServer({
   if (response == null) return null; // TODO: if fails should tell, do something
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
-    print(jsonDecode(response.body)['messages']); // RESTORE ME
-    return ServerMemory.fromJson(jsonDecode(response.body)['memory']);
+    return CreateMemoryResponse.fromJson(jsonDecode(response.body));
   }
   return null;
 }
@@ -60,4 +60,34 @@ Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
     return ServerMemory.fromJson(jsonDecode(response.body));
   }
   return null;
+}
+
+Future<List<ServerMessage>> getMessagesServer() async {
+  // TODO: Add pagination
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'GET', body: '');
+  if (response == null) return [];
+  debugPrint('getMessages: ${response.body}');
+  if (response.statusCode == 200) {
+    var messages =
+        (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMessage.fromJson(memory)).toList();
+    debugPrint('getMessages length: ${messages.length}');
+    return messages;
+  }
+  return [];
+}
+
+Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
+  return makeApiCall(
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'text': text}),
+  ).then((response) {
+    if (response == null) throw Exception('Failed to send message');
+    if (response.statusCode == 200) {
+      return ServerMessage.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to send message');
+    }
+  });
 }

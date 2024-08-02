@@ -6,6 +6,7 @@ from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
+import database.chat as chat_db
 import database.memories as memories_db
 from database.vector import upsert_vector, delete_vector, upsert_vectors
 from models.memory import *
@@ -64,12 +65,34 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
     return memory
 
 
+def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str):
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.utcnow(),
+        sender='ai',
+        plugin_id=plugin_id,
+        from_external_integration=False,
+        type='text',
+        memories=[],
+    )
+    chat_db.add_message(uid, ai_message.dict())
+    return ai_message  # TODO: include memory id
+
+
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(create_memory: CreateMemory, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
     memory = _process_memory(uid, language_code, create_memory)
-    results = trigger_external_integrations(uid, memory)  # TODO: include as part of plugin response
+    results = trigger_external_integrations(uid, memory)
+
+    messages = []
+    for key, message in results.items():
+        if not message:  # TODO: test
+            continue
+        messages.append(add_integration_as_chat_messages(message, key, uid))
+
     # TODO: include openglass photos as part of createMemory
-    return CreateMemoryResponse(memory=memory, messages=results)
+    return CreateMemoryResponse(memory=memory, messages=messages)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
