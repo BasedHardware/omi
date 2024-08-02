@@ -1,5 +1,6 @@
-from fastapi import HTTPException, APIRouter
+from fastapi import HTTPException, APIRouter, Depends
 
+from utils import auth
 from utils.storage import upload_user_backup, retrieve_user_backup, delete_backup_storage
 
 router = APIRouter()
@@ -28,7 +29,7 @@ def delete_backup(uid: str):
 
 
 @router.post('/v1/backups', tags=['v1'])
-def backup(data: dict, uid: str):  # Depends(auth.get_current_user_uid)
+def backup(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     try:
         data: str = data['data']
         if data == '':
@@ -39,11 +40,11 @@ def backup(data: dict, uid: str):  # Depends(auth.get_current_user_uid)
 
 
 @router.get('/v1/backups', tags=['v1'])
-def get_backup(uid: str):  # Depends(auth.get_current_user_uid)
+def get_backup(uid: str = Depends(auth.get_current_user_uid)):
     return {'data': retrieve_user_backup(uid)}
 
 
 @router.delete('/v1/backups', tags=['v1'])
-def delete_backup(uid: str):  # = Depends(auth.get_current_user_uid)
+def delete_backup(uid: str = Depends(auth.get_current_user_uid)):
     delete_backup_storage(uid)
     return 'ok'
