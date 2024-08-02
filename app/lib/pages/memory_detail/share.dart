@@ -20,7 +20,7 @@ void _copyTranscript(BuildContext context, ServerMemory memory) {
 }
 
 void _copySummary(BuildContext context, ServerMemory memory) {
-  final summary = memory.structured.toString(); // RESTORE ME
+  final summary = memory.structured.toString();
   Clipboard.setData(ClipboardData(text: summary));
   HapticFeedback.lightImpact();
 
