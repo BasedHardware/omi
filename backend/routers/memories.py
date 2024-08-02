@@ -104,6 +104,7 @@ def reprocess_memory(memory_id: str, language_code: str, uid: str = Depends(auth
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
+    # TODO: should trigger integrations?
     return _process_memory(uid, language_code, memory, force_process=True)
 
 

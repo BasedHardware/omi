@@ -76,9 +76,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             itemCount: widget.messages.length,
             itemBuilder: (context, chatIndex) {
               final message = widget.messages[chatIndex];
-              final isLastMessage = chatIndex == widget.messages.length - 1;
-              double topPadding = chatIndex == 0 ? 24 : 16;
-              double bottomPadding = isLastMessage ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
+              double topPadding = chatIndex == widget.messages.length - 1 ? 24 : 16;
+              double bottomPadding = chatIndex == 0 ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
               return Padding(
                 key: ValueKey(message.id),
                 padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
@@ -87,8 +86,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         message: message,
                         sendMessage: _sendMessageUtil,
                         displayOptions: widget.messages.length <= 1,
-                        // memories: message.memories,
-                        memories: [],
                         pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
                       )
                     : HumanMessage(message: message),
@@ -172,19 +169,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         ? null
         : SharedPreferencesUtil().selectedChatPluginId;
     widget.addMessage(
-      ServerMessage(
-        const Uuid().v4(),
-        DateTime.now(),
-        message,
-        MessageSender.human,
-        MessageType.text,
-        null,
-        false,
-      ),
+      ServerMessage(const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, null, false, []),
     );
+    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
     textController.clear();
     ServerMessage aiMessage = await sendMessageServer(message, pluginId: pluginId);
-    print('aiMessage: ${aiMessage.id}: ${aiMessage.text}');
+    // TODO: restore streaming capabilities, with initial empty message
+    debugPrint('aiMessage: ${aiMessage.id}: ${aiMessage.text}');
     widget.addMessage(aiMessage);
     _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
     changeLoadingState();
@@ -192,8 +183,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   sendInitialPluginMessage(Plugin? plugin) async {
     changeLoadingState();
+    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
     ServerMessage message = await getInitialPluginMessage(plugin?.id);
     widget.addMessage(message);
+    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
     changeLoadingState();
   }
 

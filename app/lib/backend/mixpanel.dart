@@ -1,5 +1,4 @@
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/env/env.dart';
@@ -38,7 +37,7 @@ class MixpanelManager {
 
     setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
     setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
-    setUserProperty('Messages Count', MessageProvider().getMessagesCount());
+    // setUserProperty('Messages Count', MessageProvider().getMessagesCount());
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
