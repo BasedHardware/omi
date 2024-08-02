@@ -65,6 +65,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
+  bool loadingNewMemories = false;
 
   _initiateMemories() async {
     memories = await getMemories();
@@ -274,6 +275,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         memoriesCopy.removeAt(index);
                         setState(() => memories = memoriesCopy);
                       },
+                      loadMoreMemories: () async {
+                        if (memories.length % 50 != 0) return;
+                        if (loadingNewMemories) return;
+                        setState(() => loadingNewMemories = true);
+                        var newMemories = await getMemories(offset: memories.length);
+                        memories.addAll(newMemories);
+                        loadingNewMemories = false;
+                        setState(() {});
+                      },
+                      loadingNewMemories: loadingNewMemories,
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
