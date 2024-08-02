@@ -30,7 +30,7 @@ class ServerMemory {
   final List<PluginResponse> pluginsResults;
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
-  final bool discarded;
+  bool discarded;
   final bool deleted;
 
   ServerMemory({

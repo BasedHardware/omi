@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
@@ -10,13 +9,13 @@ import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
   final List<ServerMemory> memories;
-  final Function refreshMemories;
+  final Function(ServerMemory, int) updateMemory;
   final FocusNode textFieldFocusNode;
 
   const MemoriesPage({
     super.key,
     required this.memories,
-    required this.refreshMemories,
+    required this.updateMemory,
     required this.textFieldFocusNode,
   });
 
@@ -177,7 +176,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 return MemoryListItem(
                   memoryIdx: index,
                   memory: memoriesWithDates[index] as ServerMemory,
-                  loadMemories: widget.refreshMemories,
+                  updateMemory: widget.updateMemory,
                 );
               },
               childCount: memoriesWithDates.length,

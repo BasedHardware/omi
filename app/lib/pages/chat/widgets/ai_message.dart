@@ -108,7 +108,7 @@ class AIMessage extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                memory.structured.title,
+                                '${utf8.decode(memory.structured.emoji.codeUnits)} ${memory.structured.title}',
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

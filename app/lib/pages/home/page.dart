@@ -263,7 +263,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   children: [
                     MemoriesPage(
                       memories: memories,
-                      refreshMemories: _initiateMemories,
+                      updateMemory: (ServerMemory memory, int index) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        memoriesCopy[index] = memory;
+                        setState(() => memories = memoriesCopy);
+                      },
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
