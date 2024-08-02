@@ -91,3 +91,19 @@ Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
     }
   });
 }
+
+Future<ServerMessage> getInitialPluginMessage(String? pluginId) {
+  return makeApiCall(
+    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$pluginId',
+    headers: {},
+    method: 'POST',
+    body: '',
+  ).then((response) {
+    if (response == null) throw Exception('Failed to send message');
+    if (response.statusCode == 200) {
+      return ServerMessage.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to send message');
+    }
+  });
+}
