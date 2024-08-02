@@ -14,7 +14,7 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from routers.plugins import get_plugins_data
 from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result
+from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
@@ -23,7 +23,11 @@ router = APIRouter()
 def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
     transcript = memory.get_transcript()
 
-    structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+    if memory.photos:
+        structured: Structured = summarize_open_glass(memory.photos)
+    else:
+        structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+
     discarded = structured.title == ''
 
     if isinstance(memory, CreateMemory):
@@ -65,7 +69,7 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
     return memory
 
 
-def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str):
+def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str, memory_id: str):
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
@@ -74,10 +78,10 @@ def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str):
         plugin_id=plugin_id,
         from_external_integration=False,
         type='text',
-        memories=[],
+        memories_id=[memory_id],
     )
     chat_db.add_message(uid, ai_message.dict())
-    return ai_message  # TODO: include memory id
+    return ai_message
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -87,11 +91,10 @@ def create_memory(create_memory: CreateMemory, language_code: str, uid: str = De
 
     messages = []
     for key, message in results.items():
-        if not message:  # TODO: test
+        if not message:
             continue
-        messages.append(add_integration_as_chat_messages(message, key, uid))
+        messages.append(add_integration_as_chat_messages(message, key, uid, memory.id))
 
-    # TODO: include openglass photos as part of createMemory
     return CreateMemoryResponse(memory=memory, messages=messages)
 
 
@@ -242,3 +245,26 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
     db_batch.commit()
     threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
     return {}
+
+# Future<String> dailySummaryNotifications(List<Memory> memories) async {
+#   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
+#   if (memories.isEmpty) return msg;
+#   if (memories.where((m) => !m.discarded).length <= 1) return msg;
+#   var str = SharedPreferencesUtil().givenName.isEmpty ? 'the user' : SharedPreferencesUtil().givenName;
+#   var prompt = '''
+#   The following are a list of $str\'s memories from today, with the transcripts with its respective structuring, that $str had during his day.
+#   $str wants to get a summary of the key action items he has to take based on his today's memories.
+#
+#   Remember $str is busy so this has to be very efficient and concise.
+#   Respond in at most 50 words.
+#
+#   Output your response in plain text, without markdown.
+#   ```
+#   ${Memory.memoriesToString(memories, includeTranscript: true)}
+#   ```
+#   ''';
+#   debugPrint(prompt);
+#   var result = await executeGptPrompt(prompt);
+#   debugPrint('dailySummaryNotifications result: $result');
+#   return result.replaceAll('```', '').trim();
+# }

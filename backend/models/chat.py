@@ -15,6 +15,17 @@ class MessageType(str, Enum):
     day_summary = 'day_summary'
 
 
+class MessageMemoryStructured(BaseModel):
+    title: str
+    emoji: str
+
+
+class MessageMemory(BaseModel):
+    id: str
+    structured: MessageMemoryStructured
+    created_at: datetime
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -23,8 +34,8 @@ class Message(BaseModel):
     plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
-
-    # memories: List[Memory] = []  # TODO: should be a smaller version of memory, id + title
+    memories_id: List[str] = []  # used in db
+    memories: List[MessageMemory] = []  # used front facing
 
     @staticmethod
     def get_messages_as_string(

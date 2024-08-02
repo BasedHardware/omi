@@ -45,44 +45,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
-  // _initDailySummary() {
-  //   Timer.periodic(const Duration(seconds: 1), (timer) async {
-  //     var now = DateTime.now();
-  //     if (now.hour < 20) return;
-  //     // TODO: maybe a better way to optimize this. is it better to do on build state?
-  //     debugPrint('now: $now');
-  //     if (SharedPreferencesUtil().lastDailySummaryDay != '') {
-  //       var secondsFrom8pm = now.difference(DateTime(now.year, now.month, now.day, 20)).inSeconds;
-  //       var at = DateTime.parse(SharedPreferencesUtil().lastDailySummaryDay);
-  //       var secondsFromLast = now.difference(at).inSeconds;
-  //       debugPrint('secondsFrom8pm: $secondsFrom8pm');
-  //       debugPrint('secondsFromLast: $secondsFromLast');
-  //       if (secondsFromLast < secondsFrom8pm) {
-  //         timer.cancel();
-  //         return;
-  //       }
-  //     }
-  //     timer.cancel();
-  //     var memories = MemoryProvider().retrieveDayMemories(now);
-  //     if (memories.isEmpty) {
-  //       SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
-  //       return;
-  //     }
-  //
-  //     var message = Message(DateTime.now(), '', 'ai', type: 'daySummary');
-  //     MessageProvider().saveMessage(message);
-  //     setState(() => widget.messages.add(message));
-  //
-  //     var result = await dailySummaryNotifications(memories);
-  //     SharedPreferencesUtil().lastDailySummaryDay = DateTime.now().toIso8601String();
-  //     message.text = result;
-  //     message.memories.addAll(memories);
-  //     MessageProvider().updateMessage(message);
-  //     setState(() => widget.messages.last = message);
-  //     _moveListToBottom();
-  //   });
-  // }
-
   @override
   void initState() {
     plugins = prefs.pluginsList;

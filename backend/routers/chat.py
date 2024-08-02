@@ -38,7 +38,7 @@ def send_message(
     messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
     messages = filter_messages(messages, plugin_id)
 
-    context_str, memories_id = retrieve_rag_context(uid, messages)
+    context_str, memories = retrieve_rag_context(uid, messages)
     response: str = qa_rag(context_str, messages, plugin)
 
     ai_message = Message(
@@ -48,10 +48,11 @@ def send_message(
         sender='ai',
         plugin_id=plugin_id,
         type='text',
-        memories=[],
+        # only store the 5 most relevant memories
+        memories_id=[m.id for m in (memories if len(memories) < 5 else memories[:5])],
     )
-    # TODO: include sources used as memory.id reference
     chat_db.add_message(uid, ai_message.dict())
+    ai_message.memories = memories if len(memories) < 5 else memories[:5]
     return ai_message
 
 
@@ -67,7 +68,7 @@ def initial_message_util(uid: str, plugin_id: Optional[str] = None):
         plugin_id=plugin_id,
         from_external_integration=False,
         type='text',
-        memories=[],
+        memories_id=[],
     )
     chat_db.add_message(uid, ai_message.dict())
     return ai_message
@@ -80,7 +81,7 @@ def send_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_u
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
 def get_messages(uid: str = Depends(auth.get_current_user_uid)):
-    messages = chat_db.get_messages(uid)
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True)  # for now retrieving first 100 messages
     if not messages:
         return [initial_message_util(uid)]
     return messages
