@@ -42,12 +42,12 @@ def disable_plugin_db(plugin_id: str, uid: str = Depends(auth.get_current_user_u
 
 
 @router.get('/v1/plugins', tags=['v1'])
-def get_plugins(uid: str):
+def get_plugins(uid: str = Depends(auth.get_current_user_uid)):
     return get_plugins_data(uid, include_reviews=True)
 
 
 @router.post('/v1/plugins/review', tags=['v1'])
-def review_plugin(plugin_id: str, data: dict, uid: str):
+def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 

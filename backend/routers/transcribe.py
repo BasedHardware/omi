@@ -3,13 +3,15 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi import UploadFile, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
+
+from utils import auth
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
     get_speaker_audio_file, remove_downloaded_samples
@@ -38,7 +40,7 @@ def transcribe(file: UploadFile, uid: str, language: str = 'en'):
 
 
 @router.post("/v1/transcribe", tags=['v1'])
-def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
+def transcribe_auth(file: UploadFile, uid: str = Depends(auth.get_current_user_uid), language: str = 'en'):
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     with open(file_path, 'wb') as f:
@@ -65,15 +67,16 @@ def get(request: Request):
 
 @router.websocket("/listen")
 async def websocket_endpoint(
-        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid),language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
     await websocket.accept()
     transcript_socket2 = None
     try:
-        single_file_path, duration = get_speaker_audio_file(uid)
-        remove_downloaded_samples(uid)
+        # single_file_path, duration = get_speaker_audio_file(uid)
+        # remove_downloaded_samples(uid)
+        single_file_path, duration = None, 0
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
