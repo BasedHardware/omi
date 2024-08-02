@@ -19,7 +19,7 @@ Future<ServerMemory?> processTranscriptContent(
   DateTime? finishedAt,
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos = const [],
-  Function(ServerMessage, ServerMemory?)? sendMessageToChat,
+  Function(ServerMessage)? sendMessageToChat,
 }) async {
   debugPrint('processTranscriptContent');
   if (transcript.isEmpty && photos.isEmpty) return null;
@@ -44,7 +44,7 @@ Future<ServerMemory?> processTranscriptContent(
   for (var message in result.messages) {
     String pluginId = message.pluginId ?? '';
     createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
-    if (sendMessageToChat != null) sendMessageToChat(message, memory);
+    if (sendMessageToChat != null) sendMessageToChat(message);
   }
   return memory;
 }

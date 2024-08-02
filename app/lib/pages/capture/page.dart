@@ -27,15 +27,15 @@ import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
-  final Function refreshMemories;
-  final Function refreshMessages;
+  final Function addMemory;
+  final Function addMessage;
   final BTDeviceStruct? device;
 
   const CapturePage({
     super.key,
     required this.device,
-    required this.refreshMemories,
-    required this.refreshMessages,
+    required this.addMemory,
+    required this.addMessage,
   });
 
   @override
@@ -174,11 +174,8 @@ class CapturePageState extends State<CapturePage>
     initiateWebsocket();
   }
 
-  void sendMessageToChat(ServerMessage message, ServerMemory? memory) {
-    // RESTORE ME
-    // if (memory != null) message.memories.add(memory);
-    // MessageProvider().saveMessage(message);
-    // widget.refreshMessages();
+  void sendMessageToChat(ServerMessage message) {
+    widget.addMessage(message);
   }
 
   _createMemory({bool forcedCreation = false}) async {
@@ -209,8 +206,9 @@ class CapturePageState extends State<CapturePage>
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
+    assert(memory != null); // TODO: handle better
+    widget.addMemory(memory);
 
-    await widget.refreshMemories(); // TODO: append memory
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();

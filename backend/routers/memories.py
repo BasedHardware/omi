@@ -224,7 +224,6 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
                 for result in memory['pluginsResponse']
             ],
             photos=[
-                # TODO: test migrating photos
                 MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
             ],
             geolocation=_get_geolocation(memory),
