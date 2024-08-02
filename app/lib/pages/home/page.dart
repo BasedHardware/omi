@@ -8,16 +8,13 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/api_requests/api/memories.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/backend/server/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -53,7 +50,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
   List<ServerMemory> memories = [];
-  List<Message> messages = [];
+  List<ServerMessage> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -75,7 +72,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _refreshMessages() async {
-    messages = MessageProvider().getMessages();
+    messages = await getMessagesServer();
     setState(() {});
   }
 
@@ -279,7 +276,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       key: chatPageKey,
                       textFieldFocusNode: chatTextFieldFocusNode,
                       messages: messages,
-                      refreshMessages: _refreshMessages,
+                      addMessage: (ServerMessage message) {
+                        var messagesCopy = List<ServerMessage>.from(messages);
+                        messagesCopy.insert(0, message);
+                        print('addMessage: ${message.text}');
+                        setState(() => messages = messagesCopy);
+                      },
                     ),
                   ],
                 ),

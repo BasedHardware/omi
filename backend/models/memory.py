@@ -1,10 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from models.chat import Message
 from models.transcript_segment import TranscriptSegment
 
 app = FastAPI()
@@ -145,4 +146,4 @@ class CreateMemory(BaseModel):
 
 class CreateMemoryResponse(BaseModel):
     memory: Memory
-    messages: Dict[str, str] = {}
+    messages: List[Message] = []

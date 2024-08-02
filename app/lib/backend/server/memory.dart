@@ -3,6 +3,21 @@ import 'dart:math';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/server/message.dart';
+
+class CreateMemoryResponse {
+  final List<ServerMessage> messages;
+  final ServerMemory? memory;
+
+  CreateMemoryResponse({required this.messages, required this.memory});
+
+  factory CreateMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return CreateMemoryResponse(
+      messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
+      memory: json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
+    );
+  }
+}
 
 class ServerMemory {
   final String id;
@@ -34,6 +49,7 @@ class ServerMemory {
   });
 
   MemoryType get type => transcript.isNotEmpty ? MemoryType.audio : MemoryType.image;
+
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
