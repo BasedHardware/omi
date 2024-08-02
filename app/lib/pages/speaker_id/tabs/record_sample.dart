@@ -87,7 +87,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
     audioBytesStream?.cancel();
     Tuple2<File, List<List<int>>> file = await audioStorage!.createWavFile(filename: '${widget.sample.id}.wav');
     changeLoadingState();
-    await uploadSample(file.item1, SharedPreferencesUtil().uid); // optimistic request
+    await uploadSample(file.item1); // optimistic request
     // TODO: handle failures + url: null, retry sample
   }
 

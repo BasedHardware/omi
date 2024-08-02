@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/pages/home/page.dart';
@@ -36,7 +35,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   _init() async {
     _device = await getConnectedDevice();
     _device ??= await scanAndConnectDevice(timeout: true);
-    _samples = await getUserSamplesState(SharedPreferencesUtil().uid);
+    _samples = await getUserSamplesState();
     _controller = TabController(length: 2 + _samples.length, vsync: this);
     _initiateConnectionListener();
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
