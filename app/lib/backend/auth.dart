@@ -117,7 +117,11 @@ listenAuthTokenChanges() {
 Future<String?> getIdToken() async {
   try {
     IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
-    if (newToken?.token != null) SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+    if (newToken?.token != null) {
+      SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+      SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
+      SharedPreferencesUtil().authToken = newToken?.token ?? '';
+    }
     return newToken?.token;
   } catch (e) {
     print(e);
