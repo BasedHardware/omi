@@ -109,7 +109,7 @@ class Memory {
       var transcript = generate && transcriptSegments.isNotEmpty
           ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
           : this.transcript;
-      var decoded = utf8.decode(transcript.codeUnits);
+      var decoded = transcript;
       if (maxCount != null) return decoded.substring(0, min(maxCount, decoded.length));
       return decoded;
     } catch (e) {
