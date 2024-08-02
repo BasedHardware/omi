@@ -74,7 +74,7 @@ def initial_message_util(uid: str, plugin_id: Optional[str] = None):
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def send_message(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def send_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid, plugin_id)
 
 
