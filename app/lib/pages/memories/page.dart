@@ -3,6 +3,7 @@ import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
@@ -11,6 +12,8 @@ class MemoriesPage extends StatefulWidget {
   final List<ServerMemory> memories;
   final Function(ServerMemory, int) updateMemory;
   final Function(ServerMemory, int) deleteMemory;
+  final Function loadMoreMemories;
+  final bool loadingNewMemories;
   final FocusNode textFieldFocusNode;
 
   const MemoriesPage({
@@ -19,6 +22,8 @@ class MemoriesPage extends StatefulWidget {
     required this.updateMemory,
     required this.deleteMemory,
     required this.textFieldFocusNode,
+    required this.loadMoreMemories,
+    required this.loadingNewMemories,
   });
 
   @override
@@ -172,6 +177,27 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
+                if (index == memoriesWithDates.length) {
+                  if (widget.loadingNewMemories) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 32.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  // widget.loadMoreMemories(); // CALL this only when visible
+                  return VisibilityDetector(
+                    key: const Key('memory-loader'),
+                    onVisibilityChanged: (visibilityInfo) {
+                      if (visibilityInfo.visibleFraction > 0 && !widget.loadingNewMemories) {
+                        widget.loadMoreMemories();
+                      }
+                    },
+                    child: const SizedBox(height: 80, width: double.maxFinite),
+                  );
+                }
+
                 if (memoriesWithDates[index].runtimeType == DateTime) {
                   return DateListItem(date: memoriesWithDates[index] as DateTime, isFirst: index == 0);
                 }
@@ -183,7 +209,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   deleteMemory: widget.deleteMemory,
                 );
               },
-              childCount: memoriesWithDates.length,
+              childCount: memoriesWithDates.length + 1,
             ),
           ),
         const SliverToBoxAdapter(
