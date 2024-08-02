@@ -8,9 +8,9 @@ import 'package:friend_private/utils/other/temp.dart';
 class MemoryListItem extends StatefulWidget {
   final int memoryIdx;
   final ServerMemory memory;
-  final Function loadMemories;
+  final Function(ServerMemory, int) updateMemory;
 
-  const MemoryListItem({super.key, required this.memory, required this.loadMemories, required this.memoryIdx});
+  const MemoryListItem({super.key, required this.memory, required this.updateMemory, required this.memoryIdx});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -27,7 +27,11 @@ class _MemoryListItemState extends State<MemoryListItem> {
             builder: (c) => MemoryDetailPage(
                   memory: widget.memory,
                 )));
-        widget.loadMemories();
+        // widget.loadMemories();
+        // TODO: restore me (how to modify the memory details, without http request)
+        // temporal prefs, ? ~ PROBABLY "most_recent_modified_memory" ~ memory json, handled in memory detail page.¬
+        // reload list ~ NO
+        // get memory by i ~ NO
       },
       child: Container(
         margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
