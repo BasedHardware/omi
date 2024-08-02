@@ -451,19 +451,6 @@ showOptionsBottomSheet(
                         ),
                       ]
                     : [
-                        // ListTile(
-                        //   title: const Text('Share memory'),
-                        //   leading: const Icon(Icons.send),
-                        //   onTap: loadingReprocessMemory
-                        //       ? null
-                        //       : () {
-                        //           // share loading
-                        //           MixpanelManager().memoryShareButtonClick(memory);
-                        //           // RESTORE ME
-                        //           Share.share(memory.structured.toString());
-                        //           HapticFeedback.lightImpact();
-                        //         },
-                        // ),
                         ListTile(
                           title: const Text('Re-summarize'),
                           leading: loadingReprocessMemory

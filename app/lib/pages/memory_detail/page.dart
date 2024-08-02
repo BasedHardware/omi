@@ -225,7 +225,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     );
     if (newMemory == null) return; // TODO: handle error
 
-    pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
+    pluginResponseExpanded = List.filled(newMemory.pluginsResults.length, false);
     overviewController.text = newMemory.structured.overview;
     titleController.text = newMemory.structured.title;
     // RESTORE ME
