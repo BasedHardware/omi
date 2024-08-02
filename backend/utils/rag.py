@@ -7,7 +7,7 @@ from models.memory import Memory
 from utils.llm import determine_requires_context
 
 
-def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, List[str]]:
+def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, List[Memory]]:
     context = determine_requires_context(prev_messages)
     if not context or (not context[0] and not context[1]):
         return '', []
@@ -28,6 +28,6 @@ def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, L
     else:
         memories = filter_memories_by_date(uid, dates_range[0], dates_range[1])
     print('Found', len(memories), 'memories for context')
-    return Memory.memories_to_string(
-        [Memory(**memory) for memory in memories]
-    ), memories_id
+    memories = [Memory(**memory) for memory in memories]
+
+    return Memory.memories_to_string(memories), memories

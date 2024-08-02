@@ -112,6 +112,8 @@ class Memory(BaseModel):
 
     photos: List[MemoryPhoto] = []
 
+    type: str = 'audio'
+
     discarded: bool = False
     deleted: bool = False
 
@@ -139,6 +141,7 @@ class CreateMemory(BaseModel):
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
+    photos: List[MemoryPhoto] = []
 
     def get_transcript(self) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)

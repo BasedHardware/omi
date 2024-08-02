@@ -18,7 +18,7 @@ from langchain_pinecone import PineconeVectorStore
 from pydantic import BaseModel, Field
 
 from models.chat import Message, MessageSender
-from models.memory import Structured, Memory
+from models.memory import Structured, Memory, MemoryPhoto
 from models.plugin import Plugin
 
 llm = ChatOpenAI(model='gpt-4o')
@@ -56,7 +56,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         {format_instructions}'''.replace('    ', '').strip()
     )])
     chain = prompt | llm | parser
-    print(parser.get_format_instructions())
     response = chain.invoke({
         'transcript': transcript.strip(),
         'prev_memories_str': '',
@@ -66,6 +65,23 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         'started_at': started_at.isoformat(),
     })
     return response
+
+
+def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
+    photos_str = ''
+    for i, photo in enumerate(photos):
+        photos_str += f'{i + 1}. "{photo.description}"\n'
+    parser = PydanticOutputParser(pydantic_object=Structured)
+    llm_with_parser = llm.with_structured_output(parser)
+    prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
+
+      For the title, use the main topic of the scenes.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Photos Descriptions: ```{photos_str}```
+      '''.replace('    ', '').strip()
+    return llm_with_parser.invoke(prompt)
 
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
