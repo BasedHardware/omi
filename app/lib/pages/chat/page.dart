@@ -2,7 +2,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/server/message.dart';
@@ -91,7 +90,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       _moveListToBottom();
     });
     // _initDailySummary();
-    if (MessageProvider().getMessagesCount() == 0) sendInitialPluginMessage(null);
     super.initState();
   }
 
@@ -115,7 +113,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: widget.messages.length,
             itemBuilder: (context, chatIndex) {
-              // chatIndex = widget.messages.length - chatIndex - 1;
               final message = widget.messages[chatIndex];
               final isLastMessage = chatIndex == widget.messages.length - 1;
               double topPadding = chatIndex == 0 ? 24 : 16;
@@ -233,9 +230,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   sendInitialPluginMessage(Plugin? plugin) async {
     changeLoadingState();
-    // add empty message locally
-    // request backend initial-message
-    // update message locally
+    ServerMessage message = await getInitialPluginMessage(plugin?.id);
+    widget.addMessage(message);
     changeLoadingState();
   }
 
