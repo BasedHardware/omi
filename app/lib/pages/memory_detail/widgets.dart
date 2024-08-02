@@ -301,7 +301,7 @@ List<Widget> getPluginsWidgets(
                       trailing: IconButton(
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: utf8.decode(pluginResponse.content.trim().codeUnits)));
+                          Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text('Plugin response copied to clipboard'),
                           ));
@@ -311,7 +311,7 @@ List<Widget> getPluginsWidgets(
                     )
                   : const SizedBox.shrink(),
               ExpandableTextWidget(
-                text: utf8.decode(pluginResponse.content.trim().codeUnits),
+                text: pluginResponse.content.trim(),
                 isExpanded: pluginResponseExpanded[i],
                 toggleExpand: () {
                   if (!pluginResponseExpanded[i]) {
