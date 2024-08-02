@@ -269,8 +269,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     CapturePage(
                       key: capturePageKey,
                       device: _device,
-                      refreshMemories: _initiateMemories,
-                      refreshMessages: _refreshMessages,
+                      addMemory: (ServerMemory memory) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        memoriesCopy.insert(0, memory);
+                        setState(() => memories = memoriesCopy);
+                      },
+                      addMessage: (ServerMessage message) {
+                        var messagesCopy = List<ServerMessage>.from(messages);
+                        messagesCopy.insert(0, message);
+                        setState(() => messages = messagesCopy);
+                      },
                     ),
                     ChatPage(
                       key: chatPageKey,
@@ -279,7 +287,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       addMessage: (ServerMessage message) {
                         var messagesCopy = List<ServerMessage>.from(messages);
                         messagesCopy.insert(0, message);
-                        print('addMessage: ${message.text}');
                         setState(() => messages = messagesCopy);
                       },
                     ),
