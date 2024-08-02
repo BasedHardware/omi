@@ -9,8 +9,15 @@ class MemoryListItem extends StatefulWidget {
   final int memoryIdx;
   final ServerMemory memory;
   final Function(ServerMemory, int) updateMemory;
+  final Function(ServerMemory, int) deleteMemory;
 
-  const MemoryListItem({super.key, required this.memory, required this.updateMemory, required this.memoryIdx});
+  const MemoryListItem({
+    super.key,
+    required this.memory,
+    required this.updateMemory,
+    required this.memoryIdx,
+    required this.deleteMemory,
+  });
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -23,11 +30,13 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        await Navigator.of(context).push(MaterialPageRoute(
-            builder: (c) => MemoryDetailPage(
-                  memory: widget.memory,
-                )));
-        // widget.loadMemories();
+        var result = await Navigator.of(context).push(MaterialPageRoute(
+          builder: (c) => MemoryDetailPage(memory: widget.memory),
+        ));
+        print('MemoryListItem: result: $result');
+        if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
+
+        // widget.updateMemory();
         // TODO: restore me (how to modify the memory details, without http request)
         // temporal prefs, ? ~ PROBABLY "most_recent_modified_memory" ~ memory json, handled in memory detail page.¬
         // reload list ~ NO

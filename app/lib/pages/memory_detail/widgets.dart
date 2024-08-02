@@ -491,7 +491,7 @@ showOptionsBottomSheet(
                                             memory: memory,
                                             onDelete: () {
                                               Navigator.pop(context, true);
-                                              Navigator.pop(context, true);
+                                              Navigator.pop(context, {'deleted': true});
                                             }),
                                       );
                                     },

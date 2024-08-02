@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/memories.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/server/memory.dart';
 
@@ -71,8 +72,7 @@ class _ConfirmDeletionWidgetState extends State<ConfirmDeletionWidget> {
                 padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 12.0, 0.0),
                 child: MaterialButton(
                   onPressed: () async {
-                    // await MemoryProvider().deleteMemory(widget.memory);
-                    // RESTORE ME
+                    deleteMemoryServer(widget.memory.id); // optimistic update
                     Navigator.pop(context);
                     widget.onDelete?.call();
                     MixpanelManager().memoryDeleted(widget.memory);
