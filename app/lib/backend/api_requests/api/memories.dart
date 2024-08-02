@@ -122,3 +122,18 @@ Future<bool> deleteMemoryServer(String memoryId) async {
   debugPrint('deleteMemory: ${response.statusCode}');
   return response.statusCode == 204;
 }
+
+Future<ServerMemory?> getMemoryById(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getMemoryById: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerMemory.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
