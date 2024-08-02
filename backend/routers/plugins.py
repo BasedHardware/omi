@@ -30,13 +30,13 @@ def review_plugin(plugin_id: str, uid: str, data: dict):
 # AUTH
 
 @router.post('/v1/plugins/enable')
-def enable_plugin_db(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
     enable_plugin(uid, plugin_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/plugins/disable')
-def disable_plugin_db(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
     disable_plugin(uid, plugin_id)
     return {'status': 'ok'}
 

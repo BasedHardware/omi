@@ -40,21 +40,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   bool canDisplaySeconds = true;
 
-  _determineCanDisplaySeconds() {
-    var segments = widget.memory.transcriptSegments;
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          canDisplaySeconds = false;
-          break;
-        }
-      }
-    }
-  }
-
   @override
   void initState() {
-    _determineCanDisplaySeconds();
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
     structured = widget.memory.structured;
     titleController.text = structured.title;
@@ -199,7 +186,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               segments: widget.memory.transcriptSegments,
               horizontalMargin: false,
               topMargin: false,
-              canDisplaySeconds: canDisplaySeconds),
+              canDisplaySeconds: canDisplaySeconds,
+            ),
       const SizedBox(height: 32)
     ];
   }
@@ -223,12 +211,18 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
           .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
       changeLoadingState,
     );
-    if (newMemory == null) return; // TODO: handle error
+    if (newMemory == null) return;
 
     pluginResponseExpanded = List.filled(newMemory.pluginsResults.length, false);
     overviewController.text = newMemory.structured.overview;
     titleController.text = newMemory.structured.title;
-    // RESTORE ME
+    widget.memory.structured.title = newMemory.structured.title;
+    widget.memory.structured.overview = newMemory.structured.overview;
+    widget.memory.structured.actionItems.clear();
+    widget.memory.structured.actionItems.addAll(newMemory.structured.actionItems);
+    widget.memory.pluginsResults.clear();
+    widget.memory.pluginsResults.addAll(newMemory.pluginsResults);
+    widget.memory.discarded = newMemory.discarded;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
