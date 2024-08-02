@@ -67,17 +67,11 @@ def get_memories_by_id(uid, memory_ids):
     user_ref = db.collection('users').document(uid)
     memories_ref = user_ref.collection('memories')
 
-    # Create a list of document references
     doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memory_ids]
-
-    # Get all documents in parallel
     docs = db.get_all(doc_refs)
 
-    # Process the results
     memories = []
     for doc in docs:
         if doc.exists:
-            memory = doc.to_dict()
-            memory['id'] = doc.id  # Add the document ID to the memory dict
-            memories.append(memory)
+            memories.append(doc.to_dict())
     return memories
