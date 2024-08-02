@@ -37,12 +37,10 @@ getOnTranscriptSegmentReceivedEvents(List<TranscriptSegment> segment, String ses
   return await Future.wait(triggerPluginResult);
 }
 
-triggerMemoryCreatedEvents(
-  ServerMemory memory, {
-  Function(Message, ServerMemory?)? sendMessageToChat,
-}) async {
+triggerMemoryCreatedEvents(ServerMemory memory) async {
   if (memory.discarded) return;
 
+  // Notification from user own webhook
   webhookOnMemoryCreatedCall(memory).then((s) {
     if (s.isNotEmpty) createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 10);
   });
@@ -51,12 +49,6 @@ triggerMemoryCreatedEvents(
   for (var result in results) {
     if (result.item2.isNotEmpty) {
       createNotification(title: '${result.item1.name} says', body: result.item2, notificationId: result.item1.hashCode);
-      if (sendMessageToChat != null) {
-        sendMessageToChat(
-          Message(DateTime.now(), result.item2, 'ai', pluginId: result.item1.id, fromIntegration: true),
-          null,
-        );
-      }
     }
   }
 }
