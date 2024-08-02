@@ -3,11 +3,15 @@ import 'dart:convert';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/api_requests/api/memories.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/server/memory.dart';
 import 'package:friend_private/backend/server/message.dart';
+import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
-class AIMessage extends StatelessWidget {
+class AIMessage extends StatefulWidget {
   final ServerMessage message;
   final Function(String) sendMessage;
   final bool displayOptions;
@@ -22,16 +26,24 @@ class AIMessage extends StatelessWidget {
   });
 
   @override
+  State<AIMessage> createState() => _AIMessageState();
+}
+
+class _AIMessageState extends State<AIMessage> {
+  List<bool> memoryDetailLoading = List.filled(3, false);
+
+  @override
   Widget build(BuildContext context) {
-    var messageMemories = message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories;
+    var messageMemories =
+        widget.message.memories.length > 3 ? widget.message.memories.sublist(0, 3) : widget.message.memories;
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        pluginSender != null
+        widget.pluginSender != null
             ? CircleAvatar(
                 radius: 16,
-                backgroundImage: NetworkImage(pluginSender!.getImageUrl()),
+                backgroundImage: NetworkImage(widget.pluginSender!.getImageUrl()),
               )
             : Container(
                 decoration: const BoxDecoration(
@@ -61,7 +73,7 @@ class AIMessage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
-              message.type == MessageType.daySummary
+              widget.message.type == MessageType.daySummary
                   ? Text(
                       '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
                       style: TextStyle(
@@ -72,30 +84,34 @@ class AIMessage extends StatelessWidget {
                       ),
                     )
                   : const SizedBox(),
-              message.type == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
+              widget.message.type == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                message.text.isEmpty
+                widget.message.text.isEmpty
                     ? '...'
                     // : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
-                    : utf8.decode(message.text.codeUnits),
+                    : utf8.decode(widget.message.text.codeUnits),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              if (message.id != 1) _getCopyButton(context), // RESTORE ME
+              if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
               // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
               // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
               if (messageMemories.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                for (var memory in messageMemories) ...[
+                for (var data in messageMemories.indexed) ...[
                   Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        // RESTORE ME
-                        // MixpanelManager().chatMessageMemoryClicked(memory);
-                        // await Navigator.of(context)
-                        //     .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
+                        if (memoryDetailLoading[data.$1]) return;
+                        setState(() => memoryDetailLoading[data.$1] = true);
+
+                        ServerMemory? m = await getMemoryById(data.$2.id);
+                        if (m == null) return;
+                        MixpanelManager().chatMessageMemoryClicked(m);
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
                         // TODO: maybe refresh memories here too
+                        setState(() => memoryDetailLoading[data.$1] = false);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
@@ -108,14 +124,21 @@ class AIMessage extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                '${utf8.decode(memory.structured.emoji.codeUnits)} ${memory.structured.title}',
+                                '${utf8.decode(data.$2.structured.emoji.codeUnits)} ${data.$2.structured.title}',
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Icon(Icons.arrow_right_alt)
+                            memoryDetailLoading[data.$1]
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ))
+                                : const Icon(Icons.arrow_right_alt)
                           ],
                         ),
                       ),
@@ -139,7 +162,7 @@ class AIMessage extends StatelessWidget {
         hoverColor: Colors.transparent,
         highlightColor: Colors.transparent,
         onTap: () async {
-          await Clipboard.setData(ClipboardData(text: message.text));
+          await Clipboard.setData(ClipboardData(text: widget.message.text));
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -186,7 +209,7 @@ class AIMessage extends StatelessWidget {
         child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
       ),
       onTap: () {
-        sendMessage(optionText);
+        widget.sendMessage(optionText);
       },
     );
   }
