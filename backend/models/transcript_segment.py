@@ -7,14 +7,14 @@ from pydantic import BaseModel
 class TranscriptSegment(BaseModel):
     text: str
     speaker: Optional[str]
-    speakerId: Optional[int]
+    speaker_id: Optional[int]
     is_user: bool
     start: float
     end: float
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.speakerId = int(self.speaker.split('_')[1]) if self.speaker else 0
+        self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
 
     def get_timestamp_string(self):
         start_duration = timedelta(seconds=int(self.start))
