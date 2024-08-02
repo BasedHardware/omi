@@ -10,12 +10,14 @@ import 'widgets/memory_list_item.dart';
 class MemoriesPage extends StatefulWidget {
   final List<ServerMemory> memories;
   final Function(ServerMemory, int) updateMemory;
+  final Function(ServerMemory, int) deleteMemory;
   final FocusNode textFieldFocusNode;
 
   const MemoriesPage({
     super.key,
     required this.memories,
     required this.updateMemory,
+    required this.deleteMemory,
     required this.textFieldFocusNode,
   });
 
@@ -173,10 +175,12 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 if (memoriesWithDates[index].runtimeType == DateTime) {
                   return DateListItem(date: memoriesWithDates[index] as DateTime, isFirst: index == 0);
                 }
+                var memory = memoriesWithDates[index] as ServerMemory;
                 return MemoryListItem(
-                  memoryIdx: index,
-                  memory: memoriesWithDates[index] as ServerMemory,
+                  memoryIdx: memories.indexOf(memory),
+                  memory: memory,
                   updateMemory: widget.updateMemory,
+                  deleteMemory: widget.deleteMemory,
                 );
               },
               childCount: memoriesWithDates.length,

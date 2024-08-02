@@ -110,3 +110,15 @@ Future<ServerMessage> getInitialPluginMessage(String? pluginId) {
     }
   });
 }
+
+Future<bool> deleteMemoryServer(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteMemory: ${response.statusCode}');
+  return response.statusCode == 204;
+}
