@@ -145,7 +145,7 @@ class MixpanelManager {
   }
 
   Map<String, dynamic> getMemoryEventProperties(ServerMemory memory) {
-    var properties = _getTranscriptProperties(memory.transcript);
+    var properties = _getTranscriptProperties(memory.getTranscript());
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
     properties['memory_id'] = memory.id;

@@ -22,7 +22,6 @@ class CreateMemoryResponse {
 class ServerMemory {
   final String id;
   final DateTime createdAt;
-  final String transcript;
   final Structured structured;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -36,7 +35,6 @@ class ServerMemory {
   ServerMemory({
     required this.id,
     required this.createdAt,
-    required this.transcript,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -48,13 +46,12 @@ class ServerMemory {
     this.deleted = false,
   });
 
-  MemoryType get type => transcript.isNotEmpty ? MemoryType.audio : MemoryType.image;
+  MemoryType get type => photos.isNotEmpty ? MemoryType.audio : MemoryType.image;
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']),
-      transcript: json['transcript'],
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
@@ -74,7 +71,6 @@ class ServerMemory {
     return {
       'id': id,
       'created_at': createdAt.toIso8601String(),
-      'transcript': transcript,
       'structured': structured.toJson(),
       'started_at': startedAt?.toIso8601String(),
       'finished_at': finishedAt?.toIso8601String(),
@@ -88,14 +84,8 @@ class ServerMemory {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    try {
-      var transcript = generate && transcriptSegments.isNotEmpty
-          ? TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true)
-          : this.transcript;
-      if (maxCount != null) return transcript.substring(0, min(maxCount, transcript.length));
-      return transcript;
-    } catch (e) {
-      return transcript;
-    }
+    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    if (maxCount != null) return transcript.substring(0, min(maxCount, transcript.length));
+    return transcript;
   }
 }

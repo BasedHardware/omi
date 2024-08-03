@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file
-from utils.stt.vad import vad_is_empty, is_speech_present, VADIterator, model
+from utils.stt.vad import vad_is_empty, VADIterator, model
 
 router = APIRouter()
 
@@ -95,19 +95,23 @@ async def websocket_endpoint(
             while True:
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
-                print(len(audio_buffer), window_size_samples * 2)
-                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
-                if len(audio_buffer) >= window_size_samples * 2:  # 2 bytes per sample
-                    # TODO: vad doesn't work index.html
-                    if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
-                        print('*')
-                        # pass
-                    else:
-                        print('-')
-                        audio_buffer = audio_buffer[window_size_samples * 2:]
-                        continue
+                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
+                # TODO: vad not working propperly.
+                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
+                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
-                    audio_buffer = audio_buffer[window_size_samples * 2:]
+                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
+                # if len(audio_buffer) >= window_size_samples * 2:
+                #     # TODO: vad doesn't work index.html
+                #     if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
+                #         print('*')
+                #         # pass
+                #     else:
+                #         print('-')
+                #         audio_buffer = audio_buffer[window_size_samples * 2:]
+                #         continue
+                #
+                #     audio_buffer = audio_buffer[window_size_samples * 2:]
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > 20 or not socket2:
