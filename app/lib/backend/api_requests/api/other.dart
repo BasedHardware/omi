@@ -67,11 +67,37 @@ Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
 Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawBody = false}) async {
   if (memory == null) return '';
   debugPrint('devModeWebhookCall: $memory');
-  return triggerMemoryRequestAtEndpoint(
-    SharedPreferencesUtil().webhookOnMemoryCreated,
-    memory,
-    returnRawBody: returnRawBody,
-  );
+  String url = SharedPreferencesUtil().webhookOnMemoryCreated;
+  if (url.isEmpty) return '';
+  if (url.contains('?')) {
+    url += '&uid=${SharedPreferencesUtil().uid}';
+  } else {
+    url += '?uid=${SharedPreferencesUtil().uid}';
+  }
+  debugPrint('triggerMemoryRequestAtEndpoint: $url');
+  var data = memory.toJson();
+  // data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
+  try {
+    var response = await makeApiCall(
+      url: url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(data),
+      method: 'POST',
+    );
+    debugPrint('response: ${response?.statusCode}');
+    if (returnRawBody) return jsonEncode({'statusCode': response?.statusCode, 'body': response?.body});
+
+    var body = jsonDecode(response?.body ?? '{}');
+    print(body);
+    return body['message'] ?? '';
+  } catch (e) {
+    debugPrint('Error triggering memory request at endpoint: $e');
+    // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.
+    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.info, userAttributes: {
+      'url': url,
+    });
+    return '';
+  }
 }
 
 Future<String> webhookOnTranscriptReceivedCall(List<TranscriptSegment> segments, String sessionId) async {
@@ -103,38 +129,6 @@ Future<bool> isPluginSetupCompleted(String? url) async {
   return data['is_setup_completed'] ?? false;
 }
 
-Future<String> triggerMemoryRequestAtEndpoint(String url, ServerMemory memory, {bool returnRawBody = false}) async {
-  if (url.isEmpty) return '';
-  if (url.contains('?')) {
-    url += '&uid=${SharedPreferencesUtil().uid}';
-  } else {
-    url += '?uid=${SharedPreferencesUtil().uid}';
-  }
-  debugPrint('triggerMemoryRequestAtEndpoint: $url');
-  var data = memory.toJson();
-  // data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
-  try {
-    var response = await makeApiCall(
-      url: url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-      method: 'POST',
-    );
-    debugPrint('response: ${response?.statusCode}');
-    if (returnRawBody) return jsonEncode({'statusCode': response?.statusCode, 'body': response?.body});
-
-    var body = jsonDecode(response?.body ?? '{}');
-    print(body);
-    return body['message'] ?? '';
-  } catch (e) {
-    debugPrint('Error triggering memory request at endpoint: $e');
-    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.warning, userAttributes: {
-      'url': url,
-    });
-    return '';
-  }
-}
-
 Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, List<TranscriptSegment> segments) async {
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   if (url.isEmpty) return '';
@@ -159,7 +153,8 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
     return body['message'] ?? '';
   } catch (e) {
     debugPrint('Error triggering transcript request at endpoint: $e');
-    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.warning, userAttributes: {
+    // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.
+    CrashReporting.reportHandledCrash(e, StackTrace.current, level: NonFatalExceptionLevel.info, userAttributes: {
       'url': url,
     });
     return '';

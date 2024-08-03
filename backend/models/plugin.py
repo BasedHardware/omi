@@ -25,6 +25,8 @@ class ExternalIntegration(BaseModel):
     webhook_url: str
     setup_completed_url: Optional[str]
     setup_instructions_file_path: str
+    # TODO: refactor to be read from backend, so frontend doesn't do extra request (cache)
+    # setup_instructions_markdown: str = ''
 
 
 class Plugin(BaseModel):
@@ -32,7 +34,7 @@ class Plugin(BaseModel):
     name: str
     author: str
     description: str
-    image: str
+    image: str  # TODO: return image_url: str with the whole repo + path
     capabilities: Set[str]
     memory_prompt: Optional[str]
     chat_prompt: Optional[str]
