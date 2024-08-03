@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -34,14 +33,6 @@ class SharedPreferencesUtil {
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
-
-  String get deepgramApiKey => getString('deepgramApiKey') ?? '';
-
-  set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
-
-  bool get useTranscriptServer => Env.growthbookApiKey == null ? false : getBool('useTranscriptServer') ?? true;
-
-  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -116,7 +107,6 @@ class SharedPreferencesUtil {
     final List<String> plugins = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('pluginsList', plugins);
   }
-
 
   enablePlugin(String value) {
     final List<Plugin> plugins = pluginsList;
@@ -262,17 +252,7 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName';
 
-// String get userName => getString('userName') ?? givenName; // the one the users sets
-//
-// set userName(String value) => saveString('userName', value);
-
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 }
-
-String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
-
-String getDeepgramApiKeyForUsage() =>
-    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;
