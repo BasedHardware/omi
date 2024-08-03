@@ -66,7 +66,7 @@ def get(request: Request):
 
 @router.websocket("/listen")
 async def websocket_endpoint(
-        websocket: WebSocket, uid: str,language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8', # uid: str = Depends(auth.get_current_user_uid)
+        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
