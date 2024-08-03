@@ -122,16 +122,16 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int,
-        preseconds: int = 0,
+        fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int, preseconds: int = 0,
 ):
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
-        # print("Received message from Deepgram")  # Log when message is received
+        print("Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
+        print(sentence)
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
@@ -182,8 +182,9 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             endpointing=100,
             language=language,
             interim_results=False,
-            sample_rate=None if sample_rate == 48000 else sample_rate,
+            sample_rate=sample_rate,
             smart_format=True,
+            profanity_filter=False,
             diarize=True,
             filler_words=False,
             channels=channels,
