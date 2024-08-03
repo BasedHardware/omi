@@ -139,10 +139,15 @@ def _get_structured(memory: dict):
     if category not in CategoryEnum.__members__:
         category = 'other'
     emoji = memory['structured'].get('emoji')
+    try:
+        emoji = emoji.encode('latin1').decode('utf-8')
+    except:
+        emoji = random.choice(['🧠', '🎉'])
+
     return Structured(
         title=memory['structured']['title'],
         overview=memory['structured']['overview'],
-        emoji=emoji.encode('latin1').decode('utf-8') if emoji else random.choice(['🧠', '🎉']),
+        emoji=emoji,
         category=CategoryEnum[category],
         action_items=[
             ActionItem(description=description, completed=False) for description in
