@@ -16,13 +16,21 @@ def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     return next((p for p in plugins if p.id == plugin_id), None)
 
 
+def weighted_rating(plugin):
+    C = 3.0  # Assume 3.0 is the mean rating across all plugins
+    m = 5  # Minimum number of ratings required to be considered
+    R = plugin.rating_avg or 0
+    v = plugin.rating_count or 0
+    return (v / (v + m) * R) + (m / (v + m) * C)
+
+
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     # print('get_plugins_data', uid, include_reviews)
     response = requests.get('https://raw.githubusercontent.com/BasedHardware/Friend/main/community-plugins.json')
     if response.status_code != 200:
         return []
     user_enabled = set(get_enabled_plugins(uid))
-    # print('get_plugins_data, user_enabled', user_enabled)
+    print('get_plugins_data, user_enabled', user_enabled)
     data = response.json()
     plugins = []
     for plugin in data:
@@ -37,6 +45,9 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
             plugin_dict['rating_avg'] = rating_avg
             plugin_dict['rating_count'] = len(sorted_reviews)
         plugins.append(Plugin(**plugin_dict))
+    if include_reviews:
+        plugins = sorted(plugins, key=weighted_rating, reverse=True)
+
     return plugins
 
 
