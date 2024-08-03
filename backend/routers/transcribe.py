@@ -89,12 +89,13 @@ async def websocket_endpoint(
     window_size_samples = 256 if sample_rate == 8000 else 512
 
     async def receive_audio(socket1, socket2):
-        audio_buffer = bytearray()
+        # audio_buffer = bytearray()
         timer_start = time.time()
         try:
             while True:
                 data = await websocket.receive_bytes()
-                audio_buffer.extend(data)
+                # print(len(data))
+                # audio_buffer.extend(data)
                 # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
                 # TODO: vad not working propperly.
                 # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
