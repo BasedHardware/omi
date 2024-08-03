@@ -1,6 +1,6 @@
 #include "storage.h"
 
-static const size_t written_max_count = 1000; // number of frames per file
+const size_t written_max_count = 1000; // number of frames per file
 static char file_path[MAX_PATH_SIZE];
 static bool written_concat = true;
 static size_t written_count = 0;
@@ -13,14 +13,39 @@ int init_storage(void)
 {
     if (mount_sd_card())
     {
-        if (verbose) printk("Failed to mount SD card\n");
+        if (verbose) printf("Failed to mount SD card\n");
         mounted = false;
         return -1;
     }
 
-    if (verbose) printk("Successfully mounted SD card\n");
+    if (verbose) printf("Successfully mounted SD card\n");
     mounted = true;
     return 0;    
+}
+
+ReadInfo get_current_file(void)
+{
+    ReadInfo readInfo;
+    readInfo.ret = -1;
+
+    ReadParams info = read_file("info.txt");
+
+    if (info.ret < 0)
+    {
+        readInfo.ret = -1;
+        return readInfo;
+    }
+    printf("data: %s\n",info.data);
+    if (info.data != NULL)
+    {
+        uint8_t number;
+        char *file_name = extract_after(info.data);
+        extract_number(info.data, &number);
+        free(file_name);
+        readInfo.name = number;
+        readInfo.ret = 0;
+    }
+    return readInfo;
 }
 
 ReadParams verify_info(void)
@@ -39,7 +64,7 @@ ReadParams verify_info(void)
             create_file("audio/0.txt");
             write_info("audio/0.txt,status:NO");
             res.data = "audio/0.txt";
-            k_msleep(10);
+            //k_msleep(10);
             res.ret = 0;
             return res;
         }
@@ -71,7 +96,7 @@ int if_file_exist(void)
         char *result = extract_after(current_path);
         if (result == NULL)
         {
-            if(verbose) printk("Failed to extract after\n");
+            if(verbose) printf("Failed to extract after\n");
             return -1;
         }
 
@@ -89,7 +114,7 @@ int if_file_exist(void)
 
             written_concat = true;
 
-            k_msleep(10);
+            //k_msleep(10);
 
             free(new_filename);
 
@@ -139,7 +164,7 @@ int save_audio_in_storage(uint8_t *buffer, size_t lenght)
 
 char *generate_next_filename(const char *input_filename) 
 {
-    char result[MAX_FILENAME_SIZE];
+    char result[MAX_PATH_SIZE];
 
     size_t input_length = strlen(input_filename);
     if (input_length < 5) 
@@ -147,7 +172,7 @@ char *generate_next_filename(const char *input_filename)
         return NULL;
     }
 
-    char number_part[MAX_FILENAME_SIZE];
+    char number_part[MAX_PATH_SIZE];
     strncpy(number_part, input_filename, input_length - 4);
     number_part[input_length - 4] = '\0';
 

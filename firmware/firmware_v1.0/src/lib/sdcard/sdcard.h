@@ -1,14 +1,8 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
-#define DATA_SIZE 1024
-
-#include <zephyr/kernel.h>
-#include <zephyr/storage/disk_access.h>
-#include <zephyr/logging/log.h>
+//#define DATA_SIZE 1024
 #include "../storage/config.h"
-#include <zephyr/device.h>
-#include <zephyr/fs/fs.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,8 +11,8 @@
 #include <stdio.h>
 #include <ff.h>
 
-#define MAX_OUTPUT_SIZE 1400
-#define MAX_INPUT_SIZE 700
+#define MAX_OUTPUT_SIZE 1400//2600//1400
+#define MAX_INPUT_SIZE 700//1300//700
 #define DELIMITER ','
 #define MAX_DIGITS 3
 
@@ -69,7 +63,7 @@ ReadParams read_file(const char *file_path);
 
 char* revert_format(const char *formatted_input);
 
-uint8_t* convert_to_uint8_array(const char *reverted_output, size_t *size);
+uint8_t* convert_to_uint8_array(const char* str, size_t* out_size);
 
 ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t pointer);
 

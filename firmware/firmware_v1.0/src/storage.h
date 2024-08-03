@@ -8,7 +8,12 @@
 #include "lib/sdcard/sdcard.h"
 #include "lib/storage/config.h"
 
-#define MAX_FILENAME_SIZE 512
+extern const size_t written_max_count;
+
+typedef struct {
+    uint8_t name;
+    int ret;
+} ReadInfo;
 
 int init_storage(void);
 
@@ -25,5 +30,9 @@ void process_file(const char *file, char *path, int *status);
 void uint8_buffer_to_char_data(const uint8_t *buffer, size_t length, char *data, size_t data_size);
 
 char *generate_next_filename(const char *current_filename);
+
+//void read_audio_in_storage(void);
+
+ReadInfo get_current_file(void);
 
 #endif // STORAGE_H

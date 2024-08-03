@@ -1,9 +1,13 @@
+#include <zephyr/kernel.h>
+#include <zephyr/storage/disk_access.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/device.h>
+#include <zephyr/fs/fs.h>
 #include "sdcard.h"
 
 static char current_full_path[MAX_PATH_SIZE];
-static const char *disk_mount_pt0 = "/SD:";
+//static const char *disk_mount_pt0 = "/SD:";
 static const char *disk_mount_pt = "/SD:/";
-//static char current_path[MAX_PATH_SIZE];
 static const bool verbose = false;
 bool mounted = false;
 
@@ -33,42 +37,42 @@ int mount_sd_card(void)
 
 	if (disk_access_init("SD") != 0) 
     {
-		if(verbose) printk("Storage init ERROR!");
+		if(verbose) printf("Storage init ERROR!");
 		return -1;
 	}
 
 	if (disk_access_ioctl("SD", DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) 
     {
-		if(verbose) printk("Unable to get sector count");
+		if(verbose) printf("Unable to get sector count");
 		return -1;
 	}
 
-	if(verbose) printk("Block count %u", block_count);
+	if(verbose) printf("Block count %u", block_count);
 
 	if (disk_access_ioctl("SD", DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) 
     {
-		if(verbose) printk("Unable to get sector size");
+		if(verbose) printf("Unable to get sector size");
 		return -1;
 	}
-	if(verbose) printk("Sector size %u\n", block_size);
+	if(verbose) printf("Sector size %u\n", block_size);
 
 	memory_size_mb = (uint64_t)block_count * block_size;
-	if(verbose) printk("Memory Size(MB) %u\n", (uint32_t)(memory_size_mb >> 20));
+	if(verbose) printf("Memory Size(MB) %u\n", (uint32_t)(memory_size_mb >> 20));
 	
-	mp.mnt_point = disk_mount_pt0;
+	mp.mnt_point = "/SD:";
 
 	int res = fs_mount(&mp);
 
 	if (res == FR_OK) 
 	{
-		if(verbose) printk("Disk mounted.\n");
+		if(verbose) printf("Disk mounted.\n");
 		fs_mkdir("/SD:/audio");
 	} else 
 	{
-		if(verbose) printk("Failed to mount disk - trying one more time\n");
+		if(verbose) printf("Failed to mount disk - trying one more time\n");
 		res = fs_mount(&mp);
 		if (res != FR_OK) {
-			if(verbose) printk("Error mounting disk.\n");
+			if(verbose) printf("Error mounting disk.\n");
 			return -1;
 		}
 	}
@@ -78,6 +82,9 @@ int mount_sd_card(void)
 FileInfo file_info(const char *path)
 {
 	FileInfo fileInfo;
+	fileInfo.res = -1;
+	fileInfo.size = 0;
+
 	struct fs_dirent entry;
 
 	int res = set_path(path);
@@ -90,6 +97,7 @@ FileInfo file_info(const char *path)
 			fileInfo.res = -1;
 			return	fileInfo;
 		}
+		printk("Name1: %s, size1: %zu\n",entry.name,entry.size);
 		fileInfo.name = entry.name;
 		fileInfo.size = entry.size;
 		fileInfo.res = ret;
@@ -115,11 +123,11 @@ int create_file(const char *file_path){
 
 	if (ret) 
 	{
-		if(verbose) printk("%s -- failed to create file (err = %d)\n", __func__, ret);
+		if(verbose) printf("%s -- failed to create file (err = %d)\n", __func__, ret);
 		return -2;
 	} else 
 	{
-		if(verbose) printk("%s - successfully created file\n", __func__);
+		if(verbose) printf("%s - successfully created file\n", __func__);
 	}
 
     fs_close(&data_filp);
@@ -156,17 +164,17 @@ int write_file(uint8_t *data, size_t lenght, bool concat, bool endBuffer)
        	if(ret < -1)
 		{
 			ret = fs_open(&data_filp, current_full_path, FS_O_WRITE | FS_O_CREATE);
-			if (ret > -1 && verbose) printk("File wrote successfully\n");
+			if (ret > -1 && verbose) printf("File wrote successfully\n");
 		}
     } else
     {
         ret = fs_open(&data_filp, current_full_path, FS_O_WRITE | FS_O_CREATE);
         if(ret < 0)
         {
-            if(verbose) printk("Error creating and writing file\n");
+            if(verbose) printf("Error creating and writing file\n");
             return -1;
         }
-        if(verbose) printk("File wrote successfully\n");
+        if(verbose) printf("File wrote successfully\n");
     }
 	
     if (formatted != NULL) {
@@ -192,11 +200,11 @@ int write_info(const char *data)
    	ret = fs_open(&data_filp, "/SD:/info.txt", FS_O_WRITE | FS_O_CREATE);
     if(ret)
     {
-        if(verbose) printk("Error creating and writing file\n");
+        if(verbose) printf("Error creating and writing file\n");
         return -1;
     }
 
-    if(verbose) printk("File wrote successfully\n");
+    if(verbose) printf("File wrote successfully\n");
 
 	ret = fs_write(&data_filp, data, strlen(data));
 
@@ -214,8 +222,7 @@ ReadParams read_file(const char *file_path)
 {
 	ReadParams readParams;
 	readParams.ret = 0;
-	
-    char boot_count[4096];
+    char boot_count[MAX_DATA_SIZE];
 	struct fs_file_t file;
 	int rc;
 
@@ -233,7 +240,7 @@ ReadParams read_file(const char *file_path)
 	
 	if (rc < 0)
 	{
-		if(verbose) printk("FAIL: open %s: %d\n", current_full_path, rc);
+		if(verbose) printf("FAIL: open %s: %d\n", current_full_path, rc);
 		readParams.ret = rc;
 		return readParams;
 	}
@@ -242,7 +249,7 @@ ReadParams read_file(const char *file_path)
 	
 	if (rc < 0)
 	{
-		if(verbose) printk("FAIL: read %s: [rd:%d]", current_full_path, rc);
+		if(verbose) printf("FAIL: read %s: [rd:%d]", current_full_path, rc);
 	}
 
     boot_count[rc] = 0;
@@ -257,7 +264,7 @@ ReadParams read_file(const char *file_path)
 ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t pointer)
 {
 	ReadParams readParams;
-	readParams.ret = 0;
+	readParams.ret = -1;
 
     char boot_count[buffer_size];
 	struct fs_file_t file;
@@ -277,7 +284,7 @@ ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t
 
 	if (rc < 0) 
 	{
-		if(verbose) printk("FAIL: open %s: %d", current_full_path, rc);
+		if(verbose) printf("FAIL: open %s: %d", current_full_path, rc);
 		readParams.ret = rc;
 		return readParams;
 	}
@@ -287,16 +294,16 @@ ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t
 	if(rs > -1)
 	{
 		rc = fs_read(&file, &boot_count, sizeof(boot_count));
-
 		if (rc < 0)
 		{
-			if(verbose) printk("FAIL: read %s: [rd:%d]", current_full_path, rc);
+			if(verbose) printf("FAIL: read %s: [rd:%d]", current_full_path, rc);
 			readParams.ret = -1;
 			return readParams;
 		}
-
 		boot_count[rc] = 0;
+
 		readParams.data = boot_count;
+		readParams.ret = rc;
 	}
 
 	fs_close(&file);
@@ -341,33 +348,52 @@ char* uint8_array_to_string(const uint8_t *array, size_t size) {
 }
 
 // function to convert char to uint8_t type
-uint8_t* convert_to_uint8_array(const char *reverted_output, size_t *size) {
-    char temp[MAX_INPUT_SIZE];
-    char *token;
-    uint8_t *array;
+uint8_t* convert_to_uint8_array(const char* str, size_t* out_size) {
+    // Contador para el número de elementos
     size_t count = 0;
+    
+    // Duplicar la cadena para no modificar la original
+    char buffer[MAX_INPUT_SIZE];
+    strncpy(buffer, str, sizeof(buffer));
+    buffer[sizeof(buffer) - 1] = '\0';
 
-    strncpy(temp, reverted_output, MAX_INPUT_SIZE);
-    token = strtok(temp, ",");
+    // Contar el número de elementos separados por comas
+    char* token = strtok(buffer, ",");
     while (token != NULL) {
         count++;
         token = strtok(NULL, ",");
     }
 
-    array = (uint8_t *)malloc(count * sizeof(uint8_t));
+    // Crear el array de uint8_t
+    uint8_t* array = (uint8_t*)malloc(count * sizeof(uint8_t));
     if (array == NULL) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return NULL;
+        perror("Failed to allocate memory");
+        exit(EXIT_FAILURE);
     }
 
-    strncpy(temp, reverted_output, MAX_INPUT_SIZE);
-    token = strtok(temp, ",");
+    // Volver a dividir la cadena original para convertir los valores
+    strncpy(buffer, str, sizeof(buffer));
+    buffer[sizeof(buffer) - 1] = '\0';
+
     size_t index = 0;
+    token = strtok(buffer, ",");
     while (token != NULL) {
-        array[index++] = (uint8_t)atoi(token);
+        // Convertir el token a uint8_t
+        int value = atoi(token);
+        if (value < 0 || value > 255) {
+            fprintf(stderr, "Value %d is out of range for uint8_t\n", value);
+            free(array);
+            return NULL;
+        }
+        array[index++] = (uint8_t)value;
         token = strtok(NULL, ",");
     }
-    *size = count;
+
+    // Retornar el tamaño del array a través del puntero
+    if (out_size != NULL) {
+        *out_size = count;
+    }
+
     return array;
 }
 

@@ -12,19 +12,12 @@
 #include "config.h"
 #include "utils.h"
 #include "btutils.h"
-
-
 #include "storage.h"
-#include "lib/sdcard/sdcard.h"
 
-static size_t pointer_frame_left;
-static bool pointer_lock = false;
-static size_t pointer_count;
-
-
-static uint32_t storage_action = 0;
-static int notification_value = 10;
+static bool reset_buf_event = true;
 static bool verbose = false;
+uint32_t storage_action = 0;
+int notification_value = 0;
 
 //
 // Internal
@@ -262,10 +255,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         if(verbose) printk("Failed to get connection info (err %d)\n", err);
         return;
     }
-
+    
+    reset_buf_event = true;
+    
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
-    if(verbose) printk("Connected\n");
+    if(verbose) printk("\n");
     if(verbose) printk("Interval: %d, latency: %d, timeout: %d\n", info.le.interval, info.le.latency, info.le.timeout);
     if(verbose) printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     if(verbose) printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
@@ -277,6 +272,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     if(verbose) printk("Disconnected\n");
     current_connection = NULL;
+    reset_buf_event = true;
     bt_conn_unref(conn);
     storage_action = 0;
     current_mtu = 0;
@@ -380,6 +376,49 @@ static bool read_from_tx_queue()
     return true;
 }
 
+int read_audio_in_storage(void)
+{
+    if(storage_action == 2)
+	{
+        //ReadInfo info = get_current_file();
+	    //printf("name: %u, ret: %d\n",info.name,info.ret);
+
+		for(size_t i = 0; i < written_max_count + 1; i++)
+        {
+			ReadParams audio_frame = read_file_fragmment("audio/0.txt", 651, (651*(i+1))+i);
+            if(audio_frame.ret < 0)
+            {
+                printf("fin del archivo\n");
+                return -2;
+            }
+            if(audio_frame.ret == 651)
+            {
+                size_t size;
+                char *revert = revert_format(audio_frame.data);
+                audio_frame.data = NULL;
+                uint8_t* audio = convert_to_uint8_array(revert, &size);
+                free(revert);
+
+                if(!current_connection)
+                {
+                    return -1;
+                }
+
+                int err = bt_gatt_notify(current_connection, &audio_service.attrs[1], audio, size); // Try send notification
+                //if (err < 0)
+                //{
+                //    i = i-1;
+                //}
+                free(audio);
+                size = 0;
+            }
+		}
+        return 0;
+	}
+    return -1;
+}
+
+
 //
 // Pusher
 //
@@ -394,6 +433,11 @@ static bool push_to_gatt(struct bt_conn *conn)
 {
     // Read data from ring buffer
     if (!read_from_tx_queue())
+    {
+        return false;
+    }
+
+    if (storage_action != 1)
     {
         return false;
     }
@@ -414,19 +458,10 @@ static bool push_to_gatt(struct bt_conn *conn)
         offset += packet_size;
         index++;
 
-        if (storage_action != 1) break;
-
         while (true)
         {
-            int err = 0;
 
-            if(storage_action == 1)
-            {   
-                err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE); // Try send notification
-            } else
-            {
-                break;
-            }
+            int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE); // Try send notification
             
             if (err == -EAGAIN || err == -ENOMEM)
             {
@@ -449,6 +484,11 @@ static bool push_to_storage(struct bt_conn *conn)
         return false;
     }
 
+    if (storage_action != 0)
+    {
+        return false;
+    }
+
     // Push each frame
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
@@ -465,15 +505,16 @@ static bool push_to_storage(struct bt_conn *conn)
         offset += packet_size;
         index++;
 
-        if (storage_action != 0) break;
+        //int lenght = sizeof(pusher_temp_data) / sizeof(pusher_temp_data[0]);
 
         while (true)
         {
-           
-            if (storage_action == 0)
+            int ret = save_audio_in_storage(pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+
+            if(ret < 0)
             {
-                save_audio_in_storage(pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-            } else break;
+                continue;
+            }
 
             break;
         }
@@ -515,9 +556,10 @@ void pusher(void)
         
         if (!valid)
         {
-            if (storage_action < 0 || storage_action > 1)
+            if (storage_action < 0 || storage_action > 1 || reset_buf_event)
             {
                 ring_buf_reset(&ring_buf);
+                reset_buf_event = false;
                 k_sleep(K_MSEC(10));
             }
         }
@@ -529,8 +571,11 @@ void pusher(void)
             if (!sent) k_sleep(K_MSEC(50));
         } else
         {
-            bool sent = push_to_storage(conn);
-            if (!sent) k_sleep(K_MSEC(50));
+            if(!reset_buf_event)
+            {
+                bool sent = push_to_storage(conn);
+                if (!sent) k_sleep(K_MSEC(50));
+            }
         }
 
         if (conn)

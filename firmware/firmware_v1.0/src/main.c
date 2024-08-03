@@ -1,5 +1,5 @@
 #include <zephyr/kernel.h>
-//#include "lib/sdcard/sdcard.h"
+#include "lib/sdcard/sdcard.h"
 #include <zephyr/logging/log.h>
 #include "transport.h"
 #include "storage.h"
@@ -57,11 +57,16 @@ int main(void)
 	//set_led_blue(false);
 	set_led_red(is_on);
 
+	//ReadInfo info = get_current_file();
+	//printf("name: %u, ret: %d\n",info.name,info.ret);	
+
 	while (1)
 	{
+		read_audio_in_storage();
 		is_on = !is_on;
 		set_led_red(is_on);
 		k_msleep(500);
+
 	}
 
 	// Unreachable
