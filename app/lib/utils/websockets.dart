@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -40,9 +40,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    headers: {'Authorization': await getAuthHeader()},
   );
 
   await channel.ready.then((_) {
