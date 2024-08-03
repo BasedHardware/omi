@@ -1,6 +1,9 @@
+from typing import List
+
 import requests
 from fastapi import APIRouter, HTTPException, Depends
 
+from models.plugin import Plugin
 from utils import auth
 from utils.plugins import get_plugins_data, get_plugin_by_id
 from utils.redis_utils import set_plugin_review, enable_plugin, disable_plugin
@@ -36,7 +39,7 @@ def get_plugins(uid: str):
     return get_plugins_data(uid, include_reviews=True)
 
 
-@router.get('/v2/plugins', tags=['v1'])
+@router.get('/v2/plugins', tags=['v1'], response_model=List[Plugin])
 def get_plugins(uid: str = Depends(auth.get_current_user_uid)):
     return get_plugins_data(uid, include_reviews=True)
 
