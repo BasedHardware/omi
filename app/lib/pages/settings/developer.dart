@@ -1,11 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/pinecone.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -23,22 +19,16 @@ class DeveloperSettingsPage extends StatefulWidget {
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController deepgramAPIKeyController = TextEditingController();
-  final TextEditingController openAIKeyController = TextEditingController();
   final TextEditingController webhookOnMemoryCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
 
   bool savingSettingsLoading = false;
-  bool useTranscriptServer = false;
 
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
   @override
   void initState() {
-    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
-    useTranscriptServer = SharedPreferencesUtil().useTranscriptServer;
-    deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
@@ -75,39 +65,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           child: ListView(
             children: [
               const SizedBox(height: 32),
-              _getText('Your own Developer Keys', bold: true),
-              const SizedBox(height: 16.0),
-              TextField(
-                controller: openAIKeyController,
-                obscureText: false,
-                autocorrect: false,
-                enabled: true,
-                enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(height: 16.0),
-              // CheckboxListTile(
-              //   contentPadding: EdgeInsets.zero,
-              //   value: useDeepgram,
-              //   onChanged: (s) {
-              //     setState(() {
-              //       useDeepgram = s!;
-              //     });
-              //   },
-              //   title: const Text('Enable Deepgram'),
-              //   checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-              // ),
-              TextField(
-                controller: deepgramAPIKeyController,
-                obscureText: false,
-                autocorrect: false,
-                enabled: true,
-                enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Deepgram API Key', hintText: ''),
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(height: 40),
               _getText('Store your audios in Google Cloud Storage', bold: true),
               const SizedBox(height: 16.0),
               TextField(
@@ -129,44 +86,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 style: const TextStyle(color: Colors.white),
               ),
               const SizedBox(height: 16),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: useTranscriptServer,
-                onChanged: (s) {
-                  if (s == null) return;
-                  if (!s) {
-                    getDialog(
-                      context,
-                      () => Navigator.of(context).pop(),
-                      () {
-                        setState(() => useTranscriptServer = true);
-                        Navigator.of(context).pop();
-                      },
-                      'Disabling Transcript Server',
-                      'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
-                          'This also means that some features will not be available.',
-                    );
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.of(context).pop(),
-                        () {
-                          setState(() => useTranscriptServer = false);
-                          Navigator.of(context).pop();
-                        },
-                        'Disabling Transcript Server',
-                        'Disabling the transcript server means that you will be using deepgram and not based hardware for transcription. '
-                            'This also means that some features will not be available.',
-                      ),
-                    );
-                  } else {
-                    setState(() => useTranscriptServer = s);
-                  }
-                },
-                title: const Text('Transcript Server Enabled'),
-                checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
               SharedPreferencesUtil().devModeEnabled
                   ? ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -266,7 +185,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 controller: webhookOnTranscriptReceived,
                 obscureText: false,
                 autocorrect: false,
-                 enabled: true,
+                enabled: true,
                 enableSuggestions: false,
                 decoration: _getTextFieldDecoration('Endpoint URL'),
                 style: const TextStyle(color: Colors.white),
@@ -339,11 +258,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
-    prefs.openAIApiKey = openAIKeyController.text.trim();
-    prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
-    prefs.useTranscriptServer = useTranscriptServer;
 
     MixpanelManager().settingsSaved();
     setState(() => savingSettingsLoading = false);

@@ -206,7 +206,7 @@ _getNoFriendConnectedYet(BuildContext context) {
 }
 
 speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
-  return !SharedPreferencesUtil().hasSpeakerProfile && SharedPreferencesUtil().useTranscriptServer
+  return !SharedPreferencesUtil().hasSpeakerProfile
       ? Stack(
           children: [
             GestureDetector(
