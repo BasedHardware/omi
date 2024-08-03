@@ -5,16 +5,16 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/growthbook.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/messages.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/backend/server/memory.dart';
-import 'package:friend_private/backend/server/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -24,6 +24,7 @@ import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
@@ -79,14 +80,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
-    print('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
+    debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setState(() {});
   }
 
   _edgeCasePluginNotAvailable() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
-    print('_edgeCasePluginNotAvailable $selectedChatPlugin');
+    debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
     if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
@@ -512,9 +513,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                   await routeToPage(context, const SettingsPage());
                   // TODO: this fails like 10 times, connects reconnects, until it finally works.
-                  if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
-                      (language != SharedPreferencesUtil().recordingsLanguage ||
-                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
+                  if (language != SharedPreferencesUtil().recordingsLanguage ||
+                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
                     capturePageKey.currentState?.restartWebSocket();
                   }
                   setState(() {});

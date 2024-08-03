@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/backend/server/memory.dart';
-import 'package:friend_private/backend/server/message.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 

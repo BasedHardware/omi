@@ -1,14 +1,23 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/shared.dart';
+import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/server/memory.dart';
-import 'package:friend_private/backend/server/message.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:tuple/tuple.dart';
+
+Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/migration/memories',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode(memories),
+  );
+  debugPrint('migrateMemoriesToBackend: ${response?.body}');
+}
 
 Future<CreateMemoryResponse?> createMemoryServer({
   required DateTime startedAt,
@@ -64,52 +73,6 @@ Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
   return null;
 }
 
-Future<List<ServerMessage>> getMessagesServer() async {
-  // TODO: Add pagination
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
-  debugPrint('getMessages: ${response.body}');
-  if (response.statusCode == 200) {
-    var messages =
-        (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMessage.fromJson(memory)).toList();
-    debugPrint('getMessages length: ${messages.length}');
-    return messages;
-  }
-  return [];
-}
-
-Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
-  return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
-    headers: {},
-    method: 'POST',
-    body: jsonEncode({'text': text}),
-  ).then((response) {
-    if (response == null) throw Exception('Failed to send message');
-    if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Failed to send message');
-    }
-  });
-}
-
-Future<ServerMessage> getInitialPluginMessage(String? pluginId) {
-  return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$pluginId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  ).then((response) {
-    if (response == null) throw Exception('Failed to send message');
-    if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Failed to send message');
-    }
-  });
-}
-
 Future<bool> deleteMemoryServer(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId',
@@ -135,28 +98,4 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
     return ServerMemory.fromJson(jsonDecode(response.body));
   }
   return null;
-}
-
-Future<bool> enablePluginServer(String pluginId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$pluginId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
-  return response.statusCode == 200;
-}
-
-Future<bool> disablePluginServer(String pluginId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$pluginId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
-  return response.statusCode == 200;
 }

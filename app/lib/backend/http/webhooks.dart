@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/shared.dart';
+import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawBody = false}) async {
@@ -49,29 +49,6 @@ Future<String> webhookOnTranscriptReceivedCall(List<TranscriptSegment> segments,
   return triggerTranscriptSegmentsRequest(SharedPreferencesUtil().webhookOnTranscriptReceived, sessionId, segments);
 }
 
-Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
-  var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath',
-    method: 'GET',
-    headers: {},
-    body: '',
-  );
-  return response?.body ?? '';
-}
-
-Future<bool> isPluginSetupCompleted(String? url) async {
-  if (url == null || url.isEmpty) return true;
-  var response = await makeApiCall(
-    url: '$url?uid=${SharedPreferencesUtil().uid}',
-    method: 'GET',
-    headers: {},
-    body: '',
-  );
-  var data = jsonDecode(response?.body ?? '{}');
-  print(data);
-  return data['is_setup_completed'] ?? false;
-}
 
 Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, List<TranscriptSegment> segments) async {
   debugPrint('triggerMemoryRequestAtEndpoint: $url');

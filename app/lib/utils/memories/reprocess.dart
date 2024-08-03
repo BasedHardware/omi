@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<ServerMemory?> reProcessMemory(
@@ -14,8 +14,6 @@ Future<ServerMemory?> reProcessMemory(
   changeLoadingState();
   try {
     var updatedMemory = await reProcessMemoryServer(memory.id);
-    // TODO: replace the current memory field
-    // TODO: handle errors
     MixpanelManager().reProcessMemory(memory);
     changeLoadingState();
     return updatedMemory;
