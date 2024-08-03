@@ -105,11 +105,16 @@ Future<UserCredential> signInWithGoogle() async {
 listenAuthTokenChanges() {
   FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
     // SharedPreferencesUtil().authToken = '123:/';
-    try {
-      var token = await getIdToken();
-      SharedPreferencesUtil().authToken = token ?? '';
-    } catch (e) {
-      debugPrint('Error getting token: $e');
+    if (user == null) {
+      debugPrint('User is currently signed out or the token has been revoked!');
+      SharedPreferencesUtil().authToken = '';
+    } else {
+      debugPrint('User is signed in!');
+      try {
+        SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+      } catch (e) {
+        debugPrint('Failed to get token: $e');
+      }
     }
   });
 }
@@ -144,6 +149,7 @@ listenAuthStateChanges() {
     if (user == null) {
       debugPrint('User is currently signed out!');
       SharedPreferencesUtil().onboardingCompleted = false;
+      SharedPreferencesUtil().authToken = '';
     } else {
       debugPrint('User is signed in!');
     }
