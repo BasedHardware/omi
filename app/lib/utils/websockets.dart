@@ -36,11 +36,11 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec';
+  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}';
 
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
-    headers: {'Authorization': await getAuthHeader()},
+    // headers: {'Authorization': await getAuthHeader()},
   );
 
   await channel.ready.then((_) {
