@@ -100,7 +100,7 @@ class Geolocation(BaseModel):
 class Memory(BaseModel):
     id: str
     created_at: datetime
-    transcript: str
+    # transcript: str
     structured: Structured
 
     started_at: Optional[datetime]
@@ -127,8 +127,6 @@ class Memory(BaseModel):
                 for item in memory.structured.action_items:
                     memory_str += f"  - {item.description}\n"
             memory_str += f"Category: {memory.structured.category}\n"
-            if include_transcript:
-                memory_str += f"Transcript:\n{memory.transcript}\n"
             result.append(memory_str.strip())
         return "\n\n".join(result)
 
