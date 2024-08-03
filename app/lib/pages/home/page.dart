@@ -277,7 +277,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         setState(() => memories = memoriesCopy);
                       },
                       deleteMemory: (ServerMemory memory, int index) {
-                        print('deleteMemory: $index');
                         var memoriesCopy = List<ServerMemory>.from(memories);
                         memoriesCopy.removeAt(index);
                         setState(() => memories = memoriesCopy);
