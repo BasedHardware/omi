@@ -29,7 +29,7 @@ class MixpanelManager {
 
   setPeopleValues() {
     setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
-    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Backups Enabled', _preferences.backupsEnabled);
@@ -88,12 +88,12 @@ class MixpanelManager {
 
   void pluginEnabled(String pluginId) {
     track('Plugin Enabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
   }
 
   void pluginDisabled(String pluginId) {
     track('Plugin Disabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
   }
 
   void pluginRated(String pluginId, double rating) {

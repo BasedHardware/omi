@@ -30,7 +30,13 @@ class AIMessage extends StatefulWidget {
 }
 
 class _AIMessageState extends State<AIMessage> {
-  List<bool> memoryDetailLoading = List.filled(3, false);
+  late List<bool> memoryDetailLoading;
+
+  @override
+  void initState() {
+    memoryDetailLoading = List.filled(widget.message.memories.length, false);
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
