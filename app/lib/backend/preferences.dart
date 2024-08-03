@@ -117,15 +117,8 @@ class SharedPreferencesUtil {
     saveStringList('pluginsList', plugins);
   }
 
-  List<String> get pluginsEnabled => getStringList('pluginsEnabled') ?? [];
-
-  set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
 
   enablePlugin(String value) {
-    final List<String> pluginsId = pluginsEnabled;
-    pluginsId.add(value);
-    pluginsEnabled = pluginsId;
-
     final List<Plugin> plugins = pluginsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = true;
@@ -133,11 +126,6 @@ class SharedPreferencesUtil {
   }
 
   disablePlugin(String value) {
-    if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
-    final List<String> pluginsId = pluginsEnabled;
-    pluginsId.remove(value);
-    pluginsEnabled = pluginsId;
-
     final List<Plugin> plugins = pluginsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = false;

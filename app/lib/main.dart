@@ -67,8 +67,8 @@ void main() async {
     OneSignal.initialize(Env.oneSignalAppId!);
     OneSignal.login(SharedPreferencesUtil().uid);
   }
-
   if (Env.instabugApiKey != null) {
+    Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () {
         Instabug.init(
