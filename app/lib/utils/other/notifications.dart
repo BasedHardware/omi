@@ -107,7 +107,7 @@ void createNotification({
   bool isDailySummaryNotification = false,
 }) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
-  print('createNotification: $allowed');
+  debugPrint('createNotification: $allowed');
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
   NotificationCalendar? interval = await _retrieveNotificationInterval(

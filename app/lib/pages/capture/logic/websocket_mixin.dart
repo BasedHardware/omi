@@ -157,7 +157,7 @@ mixin WebSocketMixin {
         case InternetStatus.disconnected:
           debugPrint('Internet connection lost. Disconnecting WebSocket.');
           internetLostNotificationDelay?.cancel();
-          internetLostNotificationDelay = Timer(const Duration(seconds: 10), () {
+          internetLostNotificationDelay = Timer(const Duration(seconds: 60), () {
             _notifyInternetLost();
           });
           websocketChannel?.sink.close(1000, 'Internet connection lost');
@@ -204,7 +204,7 @@ mixin WebSocketMixin {
         codec: codec,
       );
     });
-    if (_reconnectionAttempts == 4 && !_hasNotifiedUser) {
+    if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
       _notifyReconnectionFailure();
       _hasNotifiedUser = true;
     }
