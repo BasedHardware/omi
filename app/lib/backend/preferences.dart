@@ -260,6 +260,10 @@ class SharedPreferencesUtil {
 
   set authToken(String value) => saveString('authToken', value);
 
+  int get tokenExpirationTime => getInt('tokenExpirationTime') ?? 0;
+
+  set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
+
   String get email => getString('email') ?? '';
 
   set email(String value) => saveString('email', value);

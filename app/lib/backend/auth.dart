@@ -105,11 +105,16 @@ Future<UserCredential> signInWithGoogle() async {
 listenAuthTokenChanges() {
   FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
     // SharedPreferencesUtil().authToken = '123:/';
-    try {
-      var token = await getIdToken();
-      SharedPreferencesUtil().authToken = token ?? '';
-    } catch (e) {
-      debugPrint('Error getting token: $e');
+    if (user == null) {
+      debugPrint('User is currently signed out or the token has been revoked!');
+      SharedPreferencesUtil().authToken = '';
+    } else {
+      debugPrint('User is signed in!');
+      try {
+        SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+      } catch (e) {
+        debugPrint('Failed to get token: $e');
+      }
     }
   });
 }
@@ -117,7 +122,11 @@ listenAuthTokenChanges() {
 Future<String?> getIdToken() async {
   try {
     IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
-    if (newToken?.token != null) SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+    if (newToken?.token != null) {
+      SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+      SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
+      SharedPreferencesUtil().authToken = newToken?.token ?? '';
+    }
     return newToken?.token;
   } catch (e) {
     print(e);
@@ -140,6 +149,7 @@ listenAuthStateChanges() {
     if (user == null) {
       debugPrint('User is currently signed out!');
       SharedPreferencesUtil().onboardingCompleted = false;
+      SharedPreferencesUtil().authToken = '';
     } else {
       debugPrint('User is signed in!');
     }
