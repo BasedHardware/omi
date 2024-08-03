@@ -184,6 +184,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     super.initState();
   }
 
+  Timer? _disconnectNotificationTimer;
+
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
     // TODO: when disconnected manually need to remove this connection state listener
@@ -194,12 +196,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           capturePageKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() => _device = null);
           InstabugLog.logInfo('Friend Device Disconnected');
-          if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
-            createNotification(
-              title: 'Friend Device Disconnected',
-              body: 'Please reconnect to continue using your Friend.',
-            );
-          }
+          _disconnectNotificationTimer?.cancel();
+          _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+              createNotification(
+                title: 'Friend Device Disconnected',
+                body: 'Please reconnect to continue using your Friend.',
+              );
+          });
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
         },
@@ -216,6 +219,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
     debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
+    _disconnectNotificationTimer?.cancel();
     clearNotification(1);
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
