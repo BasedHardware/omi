@@ -36,7 +36,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   _init() async {
     _device = await getConnectedDevice();
     _device ??= await scanAndConnectDevice(timeout: true);
-    _samples = await getUserSamplesState(SharedPreferencesUtil().uid);
+    _samples = await getUserSamplesState();
     _controller = TabController(length: 2 + _samples.length, vsync: this);
     _initiateConnectionListener();
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
