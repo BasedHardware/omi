@@ -1,12 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
@@ -42,6 +43,16 @@ Future<CreateMemoryResponse?> createMemoryServer({
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateMemoryResponse.fromJson(jsonDecode(response.body));
+  } else {
+    CrashReporting.reportHandledCrash(
+      Exception('Failed to create memory'),
+      StackTrace.current,
+      level: NonFatalExceptionLevel.info,
+      userAttributes: {
+        'response': response.body,
+        'transcriptSegments': TranscriptSegment.segmentsAsString(transcriptSegments),
+      },
+    );
   }
   return null;
 }
