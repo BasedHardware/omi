@@ -44,6 +44,6 @@ def get_backup(uid: str):  # Depends(auth.get_current_user_uid)
 
 
 @router.delete('/v1/backups', tags=['v1'])
-def delete_backup(uid: str):  # Depends(auth.get_current_user_uid)
+def delete_backup(uid: str):  # = Depends(auth.get_current_user_uid)
     delete_backup_storage(uid)
     return 'ok'
