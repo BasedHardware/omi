@@ -22,7 +22,7 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({
-    'Authorization': await getAuthHeader(),
+    'authorization': await getAuthHeader(),
   });
 
   try {
@@ -42,9 +42,9 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
   }
 }
 
-Future<bool> userHasSpeakerProfile(String uid) async {
+Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/speech-profile?uid=$uid',
+    url: '${Env.apiBaseUrl}v1/speech-profile?uid=${SharedPreferencesUtil().uid}',
     // url: 'https://5818-107-3-134-29.ngrok-free.app/v1/speech-profile',
     headers: {},
     method: 'GET',
@@ -55,10 +55,10 @@ Future<bool> userHasSpeakerProfile(String uid) async {
   return jsonDecode(response.body)['has_profile'] ?? false;
 }
 
-Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
-  debugPrint('getUserSamplesState for uid: $uid');
+Future<List<SpeakerIdSample>> getUserSamplesState() async {
+  debugPrint('getUserSamplesState');
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}samples?uid=$uid',
+    url: '${Env.apiBaseUrl}samples?uid=${SharedPreferencesUtil().uid}',
     headers: {},
     method: 'GET',
     body: '',
@@ -68,12 +68,15 @@ Future<List<SpeakerIdSample>> getUserSamplesState(String uid) async {
   return SpeakerIdSample.fromJsonList(jsonDecode(response.body));
 }
 
-Future<bool> uploadSample(File file, String uid) async {
-  debugPrint('uploadSample ${file.path} for uid: $uid');
+Future<bool> uploadSample(File file) async {
+  debugPrint('uploadSample ${file.path}');
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}samples/upload?uid=$uid'),
+    Uri.parse('${Env.apiBaseUrl}samples/upload?uid=${SharedPreferencesUtil().uid}'),
   );
+  request.headers.addAll({
+    'authorization': await getAuthHeader(),
+  });
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
 
   try {
@@ -113,9 +116,9 @@ Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
   debugPrint('migrateMemoriesToBackend: ${response?.body}');
 }
 
-Future<String> downloadBackupApi(String uid) async {
+Future<String> downloadBackupApi() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups?uid=$uid',
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
     headers: {},
     method: 'GET',
     body: '',

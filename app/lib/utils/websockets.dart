@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
@@ -35,11 +36,16 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-  var params = '?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&sample_rate=$sampleRate&codec=$codec';
+  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec';
+
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
+    headers: {
+      'authorization': await getAuthHeader(),
+    },
   );
-  channel.ready.then((_) {
+
+  await channel.ready.then((_) {
     channel.stream.listen(
       (event) {
         if (event == 'ping') return;
