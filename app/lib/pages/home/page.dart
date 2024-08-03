@@ -81,7 +81,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   bool scriptsInProgress = false;
 
   _setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setState(() {});
