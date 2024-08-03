@@ -61,7 +61,6 @@ mixin WebSocketMixin {
 
     try {
       websocketChannel = await streamingTranscript(
-        codec: codec,
         onWebsocketConnectionSuccess: () {
           debugPrint('WebSocket connected successfully');
           wsConnectionState = WebsocketConnectionStatus.connected;
@@ -118,6 +117,7 @@ mixin WebSocketMixin {
           );
         },
         onMessageReceived: onMessageReceived,
+        codec: codec,
         sampleRate: sampleRate ?? (codec == BleAudioCodec.opus ? 16000 : 8000),
       );
     } catch (e) {

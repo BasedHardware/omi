@@ -59,7 +59,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         ? memories
         : memories
             .where(
-              (memory) => (memory.transcript + memory.structured.title + memory.structured.overview)
+              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
                   .toLowerCase()
                   .contains(textController.text.toLowerCase()),
             )
