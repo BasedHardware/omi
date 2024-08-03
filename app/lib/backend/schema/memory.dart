@@ -46,7 +46,7 @@ class ServerMemory {
     this.deleted = false,
   });
 
-  MemoryType get type => photos.isNotEmpty ? MemoryType.audio : MemoryType.image;
+  MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
