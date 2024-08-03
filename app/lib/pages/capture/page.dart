@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -127,9 +127,10 @@ class CapturePageState extends State<CapturePage>
     );
   }
 
-  Future<void> initiateBytesStreamingProcessing() async {
+  Future<void> initiateFriendAudioStreaming() async {
     if (btDevice == null) return;
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+    if (codec != BleAudioCodec.pcm8) restartWebSocket();
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
@@ -164,7 +165,7 @@ class CapturePageState extends State<CapturePage>
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       startOpenGlass();
-      initiateBytesStreamingProcessing();
+      initiateFriendAudioStreaming();
       // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
     }
   }
@@ -254,7 +255,7 @@ class CapturePageState extends State<CapturePage>
     WavBytesUtil.clearTempWavFiles();
     initiateWebsocket();
     startOpenGlass();
-    initiateBytesStreamingProcessing();
+    initiateFriendAudioStreaming();
     processCachedTranscript();
 
     WidgetsBinding.instance.addObserver(this);

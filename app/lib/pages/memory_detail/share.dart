@@ -12,7 +12,7 @@ enum BottomSheetView { share, exportTranscript, exportSummary }
 enum ExportType { txt, pdf, markdown }
 
 void _copyTranscript(BuildContext context, ServerMemory memory) {
-  Clipboard.setData(ClipboardData(text: memory.transcript));
+  Clipboard.setData(ClipboardData(text: memory.getTranscript(generate: true)));
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(content: Text('Transcript copied to clipboard')),
   );
