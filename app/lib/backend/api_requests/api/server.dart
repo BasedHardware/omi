@@ -44,11 +44,8 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
 Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/speech-profile',
-
     // url: 'https://5818-107-3-134-29.ngrok-free.app/v1/speech-profile',
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    headers: {},
     method: 'GET',
     body: '',
   );
@@ -61,9 +58,7 @@ Future<List<SpeakerIdSample>> getUserSamplesState() async {
   debugPrint('getUserSamplesState');
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}samples',
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    headers: {},
     method: 'GET',
     body: '',
   );
@@ -102,11 +97,8 @@ Future<bool> uploadSample(File file) async {
 
 Future<void> uploadBackupApi(String backup) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
-    headers: {
-      'Content-Type': 'application/json',
-      'authorization': await getAuthHeader(),
-    },
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
+    headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'data': backup}),
   );
@@ -116,10 +108,7 @@ Future<void> uploadBackupApi(String backup) async {
 Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/migration/memories',
-    headers: {
-      'Content-Type': 'application/json',
-      'authorization': await getAuthHeader(),
-    },
+    headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode(memories),
   );
@@ -128,10 +117,8 @@ Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
 
 Future<String> downloadBackupApi() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
     method: 'GET',
     body: '',
   );
@@ -142,10 +129,8 @@ Future<String> downloadBackupApi() async {
 
 Future<bool> deleteBackupApi() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/backups',
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    url: '${Env.apiBaseUrl}v1/backups?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
     method: 'DELETE',
     body: '',
   );
@@ -156,10 +141,8 @@ Future<bool> deleteBackupApi() async {
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins',
-    headers: {
-      'authorization': await getAuthHeader(),
-    },
+    url: '${Env.apiBaseUrl}v1/plugins?uid=${SharedPreferencesUtil().uid}',
+    headers: {},
     body: '',
     method: 'GET',
   );
@@ -179,11 +162,8 @@ Future<List<Plugin>> retrievePlugins() async {
 
 Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$pluginId',
-    headers: {
-      'Content-Type': 'application/json',
-      'authorization': await getAuthHeader(),
-    },
+    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$pluginId&uid=${SharedPreferencesUtil().uid}',
+    headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'score': score, review: review}),
   );
