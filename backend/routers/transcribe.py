@@ -3,7 +3,7 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi import UploadFile, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -11,7 +11,6 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils import auth
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
     get_speaker_audio_file, remove_downloaded_samples
@@ -40,7 +39,7 @@ def transcribe(file: UploadFile, uid: str, language: str = 'en'):
 
 
 @router.post("/v1/transcribe", tags=['v1'])
-def transcribe_auth(file: UploadFile, uid: str = Depends(auth.get_current_user_uid), language: str = 'en'):
+def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     with open(file_path, 'wb') as f:

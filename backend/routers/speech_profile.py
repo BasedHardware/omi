@@ -1,10 +1,9 @@
 import os
 import threading
 
-from fastapi import APIRouter, UploadFile, Depends
+from fastapi import APIRouter, UploadFile
 from pydub import AudioSegment
 
-from utils import auth
 from utils.storage import retrieve_all_samples, upload_sample_storage
 from utils.stt.soniox_util import create_speaker_profile, uid_has_speech_profile
 
@@ -25,7 +24,7 @@ def _create_profile(uid: str):
 
 
 @router.post('/samples/upload')
-def upload_sample(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
+def upload_sample(file: UploadFile, uid: str):
     print('upload_sample')
     path = f"_temp/{uid}"
     os.makedirs(path, exist_ok=True)
@@ -43,7 +42,7 @@ def upload_sample(file: UploadFile, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.get('/samples')
-def my_samples(uid: str = Depends(auth.get_current_user_uid)):
+def my_samples(uid: str):
     print('my_samples')
     samples_dir = retrieve_all_samples(uid)
     samples = set(os.listdir(samples_dir))
@@ -71,5 +70,5 @@ async def has_profile(uid: str):
 
 
 @router.get('/v1/speech-profile', tags=['v1'])
-async def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+async def has_speech_profile(uid: str):
     return {'has_profile': uid_has_speech_profile(uid)}
