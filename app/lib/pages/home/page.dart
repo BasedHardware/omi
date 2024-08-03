@@ -139,7 +139,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      requestNotificationPermissions();
+      // TODO: request only one more time if denied, but not again.
+      // requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
