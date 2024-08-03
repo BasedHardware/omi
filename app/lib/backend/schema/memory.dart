@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/server/message.dart';
+import 'package:friend_private/backend/schema/message.dart';
 
 class CreateMemoryResponse {
   final List<ServerMessage> messages;

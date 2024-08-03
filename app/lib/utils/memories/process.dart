@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/server/memory.dart';
-import 'package:friend_private/backend/server/message.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:tuple/tuple.dart';
 

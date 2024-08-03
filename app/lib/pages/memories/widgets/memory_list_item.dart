@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
