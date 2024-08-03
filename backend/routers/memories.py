@@ -86,6 +86,11 @@ def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str, memory
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(create_memory: CreateMemory, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
+    if create_memory.photos:
+        # TODO: photos should be handled differently, a subcollection or maybe a list of files in cloud storage,
+        # should they be uploaded from the client?
+        raise HTTPException(status_code=400, detail="Photos are not supported yet")
+
     memory = _process_memory(uid, language_code, create_memory)
     results = trigger_external_integrations(uid, memory)
 
@@ -203,8 +208,14 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
     memories_vectors = []
     db_batch = memories_db.get_memories_batch_operation()
     for i, memory in enumerate(memories):
+        if memory.get('photos'):
+            continue  # Ignore openGlass memories for now
+
         structured_obj = _get_structured(memory)
         # print(structured_obj)
+        if not memory['transcriptSegments'] and memory['transcript']:
+            memory['transcriptSegments'] = [{'text': memory['transcript']}]
+
         memory_obj = Memory(
             id=str(generate_uuid4_from_seed(f'{uid}-{memory["createdAt"]}')),
             uid=uid,
@@ -212,29 +223,28 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             created_at=datetime.fromisoformat(memory['createdAt']),
             started_at=datetime.fromisoformat(memory['startedAt']) if memory['startedAt'] else None,
             finished_at=datetime.fromisoformat(memory['finishedAt']) if memory['finishedAt'] else None,
-            transcript=memory['transcript'],
             discarded=memory['discarded'],
             transcript_segments=[
                 TranscriptSegment(
                     text=segment['text'],
-                    start=segment['start'],
-                    end=segment['end'],
-                    speaker=segment['speaker'],
-                    speaker_id=segment['speaker_id'],
-                    is_user=segment['is_user'],
-                ) for segment in memory['transcriptSegments']
+                    start=segment.get('start', 0),
+                    end=segment.get('end', 0),
+                    speaker=segment.get('speaker', 'SPEAKER_00'),
+                    is_user=segment.get('is_user', False),
+                ) for segment in memory['transcriptSegments'] if segment.get('text', '')
             ],
             plugins_results=[
                 PluginResult(plugin_id=result.get('pluginId'), content=result['content'])
                 for result in memory['pluginsResponse']
             ],
-            photos=[
-                MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
-            ],
+            # photos=[
+            #     MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
+            # ],
             geolocation=_get_geolocation(memory),
             deleted=False,
         )
         memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
+        print(len(str(memory_obj.dict())))
 
         if not memory_obj.discarded:
             memories_vectors.append(memory_obj)
@@ -243,7 +253,7 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
             memories_vectors = []
 
-        if i % 100 == 0:
+        if i % 20 == 0:
             db_batch.commit()
             db_batch = memories_db.get_memories_batch_operation()
 
