@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class ConfirmDeletionWidget extends StatefulWidget {
   final ServerMemory memory;

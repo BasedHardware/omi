@@ -1,5 +1,5 @@
-import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 
 scriptMigrateMemoriesToBack() async {

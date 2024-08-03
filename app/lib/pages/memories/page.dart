@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/server/memory.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:visibility_detector/visibility_detector.dart';
