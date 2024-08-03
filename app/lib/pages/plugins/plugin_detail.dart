@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/api_requests/api/memories.dart';
@@ -28,9 +26,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   bool pluginLoading = false;
 
   checkSetupCompleted() {
+    // TODO: move check to backend
     isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
-      print('Setup completed: $value');
-      print(SharedPreferencesUtil().uid);
       setState(() => setupCompleted = value);
     });
   }
