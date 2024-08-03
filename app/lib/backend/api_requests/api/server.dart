@@ -43,7 +43,7 @@ Future<List<TranscriptSegment>> transcribe(File file) async {
 
 Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/speech-profile',
+    url: '${Env.apiBaseUrl}v1/speech-profile?uid=${SharedPreferencesUtil().uid}',
     // url: 'https://5818-107-3-134-29.ngrok-free.app/v1/speech-profile',
     headers: {},
     method: 'GET',
@@ -57,7 +57,7 @@ Future<bool> userHasSpeakerProfile() async {
 Future<List<SpeakerIdSample>> getUserSamplesState() async {
   debugPrint('getUserSamplesState');
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}samples',
+    url: '${Env.apiBaseUrl}samples?uid=${SharedPreferencesUtil().uid}',
     headers: {},
     method: 'GET',
     body: '',
@@ -71,7 +71,7 @@ Future<bool> uploadSample(File file) async {
   debugPrint('uploadSample ${file.path}');
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}samples/upload'),
+    Uri.parse('${Env.apiBaseUrl}samples/upload?uid=${SharedPreferencesUtil().uid}'),
   );
   request.headers.addAll({
     'authorization': await getAuthHeader(),
