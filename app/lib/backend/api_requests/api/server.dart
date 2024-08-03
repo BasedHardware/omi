@@ -139,7 +139,7 @@ Future<bool> deleteBackupApi() async {
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins?uid=${SharedPreferencesUtil().uid}',
+    url: '${Env.apiBaseUrl}v2/plugins',
     headers: {},
     body: '',
     method: 'GET',

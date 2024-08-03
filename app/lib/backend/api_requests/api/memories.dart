@@ -57,7 +57,7 @@ Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getMemories: ${response.body}');
+  debugPrint('reProcessMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return ServerMemory.fromJson(jsonDecode(response.body));
   }
@@ -135,4 +135,28 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
     return ServerMemory.fromJson(jsonDecode(response.body));
   }
   return null;
+}
+
+Future<bool> enablePluginServer(String pluginId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$pluginId',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('enablePlugin: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> disablePluginServer(String pluginId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$pluginId',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('enablePlugin: ${response.body}');
+  return response.statusCode == 200;
 }

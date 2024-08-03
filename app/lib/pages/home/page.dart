@@ -86,8 +86,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _edgeCasePluginNotAvailable() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    print('_edgeCasePluginNotAvailable $selectedChatPlugin');
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat())) {
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }
   }
@@ -476,8 +477,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           menuMaxHeight: 350,
                           value: SharedPreferencesUtil().selectedChatPluginId,
                           onChanged: (s) async {
-                            if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) ||
-                                s == 'enable') {
+                            if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
                               await routeToPage(context, const PluginsPage(filterChatOnly: true));
                               setState(() {});
                               return;
@@ -504,11 +504,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     )
                   : const SizedBox(width: 16),
               IconButton(
-                icon: const Icon(
-                  Icons.settings,
-                  color: Colors.white,
-                  size: 30,
-                ),
+                icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
                   String language = SharedPreferencesUtil().recordingsLanguage;
@@ -542,16 +538,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           )
         ] +
-        plugins
-            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id) && p.worksWithChat())
-            .map<DropdownMenuItem<String>>((Plugin plugin) {
+        plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
             child: Row(
@@ -574,7 +568,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             ),
           );
         }).toList();
-    if (SharedPreferencesUtil().pluginsEnabled.isNotEmpty) {
+    if (plugins.where((p) => p.enabled).isNotEmpty) {
       items.add(const DropdownMenuItem<String>(
         value: 'enable',
         child: Row(
