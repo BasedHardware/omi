@@ -1,11 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -86,38 +88,79 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 style: const TextStyle(color: Colors.white),
               ),
               const SizedBox(height: 16),
-              SharedPreferencesUtil().devModeEnabled
-                  ? ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Export Memories'),
-                      subtitle: const Text('Export all your memories to a JSON file.'),
-                      trailing: loadingExportMemories
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.upload),
-                      onTap: loadingExportMemories
-                          ? null
-                          : () async {
-                              if (loadingExportMemories) return;
-                              setState(() => loadingExportMemories = true);
-                              File file = await MemoryProvider().exportMemoriesToFile();
-                              final result =
-                                  await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-                              if (result.status == ShareResultStatus.success) {
-                                debugPrint('Thank you for sharing the picture!');
-                              }
-                              MixpanelManager().exportMemories();
-                              // 54d2c392-57f1-46dc-b944-02740a651f7b
-                              setState(() => loadingExportMemories = false);
-                            },
-                    )
-                  : const SizedBox(),
+              ListTile(
+                title: const Text('Import Memories'),
+                subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
+                contentPadding: EdgeInsets.zero,
+                trailing: loadingImportMemories
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.download),
+                onTap: () async {
+                  if (loadingImportMemories) return;
+                  setState(() => loadingImportMemories = true);
+                  // open file picker
+                  var file = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['json'],
+                  );
+                  MixpanelManager().importMemories();
+                  if (file == null) {
+                    setState(() => loadingImportMemories = false);
+                    return;
+                  }
+                  var xFile = file.files.first.xFile;
+                  try {
+                    var content = (await xFile.readAsString());
+                    var decoded = jsonDecode(content);
+                    List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
+                    print('Memories: $memories');
+                    MemoryProvider().storeMemories(memories);
+                    _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
+                    MixpanelManager().importedMemories();
+                  } catch (e) {
+                    debugPrint(e.toString());
+                    _snackBar('Make sure the file is a valid JSON file.');
+                  }
+                  setState(() => loadingImportMemories = false);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Export Memories'),
+                subtitle: const Text('Export all your memories to a JSON file.'),
+                trailing: loadingExportMemories
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.upload),
+                onTap: loadingExportMemories
+                    ? null
+                    : () async {
+                        if (loadingExportMemories) return;
+                        setState(() => loadingExportMemories = true);
+                        File file = await MemoryProvider().exportMemoriesToFile();
+                        final result =
+                            await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                        if (result.status == ShareResultStatus.success) {
+                          debugPrint('Thank you for sharing the picture!');
+                        }
+                        MixpanelManager().exportMemories();
+                        // 54d2c392-57f1-46dc-b944-02740a651f7b
+                        setState(() => loadingExportMemories = false);
+                      },
+              ),
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
