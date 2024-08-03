@@ -14,25 +14,20 @@ else:
     index = None
 
 
-def _get_data(uid: str, memory_id: str, vector: List[float], transcript: str, summary: str):
+def _get_data(uid: str, memory_id: str, vector: List[float]):
     return {
         "id": f'{uid}-{memory_id}',
         "values": vector,
         'metadata': {
             'uid': uid,
             'memory_id': memory_id,
-            'transcript': transcript,
-            'summary': summary,
-            # TODO: should store more raw fields? or any at all?
             'created_at': datetime.utcnow().timestamp() / 1000,
         }
     }
 
 
 def upsert_vector(uid: str, memory: Memory, vector: List[float]):
-    res = index.upsert(
-        vectors=[_get_data(uid, memory.id, vector, memory.get_transcript(), str(memory.structured))], namespace="ns1"
-    )
+    res = index.upsert(vectors=[_get_data(uid, memory.id, vector)], namespace="ns1")
     print('upsert_vector', res)
 
 
@@ -40,7 +35,7 @@ def upsert_vectors(
         uid: str, vectors: List[List[float]], memories: List[Memory]
 ):
     data = [
-        _get_data(uid, memory.id, vector, memory.transcript, str(memory.structured)) for memory, vector in
+        _get_data(uid, memory.id, vector) for memory, vector in
         zip(memories, vectors)
     ]
     res = index.upsert(vectors=data, namespace="ns1")

@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file
-from utils.stt.vad import vad_is_empty, is_speech_present, window_size_samples
+from utils.stt.vad import vad_is_empty, is_speech_present, VADIterator, model
 
 router = APIRouter()
 
@@ -85,6 +85,9 @@ async def websocket_endpoint(
         await websocket.close()
         return
 
+    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
+    window_size_samples = 256 if sample_rate == 8000 else 512
+
     async def receive_audio(socket1, socket2):
         audio_buffer = bytearray()
         timer_start = time.time()
@@ -92,15 +95,15 @@ async def websocket_endpoint(
             while True:
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
-                # print(data)
+                print(len(audio_buffer), window_size_samples * 2)
                 # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
                 if len(audio_buffer) >= window_size_samples * 2:  # 2 bytes per sample
                     # TODO: vad doesn't work index.html
-                    if is_speech_present(audio_buffer[:window_size_samples * 2]):
-                        # print('Speech present')
-                        pass
+                    if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
+                        print('*')
+                        # pass
                     else:
-                        # print('-')
+                        print('-')
                         audio_buffer = audio_buffer[window_size_samples * 2:]
                         continue
 
