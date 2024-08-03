@@ -39,6 +39,7 @@ Future<void> requestNotificationPermissions() async {
     // This is just a basic example. For real apps, you must show some
     // friendly dialog box before call the request method.
     // This is very important to not harm the user experience
+    // print('shouldShowRationaleToRequest: ${await AwesomeNotifications()}');
     AwesomeNotifications().requestPermissionToSendNotifications();
   }
 }
@@ -88,6 +89,7 @@ void createNotification({
   bool isDailySummaryNotification = false,
 }) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
+  print('createNotification: $allowed');
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
   NotificationCalendar? interval = await _retrieveNotificationInterval(
