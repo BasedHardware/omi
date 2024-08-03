@@ -78,6 +78,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
+  bool scriptsInProgress = false;
+
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
@@ -119,8 +121,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
+    setState(() => scriptsInProgress = true);
     await scriptMigrateMemoriesToBack();
     _initiateMemories();
+    setState(() => scriptsInProgress = false);
   }
 
   ///Screens with respect to subpage
@@ -386,7 +390,37 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       ],
                     ),
                   ),
+                ),
+              if (scriptsInProgress)
+                Center(
+                  child: Container(
+                    height: 150,
+                    width: 250,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                        SizedBox(height: 16),
+                        Center(
+                            child: Text(
+                          'Running migration, please wait! 🚨',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        )),
+                      ],
+                    ),
+                  ),
                 )
+              else
+                const SizedBox.shrink(),
             ],
           ),
         ),
