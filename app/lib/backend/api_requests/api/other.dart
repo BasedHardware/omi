@@ -1,68 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:deepgram_speech_to_text/deepgram_speech_to_text.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/server/memory.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-
-Future<List<TranscriptSegment>> deepgramTranscribe(File file) async {
-  debugPrint('deepgramTranscribe');
-  var startTime = DateTime.now();
-  // TODO: why there seems to be no punctuation
-  Deepgram deepgram = Deepgram(getDeepgramApiKeyForUsage(), baseQueryParams: {
-    'model': 'nova-2-general',
-    'detect_language': false,
-    'language': SharedPreferencesUtil().recordingsLanguage,
-    'filler_words': false,
-    'punctuate': true,
-    'diarize': true,
-    'smart_format': true,
-    'multichannel': false
-    // 'detect_topics': true,
-    // 'topics': true,
-    // 'intents': true,
-    // 'sentiment': true,
-    // TODO: try more options, sentiment analysis, intent, topics
-  });
-
-  DeepgramSttResult res = await deepgram.transcribeFromFile(file);
-  debugPrint('Deepgram took: ${DateTime.now().difference(startTime).inSeconds} seconds');
-  var data = jsonDecode(res.json);
-  if (data['results'] == null || data['results']['channels'] == null) {
-    print('Deepgram error: ${data['error']}');
-    return [];
-  }
-  var result = data['results']['channels'][0]['alternatives'][0];
-  List<TranscriptSegment> segments = [];
-  for (var word in result['words']) {
-    if (segments.isEmpty) {
-      segments.add(TranscriptSegment(
-          speaker: 'SPEAKER_${word['speaker']}',
-          start: word['start'],
-          end: word['end'],
-          text: word['word'],
-          isUser: false));
-    } else {
-      var lastSegment = segments.last;
-      if (lastSegment.speakerId == word['speaker']) {
-        lastSegment.text += ' ${word['word']}';
-        lastSegment.end = word['end'];
-      } else {
-        segments.add(TranscriptSegment(
-            speaker: 'SPEAKER_${word['speaker']}',
-            start: word['start'],
-            end: word['end'],
-            text: word['word'],
-            isUser: false));
-      }
-    }
-  }
-  return segments;
-}
 
 Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawBody = false}) async {
   if (memory == null) return '';

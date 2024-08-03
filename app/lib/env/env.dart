@@ -13,8 +13,6 @@ abstract class Env {
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
-  static String? get deepgramApiKey => _instance.deepgramApiKey;
-
   static String? get instabugApiKey => _instance.instabugApiKey;
 
   static String get pineconeApiKey => _instance.pineconeApiKey;
@@ -38,8 +36,6 @@ abstract class EnvFields {
   String? get sentryDSNKey;
 
   String? get openAIAPIKey;
-
-  String? get deepgramApiKey;
 
   String? get instabugApiKey;
 

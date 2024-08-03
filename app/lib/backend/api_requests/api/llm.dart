@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/api_requests/api/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/env.dart';
 
 Future<dynamic> gptApiCall({
   required String model,
@@ -19,7 +20,7 @@ Future<dynamic> gptApiCall({
   final url = 'https://api.openai.com/v1/$urlSuffix';
   final headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Authorization': 'Bearer ${getOpenAIApiKeyForUsage()}',
+    'Authorization': 'Bearer ${Env.openAIAPIKey}',
   };
   final String body;
   if (urlSuffix == 'embeddings') {
