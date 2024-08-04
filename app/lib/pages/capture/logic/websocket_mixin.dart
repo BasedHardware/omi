@@ -157,9 +157,7 @@ mixin WebSocketMixin {
         case InternetStatus.disconnected:
           debugPrint('Internet connection lost. Disconnecting WebSocket.');
           internetLostNotificationDelay?.cancel();
-          internetLostNotificationDelay = Timer(const Duration(seconds: 60), () {
-            _notifyInternetLost();
-          });
+          internetLostNotificationDelay = Timer(const Duration(seconds: 60), () => _notifyInternetLost());
           websocketChannel?.sink.close(1000, 'Internet connection lost');
           _reconnectionTimer?.cancel();
           wsConnectionState = WebsocketConnectionStatus.notConnected;
