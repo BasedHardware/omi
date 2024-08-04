@@ -80,10 +80,7 @@ dependencies:
   objectbox: ^4.0.1
   objectbox_flutter_libs: any
   flutter_foreground_task: ^6.5.0
-  deepgram_speech_to_text:
-    git:
-      url: https://github.com/DamienDeepgram/deepgram_speech_to_text.git
-      ref: main
+  deepgram_speech_to_text: ^2.3.1
   upgrader: ^10.3.0
   workmanager:
     git:
