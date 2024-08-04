@@ -60,6 +60,9 @@ class LocationService {
         );
 
         var data = json.decode(res.body);
+        if (data['result'] == null || data['result'].length == 0 || data['result'][0]['place_id'] == null) {
+          return null; // FIXME, should return smth, move to the backend (send only lat, lng from here)
+        }
         Geolocation geolocation = Geolocation(
           latitude: locationData.latitude,
           longitude: locationData.longitude,
@@ -70,7 +73,7 @@ class LocationService {
         return geolocation;
       } catch (e) {
         print('getGeolocationDetails: $e');
-        return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
+        return null;
       }
     } else {
       return null;
