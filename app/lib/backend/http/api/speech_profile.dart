@@ -11,8 +11,7 @@ import 'package:path/path.dart';
 
 Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/speech-profile?uid=${SharedPreferencesUtil().uid}',
-    // url: 'https://5818-107-3-134-29.ngrok-free.app/v1/speech-profile',
+    url: '${Env.apiBaseUrl}v2/speech-profile',
     headers: {},
     method: 'GET',
     body: '',
@@ -25,7 +24,7 @@ Future<bool> userHasSpeakerProfile() async {
 Future<List<SpeakerIdSample>> getUserSamplesState() async {
   debugPrint('getUserSamplesState for uid: ${SharedPreferencesUtil().uid}');
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}samples?uid=${SharedPreferencesUtil().uid}',
+    url: '${Env.apiBaseUrl}v1/speech-profile/samples',
     headers: {},
     method: 'GET',
     body: '',
@@ -39,9 +38,10 @@ Future<bool> uploadSample(File file) async {
   debugPrint('uploadSample ${file.path} for uid: ${SharedPreferencesUtil().uid}');
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}samples/upload?uid=${SharedPreferencesUtil().uid}'),
+    Uri.parse('${Env.apiBaseUrl}v1/speech-profile/samples'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
 
   try {
     var streamedResponse = await request.send();
