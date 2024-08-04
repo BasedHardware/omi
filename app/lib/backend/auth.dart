@@ -42,7 +42,6 @@ Future<UserCredential> signInWithApple() async {
     SharedPreferencesUtil().givenName = appleCredential.givenName!;
     SharedPreferencesUtil().familyName = appleCredential.familyName ?? '';
   }
-  // TODO: this would not be set again if the user uninstalls and installs the app again :/ as name and email are only given once.
 
   // Create an `OAuthCredential` from the credential returned by Apple.
   final oauthCredential = OAuthProvider("apple.com").credential(
