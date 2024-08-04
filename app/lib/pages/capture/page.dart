@@ -207,8 +207,17 @@ class CapturePageState extends State<CapturePage>
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
-    assert(memory != null); // TODO: handle better
-    widget.addMemory(memory);
+    if (memory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Memory creation failed. Please try again later.',
+          style: TextStyle(color: Colors.white, fontSize: 14),
+        ),
+      ));
+      // TODO: store anyways something temporal and retry once connected again.
+    } else {
+      widget.addMemory(memory);
+    }
 
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
