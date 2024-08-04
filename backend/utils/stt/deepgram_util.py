@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from typing import Tuple, Optional
 
 import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -87,10 +88,10 @@ def remove_downloaded_samples(uid):
 
 
 # Add this new function to handle initial file sending
-def get_speaker_audio_file(uid):
+def get_speaker_audio_file(uid) -> Tuple[Optional[str], int]:
     path = retrieve_all_samples(uid)
     if len(os.listdir(path)) < 5:  # means user did less than 5 samples unfortunately, so not completed
-        return None, None
+        return None, 0
 
     single_file_path = f'{path}joined_output.wav'
     if os.path.exists(single_file_path):
@@ -131,7 +132,7 @@ async def process_audio_dg(
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
-        print(sentence)
+        # print(sentence)
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
