@@ -198,10 +198,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           InstabugLog.logInfo('Friend Device Disconnected');
           _disconnectNotificationTimer?.cancel();
           _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-              createNotification(
-                title: 'Friend Device Disconnected',
-                body: 'Please reconnect to continue using your Friend.',
-              );
+            createNotification(
+              title: 'Friend Device Disconnected',
+              body: 'Please reconnect to continue using your Friend.',
+            );
           });
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
@@ -518,6 +518,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           onChanged: (s) async {
                             if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
                               await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                              plugins = SharedPreferencesUtil().pluginsList;
                               setState(() {});
                               return;
                             }
@@ -554,6 +555,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
                     capturePageKey.currentState?.restartWebSocket();
                   }
+                  plugins = SharedPreferencesUtil().pluginsList;
                   setState(() {});
                 },
               )
