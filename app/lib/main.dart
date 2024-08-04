@@ -37,10 +37,12 @@ void main() async {
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(
       options: prod.DefaultFirebaseOptions.currentPlatform,
+      name: 'prod'
     );
   } else {
     await Firebase.initializeApp(
       options: dev.DefaultFirebaseOptions.currentPlatform,
+      name: 'dev'
     );
   }
 
