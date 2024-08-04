@@ -97,7 +97,6 @@ class CapturePageState extends State<CapturePage>
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
-
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
