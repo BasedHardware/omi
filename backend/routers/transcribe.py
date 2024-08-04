@@ -11,7 +11,8 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file
+from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
+    remove_downloaded_samples, get_speaker_audio_file
 from utils.stt.vad import vad_is_empty, VADIterator, model
 
 router = APIRouter()
@@ -71,9 +72,10 @@ async def websocket_endpoint(
     await websocket.accept()
     transcript_socket2 = None
     try:
-        # single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
-        # remove_downloaded_samples(uid)
-        single_file_path, duration = None, 0
+        single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
+        remove_downloaded_samples(uid)
+        # single_file_path, duration = None, 0
+        # TODO: what if opus? and the samples were created with pcm?
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
