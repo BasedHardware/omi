@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
@@ -27,55 +26,6 @@ import 'package:uuid/uuid.dart';
 
 import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
-
-Future<void> initializeNotifications() async {
-  await AwesomeNotifications().initialize(
-    null,
-    [
-      NotificationChannel(
-        channelKey: 'transcription_channel',
-        channelName: 'Transcription Notifications',
-        channelDescription: 'Displays ongoing transcription',
-        importance: NotificationImportance.Max,
-        playSound: false,
-        enableVibration: false,
-        onlyAlertOnce: true,
-      )
-    ],
-  );
-}
-
-int notificationId = 1;
-String latestTranscription = '';
-
-Future<void> updateTranscriptionNotification(String newText) async {
-  latestTranscription += newText + ' ';
-  List<String> words = latestTranscription.split(' ');
-  if (words.length > 10) {
-    latestTranscription = words.sublist(words.length - 10).join(' ');
-  }
-
-  await AwesomeNotifications().createNotification(
-    content: NotificationContent(
-      id: notificationId,
-      channelKey: 'transcription_channel',
-      title: 'Live Transcription',
-      body: latestTranscription,
-      notificationLayout: NotificationLayout.BigText,
-      autoDismissible: false,
-      category: NotificationCategory.Service,
-      locked: true,
-      displayOnBackground: false,
-      displayOnForeground: false,
-    ),
-    actionButtons: [
-      NotificationActionButton(
-        key: 'STOP',
-        label: 'Stop Transcription',
-      ),
-    ],
-  );
-}
 
 class CapturePage extends StatefulWidget {
   final Function refreshMemories;
@@ -149,8 +99,6 @@ class CapturePageState extends State<CapturePage>
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
-        updateTranscriptionNotification(newSegments.last.text);
-
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
@@ -306,7 +254,6 @@ class CapturePageState extends State<CapturePage>
     btDevice = widget.device;
     WavBytesUtil.clearTempWavFiles();
     initiateWebsocket();
-    initializeNotifications();
     startOpenGlass();
     initiateBytesStreamingProcessing();
     processCachedTranscript();
