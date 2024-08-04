@@ -203,7 +203,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _startForeground() async {
-    if (!Platform.isAndroid) return;
+    // if (!Platform.isAndroid) return;
     await foregroundUtil.initForegroundTask();
     var result = await foregroundUtil.startForegroundTask();
     debugPrint('_startForeground: $result');
