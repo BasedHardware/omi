@@ -9,15 +9,8 @@ import 'package:location/location.dart';
 
 class LocationService {
   Location location = Location();
-  StreamSubscription<LocationData>? _locationSubscription;
-  List<LocationData> locationDataList = [];
-
-  void stopLocationService() {
-    _locationSubscription?.cancel();
-  }
 
   Future<bool> enableService() async {
-    location.enableBackgroundMode(enable: true);
     bool serviceEnabled = await location.serviceEnabled();
     if (!serviceEnabled) {
       serviceEnabled = await location.requestService();
