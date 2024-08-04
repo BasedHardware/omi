@@ -60,7 +60,6 @@ class ForegroundUtil {
     // if (!await FlutterForegroundTask.canDrawOverlays) {
     //   await FlutterForegroundTask.openSystemAlertWindowSettings();
     // }
-    debugPrint('requestPermissionForAndroid: ${!await FlutterForegroundTask.isIgnoringBatteryOptimizations}');
     if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
@@ -125,7 +124,7 @@ class ForegroundUtil {
   }
 
   void stopForegroundTask() {
-    if (!Platform.isAndroid) return;
+    // if (!Platform.isAndroid) return;
     print('stopForegroundTask');
     FlutterForegroundTask.stopService();
   }
