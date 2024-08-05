@@ -112,10 +112,10 @@ class Memory(BaseModel):
 
     photos: List[MemoryPhoto] = []
 
-    type: str = 'audio'
-
     discarded: bool = False
     deleted: bool = False
+
+    source: Optional[str] = None
 
     @staticmethod
     def memories_to_string(memories: List['Memory'], include_transcript: bool = False) -> str:
