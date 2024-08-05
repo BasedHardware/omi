@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from typing import Tuple, Optional
 
 import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -87,10 +88,10 @@ def remove_downloaded_samples(uid):
 
 
 # Add this new function to handle initial file sending
-def get_speaker_audio_file(uid):
+def get_speaker_audio_file(uid) -> Tuple[Optional[str], int]:
     path = retrieve_all_samples(uid)
     if len(os.listdir(path)) < 5:  # means user did less than 5 samples unfortunately, so not completed
-        return None, None
+        return None, 0
 
     single_file_path = f'{path}joined_output.wav'
     if os.path.exists(single_file_path):
@@ -122,16 +123,16 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int,
-        preseconds: int = 0,
+        fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int, preseconds: int = 0,
 ):
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
-        # print("Received message from Deepgram")  # Log when message is received
+        print("Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
+        # print(sentence)
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
@@ -161,6 +162,8 @@ async def process_audio_dg(
                     })
         # print(json.dumps(segments, indent=2))
         # Use asyncio.run_coroutine_threadsafe to call async function from sync context
+        # TODO: a new thread should be started, so that it calls utils.plugins.trigger_realtime_integrations
+        # + the app receives the notification message + get's added to the app.
         asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
 
     def on_error(self, error, **kwargs):
@@ -182,8 +185,9 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             endpointing=100,
             language=language,
             interim_results=False,
-            sample_rate=None if sample_rate == 48000 else sample_rate,
+            sample_rate=sample_rate,
             smart_format=True,
+            profanity_filter=False,
             diarize=True,
             filler_words=False,
             channels=channels,

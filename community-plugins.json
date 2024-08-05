@@ -467,7 +467,7 @@
     "author": "Jeremy Nixon",
     "description": "Create Paper prompts from conversation.",
     "prompt": "Based on this transcript, recommend 5 descriptions of interesting research papers.",
-    "image": "https://i.imgur.com/G8etmUt.png",
+    "image": "/plugins/logos/omniscience-papergen.png",
     "memories": true,
     "chat": false,
     "capabilities": [
@@ -482,7 +482,7 @@
     "author": "Jeremy Nixon",
     "description": "Create Book  prompts from conversation.",
     "prompt": "Based on this transcript, recommend 5 descriptions of interesting books.",
-    "image": "https://i.imgur.com/G8etmUt.png",
+    "image": "/plugins/logos/omniscience-bookgen.png",
     "memories": true,
     "chat": false,
     "capabilities": [
