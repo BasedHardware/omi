@@ -62,25 +62,30 @@ def trigger_external_integrations(uid: str, memory: Memory):
     threads = []
     results = {}
 
-    # fix object in current integrations "createdAt"
-    # def _single(plugin: Plugin):
-    #     memory_dict = memory.dict()
-    #     memory_dict['created_at'] = memory_dict['created_at'].isoformat()
-    #     memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
-    #     memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
-    #     url = plugin.external_integration.webhook_url
-    #     if '?' in url:
-    #         url += '&uid=' + uid
-    #     else:
-    #         url += '?uid=' + uid
-    #
-    #     response = requests.post(url, json=memory_dict)
-    #     print('response', response.json())
-    #     if message := response.json().get('message', ''):
-    #         results[plugin.id] = message
+    def _single(plugin: Plugin):
+        if not plugin.external_integration.webhook_url:
+            return
 
-    # for plugin in filtered_plugins:
-    #     threads.append(threading.Thread(target=_single, args=(plugin,)))
+        memory_dict = memory.dict()
+        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
+        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
+        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        url = plugin.external_integration.webhook_url
+        if '?' in url:
+            url += '&uid=' + uid
+        else:
+            url += '?uid=' + uid
+
+        response = requests.post(url, json=memory_dict)
+        print('Plugin integration', plugin.id, 'result:', response.content)
+        if response.status_code != 200:
+            return
+        print('response', response.json())
+        if message := response.json().get('message', ''):
+            results[plugin.id] = message
+
+    for plugin in filtered_plugins:
+        threads.append(threading.Thread(target=_single, args=(plugin,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
