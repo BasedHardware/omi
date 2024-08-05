@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -33,14 +33,7 @@ class MemoriesPage extends StatefulWidget {
 class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   FocusNode textFieldFocusNode = FocusNode();
-  bool loading = false;
   bool displayDiscardMemories = false;
-
-  changeLoadingState() {
-    setState(() {
-      loading = !loading;
-    });
-  }
 
   _toggleDiscardMemories() async {
     MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
@@ -53,6 +46,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    print('loadingNewMemories: ${widget.loadingNewMemories}');
     var memories =
         displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
     memories = textController.text.isEmpty
@@ -164,12 +158,23 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
           ),
         ),
-        if (memories.isEmpty)
+        if (memories.isEmpty && !widget.loadingNewMemories)
           const SliverToBoxAdapter(
             child: Center(
               child: Padding(
                 padding: EdgeInsets.only(top: 32.0),
                 child: EmptyMemoriesWidget(),
+              ),
+            ),
+          )
+        else if (memories.isEmpty && widget.loadingNewMemories)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 32.0),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
               ),
             ),
           )
@@ -182,7 +187,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.only(top: 32.0),
-                        child: CircularProgressIndicator(),
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
                       ),
                     );
                   }
