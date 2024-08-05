@@ -21,7 +21,7 @@ Future<bool> userHasSpeakerProfile() async {
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_profile'] ?? false;
   }
-  return false;
+  return true; // to avoid showing the banner if the request fails or there's no internet.
 }
 
 Future<List<SpeakerIdSample>> getUserSamplesState() async {

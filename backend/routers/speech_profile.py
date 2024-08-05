@@ -5,22 +5,8 @@ from pydub import AudioSegment
 
 from utils import auth
 from utils.storage import retrieve_all_samples, upload_sample_storage
-from utils.stt.soniox_util import create_speaker_profile
 
 router = APIRouter()
-
-
-# TODO: issues with this
-# - user sends sample a, if the user sends sample b, before a process finished completely 2 things could happen
-#   - remove_speaker_audio(uid) is triggered before the previous sample created the profile, which cause an exception
-#   - os.remove(f"{path}/{file}") happens after request b, downloaded all samples again, which would result in 0 samples list dir
-# NOTE: this only happens when the user has already more than 5 samples, and tries to do the profile again.
-
-def _create_profile(uid: str):
-    path = retrieve_all_samples(uid)
-    create_speaker_profile(uid, path)
-    for file in os.listdir(path):
-        os.remove(f"{path}/{file}")
 
 
 def _endpoint1(file, uid):
@@ -62,8 +48,8 @@ def _endpoint2(uid: str):
         pid = phrase.replace(' ', '-').replace(',', '').replace('.', '').replace('\'', '').lower()
         data.append({'id': pid, 'phrase': phrase, 'uploaded': f"{pid}.wav" in samples})
 
-    for file in os.listdir(samples_dir):
-        os.remove(f"{samples_dir}/{file}")
+    # for file in os.listdir(samples_dir):
+    #     os.remove(f"{samples_dir}/{file}")
     return data
 
 
