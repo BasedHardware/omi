@@ -65,6 +65,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
+      groups:
+        - appstore_credentials
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
