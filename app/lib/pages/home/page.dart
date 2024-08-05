@@ -68,7 +68,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
-  bool loadingNewMemories = false;
+  bool loadingNewMemories = true;
 
   Future<Tuple2<int, ServerMemory?>> _retrySingleFailed(int index, ServerMemory memory) async {
     ServerMemory? result = await processTranscriptContent(
@@ -113,6 +113,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = await getMemories();
+    loadingNewMemories = false;
     setState(() {});
     _retryFailedMemories();
   }
