@@ -1,54 +1,54 @@
 workflows:
-  android-workflow:
-    name: Android Workflow
-    instance_type: mac_mini_m1
-    max_build_duration: 120
-    working_directory: app
-    environment:
-      android_signing:
-        - keystore_reference
-      groups:
-        - google_play # <-- (Includes GCLOUD_SERVICE_ACCOUNT_CREDENTIALS)
-      vars:
-        PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "alpha"
-      flutter: stable
-    scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Get Flutter packages
-        script: |
-          flutter packages pub get
-      - name: Flutter analyze
-        script: |
-          flutter analyze
-      - name: Flutter unit tests
-        script: |
-          flutter test
-        ignore_failure: true
-      - name: Build AAB with Flutter
-        script: |
-          BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks="$GOOGLE_PLAY_TRACK") + 1))      
-          flutter build appbundle --release \
-            --build-name=1.0.$BUILD_NUMBER \
-            --build-number=$BUILD_NUMBER
-    artifacts:
-      - build/**/outputs/**/*.aab
-      - build/**/outputs/**/mapping.txt
-      - flutter_drive.log
-    publishing:
-      email:
-        recipients:
-          - joan@basedhardware.com
-          - nik@basedhardware.com
-        notify:
-          success: true
-          failure: false
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: $GOOGLE_PLAY_TRACK
-        submit_as_draft: true
+#  android-workflow:
+#    name: Android Workflow
+#    instance_type: mac_mini_m1
+#    max_build_duration: 120
+#    working_directory: app
+#    environment:
+#      android_signing:
+#        - keystore_reference
+#      groups:
+#        - google_play # <-- (Includes GCLOUD_SERVICE_ACCOUNT_CREDENTIALS)
+#      vars:
+#        PACKAGE_NAME: "com.friend.ios"
+#        GOOGLE_PLAY_TRACK: "alpha"
+#      flutter: stable
+#    scripts:
+#      - name: Set up local.properties
+#        script: |
+#          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
+#      - name: Get Flutter packages
+#        script: |
+#          flutter packages pub get
+#      - name: Flutter analyze
+#        script: |
+#          flutter analyze
+#      - name: Flutter unit tests
+#        script: |
+#          flutter test
+#        ignore_failure: true
+#      - name: Build AAB with Flutter
+#        script: |
+#          BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks="$GOOGLE_PLAY_TRACK") + 1))
+#          flutter build appbundle --release \
+#            --build-name=1.0.$BUILD_NUMBER \
+#            --build-number=$BUILD_NUMBER
+#    artifacts:
+#      - build/**/outputs/**/*.aab
+#      - build/**/outputs/**/mapping.txt
+#      - flutter_drive.log
+#    publishing:
+#      email:
+#        recipients:
+#          - joan@basedhardware.com
+#          - nik@basedhardware.com
+#        notify:
+#          success: true
+#          failure: false
+#      google_play:
+#        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+#        track: $GOOGLE_PLAY_TRACK
+#        submit_as_draft: true
   ios-workflow:
     name: iOS Workflow
     instance_type: mac_mini_m1
