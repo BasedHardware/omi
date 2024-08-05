@@ -77,9 +77,10 @@ def trigger_external_integrations(uid: str, memory: Memory):
             url += '?uid=' + uid
 
         response = requests.post(url, json=memory_dict)
-        print('Plugin integration', plugin.id, 'result:', response.content)
         if response.status_code != 200:
+            print('Plugin integration failed', plugin.id, 'result:', response.content)
             return
+
         print('response', response.json())
         if message := response.json().get('message', ''):
             results[plugin.id] = message
