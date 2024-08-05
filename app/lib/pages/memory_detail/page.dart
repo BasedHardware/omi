@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
@@ -90,6 +91,19 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               IconButton(
                 onPressed: () {
+                  if (widget.memory.failed) {
+                    showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                            context,
+                            () => Navigator.pop(context),
+                            () => Navigator.pop(context),
+                            'Options not available',
+                            'This memory failed when processing. Options are not available yet, please try again later.',
+                            singleButton: true,
+                            okButtonText: 'Ok'));
+                    return;
+                  }
                   showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
                 },
                 icon: const Icon(Icons.more_horiz),
