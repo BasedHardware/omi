@@ -70,8 +70,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool loadingNewMemories = true;
 
-  Future<Tuple2<int, ServerMemory?>> _retrySingleFailed(int index, ServerMemory memory) async {
-    ServerMemory? result = await processTranscriptContent(
+  Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
+    return await processTranscriptContent(
       memory.transcriptSegments,
       retrievedFromCache: true,
       sendMessageToChat: null,
@@ -81,30 +81,30 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
     );
-    return Tuple2(index, result);
   }
 
   _retryFailedMemories() async {
     if (SharedPreferencesUtil().failedMemories.isEmpty) return;
     print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     // retry failed memories
-    List<Future<Tuple2<int, ServerMemory?>>> asyncEvents = [];
-    for (var item in SharedPreferencesUtil().failedMemories.indexed) {
-      asyncEvents.add(_retrySingleFailed(item.$1, item.$2));
+    List<Future<ServerMemory?>> asyncEvents = [];
+    for (var item in SharedPreferencesUtil().failedMemories) {
+      asyncEvents.add(_retrySingleFailed(item));
     }
     // TODO: should be able to retry including created at date.
     // TODO: should trigger integrations? probably yes, but notifications?
 
-    List<Tuple2<int, ServerMemory?>> results = await Future.wait(asyncEvents);
+    List<ServerMemory?> results = await Future.wait(asyncEvents);
+    var failedCopy = List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
+
     for (var i = 0; i < results.length; i++) {
-      var result = results[i];
-      print('$i $result');
-      if (result.item2 != null) {
-        SharedPreferencesUtil().removeFailedMemory(result.item1);
-        memories.insert(0, result.item2!);
+      ServerMemory? newCreatedMemory = results[i];
+
+      if (newCreatedMemory != null) {
+        SharedPreferencesUtil().removeFailedMemory(failedCopy[i]);
+        memories.insert(0, newCreatedMemory);
       } else {
-        // TODO: sort them or something?
-        memories.insert(0, SharedPreferencesUtil().failedMemories[i]);
+        memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
       }
     }
     print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
