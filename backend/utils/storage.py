@@ -89,7 +89,10 @@ def retrieve_all_samples(uid: str):
         path = f'{base_path}{blob.name.split("/")[-1]}'
         if os.path.exists(path):
             continue
-        blob.download_to_filename(path)
+        try:
+            blob.download_to_filename(path)
+        except Exception as e:
+            print(f'Error downloading {blob.name}', e)
     return base_path
 
 
@@ -120,6 +123,5 @@ def delete_backup_storage(uid: str):
     blob = bucket.blob(path)
     blob.delete()
     return True
-
 
 # migrate()

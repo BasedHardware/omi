@@ -153,9 +153,9 @@ class SharedPreferencesUtil {
     failedMemories = memories;
   }
 
-  removeFailedMemory(int index) {
+  removeFailedMemory(ServerMemory memory) {
     final List<ServerMemory> memories = failedMemories;
-    memories.removeAt(index);
+    memories.remove(memory);
     failedMemories = memories;
   }
 
