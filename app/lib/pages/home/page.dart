@@ -92,6 +92,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     for (var item in SharedPreferencesUtil().failedMemories.indexed) {
       asyncEvents.add(_retrySingleFailed(item.$1, item.$2));
     }
+    // TODO: should be able to retry including created at date.
+    // TODO: should trigger integrations? probably yes, but notifications?
+
     List<Tuple2<int, ServerMemory?>> results = await Future.wait(asyncEvents);
     for (var i = 0; i < results.length; i++) {
       var result = results[i];
@@ -100,6 +103,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         SharedPreferencesUtil().removeFailedMemory(result.item1);
         memories.insert(0, result.item2!);
       } else {
+        // TODO: sort them or something?
         memories.insert(0, SharedPreferencesUtil().failedMemories[i]);
       }
     }
