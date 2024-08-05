@@ -79,12 +79,12 @@ async def send_initial_file(file_path, transcript_socket):
     # os.remove(file_path)
 
 
-def remove_downloaded_samples(uid):
-    path = f'_samples/{uid}/'
-    for file in os.listdir(path):
-        # remove except joined_output.wav
-        if file != 'joined_output.wav':
-            os.remove(f"{path}/{file}")
+# def remove_downloaded_samples(uid):
+#     path = f'_samples/{uid}/'
+#     for file in os.listdir(path):
+#         # remove except joined_output.wav
+#         if file != 'joined_output.wav':
+#             os.remove(f"{path}/{file}")
 
 
 # Add this new function to handle initial file sending
