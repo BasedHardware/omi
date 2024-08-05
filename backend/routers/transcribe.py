@@ -70,6 +70,7 @@ async def _websocket_util(
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
     await websocket.accept()
     transcript_socket2 = None
+    duration = 0
     try:
         single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
         remove_downloaded_samples(uid)
@@ -116,7 +117,7 @@ async def _websocket_util(
                 #     audio_buffer = audio_buffer[window_size_samples * 2:]
 
                 elapsed_seconds = time.time() - timer_start
-                if elapsed_seconds > 20 or not socket2:
+                if elapsed_seconds > duration or not socket2:
                     socket1.send(data)
                     # print('Sending to socket 1')
                     if socket2:
