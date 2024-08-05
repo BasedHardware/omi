@@ -162,6 +162,8 @@ async def process_audio_dg(
                     })
         # print(json.dumps(segments, indent=2))
         # Use asyncio.run_coroutine_threadsafe to call async function from sync context
+        # TODO: a new thread should be started, so that it calls utils.plugins.trigger_realtime_integrations
+        # + the app receives the notification message + get's added to the app.
         asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
 
     def on_error(self, error, **kwargs):
