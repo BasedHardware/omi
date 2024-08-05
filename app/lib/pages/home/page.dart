@@ -85,7 +85,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _retryFailedMemories() async {
     if (SharedPreferencesUtil().failedMemories.isEmpty) return;
-    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     // retry failed memories
     List<Future<ServerMemory?>> asyncEvents = [];
     for (var item in SharedPreferencesUtil().failedMemories) {
@@ -101,13 +101,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       ServerMemory? newCreatedMemory = results[i];
 
       if (newCreatedMemory != null) {
-        SharedPreferencesUtil().removeFailedMemory(failedCopy[i]);
+        SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
         memories.insert(0, newCreatedMemory);
       } else {
         memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
       }
     }
-    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     setState(() {});
   }
 
