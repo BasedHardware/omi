@@ -18,7 +18,10 @@ Future<bool> userHasSpeakerProfile() async {
   );
   if (response == null) return false;
   debugPrint('userHasSpeakerProfile: ${response.body}');
-  return jsonDecode(response.body)['has_profile'] ?? false;
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body)['has_profile'] ?? false;
+  }
+  return false;
 }
 
 Future<List<SpeakerIdSample>> getUserSamplesState() async {
