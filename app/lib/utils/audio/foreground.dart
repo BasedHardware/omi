@@ -89,7 +89,7 @@ class ForegroundUtil {
         ),
       ),
       iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: true,
+        showNotification: false,
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
@@ -116,8 +116,8 @@ class ForegroundUtil {
     } else {
       print('starting service');
       return FlutterForegroundTask.startService(
-        notificationTitle: 'Your Friend Device is active',
-        notificationText: 'Tap to open the app',
+        notificationTitle: 'Your Friend Device is connected.',
+        notificationText: 'Keep the app opened while your Friend listens in the background.',
         callback: startCallback,
       );
     }
