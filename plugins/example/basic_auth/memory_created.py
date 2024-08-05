@@ -78,9 +78,9 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
             "Title": {"title": [{"text": {"content": f'{memory.structured.title}'}}]},
             "Category": {"select": {"name": memory.structured.category}},
             "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
-            "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcriptSegments)))},
+            "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcript_segments)))},
             "Duration (seconds)": {'number': (
-                    memory.finishedAt - memory.startedAt).total_seconds() if memory.finishedAt is not None else 0},
+                    memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0},
         }
     }
     resp = requests.post('https://api.notion.com/v1/pages', json=data, headers={

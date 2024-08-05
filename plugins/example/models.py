@@ -17,7 +17,7 @@ class ActionItem(BaseModel):
 
 class Event(BaseModel):
     title: str
-    startsAt: datetime
+    start: datetime
     duration: int
     description: Optional[str] = ''
     created: bool = False
@@ -28,8 +28,8 @@ class MemoryPhoto(BaseModel):
     description: str
 
 
-class PluginResponse(BaseModel):
-    pluginId: Optional[str] = None
+class PluginResult(BaseModel):
+    plugin_id: Optional[str]
     content: str
 
 
@@ -72,17 +72,19 @@ class TranscriptSegment(BaseModel):
 
 
 class Memory(BaseModel):
-    createdAt: datetime
-    startedAt: Optional[datetime] = None
-    finishedAt: Optional[datetime] = None
-    transcript: str = ''
-    transcriptSegments: List[TranscriptSegment] = []
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    transcript_segments: List[TranscriptSegment] = []
     photos: Optional[List[MemoryPhoto]] = []
-    recordingFilePath: Optional[str] = None
-    recordingFileBase64: Optional[str] = None
+    # recordingFilePath: Optional[str] = None
+    # recordingFileBase64: Optional[str] = None
     structured: Structured
-    pluginsResponse: List[PluginResponse] = []
+    plugins_results: List[PluginResult] = []
     discarded: bool
+
+    def get_transcript(self) -> str:
+        return TranscriptSegment.segments_as_string(list(map(lambda x: x.dict(), self.transcript_segments)))
 
 
 class EndpointResponse(BaseModel):
