@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-
-import '../../../backend/database/message.dart';
+import 'package:friend_private/backend/schema/message.dart';
 
 class HumanMessage extends StatelessWidget {
-  final Message message;
+  final ServerMessage message;
 
   const HumanMessage({super.key, required this.message});
 

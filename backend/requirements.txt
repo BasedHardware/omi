@@ -8,6 +8,7 @@ annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 anyio==4.4.0
 asteroid-filterbanks==0.4.0
+async-timeout==4.0.3
 attrs==23.2.0
 audioread==3.0.1
 blinker==1.8.2
@@ -22,6 +23,7 @@ cog==0.9.12
 colorlog==6.8.2
 ConfigArgParse==1.7
 contourpy==1.2.1
+crypto==1.4.1
 cryptography==42.0.8
 cycler==0.12.1
 dataclasses-json==0.6.7
@@ -32,6 +34,7 @@ dnspython==2.6.1
 docopt==0.6.2
 einops==0.8.0
 email_validator==2.2.0
+exceptiongroup==1.2.2
 fal_client==0.4.1
 fastapi==0.98.0
 fastapi-cli==0.0.4
@@ -103,6 +106,7 @@ mpmath==1.3.0
 msgpack==1.0.8
 multidict==6.0.5
 mypy-extensions==1.0.0
+Naked==0.1.32
 networkx==3.3
 noisereduce==3.0.2
 numba==0.60.0
@@ -157,6 +161,7 @@ scipy==1.14.0
 semver==3.0.2
 sentencepiece==0.2.0
 sentry-sdk==2.7.1
+shellescape==3.8.1
 shellingham==1.5.4
 sigtools==4.0.1
 six==1.16.0
@@ -178,6 +183,7 @@ tensorboardX==2.6.2.2
 threadpoolctl==3.5.0
 tiktoken==0.7.0
 toml==0.10.2
+tomli==2.0.1
 torch==2.3.1
 torch-audiomentations==0.11.1
 torch-pitch-shift==1.2.4

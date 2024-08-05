@@ -1,11 +1,27 @@
+import 'dart:math';
+
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/message.dart';
+
+class CreateMemoryResponse {
+  final List<ServerMessage> messages;
+  final ServerMemory? memory;
+
+  CreateMemoryResponse({required this.messages, required this.memory});
+
+  factory CreateMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return CreateMemoryResponse(
+      messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
+      memory: json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
+    );
+  }
+}
 
 class ServerMemory {
   final String id;
   final DateTime createdAt;
-  final String transcript;
   final Structured structured;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -13,13 +29,14 @@ class ServerMemory {
   final List<PluginResponse> pluginsResults;
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
-  final bool discarded;
+  bool discarded;
   final bool deleted;
+
+  final bool failed; // local failed memories
 
   ServerMemory({
     required this.id,
     required this.createdAt,
-    required this.transcript,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -29,13 +46,15 @@ class ServerMemory {
     this.photos = const [],
     this.discarded = false,
     this.deleted = false,
+    this.failed = false,
   });
+
+  MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']),
-      transcript: json['transcript'],
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
@@ -48,6 +67,7 @@ class ServerMemory {
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
       deleted: json['deleted'] ?? false,
+      failed: json['failed'] ?? false,
     );
   }
 
@@ -55,7 +75,6 @@ class ServerMemory {
     return {
       'id': id,
       'created_at': createdAt.toIso8601String(),
-      'transcript': transcript,
       'structured': structured.toJson(),
       'started_at': startedAt?.toIso8601String(),
       'finished_at': finishedAt?.toIso8601String(),
@@ -65,6 +84,13 @@ class ServerMemory {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
+      'failed': failed,
     };
+  }
+
+  String getTranscript({int? maxCount, bool generate = false}) {
+    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    if (maxCount != null) return transcript.substring(0, min(maxCount, transcript.length));
+    return transcript;
   }
 }

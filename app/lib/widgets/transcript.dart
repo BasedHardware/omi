@@ -36,7 +36,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
         if (idx == widget.segments.length + 1) return const SizedBox(height: 64);
         final data = widget.segments[idx - 1];
-        print(data.text.toString());
         return Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
