@@ -22,7 +22,7 @@ def retrieve_books_to_buy(memory: Memory) -> List[str]:
     chat = ChatOpenAI(model='gpt-4o', temperature=0).with_structured_output(BooksToBuy)
 
     response: BooksToBuy = chat.invoke(f'''The following is the transcript of a conversation.
-    {memory.transcript}
+    {memory.get_transcript()}
 
     Your task is to determine is first to determine if the speakers talked about a book or suggested, recommended books to each other \
     at some point during the conversation, and provide the titles of those.''')
@@ -42,7 +42,7 @@ def call_multion(books: List[str]):
     return response.message
 
 
-print(call_multion(['Cracking the code', ]))
+# print(call_multion(['Cracking the code', ]))
 
 
 # **************************************************
