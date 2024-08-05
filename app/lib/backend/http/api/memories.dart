@@ -26,9 +26,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
   required List<TranscriptSegment> transcriptSegments,
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos = const [],
+  bool triggerIntegrations = true,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?language_code=${SharedPreferencesUtil().recordingsLanguage}',
+    url: '${Env.apiBaseUrl}v1/memories?language_code=${SharedPreferencesUtil().recordingsLanguage}&trigger_integrations=$triggerIntegrations',
     headers: {},
     method: 'POST',
     body: jsonEncode({

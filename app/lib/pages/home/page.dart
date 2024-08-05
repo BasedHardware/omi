@@ -29,11 +29,13 @@ import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:tuple/tuple.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -68,9 +70,47 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool loadingNewMemories = false;
 
+  Future<Tuple2<int, ServerMemory?>> _retrySingleFailed(int index, ServerMemory memory) async {
+    ServerMemory? result = await processTranscriptContent(
+      memory.transcriptSegments,
+      retrievedFromCache: true,
+      sendMessageToChat: null,
+      startedAt: memory.startedAt,
+      finishedAt: memory.finishedAt,
+      geolocation: memory.geolocation,
+      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
+      triggerIntegrations: false,
+    );
+    return Tuple2(index, result);
+  }
+
+  _retryFailedMemories() async {
+    if (SharedPreferencesUtil().failedMemories.isEmpty) return;
+    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    // retry failed memories
+    List<Future<Tuple2<int, ServerMemory?>>> asyncEvents = [];
+    for (var item in SharedPreferencesUtil().failedMemories.indexed) {
+      asyncEvents.add(_retrySingleFailed(item.$1, item.$2));
+    }
+    List<Tuple2<int, ServerMemory?>> results = await Future.wait(asyncEvents);
+    for (var i = 0; i < results.length; i++) {
+      var result = results[i];
+      print('$i $result');
+      if (result.item2 != null) {
+        SharedPreferencesUtil().removeFailedMemory(result.item1);
+        memories.insert(0, result.item2!);
+      } else {
+        memories.insert(0, SharedPreferencesUtil().failedMemories[i]);
+      }
+    }
+    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    setState(() {});
+  }
+
   _initiateMemories() async {
     memories = await getMemories();
     setState(() {});
+    _retryFailedMemories();
   }
 
   _refreshMessages() async {

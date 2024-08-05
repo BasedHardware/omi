@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -134,6 +135,28 @@ class SharedPreferencesUtil {
   set transcriptSegments(List<TranscriptSegment> value) {
     final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('transcriptSegments', segments);
+  }
+
+  List<ServerMemory> get failedMemories {
+    final List<String> memories = getStringList('failedServerMemories') ?? [];
+    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set failedMemories(List<ServerMemory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('failedServerMemories', memories);
+  }
+
+  addFailedMemory(ServerMemory memory) {
+    final List<ServerMemory> memories = failedMemories;
+    memories.add(memory);
+    failedMemories = memories;
+  }
+
+  removeFailedMemory(int index) {
+    final List<ServerMemory> memories = failedMemories;
+    memories.removeAt(index);
+    failedMemories = memories;
   }
 
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;

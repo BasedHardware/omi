@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -192,31 +194,42 @@ class CapturePageState extends State<CapturePage>
         print(e);
       } // in case was a local recording and not a BLE recording
     }
+    Geolocation? geolocation = await LocationService().getGeolocationDetails();
     ServerMemory? memory = await processTranscriptContent(
-      context,
-      TranscriptSegment.segmentsAsString(segments),
       segments,
-      file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: await LocationService().getGeolocationDetails(),
+      geolocation: geolocation,
       photos: photos,
       // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
     if (memory == null) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        geolocation: geolocation,
+        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        deleted: false,
+        startedAt: currentTranscriptStartedAt,
+        finishedAt: currentTranscriptFinishedAt,
+        failed: true,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
-          'Memory creation failed. Please try again later.',
+          'Memory creation failed. It\' stored locally and will be retried soon.',
           style: TextStyle(color: Colors.white, fontSize: 14),
         ),
       ));
       // TODO: store anyways something temporal and retry once connected again.
-    } else {
-      widget.addMemory(memory);
     }
 
+    widget.addMemory(memory);
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
@@ -243,14 +256,11 @@ class CapturePageState extends State<CapturePage>
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
     processTranscriptContent(
-      context,
-      transcript,
       SharedPreferencesUtil().transcriptSegments,
-      null,
       retrievedFromCache: true,
-      sendMessageToChat: sendMessageToChat,
+      sendMessageToChat: null,
+      triggerIntegrations: false,
     );
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
