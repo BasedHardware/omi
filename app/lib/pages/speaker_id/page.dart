@@ -35,6 +35,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
   _init() async {
     _device = await getConnectedDevice();
+    // TODO: improve the UX of this.
     _device ??= await scanAndConnectDevice(timeout: true);
     _samples = await getUserSamplesState();
     _controller = TabController(length: 2 + _samples.length, vsync: this);
