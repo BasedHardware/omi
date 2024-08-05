@@ -79,7 +79,7 @@ def create_memory(
         # should they be uploaded from the client?
         raise HTTPException(status_code=400, detail="Photos are not supported yet")
 
-    memory = _process_memory(uid, language_code, create_memory, force_process=True)
+    memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
