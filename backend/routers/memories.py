@@ -85,13 +85,19 @@ def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str, memory
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
-def create_memory(create_memory: CreateMemory, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
+def create_memory(
+        create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
+        uid: str = Depends(auth.get_current_user_uid)
+):
     if create_memory.photos:
         # TODO: photos should be handled differently, a subcollection or maybe a list of files in cloud storage,
         # should they be uploaded from the client?
         raise HTTPException(status_code=400, detail="Photos are not supported yet")
 
     memory = _process_memory(uid, language_code, create_memory)
+    if not trigger_integrations:
+        return CreateMemoryResponse(memory=memory, messages=[])
+
     results = trigger_external_integrations(uid, memory)
 
     messages = []
