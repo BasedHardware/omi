@@ -53,11 +53,11 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     return plugins
 
 
-def trigger_external_integrations(uid: str, memory: Memory) -> dict:
+def trigger_external_integrations(uid: str, memory: Memory) -> list:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled]
     if not filtered_plugins:
-        return {}
+        return []
 
     threads = []
     results = {}
