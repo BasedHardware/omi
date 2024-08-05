@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
@@ -153,10 +154,13 @@ class SharedPreferencesUtil {
     failedMemories = memories;
   }
 
-  removeFailedMemory(ServerMemory memory) {
+  removeFailedMemory(String memoryId) {
     final List<ServerMemory> memories = failedMemories;
-    memories.remove(memory);
-    failedMemories = memories;
+    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
+    if (memory != null) {
+      memories.remove(memory);
+      failedMemories = memories;
+    }
   }
 
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
