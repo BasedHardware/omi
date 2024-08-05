@@ -1,24 +1,23 @@
-import 'dart:convert';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'maps_util.dart';
 
@@ -48,15 +47,23 @@ List<Widget> getSummaryWidgets(
     const SizedBox(height: 16),
     Row(
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            structured.category.isEmpty ? ' ' : structured.category[0].toUpperCase() + structured.category.substring(1),
-            style: Theme.of(context).textTheme.titleLarge,
+        GestureDetector(
+          onTap:memory.source == 'screenpipe' ? () {
+            launchUrl(Uri.parse('https://screenpi.pe/'));
+          } : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: memory.source == 'screenpipe' ? Colors.white : Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              memory.discarded ? 'Discarded' : memory.source ?? memory.structured.category,
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                    color: memory.source == 'screenpipe' ? Colors.deepPurple : Colors.white,
+                  ),
+              maxLines: 1,
+            ),
           ),
         )
       ],
