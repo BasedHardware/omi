@@ -67,6 +67,7 @@ workflows:
       cocoapods: default
       groups:
         - appstore_credentials
+        - firebase_credentials
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
@@ -84,6 +85,13 @@ workflows:
 #        script: |
 #          flutter test
         ignore_failure: true
+      - name: Load Firebase configuration
+        script: |
+          #!/usr/bin/env sh
+          set -e # exit on first failed command
+          
+          echo $ANDROID_FIREBASE_SECRET > $CM_BUILD_DIR/android/app/google-services.json
+          echo $IOS_FIREBASE_SECRET > $CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist
       - name: Flutter build ipa and automatic versioning
         script: |
           # See the following link about getting the latest App Store or TestFlight version - https://docs.codemagic.io/knowledge-codemagic/build-versioning/#app-store-or-testflight-latest-build-number
