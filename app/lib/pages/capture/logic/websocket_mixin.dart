@@ -61,7 +61,6 @@ mixin WebSocketMixin {
 
     try {
       websocketChannel = await streamingTranscript(
-        codec: codec,
         onWebsocketConnectionSuccess: () {
           debugPrint('WebSocket connected successfully');
           wsConnectionState = WebsocketConnectionStatus.connected;
@@ -118,6 +117,7 @@ mixin WebSocketMixin {
           );
         },
         onMessageReceived: onMessageReceived,
+        codec: codec,
         sampleRate: sampleRate ?? (codec == BleAudioCodec.opus ? 16000 : 8000),
       );
     } catch (e) {
@@ -157,9 +157,7 @@ mixin WebSocketMixin {
         case InternetStatus.disconnected:
           debugPrint('Internet connection lost. Disconnecting WebSocket.');
           internetLostNotificationDelay?.cancel();
-          internetLostNotificationDelay = Timer(const Duration(seconds: 10), () {
-            _notifyInternetLost();
-          });
+          internetLostNotificationDelay = Timer(const Duration(seconds: 60), () => _notifyInternetLost());
           websocketChannel?.sink.close(1000, 'Internet connection lost');
           _reconnectionTimer?.cancel();
           wsConnectionState = WebsocketConnectionStatus.notConnected;
@@ -204,7 +202,7 @@ mixin WebSocketMixin {
         codec: codec,
       );
     });
-    if (_reconnectionAttempts == 4 && !_hasNotifiedUser) {
+    if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
       _notifyReconnectionFailure();
       _hasNotifiedUser = true;
     }

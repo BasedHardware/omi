@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 
 import templates as templates
 from db import *
-from models import Memory
+from models import Memory, EndpointResponse
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -53,7 +53,7 @@ def is_setup_completed(uid: str):
     return {'is_setup_completed': notion_api_key is not None and notion_database_id is not None}
 
 
-@router.post('/notion-crm', tags=['basic_auth', 'memory_created'])
+@router.post('/notion-crm', tags=['basic_auth', 'memory_created'], response_model=EndpointResponse)
 def notion_crm(memory: Memory, uid: str):
     """
     The actual plugin that gets triggered when a memory gets created, and adds the memory to the Notion CRM.
@@ -68,19 +68,23 @@ def notion_crm(memory: Memory, uid: str):
 
 def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
     # TODO: validate table exists and has correct fields
+    try:
+        emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
+    except UnicodeEncodeError:
+        emoji = memory.structured.emoji
     data = {
         "parent": {"database_id": database_id},
         "icon": {
             "type": "emoji",
-            "emoji": f"{memory.structured.emoji.encode('latin1').decode('utf-8')}"
+            "emoji": f"{emoji}"
         },
         "properties": {
             "Title": {"title": [{"text": {"content": f'{memory.structured.title}'}}]},
             "Category": {"select": {"name": memory.structured.category}},
             "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
-            "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcriptSegments)))},
+            "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcript_segments)))},
             "Duration (seconds)": {'number': (
-                    memory.finishedAt - memory.startedAt).total_seconds() if memory.finishedAt is not None else 0},
+                    memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0},
         }
     }
     resp = requests.post('https://api.notion.com/v1/pages', json=data, headers={

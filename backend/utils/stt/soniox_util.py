@@ -10,7 +10,6 @@ from soniox.transcribe_file import transcribe_file_short, transcribe_file_async
 from starlette.websockets import WebSocket
 
 from utils.endpoints import timeit
-from utils.redis_utils import set_user_has_speech_profile, user_has_speech_profile
 
 
 def set_json_speech_profiles(result):
@@ -26,23 +25,13 @@ def set_json_speech_profiles(result):
             continue  # means is an audio name
         parsed_json[parsed_part['name']] = parsed_part
 
-    for uid in parsed_json.keys():
-        set_user_has_speech_profile(uid)
+    # for uid in parsed_json.keys():
+    #     set_user_has_speech_profile(uid)
     return parsed_json
 
 
 # result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--list'], capture_output=True)
 # set_json_speech_profiles(result)
-
-
-def uid_has_speech_profile(uid: str) -> bool:
-    return user_has_speech_profile(uid)
-    # result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--list'], capture_output=True)
-    # set_json_speech_profiles(result)
-    # exists: bool = f"'name': '{uid}'" in str(result.stdout)
-    # print(f'speaker {uid} exists:', exists)
-    # return exists
-
 
 def add_speaker(uid: str):
     result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--add_speaker', '--speaker_name', uid])
@@ -85,7 +74,6 @@ def remove_training_sample(uid: str, audio_name: str):
 def get_single_file(dir_path: str):
     output_path = f'{dir_path}joined_output.wav'
 
-
     files_to_join = []
     for sample in os.listdir(dir_path):
         if '.wav' not in sample:
@@ -115,17 +103,17 @@ def train_speaker_profile(uid: str, dir_path: str):
     completed = result.returncode == 0
     print('train_speaker_profile:', result)
     os.remove(output_path)
-    if completed:
-        set_user_has_speech_profile(uid)
+    # if completed:
+    #     set_user_has_speech_profile(uid)
     return completed
 
 
 def create_speaker_profile(uid: str, dir_path: str):
-    if not uid_has_speech_profile(uid):
-        add_speaker(uid)
-    else:
-        remove_speaker_audio(uid)
-        # add_speaker(uid)
+    # if not uid_has_speech_profile(uid):
+    #     add_speaker(uid)
+    # else:
+    #     remove_speaker_audio(uid)
+    #     # add_speaker(uid)
 
     try:
         return train_speaker_profile(uid, dir_path)
@@ -232,7 +220,8 @@ def longer_transcript(file_path: str, language: str, uid: str, uid_profile_exist
 def transcribe_file_soniox(uid: str, file_path: str, sample_rate=8000, language: str = 'en'):
     if language not in ['en']:  # , 'es', 'ko', 'zh', 'fr', 'it', 'pt', 'de' ~ no diarization
         raise ValueError(f'Language {language} not supported')
-    has_speech_profile = uid_has_speech_profile(uid)
+    # has_speech_profile = uid_has_speech_profile(uid)
+    has_speech_profile = False
     aseg = AudioSegment.from_wav(file_path)
     if aseg.duration_seconds <= 60:
         result = short_transcript(file_path, language, uid, has_speech_profile, sample_rate=sample_rate)

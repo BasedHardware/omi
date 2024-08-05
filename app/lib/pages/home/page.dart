@@ -5,17 +5,15 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/api/memories.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
-import 'package:friend_private/backend/growthbook.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/messages.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
@@ -26,15 +24,18 @@ import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:tuple/tuple.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -51,8 +52,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
 
-  List<Memory> memories = [];
-  List<Message> messages = [];
+  List<ServerMemory> memories = [];
+  List<ServerMessage> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -67,28 +68,75 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
+  bool loadingNewMemories = true;
+
+  Future<Tuple2<int, ServerMemory?>> _retrySingleFailed(int index, ServerMemory memory) async {
+    ServerMemory? result = await processTranscriptContent(
+      memory.transcriptSegments,
+      retrievedFromCache: true,
+      sendMessageToChat: null,
+      startedAt: memory.startedAt,
+      finishedAt: memory.finishedAt,
+      geolocation: memory.geolocation,
+      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
+      triggerIntegrations: false,
+    );
+    return Tuple2(index, result);
+  }
+
+  _retryFailedMemories() async {
+    if (SharedPreferencesUtil().failedMemories.isEmpty) return;
+    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    // retry failed memories
+    List<Future<Tuple2<int, ServerMemory?>>> asyncEvents = [];
+    for (var item in SharedPreferencesUtil().failedMemories.indexed) {
+      asyncEvents.add(_retrySingleFailed(item.$1, item.$2));
+    }
+    // TODO: should be able to retry including created at date.
+    // TODO: should trigger integrations? probably yes, but notifications?
+
+    List<Tuple2<int, ServerMemory?>> results = await Future.wait(asyncEvents);
+    for (var i = 0; i < results.length; i++) {
+      var result = results[i];
+      print('$i $result');
+      if (result.item2 != null) {
+        SharedPreferencesUtil().removeFailedMemory(result.item1);
+        memories.insert(0, result.item2!);
+      } else {
+        // TODO: sort them or something?
+        memories.insert(0, SharedPreferencesUtil().failedMemories[i]);
+      }
+    }
+    print('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    setState(() {});
+  }
 
   _initiateMemories() async {
-    memories = MemoryProvider().getMemoriesOrdered(includeDiscarded: true).reversed.toList();
+    memories = await getMemories();
+    loadingNewMemories = false;
     setState(() {});
+    _retryFailedMemories();
   }
 
   _refreshMessages() async {
-    messages = MessageProvider().getMessages();
+    messages = await getMessagesServer();
     setState(() {});
   }
 
+  bool scriptsInProgress = false;
+
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
-    print('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
+    debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setState(() {});
   }
 
   _edgeCasePluginNotAvailable() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat())) {
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }
   }
@@ -118,9 +166,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _migrationScripts() async {
-    scriptMigrateMemoriesToBack();
-    // getMemories();
-    // _initiateMemories();
+    setState(() => scriptsInProgress = true);
+    await scriptMigrateMemoriesToBack();
+    _initiateMemories();
+    setState(() => scriptsInProgress = false);
   }
 
   ///Screens with respect to subpage
@@ -140,11 +189,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      requestNotificationPermissions();
+      // TODO: request only one more time if denied, but not again.
+      // requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-    _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();
     _migrationScripts();
@@ -180,6 +229,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     super.initState();
   }
 
+  Timer? _disconnectNotificationTimer;
+
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
     // TODO: when disconnected manually need to remove this connection state listener
@@ -190,12 +241,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           capturePageKey.currentState?.resetState(restartBytesProcessing: false);
           setState(() => _device = null);
           InstabugLog.logInfo('Friend Device Disconnected');
-          if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
+          _disconnectNotificationTimer?.cancel();
+          _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
             createNotification(
               title: 'Friend Device Disconnected',
               body: 'Please reconnect to continue using your Friend.',
             );
-          }
+          });
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
         },
@@ -212,6 +264,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
     debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
+    _disconnectNotificationTimer?.cancel();
     clearNotification(1);
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
@@ -267,20 +320,51 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   children: [
                     MemoriesPage(
                       memories: memories,
-                      refreshMemories: _initiateMemories,
+                      updateMemory: (ServerMemory memory, int index) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        memoriesCopy[index] = memory;
+                        setState(() => memories = memoriesCopy);
+                      },
+                      deleteMemory: (ServerMemory memory, int index) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        memoriesCopy.removeAt(index);
+                        setState(() => memories = memoriesCopy);
+                      },
+                      loadMoreMemories: () async {
+                        if (memories.length % 50 != 0) return;
+                        if (loadingNewMemories) return;
+                        setState(() => loadingNewMemories = true);
+                        var newMemories = await getMemories(offset: memories.length);
+                        memories.addAll(newMemories);
+                        loadingNewMemories = false;
+                        setState(() {});
+                      },
+                      loadingNewMemories: loadingNewMemories,
                       textFieldFocusNode: memoriesTextFieldFocusNode,
                     ),
                     CapturePage(
                       key: capturePageKey,
                       device: _device,
-                      refreshMemories: _initiateMemories,
-                      refreshMessages: _refreshMessages,
+                      addMemory: (ServerMemory memory) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        memoriesCopy.insert(0, memory);
+                        setState(() => memories = memoriesCopy);
+                      },
+                      addMessage: (ServerMessage message) {
+                        var messagesCopy = List<ServerMessage>.from(messages);
+                        messagesCopy.insert(0, message);
+                        setState(() => messages = messagesCopy);
+                      },
                     ),
                     ChatPage(
                       key: chatPageKey,
                       textFieldFocusNode: chatTextFieldFocusNode,
                       messages: messages,
-                      refreshMessages: _refreshMessages,
+                      addMessage: (ServerMessage message) {
+                        var messagesCopy = List<ServerMessage>.from(messages);
+                        messagesCopy.insert(0, message);
+                        setState(() => messages = messagesCopy);
+                      },
                     ),
                   ],
                 ),
@@ -354,7 +438,37 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       ],
                     ),
                   ),
+                ),
+              if (scriptsInProgress)
+                Center(
+                  child: Container(
+                    height: 150,
+                    width: 250,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                        SizedBox(height: 16),
+                        Center(
+                            child: Text(
+                          'Running migration, please wait! 🚨',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        )),
+                      ],
+                    ),
+                  ),
                 )
+              else
+                const SizedBox.shrink(),
             ],
           ),
         ),
@@ -447,9 +561,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           menuMaxHeight: 350,
                           value: SharedPreferencesUtil().selectedChatPluginId,
                           onChanged: (s) async {
-                            if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) ||
-                                s == 'enable') {
+                            if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
                               await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                              plugins = SharedPreferencesUtil().pluginsList;
                               setState(() {});
                               return;
                             }
@@ -475,22 +589,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     )
                   : const SizedBox(width: 16),
               IconButton(
-                icon: const Icon(
-                  Icons.settings,
-                  color: Colors.white,
-                  size: 30,
-                ),
+                icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
                   String language = SharedPreferencesUtil().recordingsLanguage;
                   bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                   await routeToPage(context, const SettingsPage());
                   // TODO: this fails like 10 times, connects reconnects, until it finally works.
-                  if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
-                      (language != SharedPreferencesUtil().recordingsLanguage ||
-                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
+                  if (language != SharedPreferencesUtil().recordingsLanguage ||
+                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
                     capturePageKey.currentState?.restartWebSocket();
                   }
+                  plugins = SharedPreferencesUtil().pluginsList;
                   setState(() {});
                 },
               )
@@ -513,16 +623,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           )
         ] +
-        plugins
-            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id) && p.worksWithChat())
-            .map<DropdownMenuItem<String>>((Plugin plugin) {
+        plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
             child: Row(
@@ -545,7 +653,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             ),
           );
         }).toList();
-    if (SharedPreferencesUtil().pluginsEnabled.isNotEmpty) {
+    if (plugins.where((p) => p.enabled).isNotEmpty) {
       items.add(const DropdownMenuItem<String>(
         value: 'enable',
         child: Row(

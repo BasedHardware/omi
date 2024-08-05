@@ -8,8 +8,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/database/box.dart';
-import 'package:friend_private/backend/growthbook.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
@@ -19,6 +17,8 @@ import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -38,10 +38,12 @@ void main() async {
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(
       options: prod.DefaultFirebaseOptions.currentPlatform,
+      name: 'prod'
     );
   } else {
     await Firebase.initializeApp(
       options: dev.DefaultFirebaseOptions.currentPlatform,
+      name: 'dev'
     );
   }
 
@@ -68,8 +70,8 @@ void main() async {
     OneSignal.initialize(Env.oneSignalAppId!);
     OneSignal.login(SharedPreferencesUtil().uid);
   }
-
   if (Env.instabugApiKey != null) {
+    Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () {
         Instabug.init(
