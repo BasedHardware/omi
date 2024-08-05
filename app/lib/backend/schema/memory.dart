@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:friend_private/backend/database/geolocation.dart';
@@ -90,7 +91,11 @@ class ServerMemory {
 
   String getTranscript({int? maxCount, bool generate = false}) {
     var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
-    if (maxCount != null) return transcript.substring(0, min(maxCount, transcript.length));
-    return transcript;
+    if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
+    try {
+      return utf8.decode(transcript.codeUnits);
+    } catch (e) {
+      return transcript;
+    }
   }
 }
