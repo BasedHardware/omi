@@ -85,6 +85,7 @@ Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
 
 Future<bool> isPluginSetupCompleted(String? url) async {
   if (url == null || url.isEmpty) return true;
+  print('isPluginSetupCompleted: $url');
   var response = await makeApiCall(
     url: '$url?uid=${SharedPreferencesUtil().uid}',
     method: 'GET',
