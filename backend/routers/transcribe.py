@@ -72,9 +72,9 @@ async def _websocket_util(
     transcript_socket2 = None
     duration = 0
     try:
-        single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
+        # single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
         # remove_downloaded_samples(uid) # do not remove them for now.
-        # single_file_path, duration = None, 0
+        single_file_path, duration = None, 0
         # TODO: what if opus? and the samples were created with pcm?
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
