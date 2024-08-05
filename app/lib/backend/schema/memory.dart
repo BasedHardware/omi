@@ -32,6 +32,8 @@ class ServerMemory {
   bool discarded;
   final bool deleted;
 
+  final bool failed; // local failed memories
+
   ServerMemory({
     required this.id,
     required this.createdAt,
@@ -44,6 +46,7 @@ class ServerMemory {
     this.photos = const [],
     this.discarded = false,
     this.deleted = false,
+    this.failed = false,
   });
 
   MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
@@ -64,6 +67,7 @@ class ServerMemory {
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
       deleted: json['deleted'] ?? false,
+      failed: json['failed'] ?? false,
     );
   }
 
@@ -80,6 +84,7 @@ class ServerMemory {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
+      'failed': failed,
     };
   }
 
