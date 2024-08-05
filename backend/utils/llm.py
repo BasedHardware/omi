@@ -18,11 +18,13 @@ from langchain_pinecone import PineconeVectorStore
 from pydantic import BaseModel, Field
 
 from models.chat import Message, MessageSender
-from models.memory import Structured, Memory, MemoryPhoto
+from models.memory import Structured, MemoryPhoto
 from models.plugin import Plugin
 
 llm = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+parser = PydanticOutputParser(pydantic_object=Structured)
+llm_with_parser = llm.with_structured_output(Structured)
 
 
 # TODO: include caching layer, redis
@@ -37,7 +39,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     if not force_process:
         force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
 
-    parser = PydanticOutputParser(pydantic_object=Structured)
     prompt = ChatPromptTemplate.from_messages([(
         'system',
         '''Your task is to provide structure and clarity to the recording transcription of a conversation.
@@ -58,7 +59,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     chain = prompt | llm | parser
     response = chain.invoke({
         'transcript': transcript.strip(),
-        'prev_memories_str': '',
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'force_process_str': force_process_str,
@@ -71,8 +71,6 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
     photos_str = ''
     for i, photo in enumerate(photos):
         photos_str += f'{i + 1}. "{photo.description}"\n'
-    parser = PydanticOutputParser(pydantic_object=Structured)
-    llm_with_parser = llm.with_structured_output(parser)
     prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
 
       For the title, use the main topic of the scenes.
@@ -80,6 +78,18 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
       For the category, classify the scenes into one of the available categories.
     
       Photos Descriptions: ```{photos_str}```
+      '''.replace('    ', '').strip()
+    return llm_with_parser.invoke(prompt)
+
+
+def summarize_screen_pipe(description: str) -> Structured:
+    prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
+
+      For the title, use the main topic of the scenes.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Screenshots: ```{description}```
       '''.replace('    ', '').strip()
     return llm_with_parser.invoke(prompt)
 
@@ -102,28 +112,6 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 
     response = llm.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
-    if len(content) < 5:
-        return ''
-    return content
-
-
-def advise_post_memory_creation(memory: Memory) -> str:
-    # str = userName.isEmpty ? 'a busy entrepreneur': '$userName (a busy entrepreneur)';
-    _str = 'a busy entrepreneur'
-    prompt = f'''
-    The following is the structuring from a transcript of a conversation that just finished.
-    First determine if there's crucial feedback to notify {_str} about it.
-    If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
-    Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
-
-    Transcript:
-    ${memory.transcript}
-
-    Structured version:
-    ${memory.structured.dict()}
-    '''
-    response = llm.invoke(prompt)
-    content = response.content.replace('```', '')
     if len(content) < 5:
         return ''
     return content

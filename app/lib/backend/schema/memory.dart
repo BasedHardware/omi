@@ -35,6 +35,8 @@ class ServerMemory {
 
   final bool failed; // local failed memories
 
+  final String? source;
+
   ServerMemory({
     required this.id,
     required this.createdAt,
@@ -48,6 +50,7 @@ class ServerMemory {
     this.discarded = false,
     this.deleted = false,
     this.failed = false,
+    this.source,
   });
 
   MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
@@ -69,6 +72,7 @@ class ServerMemory {
       discarded: json['discarded'] ?? false,
       deleted: json['deleted'] ?? false,
       failed: json['failed'] ?? false,
+      source: json['source'],
     );
   }
 
@@ -86,6 +90,7 @@ class ServerMemory {
       'discarded': discarded,
       'deleted': deleted,
       'failed': failed,
+      'source': source,
     };
   }
 
