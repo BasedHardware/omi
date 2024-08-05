@@ -4,8 +4,10 @@ from typing import List, Optional
 
 import requests
 
+from database.chat import add_plugin_message
 from models.memory import Memory
 from models.plugin import Plugin
+from models.transcript_segment import TranscriptSegment
 from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
 
 
@@ -51,11 +53,9 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     return plugins
 
 
-def trigger_external_integrations(uid: str, memory: Memory):
+def trigger_external_integrations(uid: str, memory: Memory) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [
-        plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled
-    ]
+    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled]
     if not filtered_plugins:
         return {}
 
@@ -90,4 +90,51 @@ def trigger_external_integrations(uid: str, memory: Memory):
 
     [t.start() for t in threads]
     [t.join() for t in threads]
-    return results
+
+    messages = []
+    for key, message in results.items():
+        if not message:
+            continue
+        messages.append(add_plugin_message(message, key, uid, memory.id))
+    return messages
+
+
+def trigger_realtime_integrations(uid: str, segments: List[TranscriptSegment]) -> dict:
+    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_realtime() and plugin.enabled]
+    if not filtered_plugins:
+        return {}
+
+    threads = []
+    results = {}
+
+    def _single(plugin: Plugin):
+        if not plugin.external_integration.webhook_url:
+            return
+
+        url = plugin.external_integration.webhook_url
+        if '?' in url:
+            url += '&uid=' + uid
+        else:
+            url += '?uid=' + uid
+
+        response = requests.post(url, json=[segment.dict() for segment in segments])
+        if response.status_code != 200:
+            print('Plugin integration failed', plugin.id, 'result:', response.content)
+            return
+
+        print('response', response.json())
+        if message := response.json().get('message', ''):
+            results[plugin.id] = message
+
+    for plugin in filtered_plugins:
+        threads.append(threading.Thread(target=_single, args=(plugin,)))
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    messages = []
+    for key, message in results.items():
+        if not message:
+            continue
+        messages.append(add_plugin_message(message, key, uid))
+    return messages

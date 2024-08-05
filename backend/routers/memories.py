@@ -69,21 +69,6 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
     return memory
 
 
-def add_integration_as_chat_messages(text: str, plugin_id: str, uid: str, memory_id: str):
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.utcnow(),
-        sender='ai',
-        plugin_id=plugin_id,
-        from_external_integration=False,
-        type='text',
-        memories_id=[memory_id],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    return ai_message
-
-
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
@@ -98,14 +83,7 @@ def create_memory(
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
-    results = trigger_external_integrations(uid, memory)
-
-    messages = []
-    for key, message in results.items():
-        if not message:
-            continue
-        messages.append(add_integration_as_chat_messages(message, key, uid, memory.id))
-
+    messages = trigger_external_integrations(uid, memory)
     return CreateMemoryResponse(memory=memory, messages=messages)
 
 

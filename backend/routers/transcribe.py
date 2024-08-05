@@ -63,8 +63,7 @@ def get(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@router.websocket("/listen")
-async def websocket_endpoint(
+async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1
 ):
@@ -160,3 +159,11 @@ async def websocket_endpoint(
                 await websocket.close()
             except Exception as e:
                 print(f"Error closing WebSocket: {e}")
+
+
+@router.websocket("/listen")
+async def websocket_endpoint(
+        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1
+):
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels)
