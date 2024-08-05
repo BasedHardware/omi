@@ -1,5 +1,10 @@
+import uuid
+from datetime import datetime
+from typing import Optional
+
 from google.cloud import firestore
 
+from models.chat import Message
 from ._client import db
 
 
@@ -8,6 +13,21 @@ def add_message(uid: str, message_data: dict):
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
     return message_data
+
+
+def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[str] = None) -> Message:
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.utcnow(),
+        sender='ai',
+        plugin_id=plugin_id,
+        from_external_integration=False,
+        type='text',
+        memories_id=[memory_id] if memory_id else [],
+    )
+    add_message(uid, ai_message.dict())
+    return ai_message
 
 
 def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False):

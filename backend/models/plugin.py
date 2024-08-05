@@ -64,5 +64,8 @@ class Plugin(BaseModel):
     def triggers_on_memory_creation(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'memory_creation'
 
+    def triggers_realtime(self) -> bool:
+        return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
+
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Friend/main{self.image}'
