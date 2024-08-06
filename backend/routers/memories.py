@@ -23,8 +23,11 @@ router = APIRouter()
 def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
     transcript = memory.get_transcript()
 
+    photos = []
     if memory.photos:
         structured: Structured = summarize_open_glass(memory.photos)
+        photos = memory.photos
+        memory.photos = []  # Clear photos to avoid saving them in the memory
     else:
         structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
 
@@ -41,6 +44,8 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
             discarded=discarded,
             deleted=False,
         )
+        if photos:
+            memories_db.store_memory_photos(uid, memory.id, photos)
     else:
         memory.structured = structured
         memory.discarded = discarded
@@ -92,7 +97,6 @@ def reprocess_memory(memory_id: str, language_code: str, uid: str = Depends(auth
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    # TODO: should trigger integrations?
     return _process_memory(uid, language_code, memory, force_process=True)
 
 
@@ -102,12 +106,22 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
     return memories_db.get_memories(uid, limit, offset, include_discarded=True)
 
 
-@router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
-def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def _get_memory_by_id(uid: str, memory_id: str):
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail="Memory not found")
     return memory
+
+
+@router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
+def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    return _get_memory_by_id(uid, memory_id)
+
+
+@router.get("/v1/memories/{memory_id}/photos", response_model=List[MemoryPhoto], tags=['memories'])
+def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return memories_db.get_memory_photos(uid, memory_id)
 
 
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
