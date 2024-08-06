@@ -76,12 +76,15 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
-        create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
+        create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
     geolocation = create_memory.geolocation
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    if not language_code:  # not breaking change
+        language_code = create_memory.language
 
     memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
@@ -92,11 +95,16 @@ def create_memory(
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
-def reprocess_memory(memory_id: str, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
+def reprocess_memory(
+        memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
+    if not language_code:
+        language_code = memory.language or 'en'
+
     return _process_memory(uid, language_code, memory, force_process=True)
 
 
