@@ -16,7 +16,7 @@ def conversation_feedback(memory: Memory):
       Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not.
        
       Transcript:
-      ${memory.transcript}
+      ${memory.get_transcript()}
       
       Structured version:
       ${memory.structured.dict()}
