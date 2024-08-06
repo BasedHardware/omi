@@ -24,13 +24,13 @@ import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -202,13 +202,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       scanAndConnectDevice().then(_onConnected);
     }
 
-    createNotification(
+    NotificationService.instance.createNotification(
       title: 'Don\'t forget to wear Friend today',
       body: 'Wear your friend and capture your memories today.',
       notificationId: 4,
       isMorningNotification: true,
     );
-    createNotification(
+    NotificationService.instance.createNotification(
       title: 'Here is your action plan for tomorrow',
       body: 'Check out your daily summary to see what you should do tomorrow.',
       notificationId: 5,
@@ -243,7 +243,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           InstabugLog.logInfo('Friend Device Disconnected');
           _disconnectNotificationTimer?.cancel();
           _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-            createNotification(
+            NotificationService.instance.createNotification(
               title: 'Friend Device Disconnected',
               body: 'Please reconnect to continue using your Friend.',
             );
@@ -265,7 +265,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     _disconnectNotificationTimer?.cancel();
-    clearNotification(1);
+    NotificationService.instance.clearNotification(1);
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
