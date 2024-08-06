@@ -10,7 +10,6 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocket
 
 from utils.storage import retrieve_all_samples
-from utils.stt.soniox_util import get_single_file
 from utils.stt.vad import vad_is_empty
 
 headers = {
@@ -85,6 +84,26 @@ async def send_initial_file(file_path, transcript_socket):
 #         # remove except joined_output.wav
 #         if file != 'joined_output.wav':
 #             os.remove(f"{path}/{file}")
+
+
+def get_single_file(dir_path: str):
+    output_path = f'{dir_path}joined_output.wav'
+
+    files_to_join = []
+    for sample in os.listdir(dir_path):
+        if '.wav' not in sample:
+            continue
+        path = f'{dir_path}{sample}'
+        files_to_join.append(AudioSegment.from_file(path))
+
+    output = files_to_join[0]  # KNOWN ISSUE
+    for audio in files_to_join[1:]:
+        output += audio
+
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    output.export(output_path, format='wav')
+    return output_path
 
 
 # Add this new function to handle initial file sending
