@@ -1,6 +1,9 @@
+from typing import List
+
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from models.memory import MemoryPhoto
 from ._client import db
 
 
@@ -75,3 +78,23 @@ def get_memories_by_id(uid, memory_ids):
         if doc.exists:
             memories.append(doc.to_dict())
     return memories
+
+
+# Open Glass
+
+def store_memory_photos(uid: str, memory_id: str, photos: List[MemoryPhoto]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    photos_ref = memory_ref.collection('photos')
+    batch = db.batch()
+    for photo in photos:
+        photo_ref = photos_ref.document(photo.id)
+        batch.set(photo_ref, photo.dict())
+    batch.commit()
+
+
+def get_memory_photos(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    photos_ref = memory_ref.collection('photos')
+    return [doc.to_dict() for doc in photos_ref.stream()]
