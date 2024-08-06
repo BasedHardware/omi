@@ -130,7 +130,8 @@ backend/pretrained_models/
 /backend/scripts/
 /backend/pretrained_models/
 
-google-credentials.json
+backend/google-credentials.json
+backend/google-credentials-dev.json
 
 startup-script.sh
 /app/lib/firebase_options_dev.dart
