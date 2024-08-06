@@ -80,7 +80,7 @@ class NotificationService {
     );
   }
 
-  void registerNotification() async {
+  void saveNotificationToken() async {
     String? token = await _firebaseMessaging.getToken();
     await saveToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveToken);
