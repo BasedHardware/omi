@@ -25,12 +25,7 @@ app.include_router(screenpipe.router)
 
 modal_app = App(
     name='api',
-    secrets=[
-        Secret.from_name("gcp-credentials"),
-        Secret.from_name("huggingface-token"),
-        Secret.from_dotenv('.env'),
-    ],
-    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
+    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
 )
 image = (
     Image.debian_slim()

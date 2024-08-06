@@ -23,7 +23,7 @@ class PluginReview(BaseModel):
 class ExternalIntegration(BaseModel):
     triggers_on: str
     webhook_url: str
-    setup_completed_url: Optional[str]
+    setup_completed_url: Optional[str] = None
     setup_instructions_file_path: str
     # TODO: refactor to be read from backend, so frontend doesn't do extra request (cache)
     # setup_instructions_markdown: str = ''
@@ -36,12 +36,12 @@ class Plugin(BaseModel):
     description: str
     image: str  # TODO: return image_url: str with the whole repo + path
     capabilities: Set[str]
-    memory_prompt: Optional[str]
-    chat_prompt: Optional[str]
-    external_integration: Optional[ExternalIntegration]
+    memory_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    external_integration: Optional[ExternalIntegration] = None
     reviews: List[PluginReview] = []
-    user_review: Optional[PluginReview]
-    rating_avg: Optional[float]
+    user_review: Optional[PluginReview] = None
+    rating_avg: Optional[float] = 0
     rating_count: int = 0
     enabled: bool = False
     deleted: bool = False
