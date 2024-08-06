@@ -139,6 +139,7 @@ flutter:
     - assets/lottie_animations/
     - assets/pdfs/
     - assets/silero_vad.onnx
+    - shorebird.yaml
   fonts:
     - family: 'SF Pro Display'
       fonts:
