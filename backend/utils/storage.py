@@ -4,8 +4,6 @@ import os
 from google.cloud import storage
 from google.oauth2 import service_account
 
-from utils.stt.soniox_util import create_speaker_profile
-
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
@@ -49,32 +47,6 @@ def retrieve_speaker_profile(uid: str):
     except Exception as e:
         print(f'retrieve_speaker_profile not found {uid}')
         return None
-
-
-def migrate():
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blobs = bucket.list_blobs()
-    # get all dirs available
-    # from each dir get all files in /samples
-    # download each file to _samples/{uid}
-    # create speaker profile
-    uids = set()
-    for blob in blobs:
-        uid = blob.name.split("/")[0]
-        uids.add(uid)
-    print(len(uids))
-
-    for uid in uids:
-        base_path = retrieve_all_samples(uid)
-        count = len(os.listdir(base_path))
-        if count >= 5:
-            try:
-                result = create_speaker_profile(uid, base_path)
-                print('create_speaker_profile', result)
-            except:
-                pass
-    # base_path = retrieve_all_samples(uid)
-    # print('uid', uid, print(base_path))
 
 
 def retrieve_all_samples(uid: str):
