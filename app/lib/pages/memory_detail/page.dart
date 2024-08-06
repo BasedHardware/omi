@@ -139,7 +139,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               controller: _controller,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
               tabs: [
-                Tab(text: widget.memory.type == MemoryType.image ? 'Photos' : 'Transcript'),
+                Tab(text: widget.memory.source == MemorySource.openglass ? 'Photos' : 'Transcript'),
                 const Tab(text: 'Summary')
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
@@ -153,7 +153,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   children: [
                     ListView(
                       shrinkWrap: true,
-                      children: widget.memory.type == MemoryType.image ? _getImagesWidget() : _getTranscriptWidgets(),
+                      children:
+                          widget.memory.source == MemorySource.openglass ? _getImagesWidget() : _getTranscriptWidgets(),
                     ),
                     ListView(
                       shrinkWrap: true,

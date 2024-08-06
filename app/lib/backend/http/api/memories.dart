@@ -27,9 +27,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
   Geolocation? geolocation,
   List<Tuple2<String, String>> photos = const [],
   bool triggerIntegrations = true,
+  String? language,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?language_code=${SharedPreferencesUtil().recordingsLanguage}&trigger_integrations=$triggerIntegrations',
+    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations',
     headers: {},
     method: 'POST',
     body: jsonEncode({
@@ -37,10 +38,12 @@ Future<CreateMemoryResponse?> createMemoryServer({
       'finished_at': finishedAt.toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
-      'photos': photos.map((photo) => {'base63': photo.item1, 'description': photo.item2}).toList(),
+      'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
+      'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
+      'language': language, // maybe determine auto?
     }),
   );
-  if (response == null) return null; // TODO: if fails should tell, do something
+  if (response == null) return null;
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateMemoryResponse.fromJson(jsonDecode(response.body));
@@ -72,7 +75,7 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
 
 Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess?language_code=${SharedPreferencesUtil().recordingsLanguage}',
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess',
     headers: {},
     method: 'POST',
     body: '',
