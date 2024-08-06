@@ -74,3 +74,27 @@ def user_has_speech_profile(uid: str) -> bool:
 
 def set_user_has_speech_profile(uid: str):
     r.set(f'speech_profiles:{uid}', 1)
+
+
+def set_user_token(uid: str, token: str):
+    r.set(f'users:{uid}:token', token)
+
+
+def get_user_token(uid: str):
+    token = r.get(f'users:{uid}:token')
+    token = token.decode('utf-8')
+    return token
+
+
+def set_user_timezone(uid: str, timezone: str):
+    r.set(f'users:{uid}:timezone', timezone)
+
+
+def get_user_timezone(uid: str):
+    timezone = r.get(f'users:{uid}:timezone')
+    timezone = timezone.decode('utf-8')
+    return timezone
+
+
+def get_all_user_timezones():
+    return r.keys("users:*:timezone")
