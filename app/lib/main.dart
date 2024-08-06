@@ -4,11 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/database/box.dart';
-import 'package:friend_private/backend/growthbook.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
@@ -18,6 +17,8 @@ import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -37,10 +38,12 @@ void main() async {
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(
       options: prod.DefaultFirebaseOptions.currentPlatform,
+      name: 'prod'
     );
   } else {
     await Firebase.initializeApp(
       options: dev.DefaultFirebaseOptions.currentPlatform,
+      name: 'dev'
     );
   }
 
@@ -67,8 +70,8 @@ void main() async {
     OneSignal.initialize(Env.oneSignalAppId!);
     OneSignal.login(SharedPreferencesUtil().uid);
   }
-
   if (Env.instabugApiKey != null) {
+    Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () {
         Instabug.init(
@@ -123,48 +126,50 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorObservers: [InstabugNavigatorObserver()],
-      debugShowCheckedModeBanner: F.env == Environment.dev,
-      title: F.title,
-      navigatorKey: MyApp.navigatorKey,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('en')],
-      theme: ThemeData(
-          useMaterial3: false,
-          colorScheme: const ColorScheme.dark(
-            primary: Colors.black,
-            secondary: Colors.deepPurple,
-            surface: Colors.black38,
-          ),
-          // dialogTheme: const DialogTheme(
-          //   backgroundColor: Colors.black,
-          //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
-          //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
-          // ),
-          snackBarTheme: SnackBarThemeData(
-            backgroundColor: Colors.grey.shade900,
-            contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-          ),
-          textTheme: TextTheme(
-            titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-            titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-            bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-            labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-          ),
-          textSelectionTheme: const TextSelectionThemeData(
-            cursorColor: Colors.white,
-            selectionColor: Colors.deepPurple,
-          )),
-      themeMode: ThemeMode.dark,
-      // home: const HasBackupPage(),
-      home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
-          ? const HomePageWrapper()
-          : const OnboardingWrapper(),
+    return WithForegroundTask(
+      child: MaterialApp(
+        navigatorObservers: [InstabugNavigatorObserver()],
+        debugShowCheckedModeBanner: F.env == Environment.dev,
+        title: F.title,
+        navigatorKey: MyApp.navigatorKey,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en')],
+        theme: ThemeData(
+            useMaterial3: false,
+            colorScheme: const ColorScheme.dark(
+              primary: Colors.black,
+              secondary: Colors.deepPurple,
+              surface: Colors.black38,
+            ),
+            // dialogTheme: const DialogTheme(
+            //   backgroundColor: Colors.black,
+            //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
+            //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
+            // ),
+            snackBarTheme: SnackBarThemeData(
+              backgroundColor: Colors.grey.shade900,
+              contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+            textTheme: TextTheme(
+              titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+              titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+              bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+              labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+            ),
+            textSelectionTheme: const TextSelectionThemeData(
+              cursorColor: Colors.white,
+              selectionColor: Colors.deepPurple,
+            )),
+        themeMode: ThemeMode.dark,
+        // home: const HasBackupPage(),
+        home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
+            ? const HomePageWrapper()
+            : const OnboardingWrapper(),
+      ),
     );
   }
 }
