@@ -3,28 +3,9 @@ import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
-
-class NotifyOnKill {
-  static const platform = MethodChannel('com.friend.ios/notifyOnKill');
-
-  static Future<void> register() async {
-    try {
-      await platform.invokeMethod(
-        'setNotificationOnKillService',
-        {
-          'title': "Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
-        },
-      );
-    } catch (e) {
-      debugPrint('NotifOnKill error: $e');
-    }
-  }
-}
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -48,7 +29,6 @@ Future<void> initializeNotifications() async {
       ],
       debug: false);
   debugPrint('initializeNotifications: $initialized');
-  NotifyOnKill.register();
 }
 
 Future<void> requestNotificationPermissions() async {
