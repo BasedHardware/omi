@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/services/notification_service.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
@@ -99,6 +100,7 @@ void main() async {
 }
 
 _getRunApp(bool isAuth) {
+  NotificationService().initialize();
   return runApp(MyApp(isAuth: isAuth));
 }
 
