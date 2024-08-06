@@ -57,8 +57,9 @@ dependencies:
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-  #  nordic_dfu: ^6.1.4+hotfix
+  nordic_dfu: ^6.1.4+hotfix
   package_info_plus: ^8.0.0
+  flutter_downloader: ^1.11.8
 
   path_provider: any
   ml_linalg: any
