@@ -25,7 +25,7 @@ def save_token(data: dict ):
     return {'status': 'success'}
 
 
-@router.post('/save-token')
+@router.post('/send-notification')
 def send_notification(token: str, title: str, body: str):
     message = messaging.Message(
         notification=messaging.Notification(

@@ -105,7 +105,7 @@ class _AuthComponentState extends State<AuthComponent> {
     String? token;
     try {
       token = await getIdToken();
-      NotificationService.instance.register();
+      NotificationService.instance.saveNotificationToken();
     } catch (e, stackTrace) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Failed to retrieve firebase token, please try again.'),
