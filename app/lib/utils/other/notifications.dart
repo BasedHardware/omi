@@ -3,10 +3,28 @@ import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/notify_on_kill.dart';
+import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
+
+class NotifyOnKill {
+  static const platform = MethodChannel('com.friend.ios/notifyOnKill');
+
+  static Future<void> register() async {
+    try {
+      await platform.invokeMethod(
+        'setNotificationOnKillService',
+        {
+          'title': "Friend Device Disconnected",
+          'description': "Please keep your app opened to continue using your Friend.",
+        },
+      );
+    } catch (e) {
+      debugPrint('NotifOnKill error: $e');
+    }
+  }
+}
 
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
@@ -39,6 +57,7 @@ Future<void> requestNotificationPermissions() async {
     // This is just a basic example. For real apps, you must show some
     // friendly dialog box before call the request method.
     // This is very important to not harm the user experience
+    // print('shouldShowRationaleToRequest: ${await AwesomeNotifications()}');
     AwesomeNotifications().requestPermissionToSendNotifications();
   }
 }
@@ -88,6 +107,7 @@ void createNotification({
   bool isDailySummaryNotification = false,
 }) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
+  debugPrint('createNotification: $allowed');
   if (!allowed) return;
   debugPrint('createNotification ~ Creating notification: $title');
   NotificationCalendar? interval = await _retrieveNotificationInterval(

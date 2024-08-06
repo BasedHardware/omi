@@ -1,10 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from models.chat import Message
 from models.transcript_segment import TranscriptSegment
 
 app = FastAPI()
@@ -79,6 +80,10 @@ class Structured(BaseModel):
             result += "Action Items:\n"
             for item in self.action_items:
                 result += f"- {item.description}\n"
+        if self.events:
+            result += "Events:\n"
+            for event in self.events:
+                result += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
         return result.strip()
 
 
@@ -95,7 +100,7 @@ class Geolocation(BaseModel):
 class Memory(BaseModel):
     id: str
     created_at: datetime
-    transcript: str
+    # transcript: str
     structured: Structured
 
     started_at: Optional[datetime]
@@ -110,6 +115,8 @@ class Memory(BaseModel):
     discarded: bool = False
     deleted: bool = False
 
+    source: Optional[str] = None
+
     @staticmethod
     def memories_to_string(memories: List['Memory'], include_transcript: bool = False) -> str:
         result = []
@@ -120,8 +127,6 @@ class Memory(BaseModel):
                 for item in memory.structured.action_items:
                     memory_str += f"  - {item.description}\n"
             memory_str += f"Category: {memory.structured.category}\n"
-            if include_transcript:
-                memory_str += f"Transcript:\n{memory.transcript}\n"
             result.append(memory_str.strip())
         return "\n\n".join(result)
 
@@ -133,6 +138,8 @@ class CreateMemory(BaseModel):
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
+    geolocation: Optional[Geolocation] = None
+    photos: List[MemoryPhoto] = []
 
     def get_transcript(self) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
@@ -140,4 +147,4 @@ class CreateMemory(BaseModel):
 
 class CreateMemoryResponse(BaseModel):
     memory: Memory
-    messages: Dict[str, str] = {}
+    messages: List[Message] = []

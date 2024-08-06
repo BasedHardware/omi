@@ -3,13 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/message.dart';
-import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -28,15 +29,15 @@ import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
-  final Function refreshMemories;
-  final Function refreshMessages;
+  final Function addMemory;
+  final Function addMessage;
   final BTDeviceStruct? device;
 
   const CapturePage({
     super.key,
     required this.device,
-    required this.refreshMemories,
-    required this.refreshMessages,
+    required this.addMemory,
+    required this.addMessage,
   });
 
   @override
@@ -75,7 +76,6 @@ class CapturePageState extends State<CapturePage>
   int? secondsMissedOnReconnect;
 
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
-    // TODO: this will not work with opus for now, more complexity, unneeded rn
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
     await initWebSocket(
       codec: codec,
@@ -99,7 +99,6 @@ class CapturePageState extends State<CapturePage>
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
-
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
@@ -128,9 +127,10 @@ class CapturePageState extends State<CapturePage>
     );
   }
 
-  Future<void> initiateBytesStreamingProcessing() async {
+  Future<void> initiateFriendAudioStreaming() async {
     if (btDevice == null) return;
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+    if (codec != BleAudioCodec.pcm8) restartWebSocket();
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
@@ -165,7 +165,7 @@ class CapturePageState extends State<CapturePage>
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       startOpenGlass();
-      initiateBytesStreamingProcessing();
+      initiateFriendAudioStreaming();
       // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
     }
   }
@@ -175,10 +175,8 @@ class CapturePageState extends State<CapturePage>
     initiateWebsocket();
   }
 
-  void sendMessageToChat(Message message, Memory? memory) {
-    if (memory != null) message.memories.add(memory);
-    MessageProvider().saveMessage(message);
-    widget.refreshMessages();
+  void sendMessageToChat(ServerMessage message) {
+    widget.addMessage(message);
   }
 
   _createMemory({bool forcedCreation = false}) async {
@@ -196,21 +194,42 @@ class CapturePageState extends State<CapturePage>
         print(e);
       } // in case was a local recording and not a BLE recording
     }
-    Memory? memory = await processTranscriptContent(
-      context,
-      TranscriptSegment.segmentsAsString(segments),
+    Geolocation? geolocation = await LocationService().getGeolocationDetails();
+    ServerMemory? memory = await processTranscriptContent(
       segments,
-      file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: await LocationService().getGeolocationDetails(),
+      geolocation: geolocation,
       photos: photos,
       // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
     );
     debugPrint(memory.toString());
+    if (memory == null) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        geolocation: geolocation,
+        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        deleted: false,
+        startedAt: currentTranscriptStartedAt,
+        finishedAt: currentTranscriptFinishedAt,
+        failed: true,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Memory creation failed. It\' stored locally and will be retried soon.',
+          style: TextStyle(color: Colors.white, fontSize: 14),
+        ),
+      ));
+      // TODO: store anyways something temporal and retry once connected again.
+    }
 
-    await widget.refreshMemories();
+    widget.addMemory(memory);
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
@@ -237,14 +256,11 @@ class CapturePageState extends State<CapturePage>
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
-    String transcript = TranscriptSegment.segmentsAsString(SharedPreferencesUtil().transcriptSegments);
     processTranscriptContent(
-      context,
-      transcript,
       SharedPreferencesUtil().transcriptSegments,
-      null,
       retrievedFromCache: true,
-      sendMessageToChat: sendMessageToChat,
+      sendMessageToChat: null,
+      triggerIntegrations: false,
     );
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript
@@ -256,7 +272,7 @@ class CapturePageState extends State<CapturePage>
     WavBytesUtil.clearTempWavFiles();
     initiateWebsocket();
     startOpenGlass();
-    initiateBytesStreamingProcessing();
+    initiateFriendAudioStreaming();
     processCachedTranscript();
 
     WidgetsBinding.instance.addObserver(this);
