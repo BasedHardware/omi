@@ -14,10 +14,16 @@ async def start_cron_job():
 
 async def send_daily_notification():
     try:
-        morning_users, daily_summery_users = get_users_for_notification()
+        morning_users, daily_summary_users = get_users_for_notification()
+        morning_alert_title = "Don\'t forget to wear Friend today"
+        morning_alert_body = "Wear your friend and capture your memories today."
 
-        await send_bulk_notification(morning_users, "Don\'t forget to wear Friend today", "Wear your friend and capture your memories today.")
-        await send_bulk_notification(daily_summery_users, "Here is your action plan for tomorrow", "Check out your daily summary to see what you should do tomorrow.")
+        daily_summary_title = "Here is your action plan for tomorrow"
+        daily_summary_body = "Check out your daily summary to see what you should do tomorrow."
+
+
+        await send_bulk_notification(morning_users, morning_alert_title, morning_alert_body)
+        await send_bulk_notification(daily_summary_users, daily_summary_title, daily_summary_body)
     except Exception as e:
         print("Error sending message:", e)
         return None
