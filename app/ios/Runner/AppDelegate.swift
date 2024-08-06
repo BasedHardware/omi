@@ -2,6 +2,7 @@ import UIKit
 
 import Flutter
 import workmanager
+import flutter_downloader
 
 import UserNotifications
 @UIApplicationMain
@@ -16,8 +17,8 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
-    
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
+    FlutterDownloaderPlugin.setPluginRegistrantCallback(registerPlugins)
 
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
@@ -90,4 +91,7 @@ import UserNotifications
 // here
 func registerPlugins(registry: FlutterPluginRegistry) {
   GeneratedPluginRegistrant.register(with: registry)
+    if (!registry.hasPlugin("FlutterDownloaderPlugin")) {
+       FlutterDownloaderPlugin.register(with: registry.registrar(forPlugin: "FlutterDownloaderPlugin")!)
+    }
 }
