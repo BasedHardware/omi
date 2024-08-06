@@ -6,6 +6,7 @@ from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
+import database.chat as chat_db
 import database.memories as memories_db
 from database.vector import upsert_vector, delete_vector, upsert_vectors
 from models.memory import *
@@ -13,7 +14,7 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from routers.plugins import get_plugins_data
 from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result
+from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
@@ -22,7 +23,11 @@ router = APIRouter()
 def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
     transcript = memory.get_transcript()
 
-    structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+    if memory.photos:
+        structured: Structured = summarize_open_glass(memory.photos)
+    else:
+        structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+
     discarded = structured.title == ''
 
     if isinstance(memory, CreateMemory):
@@ -65,10 +70,21 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
-def create_memory(create_memory: CreateMemory, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
+def create_memory(
+        create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
+        uid: str = Depends(auth.get_current_user_uid)
+):
+    if create_memory.photos:
+        # TODO: photos should be handled differently, a subcollection or maybe a list of files in cloud storage,
+        # should they be uploaded from the client?
+        raise HTTPException(status_code=400, detail="Photos are not supported yet")
+
     memory = _process_memory(uid, language_code, create_memory)
-    results = trigger_external_integrations(uid, memory)  # TODO: include as part of plugin response
-    return CreateMemoryResponse(memory=memory, messages=results)
+    if not trigger_integrations:
+        return CreateMemoryResponse(memory=memory, messages=[])
+
+    messages = trigger_external_integrations(uid, memory)
+    return CreateMemoryResponse(memory=memory, messages=messages)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
@@ -77,6 +93,7 @@ def reprocess_memory(memory_id: str, language_code: str, uid: str = Depends(auth
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
+    # TODO: should trigger integrations?
     return _process_memory(uid, language_code, memory, force_process=True)
 
 
@@ -111,10 +128,15 @@ def _get_structured(memory: dict):
     if category not in CategoryEnum.__members__:
         category = 'other'
     emoji = memory['structured'].get('emoji')
+    try:
+        emoji = emoji.encode('latin1').decode('utf-8')
+    except:
+        emoji = random.choice(['🧠', '🎉'])
+
     return Structured(
         title=memory['structured']['title'],
         overview=memory['structured']['overview'],
-        emoji=emoji.encode('latin1').decode('utf-8') if emoji else random.choice(['🧠', '🎉']),
+        emoji=emoji,
         category=CategoryEnum[category],
         action_items=[
             ActionItem(description=description, completed=False) for description in
@@ -170,8 +192,14 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
     memories_vectors = []
     db_batch = memories_db.get_memories_batch_operation()
     for i, memory in enumerate(memories):
+        if memory.get('photos'):
+            continue  # Ignore openGlass memories for now
+
         structured_obj = _get_structured(memory)
         # print(structured_obj)
+        if not memory['transcriptSegments'] and memory['transcript']:
+            memory['transcriptSegments'] = [{'text': memory['transcript']}]
+
         memory_obj = Memory(
             id=str(generate_uuid4_from_seed(f'{uid}-{memory["createdAt"]}')),
             uid=uid,
@@ -179,30 +207,28 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             created_at=datetime.fromisoformat(memory['createdAt']),
             started_at=datetime.fromisoformat(memory['startedAt']) if memory['startedAt'] else None,
             finished_at=datetime.fromisoformat(memory['finishedAt']) if memory['finishedAt'] else None,
-            transcript=memory['transcript'],
             discarded=memory['discarded'],
             transcript_segments=[
                 TranscriptSegment(
                     text=segment['text'],
-                    start=segment['start'],
-                    end=segment['end'],
-                    speaker=segment['speaker'],
-                    speaker_id=segment['speaker_id'],
-                    is_user=segment['is_user'],
-                ) for segment in memory['transcriptSegments']
+                    start=segment.get('start', 0),
+                    end=segment.get('end', 0),
+                    speaker=segment.get('speaker', 'SPEAKER_00'),
+                    is_user=segment.get('is_user', False),
+                ) for segment in memory['transcriptSegments'] if segment.get('text', '')
             ],
             plugins_results=[
                 PluginResult(plugin_id=result.get('pluginId'), content=result['content'])
                 for result in memory['pluginsResponse']
             ],
-            photos=[
-                # TODO: test migrating photos
-                MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
-            ],
+            # photos=[
+            #     MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
+            # ],
             geolocation=_get_geolocation(memory),
             deleted=False,
         )
         memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
+        print(len(str(memory_obj.dict())))
 
         if not memory_obj.discarded:
             memories_vectors.append(memory_obj)
@@ -211,10 +237,33 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
             memories_vectors = []
 
-        if i % 100 == 0:
+        if i % 20 == 0:
             db_batch.commit()
             db_batch = memories_db.get_memories_batch_operation()
 
     db_batch.commit()
     threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
     return {}
+
+# Future<String> dailySummaryNotifications(List<Memory> memories) async {
+#   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
+#   if (memories.isEmpty) return msg;
+#   if (memories.where((m) => !m.discarded).length <= 1) return msg;
+#   var str = SharedPreferencesUtil().givenName.isEmpty ? 'the user' : SharedPreferencesUtil().givenName;
+#   var prompt = '''
+#   The following are a list of $str\'s memories from today, with the transcripts with its respective structuring, that $str had during his day.
+#   $str wants to get a summary of the key action items he has to take based on his today's memories.
+#
+#   Remember $str is busy so this has to be very efficient and concise.
+#   Respond in at most 50 words.
+#
+#   Output your response in plain text, without markdown.
+#   ```
+#   ${Memory.memoriesToString(memories, includeTranscript: true)}
+#   ```
+#   ''';
+#   debugPrint(prompt);
+#   var result = await executeGptPrompt(prompt);
+#   debugPrint('dailySummaryNotifications result: $result');
+#   return result.replaceAll('```', '').trim();
+# }

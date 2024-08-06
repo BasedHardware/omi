@@ -1,8 +1,9 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -34,14 +35,6 @@ class SharedPreferencesUtil {
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
-
-  String get deepgramApiKey => getString('deepgramApiKey') ?? '';
-
-  set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
-
-  bool get useTranscriptServer => Env.growthbookApiKey == null ? false : getBool('useTranscriptServer') ?? true;
-
-  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -117,15 +110,7 @@ class SharedPreferencesUtil {
     saveStringList('pluginsList', plugins);
   }
 
-  List<String> get pluginsEnabled => getStringList('pluginsEnabled') ?? [];
-
-  set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
-
   enablePlugin(String value) {
-    final List<String> pluginsId = pluginsEnabled;
-    pluginsId.add(value);
-    pluginsEnabled = pluginsId;
-
     final List<Plugin> plugins = pluginsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = true;
@@ -133,11 +118,6 @@ class SharedPreferencesUtil {
   }
 
   disablePlugin(String value) {
-    if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
-    final List<String> pluginsId = pluginsEnabled;
-    pluginsId.remove(value);
-    pluginsEnabled = pluginsId;
-
     final List<Plugin> plugins = pluginsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = false;
@@ -156,6 +136,31 @@ class SharedPreferencesUtil {
   set transcriptSegments(List<TranscriptSegment> value) {
     final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('transcriptSegments', segments);
+  }
+
+  List<ServerMemory> get failedMemories {
+    final List<String> memories = getStringList('failedServerMemories') ?? [];
+    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set failedMemories(List<ServerMemory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('failedServerMemories', memories);
+  }
+
+  addFailedMemory(ServerMemory memory) {
+    final List<ServerMemory> memories = failedMemories;
+    memories.add(memory);
+    failedMemories = memories;
+  }
+
+  removeFailedMemory(String memoryId) {
+    final List<ServerMemory> memories = failedMemories;
+    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
+    if (memory != null) {
+      memories.remove(memory);
+      failedMemories = memories;
+    }
   }
 
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
@@ -278,17 +283,7 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName';
 
-// String get userName => getString('userName') ?? givenName; // the one the users sets
-//
-// set userName(String value) => saveString('userName', value);
-
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 }
-
-String getOpenAIApiKeyForUsage() =>
-    SharedPreferencesUtil().openAIApiKey.isEmpty ? Env.openAIAPIKey! : SharedPreferencesUtil().openAIApiKey;
-
-String getDeepgramApiKeyForUsage() =>
-    SharedPreferencesUtil().deepgramApiKey.isEmpty ? Env.deepgramApiKey! : SharedPreferencesUtil().deepgramApiKey;

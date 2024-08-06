@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
@@ -188,11 +188,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  SharedPreferencesUtil().useTranscriptServer
-                      ? getItemAddOn('Speech Profile', () {
-                          routeToPage(context, const SpeakerIdPage());
-                        }, icon: Icons.multitrack_audio)
-                      : Container(),
+                  getItemAddOn('Speech Profile', () {
+                    routeToPage(context, const SpeakerIdPage());
+                  }, icon: Icons.multitrack_audio),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),

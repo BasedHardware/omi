@@ -49,7 +49,7 @@ class LocationService {
   Future<Geolocation?> getGeolocationDetails() async {
     if (await hasPermission()) {
       LocationData locationData = await location.getLocation();
-      // TODO: move http requests to other.dart
+      // TODO: move http requests to webhooks.dart
 
       try {
         var res = await http.get(
@@ -60,6 +60,9 @@ class LocationService {
         );
 
         var data = json.decode(res.body);
+        if (data['result'] == null || data['result'].length == 0 || data['result'][0]['place_id'] == null) {
+          return null; // FIXME, should return smth, move to the backend (send only lat, lng from here)
+        }
         Geolocation geolocation = Geolocation(
           latitude: locationData.latitude,
           longitude: locationData.longitude,
@@ -69,7 +72,8 @@ class LocationService {
         );
         return geolocation;
       } catch (e) {
-        return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
+        print('getGeolocationDetails: $e');
+        return null;
       }
     } else {
       return null;

@@ -1,21 +1,8 @@
 name: friend_private
 description: A new Flutter project.
 
-# The following line prevents the package from being accidentally published to
-# pub.dev using `pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
-# The following defines the version and build number for your application.
-# A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
-# Both the version and the builder number may be overridden in flutter
-# build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
-# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
-# In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
-# Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.19+61
+version: 1.0.20+68
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -109,6 +96,7 @@ dependencies:
   
   docx_template: ^0.4.0
   enum_to_string: ^2.0.1
+  visibility_detector: ^0.4.0+2
 
 
 dependency_overrides:
