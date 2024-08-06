@@ -91,8 +91,6 @@ class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
     latitude: float
     longitude: float
-    altitude: Optional[float] = None
-    accuracy: Optional[float] = None
     address: Optional[str] = None
     location_type: Optional[str] = None
 
