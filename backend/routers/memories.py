@@ -14,6 +14,7 @@ from models.transcript_segment import TranscriptSegment
 from routers.plugins import get_plugins_data
 from utils import auth
 from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
+from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
@@ -73,10 +74,9 @@ def create_memory(
         create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
         uid: str = Depends(auth.get_current_user_uid)
 ):
-    if create_memory.photos:
-        # TODO: photos should be handled differently, a subcollection or maybe a list of files in cloud storage,
-        # should they be uploaded from the client?
-        raise HTTPException(status_code=400, detail="Photos are not supported yet")
+    geolocation = create_memory.geolocation
+    if geolocation and not geolocation.google_place_id:
+        create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
