@@ -4,8 +4,10 @@ import os
 import firebase_admin
 from fastapi import FastAPI
 
-from modal import Image, App, asgi_app, Secret, mount
+
+from modal import Image, App, asgi_app, Secret
 from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, update
+
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
