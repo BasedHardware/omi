@@ -1,3 +1,4 @@
+import uuid
 from typing import List
 
 from google.cloud import firestore
@@ -88,8 +89,11 @@ def store_memory_photos(uid: str, memory_id: str, photos: List[MemoryPhoto]):
     photos_ref = memory_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
-        photo_ref = photos_ref.document(photo.id)
-        batch.set(photo_ref, photo.dict())
+        photo_id = str(uuid.uuid4())
+        photo_ref = photos_ref.document(str(uuid.uuid4()))
+        data = photo.dict()
+        data['id'] = photo_id
+        batch.set(photo_ref, data)
     batch.commit()
 
 

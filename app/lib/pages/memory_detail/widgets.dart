@@ -60,7 +60,11 @@ List<Widget> getSummaryWidgets(
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              memory.discarded ? 'Discarded' : memory.source?.toString() ?? memory.structured.category,
+              memory.discarded
+                  ? 'Discarded'
+                  : memory.source == MemorySource.screenpipe
+                      ? 'screenpipe'
+                      : memory.structured.category,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(
                     color: memory.source == MemorySource.screenpipe ? Colors.deepPurple : Colors.white,
                   ),

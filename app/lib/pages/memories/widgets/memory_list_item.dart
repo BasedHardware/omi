@@ -110,7 +110,11 @@ class _MemoryListItemState extends State<MemoryListItem> {
                   child: Text(
                     widget.memory.discarded
                         ? 'Discarded'
-                        : widget.memory.source?.toString() ?? widget.memory.structured.category,
+                        : widget.memory.source == MemorySource.openglass
+                            ? 'Openglass'
+                            : widget.memory.source == MemorySource.screenpipe
+                                ? 'Screenpipe'
+                                : widget.memory.structured.category,
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                           color: widget.memory.source == MemorySource.screenpipe ? Colors.deepPurple : Colors.white,
                         ),

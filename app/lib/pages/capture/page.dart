@@ -218,7 +218,7 @@ class CapturePageState extends State<CapturePage>
         finishedAt: currentTranscriptFinishedAt,
         failed: true,
         source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: SharedPreferencesUtil().recordingsLanguage,
+        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -254,7 +254,7 @@ class CapturePageState extends State<CapturePage>
   }
 
   processCachedTranscript() async {
-    // only applies to friend, not openglass
+    // TODO: only applies to friend, not openglass, fix it
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;

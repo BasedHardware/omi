@@ -85,6 +85,8 @@ def create_memory(
 
     if not language_code:  # not breaking change
         language_code = create_memory.language
+    else:
+        create_memory.language = language_code
 
     memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
@@ -102,7 +104,7 @@ def reprocess_memory(
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    if not language_code:
+    if not language_code:  # not breaking change
         language_code = memory.language or 'en'
 
     return _process_memory(uid, language_code, memory, force_process=True)

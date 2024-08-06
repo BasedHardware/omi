@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -113,4 +113,19 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
     return ServerMemory.fromJson(jsonDecode(response.body));
   }
   return null;
+}
+
+Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getMemoryPhotos: ${response.body}');
+  if (response.statusCode == 200) {
+    return (jsonDecode(response.body) as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList();
+  }
+  return [];
 }
