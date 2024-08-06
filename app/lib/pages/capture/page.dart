@@ -195,6 +195,7 @@ class CapturePageState extends State<CapturePage>
       } // in case was a local recording and not a BLE recording
     }
     Geolocation? geolocation = await LocationService().getGeolocationDetails();
+    print('geolocation: $geolocation');
     ServerMemory? memory = await processTranscriptContent(
       segments,
       startedAt: currentTranscriptStartedAt,

@@ -88,13 +88,13 @@ class Structured(BaseModel):
 
 
 class Geolocation(BaseModel):
-    google_place_id: str
+    google_place_id: Optional[str] = None
     latitude: float
     longitude: float
     altitude: Optional[float] = None
     accuracy: Optional[float] = None
-    address: str
-    location_type: str
+    address: Optional[str] = None
+    location_type: Optional[str] = None
 
 
 class Memory(BaseModel):
