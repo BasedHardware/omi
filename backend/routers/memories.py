@@ -6,7 +6,6 @@ from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import database.chat as chat_db
 import database.memories as memories_db
 from database.vector import upsert_vector, delete_vector, upsert_vectors
 from models.memory import *
