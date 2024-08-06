@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
 
 class LocationService {
@@ -12,19 +9,15 @@ class LocationService {
 
   Future<bool> enableService() async {
     bool serviceEnabled = await location.serviceEnabled();
-    if (!serviceEnabled) {
-      serviceEnabled = await location.requestService();
-      if (!serviceEnabled) {
-        return false;
-      } else {
-        return true;
-      }
-    } else {
+    if (serviceEnabled) {
       return true;
+    } else {
+      return await location.requestService();
     }
   }
 
   Future<bool> displayPermissionsDialog() async {
+    // TODO: check this.
     // if (SharedPreferencesUtil().locationPermissionRequested) return false;
     SharedPreferencesUtil().locationPermissionRequested = true;
     var status = await permissionStatus();
@@ -49,32 +42,7 @@ class LocationService {
   Future<Geolocation?> getGeolocationDetails() async {
     if (await hasPermission()) {
       LocationData locationData = await location.getLocation();
-      // TODO: move http requests to webhooks.dart
-
-      try {
-        var res = await http.get(
-          Uri.parse(
-            "https://maps.googleapis.com/maps/api/geocode/json?latlng"
-            "=${locationData.latitude},${locationData.longitude}&key=${Env.googleMapsApiKey}",
-          ),
-        );
-
-        var data = json.decode(res.body);
-        if (data['result'] == null || data['result'].length == 0 || data['result'][0]['place_id'] == null) {
-          return null; // FIXME, should return smth, move to the backend (send only lat, lng from here)
-        }
-        Geolocation geolocation = Geolocation(
-          latitude: locationData.latitude,
-          longitude: locationData.longitude,
-          address: data['results'][0]['formatted_address'],
-          locationType: data['results'][0]['types'][0],
-          googlePlaceId: data['results'][0]['place_id'],
-        );
-        return geolocation;
-      } catch (e) {
-        print('getGeolocationDetails: $e');
-        return null;
-      }
+      return Geolocation(latitude: locationData.latitude, longitude: locationData.longitude);
     } else {
       return null;
     }
