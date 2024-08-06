@@ -8,7 +8,6 @@ from fastapi import FastAPI
 from modal import Image, App, asgi_app, Secret, mount
 from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, notifications
 
-
 from fastapi_utilities import repeat_at
 from utils.crons.notification import start_cron_job
 
@@ -29,6 +28,7 @@ app.include_router(speech_profile.router)
 app.include_router(backups.router)
 app.include_router(screenpipe.router)
 app.include_router(notifications.router)
+app.include_router(screenpipe.router)
 
 modal_app = App(
     name='api',
