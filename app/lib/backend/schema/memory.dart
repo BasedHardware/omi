@@ -20,22 +20,26 @@ class CreateMemoryResponse {
   }
 }
 
+enum MemorySource { friend, openglass, screenpipe }
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
-  final Structured structured;
   final DateTime? startedAt;
   final DateTime? finishedAt;
+
+  final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
-  final List<PluginResponse> pluginsResults;
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
+
+  final List<PluginResponse> pluginsResults;
+  final MemorySource? source;
+  final String? language; // applies to Friend only
+
   bool discarded;
   final bool deleted;
-
   final bool failed; // local failed memories
-
-  final String? source;
 
   ServerMemory({
     required this.id,
@@ -51,9 +55,8 @@ class ServerMemory {
     this.deleted = false,
     this.failed = false,
     this.source,
+    this.language,
   });
-
-  MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
@@ -72,7 +75,8 @@ class ServerMemory {
       discarded: json['discarded'] ?? false,
       deleted: json['deleted'] ?? false,
       failed: json['failed'] ?? false,
-      source: json['source'],
+      source: json['source'] != null ? MemorySource.values.asNameMap()[json['source']] : MemorySource.friend,
+      language: json['language'],
     );
   }
 
@@ -90,7 +94,8 @@ class ServerMemory {
       'discarded': discarded,
       'deleted': deleted,
       'failed': failed,
-      'source': source,
+      'source': source?.toString(),
+      'language': language,
     };
   }
 

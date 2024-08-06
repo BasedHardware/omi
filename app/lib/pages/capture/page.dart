@@ -166,7 +166,6 @@ class CapturePageState extends State<CapturePage>
     if (restartBytesProcessing) {
       startOpenGlass();
       initiateFriendAudioStreaming();
-      // restartWebSocket(); // DO NOT USE FOR NOW, this ties the websocket to the device, and logic is much more complex
     }
   }
 
@@ -195,15 +194,15 @@ class CapturePageState extends State<CapturePage>
       } // in case was a local recording and not a BLE recording
     }
     Geolocation? geolocation = await LocationService().getGeolocationDetails();
-    print('geolocation: $geolocation');
     ServerMemory? memory = await processTranscriptContent(
       segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocation,
       photos: photos,
-      // TODO: determinePhotosToKeep(photos);
       sendMessageToChat: sendMessageToChat,
+      triggerIntegrations: true,
+      language: SharedPreferencesUtil().recordingsLanguage,
     );
     debugPrint(memory.toString());
     if (memory == null) {
@@ -215,10 +214,11 @@ class CapturePageState extends State<CapturePage>
         transcriptSegments: segments,
         geolocation: geolocation,
         photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
-        deleted: false,
         startedAt: currentTranscriptStartedAt,
         finishedAt: currentTranscriptFinishedAt,
         failed: true,
+        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: SharedPreferencesUtil().recordingsLanguage,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -254,6 +254,7 @@ class CapturePageState extends State<CapturePage>
   }
 
   processCachedTranscript() async {
+    // only applies to friend, not openglass
     debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
@@ -262,6 +263,7 @@ class CapturePageState extends State<CapturePage>
       retrievedFromCache: true,
       sendMessageToChat: null,
       triggerIntegrations: false,
+      language: SharedPreferencesUtil().recordingsLanguage,
     );
     SharedPreferencesUtil().transcriptSegments = [];
     // TODO: include created at and finished at for this cached transcript

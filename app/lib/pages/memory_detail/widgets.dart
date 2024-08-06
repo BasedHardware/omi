@@ -48,19 +48,21 @@ List<Widget> getSummaryWidgets(
     Row(
       children: [
         GestureDetector(
-          onTap:memory.source == 'screenpipe' ? () {
-            launchUrl(Uri.parse('https://screenpi.pe/'));
-          } : null,
+          onTap: memory.source == MemorySource.screenpipe
+              ? () {
+                  launchUrl(Uri.parse('https://screenpi.pe/'));
+                }
+              : null,
           child: Container(
             decoration: BoxDecoration(
-              color: memory.source == 'screenpipe' ? Colors.white : Colors.grey.shade800,
+              color: memory.source == MemorySource.screenpipe ? Colors.white : Colors.grey.shade800,
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              memory.discarded ? 'Discarded' : memory.source ?? memory.structured.category,
+              memory.discarded ? 'Discarded' : memory.source?.toString() ?? memory.structured.category,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                    color: memory.source == 'screenpipe' ? Colors.deepPurple : Colors.white,
+                    color: memory.source == MemorySource.screenpipe ? Colors.deepPurple : Colors.white,
                   ),
               maxLines: 1,
             ),

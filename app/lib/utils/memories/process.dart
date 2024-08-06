@@ -18,6 +18,7 @@ Future<ServerMemory?> processTranscriptContent(
   List<Tuple2<String, String>> photos = const [],
   Function(ServerMessage)? sendMessageToChat,
   bool triggerIntegrations = true,
+  String? language,
 }) async {
   debugPrint('processTranscriptContent');
   if (transcriptSegments.isEmpty && photos.isEmpty) return null;
@@ -28,6 +29,7 @@ Future<ServerMemory?> processTranscriptContent(
     geolocation: geolocation,
     photos: photos,
     triggerIntegrations: triggerIntegrations,
+    language: language,
   );
   if (result == null) return null;
   ServerMemory? memory = result.memory;
