@@ -60,8 +60,10 @@ class Geolocation {
       'accuracy': accuracy,
       'time': time?.toIso8601String(),
       'googlePlaceId': googlePlaceId,
+      'google_place_id': googlePlaceId, // server
       'address': address,
       'locationType': locationType,
+      'location_type': locationType, // server
     };
   }
 }

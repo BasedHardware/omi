@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/growthbook.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -206,7 +205,7 @@ _getNoFriendConnectedYet(BuildContext context) {
 }
 
 speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
-  return !SharedPreferencesUtil().hasSpeakerProfile && SharedPreferencesUtil().useTranscriptServer
+  return !SharedPreferencesUtil().hasSpeakerProfile
       ? Stack(
           children: [
             GestureDetector(
@@ -215,8 +214,7 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function restart
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 setState(() {});
-                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile &&
-                    GrowthbookUtil().hasStreamingTranscriptFeatureOn()) {
+                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                   restartWebSocket();
                 }
               },
@@ -268,7 +266,6 @@ getTranscriptWidget(
   BTDeviceStruct? btDevice,
 ) {
   if (memoryCreating) {
-    print('getTranscriptWidget: memoryCreating');
     return const Padding(
       padding: EdgeInsets.only(top: 80),
       child: Center(child: CircularProgressIndicator(color: Colors.white)),

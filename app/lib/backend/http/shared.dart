@@ -44,6 +44,7 @@ Future<http.Response?> makeApiCall({
     final client = InstabugHttpClient();
 
     if (method == 'POST') {
+      headers['Content-Type'] = 'application/json';
       return await client.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
       return await client.get(Uri.parse(url), headers: headers);

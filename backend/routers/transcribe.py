@@ -11,10 +11,9 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
-    get_speaker_audio_file, remove_downloaded_samples
-from utils.stt.vad import vad_is_empty, is_speech_present, window_size_samples
+    get_speaker_audio_file
+from utils.stt.vad import vad_is_empty, VADIterator, model
 
 router = APIRouter()
 
@@ -64,18 +63,19 @@ def get(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@router.websocket("/listen")
-async def websocket_endpoint(
+async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
     await websocket.accept()
     transcript_socket2 = None
+    duration = 0
     try:
         # single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
-        # remove_downloaded_samples(uid)
+        # remove_downloaded_samples(uid) # do not remove them for now.
         single_file_path, duration = None, 0
+        # TODO: what if opus? and the samples were created with pcm?
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
@@ -87,29 +87,37 @@ async def websocket_endpoint(
         await websocket.close()
         return
 
+    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
+    window_size_samples = 256 if sample_rate == 8000 else 512
+
     async def receive_audio(socket1, socket2):
-        audio_buffer = bytearray()
+        # audio_buffer = bytearray()
         timer_start = time.time()
         try:
             while True:
                 data = await websocket.receive_bytes()
-                audio_buffer.extend(data)
-                # print(data)
-                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
-                if len(audio_buffer) >= window_size_samples * 2:  # 2 bytes per sample
-                    # TODO: vad doesn't work index.html
-                    if is_speech_present(audio_buffer[:window_size_samples * 2]):
-                        # print('Speech present')
-                        pass
-                    else:
-                        # print('-')
-                        audio_buffer = audio_buffer[window_size_samples * 2:]
-                        continue
+                # print(len(data))
+                # audio_buffer.extend(data)
+                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
+                # TODO: vad not working propperly.
+                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
+                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
-                    audio_buffer = audio_buffer[window_size_samples * 2:]
+                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
+                # if len(audio_buffer) >= window_size_samples * 2:
+                #     # TODO: vad doesn't work index.html
+                #     if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
+                #         print('*')
+                #         # pass
+                #     else:
+                #         print('-')
+                #         audio_buffer = audio_buffer[window_size_samples * 2:]
+                #         continue
+                #
+                #     audio_buffer = audio_buffer[window_size_samples * 2:]
 
                 elapsed_seconds = time.time() - timer_start
-                if elapsed_seconds > 20 or not socket2:
+                if elapsed_seconds > duration or not socket2:
                     socket1.send(data)
                     # print('Sending to socket 1')
                     if socket2:
@@ -152,3 +160,11 @@ async def websocket_endpoint(
                 await websocket.close()
             except Exception as e:
                 print(f"Error closing WebSocket: {e}")
+
+
+@router.websocket("/listen")
+async def websocket_endpoint(
+        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1
+):
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels)

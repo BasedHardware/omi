@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
@@ -10,6 +9,7 @@ import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/pages/onboarding/permissions/permissions.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 
@@ -28,7 +28,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: 5, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (await isSignedIn() && !SharedPreferencesUtil().onboardingCompleted) {
+      if (isSignedIn() && !SharedPreferencesUtil().onboardingCompleted) {
         _goNext();
       }
     });
