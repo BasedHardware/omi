@@ -10,7 +10,7 @@ Future<void> saveTokenToBackend({
   required String timeZone,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}/save-token',
+    url: '${Env.apiBaseUrl}save-token',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({

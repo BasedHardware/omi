@@ -99,6 +99,9 @@ void main() async {
 }
 
 _getRunApp(bool isAuth) {
+  if (isAuth) {
+    NotificationService.instance.saveNotificationToken();
+  }
   return runApp(MyApp(isAuth: isAuth));
 }
 
@@ -128,7 +131,9 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return WithForegroundTask(
       child: MaterialApp(
-        navigatorObservers: [InstabugNavigatorObserver()],
+        navigatorObservers: [
+          if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+        ],
         debugShowCheckedModeBanner: F.env == Environment.dev,
         title: F.title,
         navigatorKey: MyApp.navigatorKey,
