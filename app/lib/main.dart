@@ -26,25 +26,12 @@ import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
-void main() async {
-  if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
-  } else {
-    Env.init(DevEnv());
-  }
-
-  WidgetsFlutterBinding.ensureInitialized();
+Future<bool> _init() async {
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(
-      options: prod.DefaultFirebaseOptions.currentPlatform,
-      name: 'prod'
-    );
+    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
-    await Firebase.initializeApp(
-      options: dev.DefaultFirebaseOptions.currentPlatform,
-      name: 'dev'
-    );
+    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
   await initializeNotifications();
@@ -64,16 +51,26 @@ void main() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-
   if (Env.oneSignalAppId != null) {
     OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
     OneSignal.initialize(Env.oneSignalAppId!);
     OneSignal.login(SharedPreferencesUtil().uid);
   }
+  return isAuth;
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (F.env == Environment.prod) {
+    Env.init(ProdEnv());
+  } else {
+    Env.init(DevEnv());
+  }
+  bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
-      () {
+      () async {
         Instabug.init(
           token: Env.instabugApiKey!,
           invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
@@ -89,17 +86,13 @@ void main() async {
           Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
-        _getRunApp(isAuth);
+        runApp(MyApp(isAuth: isAuth));
       },
       CrashReporting.reportCrash,
     );
   } else {
-    _getRunApp(isAuth);
+    runApp(MyApp(isAuth: isAuth));
   }
-}
-
-_getRunApp(bool isAuth) {
-  return runApp(MyApp(isAuth: isAuth));
 }
 
 class MyApp extends StatefulWidget {
