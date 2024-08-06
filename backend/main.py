@@ -6,10 +6,18 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, mount
-from routers import backups, chat, memories, plugins, proactivity, speech_profile, transcribe
+from routers import backups, chat, memories, plugins, proactivity, speech_profile, transcribe, notifications
 from utils.redis_utils import migrate_user_plugins_reviews
 from utils.storage import retrieve_all_samples
 from utils.stt.soniox_util import create_speaker_profile, uid_has_speech_profile
+from utils.crons.notification import start_cron_job
+
+import asyncio
+from fastapi_utilities import repeat_at
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -27,6 +35,7 @@ app.include_router(plugins.router)
 app.include_router(proactivity.router)
 app.include_router(speech_profile.router)
 app.include_router(backups.router)
+app.include_router(notifications.router)
 
 modal_app = App(
     name='api',
@@ -89,3 +98,9 @@ def migrate_user(prev_uid: str, new_uid: str):
 def receive(data: dict):
     print(data)
     return 'ok'
+
+
+@app.on_event('startup')
+@repeat_at(cron="* * * * *")
+def start_job():
+    asyncio.run(start_cron_job())
