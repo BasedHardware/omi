@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 
 class SetupQuestionsPage extends StatefulWidget {

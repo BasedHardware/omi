@@ -16,6 +16,8 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    
+    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
 
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
@@ -86,6 +88,6 @@ import UserNotifications
 }
 
 // here
-// func registerPlugins(registry: FlutterPluginRegistry) {
-//   GeneratedPluginRegistrant.register(with: registry)
-// }
+func registerPlugins(registry: FlutterPluginRegistry) {
+  GeneratedPluginRegistrant.register(with: registry)
+}

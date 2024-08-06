@@ -1,4 +1,4 @@
-import numpy as np
+# import numpy as np
 import requests
 import torch
 
@@ -15,18 +15,15 @@ torch.hub.set_dir('pretrained_models')
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
-vad_iterator = VADIterator(model, sampling_rate=8000)  # threshold=0.9
-window_size_samples = 256  # 8000
 
-
-def is_speech_present(data):
+def is_speech_present(data, vad_iterator, window_size_samples=256):
     for i in range(0, len(data), window_size_samples):
         chunk = data[i: i + window_size_samples]
         if len(chunk) < window_size_samples:
             break
         speech_dict = vad_iterator(chunk, return_seconds=False)
         if speech_dict:
-            # print(speech_dict)
+            print(speech_dict)
             return True
     return False
 

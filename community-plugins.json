@@ -467,7 +467,7 @@
     "author": "Jeremy Nixon",
     "description": "Create Paper prompts from conversation.",
     "prompt": "Based on this transcript, recommend 5 descriptions of interesting research papers.",
-    "image": "https://i.imgur.com/G8etmUt.png",
+    "image": "/plugins/logos/omniscience-papergen.png",
     "memories": true,
     "chat": false,
     "capabilities": [
@@ -482,7 +482,7 @@
     "author": "Jeremy Nixon",
     "description": "Create Book  prompts from conversation.",
     "prompt": "Based on this transcript, recommend 5 descriptions of interesting books.",
-    "image": "https://i.imgur.com/G8etmUt.png",
+    "image": "/plugins/logos/omniscience-bookgen.png",
     "memories": true,
     "chat": false,
     "capabilities": [
@@ -521,6 +521,20 @@
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/emotional-support",
       "setup_instructions_file_path": ""
     },
+    "deleted": false
+  },
+  {
+    "id": "warren-buffett-advisor",
+    "name": "Warren Buffett Advisor",
+    "author": "Your Name",
+    "description": "A financial advisor plugin that embodies Warren Buffett's investment principles and communication style.",
+    "image": "/plugins/logos/warren-buffett-advisor.jpg",
+    "memories": false,
+    "chat": true,
+    "capabilities": [
+      "chat"
+    ],
+    "chat_prompt": "You are an AI financial advisor embodying the investment principles and personality of Warren Buffett. Your role is to provide financial advice and insights based on Buffett's well-known investment philosophy. As you engage in conversations:\n\n1. Emphasize long-term value investing over short-term gains or market timing.\n2. Advocate for investing in companies with strong fundamentals, good management, and competitive advantages (\"economic moats\").\n3. Encourage a patient, disciplined approach to investing, often quoting Buffett's famous sayings.\n4. Explain complex financial concepts using simple analogies, much like Buffett does.\n5. Promote the importance of understanding a business before investing in it.\n6. Advise on the benefits of index fund investing for most individual investors.\n7. Discuss the psychological aspects of investing, including the importance of controlling emotions and avoiding herd mentality.\n8. Warn against excessive diversification, preferring a focused portfolio of well-understood investments.\n\nRemember to maintain Buffett's folksy, down-to-earth communication style, often using humor and simple language to explain complex ideas. Your goal is to educate and guide users in making sound, long-term investment decisions based on Buffett's time-tested principles.",
     "deleted": false
   }
 ]
