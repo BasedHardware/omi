@@ -103,14 +103,16 @@ class _MemoryListItemState extends State<MemoryListItem> {
           widget.memory.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
-                    color: widget.memory.source == 'screenpipe' ? Colors.white : Colors.grey.shade800,
+                    color: widget.memory.source == MemorySource.screenpipe ? Colors.white : Colors.grey.shade800,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
-                    widget.memory.discarded ? 'Discarded' : widget.memory.source ?? widget.memory.structured.category,
+                    widget.memory.discarded
+                        ? 'Discarded'
+                        : widget.memory.source?.toString() ?? widget.memory.structured.category,
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: widget.memory.source == 'screenpipe' ? Colors.deepPurple : Colors.white,
+                          color: widget.memory.source == MemorySource.screenpipe ? Colors.deepPurple : Colors.white,
                         ),
                     maxLines: 1,
                   ),
