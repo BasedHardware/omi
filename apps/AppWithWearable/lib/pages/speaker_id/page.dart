@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/mixpanel.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/storage/sample.dart';
+import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/widgets/dialog.dart';
 
 class SpeakerIdPage extends StatefulWidget {
   final bool onbording;
@@ -33,15 +33,35 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
 
   _init() async {
-    _device = await scanAndConnectDevice();
-    _samples = await getUserSamplesState(SharedPreferencesUtil().uid);
+    _device = await getConnectedDevice();
+    _device ??= await scanAndConnectDevice(timeout: true);
+    _samples = await getUserSamplesState();
     _controller = TabController(length: 2 + _samples.length, vsync: this);
     _initiateConnectionListener();
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      if (_device == null) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (c) => getDialog(
+            context,
+            () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            () => {},
+            'Device Disconnected',
+            'Please make sure your device is turned on and nearby, and try again.',
+            singleButton: true,
+          ),
+        );
+      }
+    });
     setState(() {});
   }
 
   _initiateConnectionListener() async {
-    if (_connectionStateListener != null) return;
+    if (_device == null || _connectionStateListener != null) return;
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () => setState(() => _device = null),
@@ -64,7 +84,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
@@ -97,30 +117,15 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                     if (_currentIdx > 0 && _currentIdx < (_controller?.length ?? 0) - 1) {
                       showDialog(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Are you sure?'),
-                          content: const Text('You will lose all the samples you have recorded so far.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.pop(context);
-                              },
-                              child: const Text(
-                                'Yes',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ],
+                        builder: (context) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          },
+                          'Are you sure?',
+                          'You will lose all the samples you have recorded so far.',
                         ),
                       );
                       return;
@@ -142,7 +147,10 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        InstructionsTab(goNext: _goNext),
+                        InstructionsTab(
+                          goNext: _goNext,
+                          deviceFound: _device != null,
+                        ),
                         ..._samples.mapIndexed<Widget>((index, sample) => RecordSampleTab(
                               sample: sample,
                               btDevice: _device,

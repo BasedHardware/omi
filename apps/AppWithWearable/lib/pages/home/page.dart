@@ -1,34 +1,41 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/memories.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/database/message.dart';
 import 'package:friend_private/backend/database/message_provider.dart';
+import 'package:friend_private/backend/growthbook.dart';
 import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/pages/settings/widgets.dart';
+import 'package:friend_private/scripts.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/foreground.dart';
-import 'package:friend_private/utils/notifications.dart';
-import 'package:friend_private/utils/sentry_log.dart';
+import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -52,12 +59,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<CapturePageState> capturePageKey = GlobalKey();
+  GlobalKey<ChatPageState> chatPageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
+
+  /* start section added */
+  StreamSubscription<List<int>>? _getBleBatteryLevelListener;
+  /* end section added */
 
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
+  List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   _initiateMemories() async {
@@ -71,30 +84,48 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _setupHasSpeakerProfile() async {
-    // SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile(SharedPreferencesUtil().uid);
+    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
+    print('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
+    MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    setState(() {});
+  }
+
+  _edgeCasePluginNotAvailable() {
+    var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
+    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat())) {
+      SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
+    }
   }
 
   Future<void> _initiatePlugins() async {
-    var plugins = await retrievePlugins();
-    SharedPreferencesUtil().pluginsList = plugins;
+    plugins = SharedPreferencesUtil().pluginsList;
+    plugins = await retrievePlugins();
+    _edgeCasePluginNotAvailable();
+    setState(() {});
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    String event = '';
     if (state == AppLifecycleState.paused) {
-      addEventToContext('App is paused');
+      event = 'App is paused';
     } else if (state == AppLifecycleState.resumed) {
-      addEventToContext('App is resumed');
+      event = 'App is resumed';
     } else if (state == AppLifecycleState.hidden) {
-      addEventToContext('App is hidden');
+      event = 'App is hidden';
+    } else if (state == AppLifecycleState.detached) {
+      event = 'App is detached';
     }
+    debugPrint(event);
+    InstabugLog.logInfo(event);
   }
 
   _migrationScripts() async {
-    // await migrateMemoriesCategoriesAndEmojis();
-    // await migrateMemoriesToObjectBox();
-    _initiateMemories();
+    scriptMigrateMemoriesToBack();
+    // getMemories();
+    // _initiateMemories();
   }
 
   ///Screens with respect to subpage
@@ -111,13 +142,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     );
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       requestNotificationPermissions();
       foregroundUtil.requestPermissionForAndroid();
     });
     _refreshMessages();
-
     _initiateMemories();
     _initiatePlugins();
     _setupHasSpeakerProfile();
@@ -156,17 +187,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
+    // TODO: when disconnected manually need to remove this connection state listener
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
+          debugPrint('onDisconnected');
           capturePageKey.currentState?.resetState(restartBytesProcessing: false);
-          setState(() {
-            _device = null;
-          });
+          setState(() => _device = null);
           InstabugLog.logInfo('Friend Device Disconnected');
           if (SharedPreferencesUtil().reconnectNotificationIsChecked) {
             createNotification(
-                title: 'Friend Device Disconnected', body: 'Please reconnect to continue using your Friend.');
+              title: 'Friend Device Disconnected',
+              body: 'Please reconnect to continue using your Friend.',
+            );
           }
           MixpanelManager().deviceDisconnected();
           foregroundUtil.stopForegroundTask();
@@ -182,27 +215,48 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+    debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     clearNotification(1);
-    setState(() {
-      _device = connectedDevice;
-    });
+    _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
+    /* start section added */
+    _initiateStorageListener();
+    /* end section added */
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().deviceName = _device!.name;
     _startForeground();
+    setState(() {});
   }
 
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(_device!, onBatteryLevelChange: (int value) {
-      setState(() {
-        batteryLevel = value;
-      });
-    });
+    _bleBatteryLevelListener = await getBleBatteryLevelListener(
+      _device!.id,
+      onBatteryLevelChange: (int value) {
+        setState(() {
+          batteryLevel = value;
+        });
+      },
+    );
   }
+
+  /* start section added */
+  _initiateStorageListener() async {
+    _getBleBatteryLevelListener?.cancel();
+    _getBleBatteryLevelListener = await getFilesInStorageListener(
+      _device!.id,
+      onFilesInStorageChange: (int value) {
+        setState(() async {
+          filesInStorage = value.toString();
+        });
+      },
+    );
+  }
+  /* end section added */
 
   _tabChange(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
@@ -245,6 +299,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       refreshMessages: _refreshMessages,
                     ),
                     ChatPage(
+                      key: chatPageKey,
                       textFieldFocusNode: chatTextFieldFocusNode,
                       messages: messages,
                       refreshMessages: _refreshMessages,
@@ -332,7 +387,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _device != null
+              _device != null && batteryLevel != -1
                   ? GestureDetector(
                       onTap: _device == null
                           ? null
@@ -381,8 +436,66 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ],
                           )),
                     )
-                  : const SizedBox.shrink(),
-              // Text(['Memories', 'Device', 'Chat'][_selectedIndex]),
+                  : TextButton(
+                      onPressed: () async {
+                        if (SharedPreferencesUtil().deviceId.isEmpty) {
+                          routeToPage(context, const ConnectDevicePage());
+                          MixpanelManager().connectFriendClicked();
+                        } else {
+                          await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
+                        }
+                        setState(() {});
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: Colors.white, width: 1),
+                        ),
+                      ),
+                      child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                    ),
+              _controller!.index == 2
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 0),
+                      child: Container(
+                        // decoration: BoxDecoration(
+                        //   border: Border.all(color: Colors.grey),
+                        //   borderRadius: BorderRadius.circular(30),
+                        // ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: DropdownButton<String>(
+                          menuMaxHeight: 350,
+                          value: SharedPreferencesUtil().selectedChatPluginId,
+                          onChanged: (s) async {
+                            if ((s == 'no_selected' && SharedPreferencesUtil().pluginsEnabled.isEmpty) ||
+                                s == 'enable') {
+                              await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                              setState(() {});
+                              return;
+                            }
+                            print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
+                            if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+
+                            SharedPreferencesUtil().selectedChatPluginId = s;
+                            var plugin = plugins.firstWhereOrNull((p) => p.id == s);
+                            chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                            setState(() {});
+                          },
+                          icon: Container(),
+                          alignment: Alignment.center,
+                          dropdownColor: Colors.black,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          underline: Container(height: 0, color: Colors.transparent),
+                          isExpanded: false,
+                          itemHeight: 48,
+                          padding: EdgeInsets.zero,
+                          items: _getPluginsDropdownItems(context),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(
                   Icons.settings,
@@ -391,13 +504,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 ),
                 onPressed: () async {
                   MixpanelManager().settingsOpened();
-                  var language = SharedPreferencesUtil().recordingsLanguage;
-                  var useFriendApiKeys = SharedPreferencesUtil().useFriendApiKeys;
-                  Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SettingsPage()));
-                  if (language != SharedPreferencesUtil().recordingsLanguage ||
-                      useFriendApiKeys != SharedPreferencesUtil().useFriendApiKeys) {
-                    capturePageKey.currentState?.resetState();
+                  String language = SharedPreferencesUtil().recordingsLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                  await routeToPage(context, const SettingsPage());
+                  // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                  if (GrowthbookUtil().hasStreamingTranscriptFeatureOn() &&
+                      (language != SharedPreferencesUtil().recordingsLanguage ||
+                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile)) {
+                    capturePageKey.currentState?.restartWebSocket();
                   }
+                  setState(() {});
                 },
               )
             ],
@@ -409,11 +525,77 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     ));
   }
 
+  _getPluginsDropdownItems(BuildContext context) {
+    var items = [
+          DropdownMenuItem<String>(
+            value: 'no_selected',
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Icon(size: 20, Icons.chat, color: Colors.white),
+                const SizedBox(width: 10),
+                Text(
+                  SharedPreferencesUtil().pluginsEnabled.isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          )
+        ] +
+        plugins
+            .where((p) => SharedPreferencesUtil().pluginsEnabled.contains(p.id) && p.worksWithChat())
+            .map<DropdownMenuItem<String>>((Plugin plugin) {
+          return DropdownMenuItem<String>(
+            value: plugin.id,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  maxRadius: 12,
+                  backgroundImage: NetworkImage(plugin.getImageUrl()),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  plugin.name.length > 18
+                      ? '${plugin.name.substring(0, 18)}...'
+                      : plugin.name + ' ' * (18 - plugin.name.length),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                )
+              ],
+            ),
+          );
+        }).toList();
+    if (SharedPreferencesUtil().pluginsEnabled.isNotEmpty) {
+      items.add(const DropdownMenuItem<String>(
+        value: 'enable',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.transparent,
+              maxRadius: 12,
+              child: Icon(Icons.star, color: Colors.purpleAccent),
+            ),
+            SizedBox(width: 8),
+            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+          ],
+        ),
+      ));
+    }
+    return items;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
+    /* start section added */
+    _getBleBatteryLevelListener?.cancel();
+    /* end section added */
+
     _controller?.dispose();
     super.dispose();
   }

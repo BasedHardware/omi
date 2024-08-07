@@ -28,9 +28,6 @@ void bt_ctlr_assert_handle(char *name, int type)
 	}
 }
 
-
-
-
 // Main loop
 int main(void)
 {
@@ -57,12 +54,10 @@ int main(void)
 	//set_led_blue(false);
 	set_led_red(is_on);
 
-	//ReadInfo info = get_current_file();
-	//printf("name: %u, ret: %d\n",info.name,info.ret);	
-
 	while (1)
 	{
 		read_audio_in_storage();
+		
 		is_on = !is_on;
 		set_led_red(is_on);
 		k_msleep(500);

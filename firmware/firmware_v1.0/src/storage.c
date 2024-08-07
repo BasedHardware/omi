@@ -1,13 +1,14 @@
 #include "storage.h"
 
+static char current_path[MAX_PATH_SIZE];
 const size_t written_max_count = 1000; // number of frames per file
 static char file_path[MAX_PATH_SIZE];
 static bool written_concat = true;
 static size_t written_count = 0;
-static bool verbose = true; // set to true if you want to enable verbose output
-
-static char current_path[MAX_PATH_SIZE];
 static uint16_t file_count = 0;
+static bool verbose = true; // set to true if you want to enable verbose output
+int notification_value = 0;
+
 
 int init_storage(void)
 {
@@ -35,7 +36,7 @@ ReadInfo get_current_file(void)
         readInfo.ret = -1;
         return readInfo;
     }
-    printf("data: %s\n",info.data);
+
     if (info.data != NULL)
     {
         uint8_t number;
@@ -63,9 +64,10 @@ ReadParams verify_info(void)
         {
             create_file("audio/0.txt");
             write_info("audio/0.txt,status:NO");
+
             res.data = "audio/0.txt";
-            //k_msleep(10);
             res.ret = 0;
+            
             return res;
         }
 
@@ -76,6 +78,7 @@ ReadParams verify_info(void)
             
             if (extract_number(current_path, &number) == 0) 
             {
+                notification_value = number;
                 file_count = number;
             }
 
@@ -90,7 +93,7 @@ int if_file_exist(void)
 {
     ReadParams ret = verify_info();
     
-    if (ret.ret == 0 && !written_concat)
+    if (ret.ret >= 0 && !written_concat)
     {
         char file_info[MAX_DATA_SIZE];
         char *result = extract_after(current_path);
@@ -113,9 +116,7 @@ int if_file_exist(void)
             write_info(file_info);
 
             written_concat = true;
-
-            //k_msleep(10);
-
+            
             free(new_filename);
 
             return 0;

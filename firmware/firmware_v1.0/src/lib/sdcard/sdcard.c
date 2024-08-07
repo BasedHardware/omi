@@ -6,7 +6,6 @@
 #include "sdcard.h"
 
 static char current_full_path[MAX_PATH_SIZE];
-//static const char *disk_mount_pt0 = "/SD:";
 static const char *disk_mount_pt = "/SD:/";
 static const bool verbose = false;
 bool mounted = false;
@@ -107,6 +106,19 @@ FileInfo file_info(const char *path)
 }
 
 //
+//  This functios is for delete files o paths.
+//
+int delete_file(const char *file_path)
+{
+
+    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, file_path);
+
+	int ret = fs_unlink(current_full_path);
+
+    return ret;
+}
+
+//
 //   If you want to create a file "test.txt" in folder "test", file_path must be look like this "test/test.txt"
 //
 int create_file(const char *file_path){
@@ -136,7 +148,7 @@ int create_file(const char *file_path){
 }
 
 //
-//   this function is only for uint8_t data input
+//   This function is only for uint8_t data input
 //
 int write_file(uint8_t *data, size_t lenght, bool concat, bool endBuffer)
 {
@@ -275,6 +287,7 @@ ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t
 	if(ret)
 	{
 		readParams.ret = -1;
+
 		return readParams;
 	}
 
@@ -285,7 +298,9 @@ ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t
 	if (rc < 0) 
 	{
 		if(verbose) printf("FAIL: open %s: %d", current_full_path, rc);
+
 		readParams.ret = rc;
+
 		return readParams;
 	}
 	
@@ -294,12 +309,16 @@ ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t
 	if(rs > -1)
 	{
 		rc = fs_read(&file, &boot_count, sizeof(boot_count));
+
 		if (rc < 0)
 		{
 			if(verbose) printf("FAIL: read %s: [rd:%d]", current_full_path, rc);
+
 			readParams.ret = -1;
+
 			return readParams;
 		}
+
 		boot_count[rc] = 0;
 
 		readParams.data = boot_count;
@@ -348,37 +367,31 @@ char* uint8_array_to_string(const uint8_t *array, size_t size) {
 }
 
 // function to convert char to uint8_t type
-uint8_t* convert_to_uint8_array(const char* str, size_t* out_size) {
-    // Contador para el número de elementos
+uint8_t* convert_to_uint8_array(const char *str, size_t *out_size) {
     size_t count = 0;
     
-    // Duplicar la cadena para no modificar la original
     char buffer[MAX_INPUT_SIZE];
     strncpy(buffer, str, sizeof(buffer));
     buffer[sizeof(buffer) - 1] = '\0';
 
-    // Contar el número de elementos separados por comas
     char* token = strtok(buffer, ",");
     while (token != NULL) {
         count++;
         token = strtok(NULL, ",");
     }
 
-    // Crear el array de uint8_t
     uint8_t* array = (uint8_t*)malloc(count * sizeof(uint8_t));
     if (array == NULL) {
         perror("Failed to allocate memory");
         exit(EXIT_FAILURE);
     }
 
-    // Volver a dividir la cadena original para convertir los valores
     strncpy(buffer, str, sizeof(buffer));
     buffer[sizeof(buffer) - 1] = '\0';
 
     size_t index = 0;
     token = strtok(buffer, ",");
     while (token != NULL) {
-        // Convertir el token a uint8_t
         int value = atoi(token);
         if (value < 0 || value > 255) {
             fprintf(stderr, "Value %d is out of range for uint8_t\n", value);
@@ -389,7 +402,6 @@ uint8_t* convert_to_uint8_array(const char* str, size_t* out_size) {
         token = strtok(NULL, ",");
     }
 
-    // Retornar el tamaño del array a través del puntero
     if (out_size != NULL) {
         *out_size = count;
     }
@@ -443,7 +455,6 @@ char* format_values(const char *input)
     return output;
 }
 
-// revert format data rounded 
 char* revert_format(const char *formatted_input) 
 {
     char temp[MAX_INPUT_SIZE];

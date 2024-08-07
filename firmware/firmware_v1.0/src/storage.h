@@ -9,6 +9,7 @@
 #include "lib/storage/config.h"
 
 extern const size_t written_max_count;
+extern int notification_value;
 
 typedef struct {
     uint8_t name;
@@ -31,8 +32,8 @@ void uint8_buffer_to_char_data(const uint8_t *buffer, size_t length, char *data,
 
 char *generate_next_filename(const char *current_filename);
 
-//void read_audio_in_storage(void);
-
 ReadInfo get_current_file(void);
+
+int generate_info_data(void);
 
 #endif // STORAGE_H

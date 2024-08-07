@@ -1,10 +1,9 @@
 import 'dart:convert';
 
-import 'package:friend_private/backend/storage/plugin.dart';
-import 'package:friend_private/backend/storage/segment.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -18,20 +17,19 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
-    // _instance.chatMessages = [];
-    if (!_preferences!.containsKey('uid')) {
-      _preferences!.setString('uid', const Uuid().v4());
-    }
   }
 
-  String get uid => getString('uid') ?? '';
+  set uid(String value) => saveString('uid', value);
 
-  // DO NOT USE BESIDES BACKUP IMPORT
-  // set uid(String value) => saveString('uid', value);
+  String get uid => getString('uid') ?? '';
 
   set deviceId(String value) => saveString('deviceId', value);
 
   String get deviceId => getString('deviceId') ?? '';
+
+  set deviceName(String value) => saveString('deviceName', value);
+
+  String get deviceName => getString('deviceName') ?? '';
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
@@ -41,6 +39,10 @@ class SharedPreferencesUtil {
 
   set deepgramApiKey(String value) => saveString('deepgramApiKey', value);
 
+  bool get useTranscriptServer => Env.growthbookApiKey == null ? false : getBool('useTranscriptServer') ?? true;
+
+  set useTranscriptServer(bool value) => saveBool('useTranscriptServer', value);
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -49,13 +51,13 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
-  String get webhookUrl => getString('webhookUrl') ?? '';
+  String get webhookOnMemoryCreated => getString('webhookUrl') ?? '';
 
-  set webhookUrl(String value) => saveString('webhookUrl', value);
+  set webhookOnMemoryCreated(String value) => saveString('webhookUrl', value);
 
-  String get transcriptServerUrl => getString('transcriptServerUrl') ?? '';
+  String get webhookOnTranscriptReceived => getString('transcriptServerUrl') ?? '';
 
-  set transcriptServerUrl(String value) => saveString('transcriptServerUrl', value);
+  set webhookOnTranscriptReceived(String value) => saveString('transcriptServerUrl', value);
 
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
@@ -97,24 +99,17 @@ class SharedPreferencesUtil {
 
   set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
 
-  // List<Message> get chatMessages {
-  //   final List<String> messages = getStringList('messages') ?? [];
-  //   return messages.map((e) => Message.fromJson(jsonDecode(e))).toList();
-  // }
-  //
-  // set chatMessages(List<Message> value) {
-  //   final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
-  //   saveStringList('messages', messages);
-  // }
+  List<String> get recordingPaths => getStringList('recordingPaths') ?? [];
 
-  // bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
-  bool get hasSpeakerProfile => true;
+  set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
+
+  bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
-    return plugins.map((e) => Plugin.fromJson(jsonDecode(e))).toList();
+    return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
   }
 
   set pluginsList(List<Plugin> value) {
@@ -127,16 +122,31 @@ class SharedPreferencesUtil {
   set pluginsEnabled(List<String> value) => saveStringList('pluginsEnabled', value);
 
   enablePlugin(String value) {
-    final List<String> plugins = pluginsEnabled;
-    plugins.add(value);
-    pluginsEnabled = plugins;
+    final List<String> pluginsId = pluginsEnabled;
+    pluginsId.add(value);
+    pluginsEnabled = pluginsId;
+
+    final List<Plugin> plugins = pluginsList;
+    final plugin = plugins.firstWhere((element) => element.id == value);
+    plugin.enabled = true;
+    pluginsList = plugins;
   }
 
   disablePlugin(String value) {
-    final List<String> plugins = pluginsEnabled;
-    plugins.remove(value);
-    pluginsEnabled = plugins;
+    if (value == selectedChatPluginId) selectedChatPluginId = 'no_selected';
+    final List<String> pluginsId = pluginsEnabled;
+    pluginsId.remove(value);
+    pluginsEnabled = pluginsId;
+
+    final List<Plugin> plugins = pluginsList;
+    final plugin = plugins.firstWhere((element) => element.id == value);
+    plugin.enabled = false;
+    pluginsList = plugins;
   }
+
+  String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';
+
+  set selectedChatPluginId(String value) => saveString('selectedChatPluginId2', value);
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
@@ -148,19 +158,9 @@ class SharedPreferencesUtil {
     saveStringList('transcriptSegments', segments);
   }
 
-  bool get backupsEnabled => getBool('backupsEnabled') ?? false;
+  bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
 
-  set backupsEnabled(bool value) => saveBool('backupsEnabled', value);
-
-  bool get hasBackupPassword => getString('backupPassword') != null && getString('backupPassword')!.isNotEmpty;
-
-  String get backupPassword => getString('backupPassword') ?? '';
-
-  set backupPassword(String value) => saveString('backupPassword', value);
-
-  String get lastBackupDate => getString('lastBackupDate') ?? '';
-
-  set lastBackupDate(String value) => saveString('lastBackupDate', value);
+  set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);
 
   String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
 
@@ -218,6 +218,14 @@ class SharedPreferencesUtil {
 
   bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
 
+  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted2', value);
+
+  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
+
+  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack', value);
+
+  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack') ?? false;
+
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 
   bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
@@ -229,6 +237,54 @@ class SharedPreferencesUtil {
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
+
+  bool get calendarEnabled => getBool('calendarEnabled') ?? false;
+
+  set calendarId(String value) => saveString('calendarId', value);
+
+  String get calendarId => getString('calendarId') ?? '';
+
+  set calendarType(String value) => saveString('calendarType', value); // auto, manual
+
+  String get calendarType => getString('calendarType') ?? 'auto';
+
+  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
+
+  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
+
+  // AUTH
+
+  String get authToken => getString('authToken') ?? '';
+
+  set authToken(String value) => saveString('authToken', value);
+
+  int get tokenExpirationTime => getInt('tokenExpirationTime') ?? 0;
+
+  set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
+
+  String get email => getString('email') ?? '';
+
+  set email(String value) => saveString('email', value);
+
+  String get givenName => getString('givenName') ?? '';
+
+  set givenName(String value) => saveString('givenName', value);
+
+  String get familyName => getString('familyName') ?? '';
+
+  set familyName(String value) => saveString('familyName', value);
+
+  String get fullName => '$givenName $familyName';
+
+// String get userName => getString('userName') ?? givenName; // the one the users sets
+//
+// set userName(String value) => saveString('userName', value);
+
+  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
+
+  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 }
 
 String getOpenAIApiKeyForUsage() =>

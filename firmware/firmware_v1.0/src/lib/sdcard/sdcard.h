@@ -1,7 +1,6 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
-//#define DATA_SIZE 1024
 #include "../storage/config.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,10 +10,10 @@
 #include <stdio.h>
 #include <ff.h>
 
-#define MAX_OUTPUT_SIZE 1400//2600//1400
-#define MAX_INPUT_SIZE 700//1300//700
+#define MAX_OUTPUT_SIZE 1400
+#define MAX_INPUT_SIZE 700
 #define DELIMITER ','
-#define MAX_DIGITS 3
+#define MAX_DIGITS 4
 
 extern bool mounted;
 
@@ -30,12 +29,7 @@ typedef struct {
     char *data;
     int ret;
 } ReadParams;
-/*
-typedef struct {
-    char *files;
-    int res;
-} Result;
-*/
+
 typedef struct {
     char *name;
     size_t size;
@@ -44,8 +38,6 @@ typedef struct {
 
 
 int mount_sd_card(void);
-
-//Result lsdir(const char *path);
 
 int write_info(const char *data);
 
@@ -67,7 +59,8 @@ uint8_t* convert_to_uint8_array(const char* str, size_t* out_size);
 
 ReadParams read_file_fragmment(const char *file_path, size_t buffer_size, size_t pointer);
 
-//void uint8_buffer_to_char_data(const uint8_t *buffer, size_t length, char *data, size_t data_size);
+int delete_file(const char *file_path);
+
 char* uint8_array_to_string(const uint8_t *array, size_t size);
 
 #endif // SDCARD_H

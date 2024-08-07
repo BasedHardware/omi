@@ -4,89 +4,357 @@
   "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
   "entities": [
     {
-      "id": "1:1521024926543535",
-      "lastPropertyId": "8:970897693726655020",
-      "name": "Memory",
+      "id": "1:4960683592044768814",
+      "lastPropertyId": "4:6408853575756605482",
+      "name": "ActionItem",
       "properties": [
         {
-          "id": "1:8192907449372324122",
+          "id": "1:1234214565693918832",
           "name": "id",
           "type": 6,
           "flags": 1
         },
         {
-          "id": "2:1146945244623312213",
-          "name": "createdAt",
-          "type": 10,
-          "flags": 8,
-          "indexId": "1:4862313103417962125"
-        },
-        {
-          "id": "3:1067066826133615759",
-          "name": "transcript",
+          "id": "2:5970897963760142693",
+          "name": "description",
           "type": 9
         },
         {
-          "id": "4:8255028376208853529",
-          "name": "recordingFilePath",
-          "type": 9
+          "id": "3:8973081129129585372",
+          "name": "completed",
+          "type": 1
         },
         {
-          "id": "5:1519520653454061032",
-          "name": "discarded",
-          "type": 1,
-          "flags": 8,
-          "indexId": "2:2359101042900121877"
-        },
-        {
-          "id": "6:1385167281437281076",
+          "id": "4:6408853575756605482",
           "name": "structuredId",
           "type": 11,
           "flags": 520,
-          "indexId": "4:7578069314509735145",
+          "indexId": "1:7230739116288499097",
           "relationTarget": "Structured"
-        },
-        {
-          "id": "7:8550625374874609345",
-          "name": "startedAt",
-          "type": 10
-        },
-        {
-          "id": "8:970897693726655020",
-          "name": "finishedAt",
-          "type": 10
         }
       ],
       "relations": []
     },
     {
-      "id": "2:6427539297124375252",
-      "lastPropertyId": "7:4057508104512714772",
-      "name": "Structured",
+      "id": "2:3370853323494489051",
+      "lastPropertyId": "7:2960744415000040748",
+      "name": "Event",
       "properties": [
         {
-          "id": "1:3948118750863357078",
+          "id": "1:6519513924868367122",
           "name": "id",
           "type": 6,
           "flags": 1
         },
         {
-          "id": "2:9195755445020816093",
+          "id": "2:3074185961381657268",
           "name": "title",
           "type": 9
         },
         {
-          "id": "3:2794378035287238174",
+          "id": "3:8800085552899630099",
+          "name": "startsAt",
+          "type": 10
+        },
+        {
+          "id": "4:7755814328517730062",
+          "name": "duration",
+          "type": 6
+        },
+        {
+          "id": "5:7813297474127904437",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "6:1296191506397281914",
+          "name": "created",
+          "type": 1
+        },
+        {
+          "id": "7:2960744415000040748",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "2:8944243846027014481",
+          "relationTarget": "Structured"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:6407967942633988535",
+      "lastPropertyId": "9:4941101547183996645",
+      "name": "Geolocation",
+      "properties": [
+        {
+          "id": "1:640763911624133255",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7629798940084340797",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "3:4564347865368697289",
+          "name": "longitude",
+          "type": 8
+        },
+        {
+          "id": "4:2722572058703652558",
+          "name": "altitude",
+          "type": 8
+        },
+        {
+          "id": "5:224357794277900417",
+          "name": "accuracy",
+          "type": 8
+        },
+        {
+          "id": "6:5899687295343018303",
+          "name": "time",
+          "type": 10
+        },
+        {
+          "id": "7:7699174859215729570",
+          "name": "googlePlaceId",
+          "type": 9
+        },
+        {
+          "id": "8:8238516950388175494",
+          "name": "address",
+          "type": 9
+        },
+        {
+          "id": "9:4941101547183996645",
+          "name": "locationType",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:2339191794412654041",
+      "lastPropertyId": "9:5185228533309845597",
+      "name": "Memory",
+      "properties": [
+        {
+          "id": "1:476621663710899172",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8536151600227403937",
+          "name": "createdAt",
+          "type": 10,
+          "flags": 8,
+          "indexId": "3:4411954421987982560"
+        },
+        {
+          "id": "3:1647028034707624658",
+          "name": "startedAt",
+          "type": 10
+        },
+        {
+          "id": "4:2420197067416542929",
+          "name": "finishedAt",
+          "type": 10
+        },
+        {
+          "id": "5:4139928920105897421",
+          "name": "transcript",
+          "type": 9
+        },
+        {
+          "id": "6:8995337128856489715",
+          "name": "recordingFilePath",
+          "type": 9
+        },
+        {
+          "id": "7:5065645883707848778",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "4:917431743032433500",
+          "relationTarget": "Structured"
+        },
+        {
+          "id": "8:7516157119583506328",
+          "name": "discarded",
+          "type": 1,
+          "flags": 8,
+          "indexId": "5:3484387403929624797"
+        },
+        {
+          "id": "9:5185228533309845597",
+          "name": "geolocationId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "6:7513548442790770560",
+          "relationTarget": "Geolocation"
+        }
+      ],
+      "relations": [
+        {
+          "id": "1:6644700377204735258",
+          "name": "transcriptSegments",
+          "targetId": "9:8626324877080418979"
+        },
+        {
+          "id": "2:2749755189499373728",
+          "name": "photos",
+          "targetId": "5:5445389795508602145"
+        }
+      ]
+    },
+    {
+      "id": "5:5445389795508602145",
+      "lastPropertyId": "4:8293686454067785749",
+      "name": "MemoryPhoto",
+      "properties": [
+        {
+          "id": "1:7379967832711942800",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8289901431741399211",
+          "name": "base64",
+          "type": 9
+        },
+        {
+          "id": "3:6656031447853934779",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "4:8293686454067785749",
+          "name": "memoryId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "7:7880020239580026484",
+          "relationTarget": "Memory"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "6:7965715549556946988",
+      "lastPropertyId": "7:8688107240455425456",
+      "name": "Message",
+      "properties": [
+        {
+          "id": "1:7583669492414995514",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7110837786029080802",
+          "name": "createdAt",
+          "type": 10,
+          "flags": 8,
+          "indexId": "8:2339743406945490130"
+        },
+        {
+          "id": "3:194245135065393227",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "4:6498299209144191500",
+          "name": "sender",
+          "type": 9
+        },
+        {
+          "id": "5:2087182906837981952",
+          "name": "pluginId",
+          "type": 9
+        },
+        {
+          "id": "6:8834018772908056201",
+          "name": "fromIntegration",
+          "type": 1
+        },
+        {
+          "id": "7:8688107240455425456",
+          "name": "type",
+          "type": 9
+        }
+      ],
+      "relations": [
+        {
+          "id": "3:6345192968309220381",
+          "name": "memories",
+          "targetId": "4:2339191794412654041"
+        }
+      ]
+    },
+    {
+      "id": "7:4407539235076293780",
+      "lastPropertyId": "4:4133496048201490848",
+      "name": "PluginResponse",
+      "properties": [
+        {
+          "id": "1:7188957890887605329",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4671978410671303193",
+          "name": "pluginId",
+          "type": 9
+        },
+        {
+          "id": "3:5066447867401082449",
+          "name": "content",
+          "type": 9
+        },
+        {
+          "id": "4:4133496048201490848",
+          "name": "memoryId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "9:6663590329866729789",
+          "relationTarget": "Memory"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:6329364989252840959",
+      "lastPropertyId": "5:5960294643724999146",
+      "name": "Structured",
+      "properties": [
+        {
+          "id": "1:245391612132133763",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:631793208958033223",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:481810570972335466",
           "name": "overview",
           "type": 9
         },
         {
-          "id": "6:1092528478436176027",
+          "id": "4:3654064378854396241",
           "name": "emoji",
           "type": 9
         },
         {
-          "id": "7:4057508104512714772",
+          "id": "5:5960294643724999146",
           "name": "category",
           "type": 9
         }
@@ -94,128 +362,59 @@
       "relations": []
     },
     {
-      "id": "3:9190753393137293311",
-      "lastPropertyId": "4:3090374185978757862",
-      "name": "ActionItem",
+      "id": "9:8626324877080418979",
+      "lastPropertyId": "7:3929832314379540202",
+      "name": "TranscriptSegment",
       "properties": [
         {
-          "id": "1:2694083310188604862",
+          "id": "1:3919775542068218705",
           "name": "id",
           "type": 6,
           "flags": 1
         },
         {
-          "id": "2:6712185592055014870",
-          "name": "description",
-          "type": 9
-        },
-        {
-          "id": "3:54520819618183643",
-          "name": "completed",
-          "type": 1
-        },
-        {
-          "id": "4:3090374185978757862",
-          "name": "structuredId",
-          "type": 11,
-          "flags": 520,
-          "indexId": "3:2460795322279972178",
-          "relationTarget": "Structured"
-        }
-      ],
-      "relations": []
-    },
-    {
-      "id": "4:8944838570398231806",
-      "lastPropertyId": "6:4389894679139533208",
-      "name": "PluginResponse",
-      "properties": [
-        {
-          "id": "1:6229771852928788263",
-          "name": "id",
-          "type": 6,
-          "flags": 1
-        },
-        {
-          "id": "4:691957194881154364",
-          "name": "memoryId",
-          "type": 11,
-          "flags": 520,
-          "indexId": "6:2436940497868764355",
-          "relationTarget": "Memory"
-        },
-        {
-          "id": "5:2860027525438426963",
-          "name": "content",
-          "type": 9
-        },
-        {
-          "id": "6:4389894679139533208",
-          "name": "pluginId",
-          "type": 9
-        }
-      ],
-      "relations": []
-    },
-    {
-      "id": "5:3905873968765933532",
-      "lastPropertyId": "5:5337649766892625543",
-      "name": "Message",
-      "properties": [
-        {
-          "id": "1:1878881834426487468",
-          "name": "id",
-          "type": 6,
-          "flags": 1
-        },
-        {
-          "id": "2:9040753066664612555",
-          "name": "createdAt",
-          "type": 10,
-          "flags": 8,
-          "indexId": "7:296619579137476887"
-        },
-        {
-          "id": "3:3367360249871802822",
+          "id": "2:6777453807691876086",
           "name": "text",
           "type": 9
         },
         {
-          "id": "4:3325943223378277861",
-          "name": "sender",
+          "id": "3:4532856567152428992",
+          "name": "speaker",
           "type": 9
         },
         {
-          "id": "5:5337649766892625543",
-          "name": "type",
-          "type": 9
+          "id": "4:1507998716617284140",
+          "name": "speakerId",
+          "type": 6
+        },
+        {
+          "id": "5:873461519142689899",
+          "name": "isUser",
+          "type": 1
+        },
+        {
+          "id": "6:4998932976569606983",
+          "name": "start",
+          "type": 8
+        },
+        {
+          "id": "7:3929832314379540202",
+          "name": "end",
+          "type": 8
         }
       ],
-      "relations": [
-        {
-          "id": "1:7091380547659316419",
-          "name": "memories",
-          "targetId": "1:1521024926543535"
-        }
-      ]
+      "relations": []
     }
   ],
-  "lastEntityId": "5:3905873968765933532",
-  "lastIndexId": "7:296619579137476887",
-  "lastRelationId": "1:7091380547659316419",
+  "lastEntityId": "9:8626324877080418979",
+  "lastIndexId": "9:6663590329866729789",
+  "lastRelationId": "3:6345192968309220381",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,
   "retiredEntityUids": [],
-  "retiredIndexUids": [
-    2159273736567567467
-  ],
-  "retiredPropertyUids": [
-    2626201971202508244,
-    1809459319638310611,
-    6229900676402028868,
-    8014962203152976278
-  ],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
   "retiredRelationUids": [],
   "version": 1
 }

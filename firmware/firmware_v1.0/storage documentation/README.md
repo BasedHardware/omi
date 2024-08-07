@@ -195,3 +195,37 @@ Extracts a number from the file name in the `input` string.
 **Return:**
 - `0` if the number was extracted successfully.
 - `-1` if there was an error.
+
+<br>
+
+## How to compile
+
+Add a new build configuration:
+
+<div align="center">
+    <img src="assets/media/build_step_0.png" alt="#">
+</div>
+
+<br>
+
+Choose the board **xiao_ble_sense**, add the configuration file **prj.conf** and finally add the file **xiao_ble_sense.overlay***.
+
+<div align="center">
+    <img src="assets/media/build_step_1.png" alt="#">
+</div>
+
+<br>
+
+Finally press **Build configuration**.
+
+<div align="center">
+    <img src="assets/media/build_step_2.png" alt="#">
+</div>
+
+<br>
+
+Congratulations you have successfully compiled your project.
+
+<div align="center">
+    <img src="assets/media/build_step_3.png" alt="#">
+</div>

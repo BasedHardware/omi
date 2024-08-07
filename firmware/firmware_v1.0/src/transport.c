@@ -15,9 +15,8 @@
 #include "storage.h"
 
 static bool reset_buf_event = true;
+static uint32_t storage_action = 0;
 static bool verbose = false;
-uint32_t storage_action = 0;
-int notification_value = 0;
 
 //
 // Internal
@@ -360,7 +359,6 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
 
 static bool read_from_tx_queue()
 {
-
     // Read from ring buffer
     // memset(tx_buffer, 0, sizeof(tx_buffer));
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
@@ -375,49 +373,6 @@ static bool read_from_tx_queue()
 
     return true;
 }
-
-int read_audio_in_storage(void)
-{
-    if(storage_action == 2)
-	{
-        //ReadInfo info = get_current_file();
-	    //printf("name: %u, ret: %d\n",info.name,info.ret);
-
-		for(size_t i = 0; i < written_max_count + 1; i++)
-        {
-			ReadParams audio_frame = read_file_fragmment("audio/0.txt", 651, (651*(i+1))+i);
-            if(audio_frame.ret < 0)
-            {
-                printf("fin del archivo\n");
-                return -2;
-            }
-            if(audio_frame.ret == 651)
-            {
-                size_t size;
-                char *revert = revert_format(audio_frame.data);
-                audio_frame.data = NULL;
-                uint8_t* audio = convert_to_uint8_array(revert, &size);
-                free(revert);
-
-                if(!current_connection)
-                {
-                    return -1;
-                }
-
-                int err = bt_gatt_notify(current_connection, &audio_service.attrs[1], audio, size); // Try send notification
-                //if (err < 0)
-                //{
-                //    i = i-1;
-                //}
-                free(audio);
-                size = 0;
-            }
-		}
-        return 0;
-	}
-    return -1;
-}
-
 
 //
 // Pusher
@@ -505,8 +460,6 @@ static bool push_to_storage(struct bt_conn *conn)
         offset += packet_size;
         index++;
 
-        //int lenght = sizeof(pusher_temp_data) / sizeof(pusher_temp_data[0]);
-
         while (true)
         {
             int ret = save_audio_in_storage(pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
@@ -521,6 +474,69 @@ static bool push_to_storage(struct bt_conn *conn)
     }
 
     return true;
+}
+
+int read_audio_in_storage(void)
+{
+    if(storage_action == 2 && notification_value > -1)
+	{
+        char *file = (char *)malloc(20);
+
+        snprintf(file, 20, "audio/%u.txt", notification_value);
+
+        size_t index = 0;
+
+        while (1)
+        {
+			ReadParams audio_frame = read_file_fragmment(file, 651, (651*(index+1))+index);
+            if(audio_frame.ret != 651)
+            {
+                printf("fin del archivo\n");
+                if(notification_value > -2)
+                {
+                    char *prev_file = (char *)malloc(30);
+                    snprintf(prev_file, 30, "audio/%u.txt,status:OK", notification_value);
+                    notification_value = notification_value - 1;
+                    write_info(prev_file);
+                    free(prev_file);
+                } 
+                else if(notification_value < 0)
+                {
+                    write_info("");
+                }
+
+                delete_file(file);
+                
+                free(file);
+
+                return -2;
+            }
+
+            if(!current_connection)
+            {
+                return -1;
+            }
+
+            size_t size;
+            
+            char *revert = revert_format(audio_frame.data);
+            audio_frame.data = NULL;
+            uint8_t *audio = convert_to_uint8_array(revert, &size);
+            free(revert);
+
+            bt_gatt_notify(current_connection, &audio_service.attrs[1], audio, size); // Try send notification
+
+            free(audio);
+
+            index++;
+		}
+
+        free(file);
+
+        return 0;
+	}
+    
+    return -1;
 }
 
 void pusher(void)

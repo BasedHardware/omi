@@ -10,6 +10,7 @@ class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
   static final Box<Memory> _box = ObjectBoxUtil().box!.store.box<Memory>();
   static final Box<Structured> _boxStructured = ObjectBoxUtil().box!.store.box<Structured>();
+  static final Box<Event> _boxEvent = ObjectBoxUtil().box!.store.box<Event>();
 
   factory MemoryProvider() {
     return _instance;
@@ -18,6 +19,10 @@ class MemoryProvider {
   MemoryProvider._internal();
 
   List<Memory> getMemories() => _box.getAll();
+
+  int getMemoriesCount() => _box.count();
+
+  int getNonDiscardedMemoriesCount() => _box.query(Memory_.discarded.equals(false)).build().count();
 
   List<Memory> getMemoriesOrdered({bool includeDiscarded = false}) {
     if (includeDiscarded) {
@@ -30,6 +35,11 @@ class MemoryProvider {
           .build()
           .find();
     }
+  }
+
+  setEventCreated(Event event) {
+    event.created = true;
+    _boxEvent.put(event);
   }
 
   int saveMemory(Memory memory) => _box.put(memory);

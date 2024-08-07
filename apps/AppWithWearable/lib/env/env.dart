@@ -4,7 +4,7 @@ abstract class Env {
   static late final EnvFields _instance;
 
   static void init([EnvFields? instance]) {
-    _instance = instance ?? DevEnv();
+    _instance = instance ?? DevEnv() as EnvFields;
   }
 
   static String? get oneSignalAppId => _instance.oneSignalAppId;
@@ -26,6 +26,10 @@ abstract class Env {
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   static String? get apiBaseUrl => _instance.apiBaseUrl;
+
+  static String? get growthbookApiKey => _instance.growthbookApiKey;
+
+  static String? get googleMapsApiKey => _instance.googleMapsApiKey;
 }
 
 abstract class EnvFields {
@@ -48,4 +52,8 @@ abstract class EnvFields {
   String? get mixpanelProjectToken;
 
   String? get apiBaseUrl;
+
+  String? get growthbookApiKey;
+
+  String? get googleMapsApiKey;
 }

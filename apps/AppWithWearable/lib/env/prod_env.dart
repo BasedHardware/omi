@@ -4,7 +4,7 @@ import 'env.dart';
 
 part 'prod_env.g.dart';
 
-@Envied(allowOptionalFields: true, path: '.env')
+@Envied(allowOptionalFields: true, path: '../../env')
 final class ProdEnv implements EnvFields {
   ProdEnv();
 
@@ -47,5 +47,14 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
+
   //fd861c28-effb-4594-a77c-4b9969576f75®
+
+  @override
+  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
+  final String? growthbookApiKey = _ProdEnv.growthbookApiKey;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
+  final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
 }

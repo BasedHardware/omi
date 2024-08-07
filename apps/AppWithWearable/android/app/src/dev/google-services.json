@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "628811116024",
+    "project_id": "friend-test-c07c1",
+    "storage_bucket": "friend-test-c07c1.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:628811116024:android:c5d443ecf9ca790074fa0d",
+        "android_client_info": {
+          "package_name": "com.friend.ios"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIQHi1NpYSg2_SmRLuejYKUDtfy5zKh-I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:628811116024:android:417f18fab4fb5b8474fa0d",
+        "android_client_info": {
+          "package_name": "com.friend.ios.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIQHi1NpYSg2_SmRLuejYKUDtfy5zKh-I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
