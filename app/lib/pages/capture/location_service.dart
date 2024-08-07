@@ -17,7 +17,8 @@ class LocationService {
   }
 
   Future<bool> displayPermissionsDialog() async {
-    if (SharedPreferencesUtil().locationPermissionRequested) return false;
+    // TODO: check this.
+    // if (SharedPreferencesUtil().locationPermissionRequested) return false;
     SharedPreferencesUtil().locationPermissionRequested = true;
     var status = await permissionStatus();
     return await isServiceEnabled() == false ||

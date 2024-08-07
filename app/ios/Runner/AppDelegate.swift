@@ -4,7 +4,7 @@ import Flutter
 import workmanager
 
 import UserNotifications
-@UIApplicationMain
+@main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
 

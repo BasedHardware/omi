@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/memories/notion/notion_services.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import '../../utils/memories/process.dart';
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
@@ -30,10 +34,13 @@ class MemoriesPage extends StatefulWidget {
   State<MemoriesPage> createState() => _MemoriesPageState();
 }
 
-class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+class _MemoriesPageState extends State<MemoriesPage>
+    with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   FocusNode textFieldFocusNode = FocusNode();
   bool displayDiscardMemories = false;
+
+  final NotionService notionService = NotionService();
 
   _toggleDiscardMemories() async {
     MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
@@ -46,13 +53,17 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    var memories =
-        displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
+    print('loadingNewMemories: ${widget.loadingNewMemories}');
+    var memories = displayDiscardMemories
+        ? widget.memories
+        : widget.memories.where((memory) => !memory.discarded).toList();
     memories = textController.text.isEmpty
         ? memories
         : memories
             .where(
-              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
+              (memory) => (memory.getTranscript() +
+                      memory.structured.title +
+                      memory.structured.overview)
                   .toLowerCase()
                   .contains(textController.text.toLowerCase()),
             )
@@ -125,7 +136,53 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        // const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        SliverToBoxAdapter(
+          child: GestureDetector(
+            onTap: () async {
+              // final authorizationCode =
+              //     await notionService.authenticate(context);
+              // if (authorizationCode != null) {
+              //   final accessToken = await notionService
+              //       .fetchAccessToken(authorizationCode);
+              //   await notionService.fetchNotionData(accessToken);
+              // } else {
+              //   print('Authorization failed');
+              // }
+              final notionData = await notionService.fetchNotionData();
+
+              final result = await processTranscriptContent(
+                [
+                  TranscriptSegment(
+                    text: notionData,
+                    speaker:  'SPEAKER_1',
+                    isUser: true,
+                    start: 0.0,
+                    end: 0.0,
+                  ),
+                 
+                ],
+                retrievedFromCache: true,
+                sendMessageToChat: null,
+                triggerIntegrations: false,
+                language: SharedPreferencesUtil().recordingsLanguage,
+              );
+              if (result != null) {
+                print("Lesgooo");
+                print(result);
+              } else {
+                print("opps");
+                print(result);
+              }
+            },
+            child: Container(
+                width: 200,
+                height: 49,
+                color: Colors.pink,
+                child: Text('Connect to Notion')),
+          ),
+        ),
+
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -138,7 +195,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(
-                      displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                      displayDiscardMemories
+                          ? 'Hide Discarded'
+                          : 'Show Discarded',
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                     const SizedBox(width: 8),
@@ -147,7 +206,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                         _toggleDiscardMemories();
                       },
                       icon: Icon(
-                        displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                        displayDiscardMemories
+                            ? Icons.cancel_outlined
+                            : Icons.filter_list,
                         color: Colors.white,
                       ),
                     ),
@@ -187,7 +248,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                       child: Padding(
                         padding: EdgeInsets.only(top: 32.0),
                         child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                     );
@@ -196,7 +258,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   return VisibilityDetector(
                     key: const Key('memory-loader'),
                     onVisibilityChanged: (visibilityInfo) {
-                      if (visibilityInfo.visibleFraction > 0 && !widget.loadingNewMemories) {
+                      if (visibilityInfo.visibleFraction > 0 &&
+                          !widget.loadingNewMemories) {
                         widget.loadMoreMemories();
                       }
                     },
@@ -205,7 +268,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 }
 
                 if (memoriesWithDates[index].runtimeType == DateTime) {
-                  return DateListItem(date: memoriesWithDates[index] as DateTime, isFirst: index == 0);
+                  return DateListItem(
+                      date: memoriesWithDates[index] as DateTime,
+                      isFirst: index == 0);
                 }
                 var memory = memoriesWithDates[index] as ServerMemory;
                 return MemoryListItem(

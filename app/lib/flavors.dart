@@ -17,7 +17,9 @@ enum Environment {
 }
 
 class F {
-  static Environment env = Environment.fromFlavor();
+  static Environment env = Environment.fromFlavor(
+    
+  );
 
   static String get title {
     switch (env) {

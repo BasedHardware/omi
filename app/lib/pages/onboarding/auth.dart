@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -110,7 +111,7 @@ class _AuthComponentState extends State<AuthComponent> {
       CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
       return;
     }
-    debugPrint('Token: $token');
+    print('Token: $token');
     if (token != null) {
       User user;
       try {
@@ -119,12 +120,39 @@ class _AuthComponentState extends State<AuthComponent> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Unexpected error signing in, Firebase error, please try again.'),
         ));
-        CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+        CrashReporting.reportHandledCrash(
+          e,
+          stackTrace,
+          level: NonFatalExceptionLevel.error,
+        );
         return;
       }
+
+      String prevUid = SharedPreferencesUtil().uid;
       String newUid = user.uid;
-      SharedPreferencesUtil().uid = newUid;
-      MixpanelManager().identify();
+      if (prevUid.isNotEmpty && prevUid != newUid) {
+        MixpanelManager().migrateUser(newUid);
+        try {
+          await migrateUserServer(prevUid, newUid);
+        } catch (e, stackTrace) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Unexpected error retrieving your memories backup.'),
+          ));
+          CrashReporting.reportHandledCrash(
+            e,
+            stackTrace,
+            level: NonFatalExceptionLevel.error,
+            userAttributes: {
+              'prevUid': prevUid,
+              'newUid': newUid,
+            },
+          );
+        }
+        SharedPreferencesUtil().uid = newUid;
+      } else {
+        SharedPreferencesUtil().uid = newUid;
+        MixpanelManager().identify();
+      }
       widget.onSignIn();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

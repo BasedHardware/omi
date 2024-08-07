@@ -193,9 +193,7 @@ class CapturePageState extends State<CapturePage>
         print(e);
       } // in case was a local recording and not a BLE recording
     }
-    Geolocation? geolocation; // TODO: @mohsin fixes for android, in the background fails
-    if (Platform.isIOS) geolocation = await LocationService().getGeolocationDetails();
-
+    Geolocation? geolocation = await LocationService().getGeolocationDetails();
     ServerMemory? memory = await processTranscriptContent(
       segments,
       startedAt: currentTranscriptStartedAt,
@@ -261,7 +259,7 @@ class CapturePageState extends State<CapturePage>
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
-      segments,
+      SharedPreferencesUtil().transcriptSegments,
       retrievedFromCache: true,
       sendMessageToChat: null,
       triggerIntegrations: false,

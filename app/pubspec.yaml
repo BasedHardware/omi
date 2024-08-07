@@ -2,7 +2,7 @@ name: friend_private
 description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.0.21+70
+version: 1.0.20+68
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -98,6 +98,8 @@ dependencies:
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
 
+  app_links:
+
 
 dependency_overrides:
   http: ^1.2.1
@@ -116,6 +118,7 @@ dev_dependencies:
   build_runner: ^2.4.11
   objectbox_generator: any
   flutter_flavorizr: ^2.2.3
+  webview_flutter:
 
 
 flutter_launcher_icons:
