@@ -190,11 +190,12 @@ class CapturePageState extends State<CapturePage>
         file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
         uploadFile(file);
       } catch (e) {
-        print(e);
+        print("creating and uploading file error: $e");
       } // in case was a local recording and not a BLE recording
     }
-    Geolocation? geolocation; // TODO: @mohsin fixes for android, in the background fails
-    if (Platform.isIOS) geolocation = await LocationService().getGeolocationDetails();
+    Geolocation? geolocation;
+    // TODO: Location fails in bg on Android, awaits forever. Change package or fix the current one
+    geolocation = await LocationService().getGeolocationDetails();
 
     ServerMemory? memory = await processTranscriptContent(
       segments,
@@ -283,17 +284,20 @@ class CapturePageState extends State<CapturePage>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (await LocationService().displayPermissionsDialog()) {
-        showDialog(
+        await showDialog(
           context: context,
           builder: (c) => getDialog(
             context,
             () => Navigator.of(context).pop(),
             () async {
-              Navigator.of(context).pop();
               await requestLocationPermission();
+              if (Platform.isAndroid) {
+                await LocationService().requestBackgroundPermission();
+              }
+              if (mounted) Navigator.of(context).pop();
             },
             'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.',
+            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.${Platform.isAndroid ? '\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings' : ''}',
             singleButton: false,
           ),
         );
