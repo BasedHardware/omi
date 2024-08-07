@@ -10,7 +10,7 @@ import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
+Future<bool> migrateMemoriesToBackend(List<dynamic> memories) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/migration/memories',
     headers: {'Content-Type': 'application/json'},
@@ -18,6 +18,7 @@ Future<void> migrateMemoriesToBackend(List<dynamic> memories) async {
     body: jsonEncode(memories),
   );
   debugPrint('migrateMemoriesToBackend: ${response?.body}');
+  return response?.statusCode == 200;
 }
 
 Future<CreateMemoryResponse?> createMemoryServer({
