@@ -96,22 +96,18 @@ class _MemoryListItemState extends State<MemoryListItem> {
               : Text(widget.memory.structured.getEmoji(),
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
           widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
-              ? const SizedBox(
-                  width: 12,
-                )
+              ? const SizedBox(width: 12)
               : const SizedBox.shrink(),
           widget.memory.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
-                    color: widget.memory.source == 'screenpipe' ? Colors.white : Colors.grey.shade800,
+                    color: widget.memory.getTagColor(),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
-                    widget.memory.discarded ? 'Discarded' : widget.memory.source ?? widget.memory.structured.category,
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: widget.memory.source == 'screenpipe' ? Colors.deepPurple : Colors.white,
-                        ),
+                    widget.memory.getTag(),
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.memory.getTagTextColor()),
                     maxLines: 1,
                   ),
                 )
