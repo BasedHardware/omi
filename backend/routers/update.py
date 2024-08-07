@@ -30,7 +30,10 @@ async def get_latest_version():
                 asset = asset
                 break
         return {
-            "version": release_data.get("tag_name"),
+            "version": kv.get("release_firmware_version"),
+            "min_version": kv.get("minimum_firmware_required"),
+            "min_app_version": kv.get("minimum_app_version"),
+            "min_app_version_code": kv.get("minimum_app_version_code"),
             "id": release_data.get("id"),
             "tag_name": release_data.get("tag_name"),
             "published_at": release_data.get("published_at"),
@@ -40,7 +43,6 @@ async def get_latest_version():
             "zip_name": asset.get("name"),
             "zip_size": asset.get("size"),
             "release_name": release_data.get("name"),
-            "body": kv,
         }
 
 
