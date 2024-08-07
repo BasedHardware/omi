@@ -106,3 +106,37 @@ Future<IOWebSocketChannel?> streamingTranscript({
 
   return null;
 }
+
+Future<void> handleBrilliantLabsFrameStream({
+  required void Function(List<TranscriptSegment>) onMessageReceived,
+  required void Function(List<int>) onAudioBytesReceived,
+  required void Function(List<int>) onImageBytesReceived,
+  required VoidCallback onWebsocketConnectionSuccess,
+  required void Function(dynamic) onWebsocketConnectionFailed,
+  required void Function(int?, String?) onWebsocketConnectionClosed,
+  required void Function(dynamic) onWebsocketConnectionError,
+  required BleAudioCodec codec,
+  required int sampleRate,
+}) async {
+  IOWebSocketChannel? channel = await streamingTranscript(
+    onWebsocketConnectionSuccess: onWebsocketConnectionSuccess,
+    onWebsocketConnectionFailed: onWebsocketConnectionFailed,
+    onWebsocketConnectionClosed: onWebsocketConnectionClosed,
+    onWebsocketConnectionError: onWebsocketConnectionError,
+    onMessageReceived: onMessageReceived,
+    codec: codec,
+    sampleRate: sampleRate,
+  );
+
+  if (channel != null) {
+    await getBleAudioBytesListener(
+      'brilliant_labs_frame_device_id',
+      onAudioBytesReceived: onAudioBytesReceived,
+    );
+
+    await getBleImageBytesListener(
+      'brilliant_labs_frame_device_id',
+      onImageBytesReceived: onImageBytesReceived,
+    );
+  }
+}

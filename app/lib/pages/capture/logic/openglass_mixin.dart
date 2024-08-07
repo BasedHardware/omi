@@ -41,6 +41,33 @@ mixin OpenGlassMixin {
     await cameraStartPhotoController(device.id);
   }
 
+  Future<void> brilliantLabsFrameProcessing(
+    BTDeviceStruct device,
+    Function(List<Tuple2<String, String>>) onPhotosUpdated,
+    Function(bool) setHasTranscripts,
+  ) async {
+    await connectToBrilliantLabsFrame(device.id);
+    await startStreamingFromBrilliantLabsFrame(device.id);
+
+    _bleBytesStream = await getBleImageBytesListener(
+      device.id,
+      onImageBytesReceived: (List<int> value) async {
+        if (value.isEmpty) return;
+        Uint8List data = Uint8List.fromList(value);
+        Uint8List? completedImage = imageBytesUtil.processChunk(data);
+        if (completedImage != null && completedImage.isNotEmpty) {
+          debugPrint('Completed image bytes length: ${completedImage.length}');
+          getPhotoDescription(completedImage).then((description) {
+            photos.add(Tuple2(base64Encode(completedImage), description));
+            onPhotosUpdated(photos);
+            debugPrint('photos: ${photos.length}');
+            setHasTranscripts(true);
+          });
+        }
+      },
+    );
+  }
+
   Future<bool> isGlassesDevice(String deviceId) async {
     return await hasPhotoStreamingCharacteristic(deviceId);
   }

@@ -6,6 +6,7 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:friend_private/utils/ble/communication.dart'; // Import the communication file
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
@@ -72,9 +73,21 @@ class _DeviceInfo {
 }
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
+  int brilliantLabsFrameBatteryLevel = -1; // Initialize the battery level
+
   @override
   void initState() {
     super.initState();
+    if (widget.device != null) {
+      _retrieveBrilliantLabsFrameBatteryLevel(widget.device!.id);
+    }
+  }
+
+  Future<void> _retrieveBrilliantLabsFrameBatteryLevel(String deviceId) async {
+    int batteryLevel = await retrieveBrilliantLabsFrameBatteryLevel(deviceId);
+    setState(() {
+      brilliantLabsFrameBatteryLevel = batteryLevel;
+    });
   }
 
   @override
@@ -170,7 +183,40 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                               ),
                             ],
                           ))
-                      : const SizedBox.shrink()
+                      : const SizedBox.shrink(),
+                  if (brilliantLabsFrameBatteryLevel != -1)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: brilliantLabsFrameBatteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : brilliantLabsFrameBatteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Text(
+                            '${brilliantLabsFrameBatteryLevel.toString()}% Frame Battery',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 32),

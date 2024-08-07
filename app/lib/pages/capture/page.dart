@@ -157,6 +157,12 @@ class CapturePageState extends State<CapturePage>
     closeWebSocket();
   }
 
+  Future<void> startBrilliantLabsFrame() async {
+    if (btDevice == null) return;
+    await brilliantLabsFrameProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+    closeWebSocket();
+  }
+
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
     _bleBytesStream?.cancel();
@@ -165,6 +171,7 @@ class CapturePageState extends State<CapturePage>
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       startOpenGlass();
+      startBrilliantLabsFrame();
       initiateFriendAudioStreaming();
     }
   }
@@ -277,6 +284,7 @@ class CapturePageState extends State<CapturePage>
     WavBytesUtil.clearTempWavFiles();
     initiateWebsocket();
     startOpenGlass();
+    startBrilliantLabsFrame();
     initiateFriendAudioStreaming();
     processCachedTranscript();
 

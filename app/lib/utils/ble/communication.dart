@@ -238,3 +238,52 @@ Future<StreamSubscription?> getBleImageBytesListener(
 
   return listener;
 }
+
+Future<void> connectToBrilliantLabsFrame(String deviceId) async {
+  final device = BluetoothDevice.fromId(deviceId);
+  try {
+    await device.connect(autoConnect: true, mtu: null);
+    await device.connectionState.where((state) => state == BluetoothConnectionState.connected).first;
+    if (Platform.isAndroid) await device.requestMtu(512);
+  } catch (e) {
+    debugPrint('connectToBrilliantLabsFrame failed: $e');
+  }
+}
+
+Future<void> startStreamingFromBrilliantLabsFrame(String deviceId) async {
+  final frameService = await getServiceByUuid(deviceId, friendServiceUuid);
+  if (frameService == null) {
+    logServiceNotFoundError('Brilliant Labs Frame', deviceId);
+    return;
+  }
+
+  var imageCaptureControlCharacteristic = getCharacteristicByUuid(frameService, imageCaptureControlCharacteristicUuid);
+  if (imageCaptureControlCharacteristic == null) {
+    logCharacteristicNotFoundError('Image capture control', deviceId);
+    return;
+  }
+
+  await imageCaptureControlCharacteristic.write([0x0A]);
+  print('startStreamingFromBrilliantLabsFrame');
+}
+
+Future<int> retrieveBrilliantLabsFrameBatteryLevel(String deviceId) async {
+  final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
+  if (batteryService == null) {
+    logServiceNotFoundError('Battery', deviceId);
+    return -1;
+  }
+
+  var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
+  if (batteryLevelCharacteristic == null) {
+    logCharacteristicNotFoundError('Battery level', deviceId);
+    return -1;
+  }
+
+  var currValue = await batteryLevelCharacteristic.read();
+  if (currValue.isNotEmpty) {
+    return currValue[0];
+  }
+
+  return -1;
+}
