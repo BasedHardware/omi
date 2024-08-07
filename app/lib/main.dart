@@ -29,11 +29,9 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 Future<bool> _init() async {
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(
-        options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
-    await Firebase.initializeApp(
-        options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
   await NotificationService.instance.initialize();
@@ -85,8 +83,7 @@ void main() async {
           );
         }
         FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(
-              details.exception, details.stack ?? StackTrace.empty);
+          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
         runApp(MyApp(isAuth: isAuth));
@@ -106,12 +103,10 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) =>
-      context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
 class _MyAppState extends State<MyApp> {
@@ -119,6 +114,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
+    NotificationService.instance.saveNotificationToken();
     super.initState();
   }
 
@@ -152,10 +148,7 @@ class _MyAppState extends State<MyApp> {
             // ),
             snackBarTheme: SnackBarThemeData(
               backgroundColor: Colors.grey.shade900,
-              contentTextStyle: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500),
+              contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
             ),
             textTheme: TextTheme(
               titleLarge: const TextStyle(fontSize: 18, color: Colors.white),

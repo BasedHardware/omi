@@ -2,7 +2,7 @@ import logging
 
 from firebase_admin import messaging
 from fastapi import APIRouter
-from utils.redis_utils import set_user_token, get_user_token, set_user_timezone, get_user_timezone
+import database.notification as notification_db
 
 
 logger = logging.getLogger('uvicorn.error')
@@ -17,8 +17,7 @@ def save_token(data: dict ):
         user_id = data['user_id']
         token = data['token']
         time_zone = data['time_zone']
-        set_user_token(user_id, token)
-        set_user_timezone(user_id,time_zone)
+        notification_db.save_token(user_id, token, time_zone)    
 
     except Exception:
         raise HTTPException(status_code=400, detail='No valid data')
