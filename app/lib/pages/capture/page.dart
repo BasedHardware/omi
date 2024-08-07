@@ -195,7 +195,7 @@ class CapturePageState extends State<CapturePage>
     }
     Geolocation? geolocation;
     // TODO: Location fails in bg on Android, awaits forever. Change package or fix the current one
-    geolocation = await LocationService().getGeolocationDetails();
+    if (Platform.isIOS) geolocation = await LocationService().getGeolocationDetails();
 
     ServerMemory? memory = await processTranscriptContent(
       segments,
