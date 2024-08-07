@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -33,14 +34,11 @@ class _MemoryListItemState extends State<MemoryListItem> {
         var result = await Navigator.of(context).push(MaterialPageRoute(
           builder: (c) => MemoryDetailPage(memory: widget.memory),
         ));
-        print('MemoryListItem: result: $result');
         if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
-
-        // widget.updateMemory();
-        // TODO: restore me (how to modify the memory details, without http request)
-        // temporal prefs, ? ~ PROBABLY "most_recent_modified_memory" ~ memory json, handled in memory detail page.¬
-        // reload list ~ NO
-        // get memory by i ~ NO
+        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == widget.memory.id) {
+          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!, widget.memoryIdx);
+          SharedPreferencesUtil().modifiedMemoryDetails = null;
+        }
       },
       child: Container(
         margin: const EdgeInsets.only(top: 12, left: 8, right: 8),

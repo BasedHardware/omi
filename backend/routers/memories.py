@@ -78,6 +78,9 @@ def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
+    if not create_memory.transcript_segments and not create_memory.photos:
+        raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
+
     geolocation = create_memory.geolocation
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
@@ -248,7 +251,6 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             deleted=False,
         )
         memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
-        print(len(str(memory_obj.dict())))
 
         if not memory_obj.discarded:
             memories_vectors.append(memory_obj)

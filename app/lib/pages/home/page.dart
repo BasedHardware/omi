@@ -374,6 +374,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         messagesCopy.insert(0, message);
                         setState(() => messages = messagesCopy);
                       },
+                      updateMemory: (ServerMemory memory) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                        if (index != -1) {
+                          memoriesCopy[index] = memory;
+                          setState(() => memories = memoriesCopy);
+                        }
+                      },
                     ),
                   ],
                 ),
