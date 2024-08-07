@@ -96,3 +96,18 @@ Future<bool> isPluginSetupCompleted(String? url) async {
   print(data);
   return data['is_setup_completed'] ?? false;
 }
+
+Future<bool> orderFoodFromDoorDash(String food) async {
+  var response = await makeApiCall(
+    url: 'https://api.doordash.com/v2/orders',
+    headers: {
+      'Authorization': 'Bearer YOUR_DOORDASH_API_KEY',
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+    body: jsonEncode({'food': food}),
+  );
+  if (response == null) return false;
+  debugPrint('orderFoodFromDoorDash: ${response.body}');
+  return response.statusCode == 200;
+}

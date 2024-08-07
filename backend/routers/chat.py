@@ -32,6 +32,21 @@ def send_message(
     message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.utcnow(), sender='human', type='text')
     chat_db.add_message(uid, message.dict())
 
+    if "i want" in data.text.lower() and "food from doordash" in data.text.lower():
+        food = data.text.split("I want")[1].split("food from doordash")[0].strip()
+        order_status = order_food_from_doordash(food)
+        response_text = f'Your order for {food} has been placed successfully!' if order_status else f'Failed to place order for {food}.'
+        ai_message = Message(
+            id=str(uuid.uuid4()),
+            text=response_text,
+            created_at=datetime.utcnow(),
+            sender='ai',
+            plugin_id='doordash',
+            type='text',
+        )
+        chat_db.add_message(uid, ai_message.dict())
+        return ai_message
+
     plugin = get_plugin_by_id(plugin_id)
     plugin_id = plugin.id if plugin else None
 
@@ -85,3 +100,10 @@ def get_messages(uid: str = Depends(auth.get_current_user_uid)):
     if not messages:
         return [initial_message_util(uid)]
     return messages
+
+
+def order_food_from_doordash(food: str) -> bool:
+    # Simulate DoorDash API call
+    # In a real implementation, you would use an HTTP client to make a request to the DoorDash API
+    # and handle the response accordingly.
+    return True
