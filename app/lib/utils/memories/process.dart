@@ -31,12 +31,9 @@ Future<ServerMemory?> processTranscriptContent(
     triggerIntegrations: triggerIntegrations,
     language: language,
   );
-  if (result == null) return null;
-  ServerMemory? memory = result.memory;
-  if (memory == null) return null;
+  if (result == null || result.memory == null) return null;
 
-  // EVENTS
-  webhookOnMemoryCreatedCall(memory).then((s) {
+  webhookOnMemoryCreatedCall(result.memory).then((s) {
     if (s.isNotEmpty) createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
   });
 
@@ -45,5 +42,5 @@ Future<ServerMemory?> processTranscriptContent(
     createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
     if (sendMessageToChat != null) sendMessageToChat(message);
   }
-  return memory;
+  return result.memory;
 }
