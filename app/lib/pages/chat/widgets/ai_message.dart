@@ -4,11 +4,12 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 class AIMessage extends StatefulWidget {
@@ -16,6 +17,7 @@ class AIMessage extends StatefulWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final Plugin? pluginSender;
+  final Function(ServerMemory) updateMemory;
 
   const AIMessage({
     super.key,
@@ -23,6 +25,7 @@ class AIMessage extends StatefulWidget {
     required this.sendMessage,
     required this.displayOptions,
     this.pluginSender,
+    required this.updateMemory,
   });
 
   @override
@@ -115,9 +118,25 @@ class _AIMessageState extends State<AIMessage> {
                         ServerMemory? m = await getMemoryById(data.$2.id);
                         if (m == null) return;
                         MixpanelManager().chatMessageMemoryClicked(m);
-                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
-                        // TODO: maybe refresh memories here too
                         setState(() => memoryDetailLoading[data.$1] = false);
+                        await Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
+                        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
+                          ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
+                          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
+                          var copy = List<MessageMemory>.from(widget.message.memories);
+                          copy[data.$1] = MessageMemory(
+                              modifiedDetails.id,
+                              modifiedDetails.createdAt,
+                              MessageMemoryStructured(
+                                modifiedDetails.structured.title,
+                                modifiedDetails.structured.emoji,
+                              ));
+                          widget.message.memories.clear();
+                          widget.message.memories.addAll(copy);
+                          SharedPreferencesUtil().modifiedMemoryDetails = null;
+                          setState(() {});
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),

@@ -248,6 +248,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     widget.memory.pluginsResults.addAll(newMemory.pluginsResults);
     widget.memory.discarded = newMemory.discarded;
 
+    SharedPreferencesUtil().modifiedMemoryDetails = widget.memory;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
     );
