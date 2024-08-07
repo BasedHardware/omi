@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 def _process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 0
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
 ):
     transcript = memory.get_transcript()
 
@@ -36,7 +36,7 @@ def _process_memory(
                 transcript, memory.started_at, language_code, force_process
             )
     except Exception as e:
-        if retries > 2:
+        if retries == 2:
             raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
         return _process_memory(uid, language_code, memory, force_process, retries + 1)
 
