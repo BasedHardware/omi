@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:googleapis/gmail/v1.dart' as gmail;
+import 'package:googleapis_auth/auth_io.dart';
 
 /// Generates a cryptographically secure random nonce, to be included in a
 /// credential request.
@@ -99,6 +101,28 @@ Future<UserCredential> signInWithGoogle() async {
   debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
   return result;
+}
+
+Future<void> signInWithGmail() async {
+  final clientId = 'YOUR_CLIENT_ID';
+  final clientSecret = 'YOUR_CLIENT_SECRET';
+  final scopes = [gmail.GmailApi.gmailReadonlyScope];
+
+  final client = await clientViaUserConsent(ClientId(clientId, clientSecret), scopes, (url) {
+    // Open the URL in a webview or browser
+    print('Please go to the following URL and grant access:');
+    print('  => $url');
+    print('');
+  });
+
+  final gmailApi = gmail.GmailApi(client);
+  final profile = await gmailApi.users.getProfile('me');
+  final email = profile.emailAddress;
+
+  SharedPreferencesUtil().gmailAccessToken = client.credentials.accessToken.data;
+  SharedPreferencesUtil().gmailEmail = email;
+
+  print('Gmail account connected: $email');
 }
 
 listenAuthTokenChanges() {

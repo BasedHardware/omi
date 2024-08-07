@@ -5,6 +5,9 @@ import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/objectbox.g.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:googleapis/gmail/v1.dart' as gmail;
+import 'package:googleapis_auth/auth_io.dart';
+import 'package:friend_private/backend/preferences.dart';
 
 class MemoryProvider {
   static final MemoryProvider _instance = MemoryProvider._internal();
@@ -101,6 +104,34 @@ class MemoryProvider {
     final file = File('${directory.path}/memories.json');
     await file.writeAsString(json);
     return file;
+  }
+
+  Future<void> importGmailData() async {
+    final clientId = 'YOUR_CLIENT_ID';
+    final clientSecret = 'YOUR_CLIENT_SECRET';
+    final scopes = [gmail.GmailApi.gmailReadonlyScope];
+
+    final client = await clientViaUserConsent(ClientId(clientId, clientSecret), scopes, (url) {
+      // Open the URL in a webview or browser
+      print('Please go to the following URL and grant access:');
+      print('  => $url');
+      print('');
+    });
+
+    final gmailApi = gmail.GmailApi(client);
+    final messages = await gmailApi.users.messages.list('me');
+
+    for (var message in messages.messages!) {
+      final msg = await gmailApi.users.messages.get('me', message.id!);
+      final memory = Memory(
+        DateTime.now(),
+        msg.snippet ?? '',
+        false,
+      );
+      saveMemory(memory);
+    }
+
+    print('Gmail data imported successfully.');
   }
 }
 

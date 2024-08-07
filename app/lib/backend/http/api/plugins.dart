@@ -6,6 +6,8 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/database/memory_provider.dart';
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
@@ -73,7 +75,6 @@ Future<void> migrateUserServer(String prevUid, String newUid) async {
 }
 
 Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
   var response = await makeApiCall(
     url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath',
     method: 'GET',
@@ -95,4 +96,9 @@ Future<bool> isPluginSetupCompleted(String? url) async {
   var data = jsonDecode(response?.body ?? '{}');
   print(data);
   return data['is_setup_completed'] ?? false;
+}
+
+Future<void> connectGmailPlugin() async {
+  await signInWithGmail();
+  await importGmailData();
 }

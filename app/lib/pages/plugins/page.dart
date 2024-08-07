@@ -510,6 +510,22 @@ class _PluginsPageState extends State<PluginsPage> {
             //     },
             //   ),
             // ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await connectGmailPlugin();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Gmail account connected and emails imported as memories.'),
+                      ),
+                    );
+                  },
+                  child: const Text('Connect Gmail'),
+                ),
+              ),
+            ),
           ],
         ),
       ),
