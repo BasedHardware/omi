@@ -6,6 +6,8 @@ import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CreateMemoryResponse {
   final List<ServerMessage> messages;
@@ -103,8 +105,8 @@ class ServerMemory {
   String getTag() {
     if (source == MemorySource.screenpipe) return 'Screenpipe';
     if (source == MemorySource.openglass) return 'Openglass';
-    if (discarded) return 'Discarded';
     if (failed) return 'Failed';
+    if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 
@@ -116,6 +118,18 @@ class ServerMemory {
   Color getTagColor() {
     if (source == MemorySource.screenpipe) return Colors.white;
     return Colors.grey.shade800;
+  }
+
+  VoidCallback? onTagPressed(BuildContext context) {
+    if (source == MemorySource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
+    if (failed) {
+      return () => showDialog(
+          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+              'Failed Memory', 'This memory failed to be created. Will be retried once you reopen the app.',
+              singleButton: true, okButtonText: 'OK'),
+          context: context);
+    }
+    return null;
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {

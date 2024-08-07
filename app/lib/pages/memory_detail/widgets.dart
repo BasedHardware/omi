@@ -17,7 +17,6 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'maps_util.dart';
 
@@ -48,11 +47,7 @@ List<Widget> getSummaryWidgets(
     Row(
       children: [
         GestureDetector(
-          onTap: memory.source == MemorySource.screenpipe
-              ? () {
-                  launchUrl(Uri.parse('https://screenpi.pe/'));
-                }
-              : null,
+          onTap: memory.onTagPressed(context),
           child: Container(
             decoration: BoxDecoration(color: memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
