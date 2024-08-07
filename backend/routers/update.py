@@ -11,7 +11,7 @@ router = APIRouter()
 async def get_latest_version():
     async with httpx.AsyncClient() as client:
         # TODO: Change this to the official repo
-        url = "https://api.github.com/repos/mdmohsin7/Friend/releases/latest"
+        url = "https://api.github.com/repos/basedhardware/Friend/releases/latest"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
