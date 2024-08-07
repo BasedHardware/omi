@@ -261,7 +261,7 @@ class CapturePageState extends State<CapturePage>
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
-      SharedPreferencesUtil().transcriptSegments,
+      segments,
       retrievedFromCache: true,
       sendMessageToChat: null,
       triggerIntegrations: false,
