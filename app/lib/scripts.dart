@@ -5,6 +5,9 @@ import 'package:friend_private/backend/preferences.dart';
 scriptMigrateMemoriesToBack() async {
   if (SharedPreferencesUtil().scriptMigrateMemoriesToBack) return;
   var memoriesJson = MemoryProvider().getMemories().map((e) => e.toJson()).toList();
-  if (memoriesJson.isNotEmpty) await migrateMemoriesToBackend(memoriesJson);
+  if (memoriesJson.isNotEmpty) {
+    bool result = await migrateMemoriesToBackend(memoriesJson);
+    if (!result) return;
+  }
   SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
 }

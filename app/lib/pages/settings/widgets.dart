@@ -202,8 +202,6 @@ getPreferencesWidgets({
   required bool optInAnalytics,
   required VoidCallback onDevModeClicked,
   required bool devModeEnabled,
-  required VoidCallback onBackupsClicked,
-  required bool backupsEnabled,
 }) {
   return [
     const Align(

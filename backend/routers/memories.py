@@ -6,7 +6,6 @@ from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import database.chat as chat_db
 import database.memories as memories_db
 from database.vector import upsert_vector, delete_vector, upsert_vectors
 from models.memory import *
@@ -15,6 +14,7 @@ from models.transcript_segment import TranscriptSegment
 from routers.plugins import get_plugins_data
 from utils import auth
 from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
+from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
@@ -23,8 +23,11 @@ router = APIRouter()
 def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
     transcript = memory.get_transcript()
 
+    photos = []
     if memory.photos:
         structured: Structured = summarize_open_glass(memory.photos)
+        photos = memory.photos
+        memory.photos = []  # Clear photos to avoid saving them in the memory
     else:
         structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
 
@@ -41,10 +44,11 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
             discarded=discarded,
             deleted=False,
         )
+        if photos:
+            memories_db.store_memory_photos(uid, memory.id, photos)
     else:
         memory.structured = structured
         memory.discarded = discarded
-        memory.transcript = transcript
 
     if not discarded:
         structured_str = str(structured)
@@ -71,13 +75,17 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
-        create_memory: CreateMemory, language_code: str, trigger_integrations: bool,
+        create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
-    if create_memory.photos:
-        # TODO: photos should be handled differently, a subcollection or maybe a list of files in cloud storage,
-        # should they be uploaded from the client?
-        raise HTTPException(status_code=400, detail="Photos are not supported yet")
+    geolocation = create_memory.geolocation
+    if geolocation and not geolocation.google_place_id:
+        create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    if not language_code:  # not breaking change
+        language_code = create_memory.language
+    else:
+        create_memory.language = language_code
 
     memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
@@ -88,12 +96,16 @@ def create_memory(
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
-def reprocess_memory(memory_id: str, language_code: str, uid: str = Depends(auth.get_current_user_uid)):
+def reprocess_memory(
+        memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    # TODO: should trigger integrations?
+    if not language_code:  # not breaking change
+        language_code = memory.language or 'en'
+
     return _process_memory(uid, language_code, memory, force_process=True)
 
 
@@ -103,12 +115,22 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
     return memories_db.get_memories(uid, limit, offset, include_discarded=True)
 
 
-@router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
-def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def _get_memory_by_id(uid: str, memory_id: str):
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail="Memory not found")
     return memory
+
+
+@router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
+def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    return _get_memory_by_id(uid, memory_id)
+
+
+@router.get("/v1/memories/{memory_id}/photos", response_model=List[MemoryPhoto], tags=['memories'])
+def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return memories_db.get_memory_photos(uid, memory_id)
 
 
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
@@ -161,8 +183,6 @@ def _get_geolocation(memory: dict):
             google_place_id=geolocation['googlePlaceId'],
             latitude=geolocation['latitude'],
             longitude=geolocation['longitude'],
-            altitude=geolocation['altitude'],
-            accuracy=geolocation['accuracy'],
             address=geolocation['address'],
             location_type=geolocation['locationType'],
         )

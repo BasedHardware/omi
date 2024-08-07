@@ -34,7 +34,12 @@ def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_
     return {'status': 'ok'}
 
 
-@router.get('/v1/plugins', tags=['v1'])  # No auth while migration happens for all.
+@router.get('/plugins')  # No auth while migration happens for all.
+def get_plugins(uid: str):
+    return get_plugins_data(uid, include_reviews=True)
+
+
+@router.get('/v1/plugins', tags=['v1'])
 def get_plugins(uid: str):
     return get_plugins_data(uid, include_reviews=True)
 

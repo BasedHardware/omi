@@ -5,7 +5,8 @@ import asyncio
 import firebase_admin
 from fastapi import FastAPI
 
-from modal import Image, App, asgi_app, Secret, mount
+
+from modal import Image, App, asgi_app, Secret
 from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, notifications
 
 from fastapi_utilities import repeat_at
@@ -32,12 +33,7 @@ app.include_router(screenpipe.router)
 
 modal_app = App(
     name='api',
-    secrets=[
-        Secret.from_name("gcp-credentials"),
-        Secret.from_name("huggingface-token"),
-        Secret.from_dotenv('.env'),
-    ],
-    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
+    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
 )
 image = (
     Image.debian_slim()
