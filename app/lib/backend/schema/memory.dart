@@ -42,7 +42,10 @@ class ServerMemory {
 
   bool discarded;
   final bool deleted;
-  final bool failed; // local failed memories
+
+  // local failed memories
+  final bool failed;
+  int retries;
 
   ServerMemory({
     required this.id,
@@ -57,6 +60,7 @@ class ServerMemory {
     this.discarded = false,
     this.deleted = false,
     this.failed = false,
+    this.retries = 0,
     this.source,
     this.language,
   });
@@ -76,10 +80,11 @@ class ServerMemory {
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
-      deleted: json['deleted'] ?? false,
-      failed: json['failed'] ?? false,
       source: json['source'] != null ? MemorySource.values.asNameMap()[json['source']] : MemorySource.friend,
       language: json['language'],
+      deleted: json['deleted'] ?? false,
+      failed: json['failed'] ?? false,
+      retries: json['retries'] ?? 0,
     );
   }
 
@@ -96,9 +101,10 @@ class ServerMemory {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'failed': failed,
       'source': source?.toString(),
       'language': language,
+      'failed': failed,
+      'retries': retries,
     };
   }
 
