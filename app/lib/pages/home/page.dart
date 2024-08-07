@@ -80,6 +80,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       geolocation: memory.geolocation,
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
+      language: memory.language,
     );
   }
 

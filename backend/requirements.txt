@@ -82,6 +82,7 @@ pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.9.0
 pyparsing==3.1.2
+python-dotenv==1.0.1
 python-multipart==0.0.9
 PyYAML==6.0.1
 redis==5.0.8

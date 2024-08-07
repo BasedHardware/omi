@@ -18,6 +18,7 @@ Future<ServerMemory?> processTranscriptContent(
   List<Tuple2<String, String>> photos = const [],
   Function(ServerMessage)? sendMessageToChat,
   bool triggerIntegrations = true,
+  String? language,
 }) async {
   debugPrint('processTranscriptContent');
   if (transcriptSegments.isEmpty && photos.isEmpty) return null;
@@ -28,24 +29,25 @@ Future<ServerMemory?> processTranscriptContent(
     geolocation: geolocation,
     photos: photos,
     triggerIntegrations: triggerIntegrations,
+    language: language,
   );
-  if (result == null) return null;
-  ServerMemory? memory = result.memory;
-  if (memory == null) return null;
+  if (result == null || result.memory == null) return null;
 
   // EVENTS
   webhookOnMemoryCreatedCall(memory).then((s) {
     if (s.isNotEmpty) {
-      NotificationService.instance
-          .createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
+      NotificationService.instance.createNotification(
+          title: 'Developer: On Memory Created', body: s, notificationId: 11);
     }
   });
 
   for (var message in result.messages) {
     String pluginId = message.pluginId ?? '';
-    NotificationService.instance
-        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
+    NotificationService.instance.createNotification(
+        title: '$pluginId says',
+        body: message.text,
+        notificationId: pluginId.hashCode);
     if (sendMessageToChat != null) sendMessageToChat(message);
   }
-  return memory;
+  return result.memory;
 }

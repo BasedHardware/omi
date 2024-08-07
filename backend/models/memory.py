@@ -88,37 +88,40 @@ class Structured(BaseModel):
 
 
 class Geolocation(BaseModel):
-    google_place_id: str
+    google_place_id: Optional[str] = None
     latitude: float
     longitude: float
-    altitude: Optional[float] = None
-    accuracy: Optional[float] = None
-    address: str
-    location_type: str
+    address: Optional[str] = None
+    location_type: Optional[str] = None
+
+
+class MemorySource(str, Enum):
+    friend = 'friend'
+    openglass = 'openglass'
+    screenpipe = 'screenpipe'
 
 
 class Memory(BaseModel):
     id: str
     created_at: datetime
-    # transcript: str
-    structured: Structured
-
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    transcript_segments: List[TranscriptSegment] = []
-    plugins_results: List[PluginResult] = []
-    geolocation: Optional[Geolocation] = None
+    source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
+    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
+    structured: Structured
+    transcript_segments: List[TranscriptSegment] = []
+    geolocation: Optional[Geolocation] = None
     photos: List[MemoryPhoto] = []
+
+    plugins_results: List[PluginResult] = []
 
     discarded: bool = False
     deleted: bool = False
 
-    source: Optional[str] = None
-
     @staticmethod
-    def memories_to_string(memories: List['Memory'], include_transcript: bool = False) -> str:
+    def memories_to_string(memories: List['Memory']) -> str:
         result = []
         for memory in memories:
             memory_str = f"{memory.created_at.isoformat().split('.')[0]}\nTitle: {memory.structured.title}\nSummary: {memory.structured.overview}\n"
@@ -139,7 +142,11 @@ class CreateMemory(BaseModel):
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
+
     photos: List[MemoryPhoto] = []
+
+    source: MemorySource = MemorySource.friend
+    language: Optional[str] = None
 
     def get_transcript(self) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)

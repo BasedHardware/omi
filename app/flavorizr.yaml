@@ -7,12 +7,12 @@ flavors:
       applicationId: "com.friend.ios"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
-        config: "apps/AppWithWearable/android/app/src/prod/google-services.json"
+        config: "app/android/app/src/prod/google-services.json"
     ios:
       bundleId: "com.friend-app-with-wearable.ios12"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
-        config: "apps/AppWithWearable/ios/Config/Prod/GoogleService-Info.plist"
+        config: "app/ios/Config/Prod/GoogleService-Info.plist"
   dev:
     app:
       name: "Friend Dev"
@@ -21,9 +21,9 @@ flavors:
       icon: "assets/images/app_launcher_icon.png"
       applicationId: "com.friend.ios.dev"
       firebase:
-        config: "apps/AppWithWearable/android/app/src/dev/google-services.json"
+        config: "app/android/app/src/dev/google-services.json"
     ios:
       bundleId: "com.friend-app-with-wearable.ios12.development"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
-        config: "apps/AppWithWearable/ios/Config/Dev/GoogleService-Info.plist"
+        config: "app/ios/Config/Dev/GoogleService-Info.plist"

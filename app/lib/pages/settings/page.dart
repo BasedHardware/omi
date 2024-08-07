@@ -23,7 +23,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
   late bool devModeEnabled;
-  late bool backupsEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
@@ -36,7 +35,6 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
-    backupsEnabled = SharedPreferencesUtil().backupsEnabled;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -94,8 +92,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
-                  // TODO: do not works like this, fix if reusing
-                  // ...getNotificationsWidgets(setState, postMemoryNotificationIsChecked, reconnectNotificationIsChecked),
                   ...getPreferencesWidgets(
                     onOptInAnalytics: () {
                       setState(() {
@@ -122,34 +118,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           SharedPreferencesUtil().devModeEnabled = true;
                         }
                       });
-                    },
-                    backupsEnabled: backupsEnabled,
-                    onBackupsClicked: () {
-                      // setState(() {
-                      //   if (backupsEnabled) {
-                      //     showDialog(
-                      //         context: context,
-                      //         builder: (c) => getDialog(
-                      //               context,
-                      //               () => Navigator.of(context).pop(),
-                      //               () {
-                      //                 backupsEnabled = false;
-                      //                 SharedPreferencesUtil().backupsEnabled = false;
-                      //                 MixpanelManager().backupsDisabled();
-                      //                 deleteBackupApi();
-                      //                 Navigator.of(context).pop();
-                      //                 setState(() {});
-                      //               },
-                      //               'Disable Automatic Backups',
-                      //               'You will be responsible for backing up your own data. We will not be able to restore it automatically once you disable this feature. Are you sure?',
-                      //             ));
-                      //   } else {
-                      //     SharedPreferencesUtil().backupsEnabled = true;
-                      //     setState(() => backupsEnabled = true);
-                      //     MixpanelManager().backupsEnabled();
-                      //     executeBackupWithUid();
-                      //   }
-                      // });
                     },
                   ),
                   const SizedBox(height: 16),

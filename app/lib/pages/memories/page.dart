@@ -46,7 +46,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    print('loadingNewMemories: ${widget.loadingNewMemories}');
     var memories =
         displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
     memories = textController.text.isEmpty
