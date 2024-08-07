@@ -54,20 +54,11 @@ List<Widget> getSummaryWidgets(
                 }
               : null,
           child: Container(
-            decoration: BoxDecoration(
-              color: memory.source == MemorySource.screenpipe ? Colors.white : Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: BoxDecoration(color: memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              memory.discarded
-                  ? 'Discarded'
-                  : memory.source == MemorySource.screenpipe
-                      ? 'screenpipe'
-                      : memory.structured.category,
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                    color: memory.source == MemorySource.screenpipe ? Colors.deepPurple : Colors.white,
-                  ),
+              memory.getTag(),
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(color: memory.getTagTextColor()),
               maxLines: 1,
             ),
           ),
@@ -77,10 +68,7 @@ List<Widget> getSummaryWidgets(
     const SizedBox(height: 40),
     memory.discarded
         ? const SizedBox.shrink()
-        : Text(
-            'Overview',
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-          ),
+        : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
     memory.discarded
         ? const SizedBox.shrink()
         : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
