@@ -61,12 +61,15 @@ class LocationService {
           await Future.any([getDeviceLocation(), timeout]);
           if (locationData == null) {
             return null;
+          } else {
+            return Geolocation(latitude: locationData!.latitude, longitude: locationData!.longitude);
           }
-          return Geolocation(latitude: locationData?.latitude, longitude: locationData?.longitude);
         } else {
           try {
             await getDeviceLocation();
-            return Geolocation(latitude: locationData?.latitude, longitude: locationData?.longitude);
+            if (locationData != null) {
+              return Geolocation(latitude: locationData!.latitude, longitude: locationData!.longitude);
+            }
           } catch (e) {
             debugPrint("Error getting location data $e");
           }
