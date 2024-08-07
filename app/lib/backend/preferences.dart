@@ -171,6 +171,14 @@ class SharedPreferencesUtil {
 
   set lastDailySummaryDay(String value) => saveString('lastDailySummaryDate', value);
 
+  String get userDefinedAudioUrl => getString('userDefinedAudioUrl') ?? '';
+
+  set userDefinedAudioUrl(String value) => saveString('userDefinedAudioUrl', value);
+
+  String get customServerUrl => getString('customServerUrl') ?? '';
+
+  set customServerUrl(String value) => saveString('customServerUrl', value);
+
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
   }

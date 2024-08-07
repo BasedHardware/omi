@@ -1,8 +1,11 @@
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/websockets.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:web_socket_channel/io.dart';
@@ -46,6 +49,13 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
     if (await record.isRecording()) await record.stop();
     if (wsConnectionState == WebsocketConnectionStatus.connected) websocketChannel?.sink.close();
     setState(() => recordingState = RecordingState.stop);
+
+    // Send raw audio file to custom server URL
+    String customServerUrl = SharedPreferencesUtil().customServerUrl;
+    if (customServerUrl.isNotEmpty) {
+      File audioFile = File(record.path);
+      await sendRawAudioToCustomServer(audioFile);
+    }
   }
 
   @override

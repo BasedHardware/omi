@@ -27,6 +27,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
+  late TextEditingController _audioUrlController;
+  late TextEditingController _customServerUrlController;
 
   @override
   void initState() {
@@ -35,6 +37,8 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    _audioUrlController = TextEditingController(text: SharedPreferencesUtil().userDefinedAudioUrl);
+    _customServerUrlController = TextEditingController(text: SharedPreferencesUtil().customServerUrl);
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -92,6 +96,43 @@ class _SettingsPageState extends State<SettingsPage> {
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
+                  const SizedBox(height: 16.0),
+                  TextField(
+                    controller: _audioUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Audio URL',
+                      labelStyle: TextStyle(color: Colors.white),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue),
+                      ),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (value) {
+                      SharedPreferencesUtil().userDefinedAudioUrl = value;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextField(
+                    controller: _customServerUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Custom Server URL',
+                      labelStyle: TextStyle(color: Colors.white),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue),
+                      ),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (value) {
+                      SharedPreferencesUtil().customServerUrl = value;
+                    },
+                  ),
+                  const SizedBox(height: 32.0),
                   ...getPreferencesWidgets(
                     onOptInAnalytics: () {
                       setState(() {

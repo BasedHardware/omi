@@ -248,6 +248,16 @@ class CapturePageState extends State<CapturePage>
     photos = [];
     conversationId = const Uuid().v4();
     setState(() => memoryCreating = false);
+
+    // Send audio data to user-defined URL
+    String userDefinedAudioUrl = SharedPreferencesUtil().userDefinedAudioUrl;
+    if (userDefinedAudioUrl.isNotEmpty && file != null) {
+      try {
+        await uploadFileToUserDefinedUrl(file, userDefinedAudioUrl);
+      } catch (e) {
+        print('Error uploading file to user-defined URL: $e');
+      }
+    }
   }
 
   setHasTranscripts(bool hasTranscripts) {

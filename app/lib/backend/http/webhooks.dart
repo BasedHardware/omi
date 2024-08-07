@@ -11,7 +11,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawBody = false}) async {
   if (memory == null) return '';
   debugPrint('devModeWebhookCall: $memory');
-  String url = SharedPreferencesUtil().webhookOnMemoryCreated;
+  String url = SharedPreferencesUtil().userDefinedAudioUrl;
   if (url.isEmpty) return '';
   if (url.contains('?')) {
     url += '&uid=${SharedPreferencesUtil().uid}';
@@ -46,7 +46,7 @@ Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawB
 
 Future<String> webhookOnTranscriptReceivedCall(List<TranscriptSegment> segments, String sessionId) async {
   debugPrint('webhookOnTranscriptReceivedCall: $segments');
-  return triggerTranscriptSegmentsRequest(SharedPreferencesUtil().webhookOnTranscriptReceived, sessionId, segments);
+  return triggerTranscriptSegmentsRequest(SharedPreferencesUtil().userDefinedAudioUrl, sessionId, segments);
 }
 
 
@@ -100,5 +100,27 @@ Future<String?> wavToBase64(String filePath) async {
   } catch (e) {
     // print('Error converting WAV to base64: $e');
     return null; // Handle error gracefully in your application
+  }
+}
+
+Future<void> sendRawAudioToCustomServer(File audioFile) async {
+  String customServerUrl = SharedPreferencesUtil().customServerUrl;
+  if (customServerUrl.isEmpty) {
+    debugPrint('No custom server URL defined');
+    return;
+  }
+
+  try {
+    var request = http.MultipartRequest('POST', Uri.parse(customServerUrl));
+    request.files.add(await http.MultipartFile.fromPath('file', audioFile.path));
+    var response = await request.send();
+
+    if (response.statusCode == 200) {
+      debugPrint('Audio file sent successfully to custom server');
+    } else {
+      debugPrint('Failed to send audio file to custom server: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('Error sending audio file to custom server: $e');
   }
 }
