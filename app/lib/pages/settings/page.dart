@@ -25,6 +25,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
+  late bool googleDriveExportEnabled;
+  late String googleDriveFolderId;
+  late List<String> googleDriveExportParts;
   String? version;
   String? buildVersion;
 
@@ -35,6 +38,9 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
+    googleDriveExportEnabled = SharedPreferencesUtil().googleDriveExportEnabled;
+    googleDriveFolderId = SharedPreferencesUtil().googleDriveFolderId;
+    googleDriveExportParts = SharedPreferencesUtil().googleDriveExportParts;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -92,6 +98,83 @@ class _SettingsPageState extends State<SettingsPage> {
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
+                  const SizedBox(height: 32.0),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'GOOGLE DRIVE EXPORT',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    title: const Text('Enable Google Drive Export', style: TextStyle(color: Colors.white)),
+                    value: googleDriveExportEnabled,
+                    onChanged: (bool value) {
+                      setState(() {
+                        googleDriveExportEnabled = value;
+                        SharedPreferencesUtil().googleDriveExportEnabled = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Google Drive Folder ID',
+                      labelStyle: TextStyle(color: Colors.white),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (value) {
+                      setState(() {
+                        googleDriveFolderId = value;
+                        SharedPreferencesUtil().googleDriveFolderId = value;
+                      });
+                    },
+                    controller: TextEditingController(text: googleDriveFolderId),
+                  ),
+                  const SizedBox(height: 12),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Select parts to export:',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Transcript', style: TextStyle(color: Colors.white)),
+                    value: googleDriveExportParts.contains('transcript'),
+                    onChanged: (bool? value) {
+                      setState(() {
+                        if (value == true) {
+                          googleDriveExportParts.add('transcript');
+                        } else {
+                          googleDriveExportParts.remove('transcript');
+                        }
+                        SharedPreferencesUtil().googleDriveExportParts = googleDriveExportParts;
+                      });
+                    },
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Raw Audio', style: TextStyle(color: Colors.white)),
+                    value: googleDriveExportParts.contains('raw_audio'),
+                    onChanged: (bool? value) {
+                      setState(() {
+                        if (value == true) {
+                          googleDriveExportParts.add('raw_audio');
+                        } else {
+                          googleDriveExportParts.remove('raw_audio');
+                        }
+                        SharedPreferencesUtil().googleDriveExportParts = googleDriveExportParts;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 32.0),
                   ...getPreferencesWidgets(
                     onOptInAnalytics: () {
                       setState(() {

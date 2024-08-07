@@ -286,4 +286,18 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
+
+  // Google Drive Export Preferences
+
+  bool get googleDriveExportEnabled => getBool('googleDriveExportEnabled') ?? false;
+
+  set googleDriveExportEnabled(bool value) => saveBool('googleDriveExportEnabled', value);
+
+  String get googleDriveFolderId => getString('googleDriveFolderId') ?? '';
+
+  set googleDriveFolderId(String value) => saveString('googleDriveFolderId', value);
+
+  List<String> get googleDriveExportParts => getStringList('googleDriveExportParts') ?? [];
+
+  set googleDriveExportParts(List<String> value) => saveStringList('googleDriveExportParts', value);
 }
