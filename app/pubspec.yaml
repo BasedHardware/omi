@@ -58,7 +58,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
   nordic_dfu: ^6.1.4+hotfix
-  package_info_plus: ^8.0.0
+  package_info_plus: ^8.0.1
   flutter_downloader: ^1.11.8
 
   path_provider: any
@@ -98,6 +98,7 @@ dependencies:
   docx_template: ^0.4.0
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
+  version: ^3.0.2
 
 
 dependency_overrides:
