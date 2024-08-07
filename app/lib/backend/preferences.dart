@@ -163,6 +163,15 @@ class SharedPreferencesUtil {
     }
   }
 
+  increaseFailedMemoryRetries(String memoryId) {
+    final List<ServerMemory> memories = failedMemories;
+    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
+    if (memory != null) {
+      memory.retries += 1;
+      failedMemories = memories;
+    }
+  }
+
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
 
   set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);
