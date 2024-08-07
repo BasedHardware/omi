@@ -49,7 +49,6 @@ def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMe
     else:
         memory.structured = structured
         memory.discarded = discarded
-        memory.transcript = transcript
 
     if not discarded:
         structured_str = str(structured)
