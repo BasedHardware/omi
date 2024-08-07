@@ -158,7 +158,6 @@ class _MyAppState extends State<MyApp> {
               selectionColor: Colors.deepPurple,
             )),
         themeMode: ThemeMode.dark,
-        // home: const HasBackupPage(),
         home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
             ? const HomePageWrapper()
             : const OnboardingWrapper(),
