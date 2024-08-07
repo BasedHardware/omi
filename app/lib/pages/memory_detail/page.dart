@@ -56,7 +56,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     if (widget.memory.source == MemorySource.openglass) {
       getMemoryPhotos(widget.memory.id).then((value) {
         photos = value;
-        setState(() {});
+        setState(() {}); // TODO: if left before this closes, fails
       });
     }
     super.initState();

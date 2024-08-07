@@ -39,6 +39,7 @@ Future<http.Response?> makeApiCall({
     }
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
+      // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = InstabugHttpClient();

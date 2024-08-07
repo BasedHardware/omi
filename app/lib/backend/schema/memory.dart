@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -97,6 +98,24 @@ class ServerMemory {
       'source': source?.toString(),
       'language': language,
     };
+  }
+
+  String getTag() {
+    if (source == MemorySource.screenpipe) return 'Screenpipe';
+    if (source == MemorySource.openglass) return 'Openglass';
+    if (discarded) return 'Discarded';
+    if (failed) return 'Failed';
+    return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
+  }
+
+  Color getTagTextColor() {
+    if (source == MemorySource.screenpipe) return Colors.deepPurple;
+    return Colors.white;
+  }
+
+  Color getTagColor() {
+    if (source == MemorySource.screenpipe) return Colors.white;
+    return Colors.grey.shade800;
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
