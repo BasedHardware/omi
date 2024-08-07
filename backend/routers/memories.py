@@ -20,16 +20,25 @@ from utils.plugins import trigger_external_integrations
 router = APIRouter()
 
 
-def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
+def _process_memory(
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 0
+):
     transcript = memory.get_transcript()
 
     photos = []
-    if memory.photos:
-        structured: Structured = summarize_open_glass(memory.photos)
-        photos = memory.photos
-        memory.photos = []  # Clear photos to avoid saving them in the memory
-    else:
-        structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+    try:
+        if memory.photos:
+            structured: Structured = summarize_open_glass(memory.photos)
+            photos = memory.photos
+            memory.photos = []  # Clear photos to avoid saving them in the memory
+        else:
+            structured: Structured = get_transcript_structure(
+                transcript, memory.started_at, language_code, force_process
+            )
+    except Exception as e:
+        if retries > 2:
+            raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
+        return _process_memory(uid, language_code, memory, force_process, retries + 1)
 
     discarded = structured.title == ''
 
