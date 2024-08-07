@@ -183,8 +183,6 @@ def _get_geolocation(memory: dict):
             google_place_id=geolocation['googlePlaceId'],
             latitude=geolocation['latitude'],
             longitude=geolocation['longitude'],
-            altitude=geolocation['altitude'],
-            accuracy=geolocation['accuracy'],
             address=geolocation['address'],
             location_type=geolocation['locationType'],
         )
