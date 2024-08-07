@@ -8,6 +8,7 @@ from advanced import realtime as advanced_realtime_router
 from basic import memory_created as basic_memory_created_router
 from basic import realtime as basic_realtime_router
 from basic_auth import memory_created as basic_auth_memory_created_router
+from order_uber import router as order_uber_router
 
 app = FastAPI()
 
@@ -49,3 +50,4 @@ app.include_router(advanced_realtime_router.router)
 
 app.include_router(multion_router.router)
 # app.include_router(mem0_router.router)
+app.include_router(order_uber_router)
