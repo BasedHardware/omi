@@ -68,7 +68,7 @@ class ServerMemory {
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
