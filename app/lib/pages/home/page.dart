@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -105,7 +106,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
         memories.insert(0, newCreatedMemory);
       } else {
+        if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
+          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
+              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
+          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
+          continue;
+        }
         memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
+        SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
       }
     }
     debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
@@ -365,6 +373,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         var messagesCopy = List<ServerMessage>.from(messages);
                         messagesCopy.insert(0, message);
                         setState(() => messages = messagesCopy);
+                      },
+                      updateMemory: (ServerMemory memory) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                        if (index != -1) {
+                          memoriesCopy[index] = memory;
+                          setState(() => memories = memoriesCopy);
+                        }
                       },
                     ),
                   ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
@@ -14,12 +15,14 @@ class ChatPage extends StatefulWidget {
   final FocusNode textFieldFocusNode;
   final List<ServerMessage> messages;
   final Function(ServerMessage) addMessage;
+  final Function(ServerMemory) updateMemory;
 
   const ChatPage({
     super.key,
     required this.textFieldFocusNode,
     required this.messages,
     required this.addMessage,
+    required this.updateMemory,
   });
 
   @override
@@ -87,6 +90,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         sendMessage: _sendMessageUtil,
                         displayOptions: widget.messages.length <= 1,
                         pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                        updateMemory: widget.updateMemory,
                       )
                     : HumanMessage(message: message),
               );

@@ -45,6 +45,8 @@ Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawB
 }
 
 Future<String> webhookOnTranscriptReceivedCall(List<TranscriptSegment> segments, String sessionId) async {
+  // was called twice?
+  if (segments.isEmpty || SharedPreferencesUtil().webhookOnTranscriptReceived.isEmpty) return '';
   debugPrint('webhookOnTranscriptReceivedCall: $segments');
   return triggerTranscriptSegmentsRequest(SharedPreferencesUtil().webhookOnTranscriptReceived, sessionId, segments);
 }

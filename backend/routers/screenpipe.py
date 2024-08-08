@@ -21,7 +21,7 @@ def create_memory(request: Request, uid: str, data: ScreenPipeCreateMemory):
     if data.memory_source == 'screen':
         structured = summarize_screen_pipe(data.memory_text)
     elif data.memory_source == 'audio':
-        structured = get_transcript_structure(data.memory_text, datetime.now(), 'en', True)
+        structured = get_transcript_structure(data.memory_text, datetime.utcnow(), 'en', True)
     else:
         raise HTTPException(status_code=400, detail='Invalid memory source')
 
