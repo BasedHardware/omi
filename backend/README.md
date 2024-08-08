@@ -21,13 +21,13 @@
 10.  Run the command `pip install -r requirements.txt`
 11. Sign Up on [https://ngrok.com/](https://ngrok.com/ "https://ngrok.com/") and follow the steps to configure it
 	1. During the onboarding flow, under the `Static Domain` section, Ngrok should tell you to run a command like `ngrok http --domain=example.ngrok-free.app 80`. In that, replace 80 with 8000. Open a new terminal and run this command
-12. Run the command `fastapi run`
+12. Run the command `uvicorn main:app --reload --env-file .env`
 13. If you get any error mentioning `no internet connection or something`, then add the following lines in the `utils/stt/vad.py` file after the import statements.
 	`import ssl ssl._create_default_https_context = ssl._create_unverified_context`
 14. If you get the openai key error, include the following in `utils/llm.py` file after import statements
 	`os.environ['OPENAI_API_KEY'] = 'your_key_here'`
-15.  If not the above solution, you can try `OPENAI_API_KEY=xyz fastapi run` to fix it as well.
-16. Now try running the `fastapi run` command again.
+15.  If not the above solution, you can try `OPENAI_API_KEY=xyz uvicorn main:app --reload --env-file .env` to fix it as well.
+16. Now try running the `uvicorn main:app --reload --env-file .env` command again.
 17. Assign the url given by ngrok in the app’s env to `API_BASE_URL`
 18. Now your app should be using your local backend (hopefully)
 
