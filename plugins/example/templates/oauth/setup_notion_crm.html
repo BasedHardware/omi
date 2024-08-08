@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-	<title>Setup Notion CRM</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Setup Completed</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..800&display=swap" rel="stylesheet">
-
 	<style>
 		body {
 			font-family: Assistant, sans-serif;
@@ -25,8 +26,14 @@
 		}
 
 		.container {
+			margin: 0.5rem;
 			background-color: #fff;
-			padding: 2rem;
+			padding: 5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 5rem;
+			align-items: center;
+			justify-content: center;
 			border-radius: 4px;
 			box-shadow: 0 0 0.075rem rgb(0, 0, 0);
 			max-width: 600px;
@@ -46,19 +53,11 @@
 			font-size: 1.5rem;
 			cursor: pointer;
 			box-sizing: border-box;
+			display: block;
 		}
 
 		.container a:hover {
 			background-color: rgba(0, 0, 0, 0.75);
-		}
-
-		.container {
-			padding: 5rem;
-			display: flex;
-			flex-direction: column;
-			gap: 5rem;
-			align-items: center;
-			justify-content: center;
 		}
 
 		.container>div:first-of-type {
@@ -69,22 +68,23 @@
 
 		.container>p:first-of-type {
 			font-size: 1.5rem;
-			font-color: #000000;
-		}
-
-		.container>div:last-of-type {
-			display: flex;
-			flex-direction: column;
-			gap: 0.5rem;
+			color: #000000;
 		}
 
 		@media (max-width: 600px) {
 			.container {
 				padding: 2.5rem;
+				gap: 2.5rem;
+			}
+
+			.container div:last-of-type {
+				width: 100%;
 			}
 
 			.container a {
 				width: 100%;
+				padding-left: 0rem;
+				padding-right: 0rem;
 			}
 		}
 	</style>
@@ -99,7 +99,7 @@
 		<p>Sync your memory directly with Notion</p>
 		<div>
 			{% if error_message %}
-				<p>{{ error_message }}</p>
+			<p>{{ error_message }}</p>
 			{% endif %}
 			<a href="{{ oauth_url }}">Connect with Notion</a>
 		</div>
