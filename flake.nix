@@ -32,17 +32,12 @@
           default = pkgs.mkShell {
           # Pinned packages available in the environment
           packages = with pkgs; [
-            rust-bin.stable."1.78.0".default
-            cargo-bloat
-            cargo-edit
-            cargo-outdated
-            cargo-udeps
-            cargo-watch
-            rust-analyzer
             SDL2
             curl
             openssl_1_1
             libiconv
+            ffmpeg
+            opusTools
             cmake
             gcc
             google-cloud-sdk
