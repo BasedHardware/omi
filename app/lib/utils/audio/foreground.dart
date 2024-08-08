@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
@@ -54,7 +53,7 @@ class ForegroundUtil {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'foreground_service',
         channelName: 'Foreground Service Notification',
-        channelDescription: 'Your Friend Device is connected',
+        channelDescription: 'Transcription service is running in the background.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.HIGH,
         // iconData: const NotificationIconData(
@@ -77,19 +76,17 @@ class ForegroundUtil {
     );
   }
 
-  static Future<bool> startForegroundTask() async {
+  static Future<ServiceRequestResult> startForegroundTask() async {
     print('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
-      var res = await FlutterForegroundTask.restartService();
-      return res.success;
+      return FlutterForegroundTask.restartService();
     } else {
       print('starting service');
-      var res = await FlutterForegroundTask.startService(
+      return await FlutterForegroundTask.startService(
         notificationTitle: 'Your Friend Device is connected.',
-        notificationText: 'Keep the app opened while your Friend listens in the background.',
+        notificationText: 'Transcription service is running in the background.',
         callback: _startForegroundCallback,
       );
-      return res.success;
     }
   }
 }
