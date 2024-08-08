@@ -86,7 +86,7 @@ async def send_initial_file(file_path, transcript_socket):
 #             os.remove(f"{path}/{file}")
 
 
-def get_single_file(dir_path: str):
+def get_single_file(dir_path: str, target_sample_rate: int = 8000):
     output_path = f'{dir_path}joined_output.wav'
 
     files_to_join = []
@@ -94,7 +94,11 @@ def get_single_file(dir_path: str):
         if '.wav' not in sample:
             continue
         path = f'{dir_path}{sample}'
-        files_to_join.append(AudioSegment.from_file(path))
+        aseg = AudioSegment.from_file(path)
+        if aseg.frame_rate != target_sample_rate:
+            print('converting', aseg.frame_rate, 'to', target_sample_rate)
+            aseg = aseg.set_frame_rate(target_sample_rate)
+        files_to_join.append(aseg)
 
     output = files_to_join[0]  # KNOWN ISSUE
     for audio in files_to_join[1:]:
@@ -107,18 +111,23 @@ def get_single_file(dir_path: str):
 
 
 # Add this new function to handle initial file sending
-def get_speaker_audio_file(uid) -> Tuple[Optional[str], int]:
+def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Optional[str], int]:
     path = retrieve_all_samples(uid)
-    if len(os.listdir(path)) < 5:  # means user did less than 5 samples unfortunately, so not completed
+    files_at_path = len(os.listdir(path))
+    print('get_speaker_audio_file', uid, path, 'Files:', files_at_path)
+    if files_at_path < 5:  # means user did less than 5 samples unfortunately, so not completed
         return None, 0
 
     single_file_path = f'{path}joined_output.wav'
     if os.path.exists(single_file_path):
-        duration = AudioSegment.from_wav(single_file_path).duration_seconds
-        print('get_speaker_audio_file Cached Duration:', duration)
-        return single_file_path, duration
+        aseg = AudioSegment.from_wav(single_file_path)
+        if aseg.frame_rate == target_sample_rate:
+            aseg = aseg.set_frame_rate(target_sample_rate)
+            aseg.export(single_file_path, format='wav')
+        print('get_speaker_audio_file Cached Duration:', aseg.duration_seconds)
+        return single_file_path, aseg.duration_seconds
 
-    single_file_path = get_single_file(path)
+    single_file_path = get_single_file(path, target_sample_rate)
     aseg = AudioSegment.from_wav(single_file_path)
     print('get_speaker_audio_file Initial Duration:', aseg.duration_seconds, 'Sample rate:', aseg.frame_rate / 1000)
     output = AudioSegment.empty()
