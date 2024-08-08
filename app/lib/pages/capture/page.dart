@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -16,7 +16,6 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -24,7 +23,6 @@ import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:uuid/uuid.dart';
@@ -109,6 +107,7 @@ class CapturePageState extends State<CapturePage>
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
           //  losing from the audio the first part of the recording. All other parts are fine.
+          FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
           audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
           firstStreamReceivedAt = DateTime.now();
         }
@@ -187,7 +186,6 @@ class CapturePageState extends State<CapturePage>
   _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return;
-    FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     File? file;
@@ -201,25 +199,11 @@ class CapturePageState extends State<CapturePage>
       } // in case was a local recording and not a BLE recording
     }
 
-    print("geolocation: $geolocation before delay");
-    // There's a delay to get the geolocation. This is because the location is requested in the background and it takes some time to get it.
-    await Future.delayed(const Duration(seconds: 2));
-    print("geolocation: $geolocation after delay");
-    // check if geolocation is empty, if so, add some more delay. Should we? or 2 seconds is enough?
-    if (geolocation == null) {
-      print('geolocation is null, retrying');
-      await Future.delayed(const Duration(seconds: 2));
-    }
-    Geolocation? geolocation2;
-    setState(() {
-      geolocation2 = geolocation;
-    });
-    print('geolocation2: $geolocation2');
     ServerMemory? memory = await processTranscriptContent(
       segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: geolocation2,
+      geolocation: geolocation,
       photos: photos,
       sendMessageToChat: sendMessageToChat,
       triggerIntegrations: true,
@@ -299,7 +283,7 @@ class CapturePageState extends State<CapturePage>
             longitude: data['longitude'],
             accuracy: data['accuracy'],
             altitude: data['altitude'],
-            time: data['time'],
+            time: DateTime.parse(data['time']),
           );
         });
 
@@ -354,20 +338,6 @@ class CapturePageState extends State<CapturePage>
       }
     });
     super.initState();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) async {
-    if (state == AppLifecycleState.resumed) {
-      await Geolocator.checkPermission().then((LocationPermission permission) async {
-        if (permission.name != SharedPreferencesUtil().locationPermissionState) {
-          SharedPreferencesUtil().locationPermissionState = permission.name;
-          print('Permission: $permission');
-          await ForegroundUtil.startForegroundTask();
-        }
-      });
-    }
-    super.didChangeAppLifecycleState(state);
   }
 
   @override
@@ -436,7 +406,11 @@ class CapturePageState extends State<CapturePage>
 
   _recordingToggled() async {
     if (recordingState == RecordingState.record) {
+      // if (Platform.isAndroid) {
+      //   stopRecordingOnAndroid();
+      // } else {
       await stopStreamRecording(wsConnectionState, websocketChannel);
+      // }
       setState(() => recordingState = RecordingState.stop);
       _memoryCreationTimer?.cancel();
       _createMemory();
@@ -453,7 +427,11 @@ class CapturePageState extends State<CapturePage>
             setState(() => recordingState = RecordingState.initialising);
             closeWebSocket();
             await initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            // if (Platform.isAndroid) {
+            //   await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+            // } else {
             await startStreamRecording(wsConnectionState, websocketChannel);
+            // }
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
