@@ -9,23 +9,6 @@
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..800&display=swap" rel="stylesheet">
 	<style>
-		/*
-		body {
-			display: flex;
-			justify-content: center;
-			align-items: center;
-			height: 100vh;
-			margin: 0;
-			font-family: Arial, sans-serif;
-			background-color: #f0f0f0;
-		}
-
-		.message {
-			text-align: center;
-			font-size: 2rem;
-			color: #333;
-		}
-		*/
 		body {
 			font-family: Assistant, sans-serif;
 			background-color: #f4f4f4;
@@ -43,8 +26,14 @@
 		}
 
 		.container {
+			margin: 0.5rem;
 			background-color: #fff;
-			padding: 2rem;
+			padding: 5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 5rem;
+			align-items: center;
+			justify-content: center;
 			border-radius: 4px;
 			box-shadow: 0 0 0.075rem rgb(0, 0, 0);
 			max-width: 600px;
@@ -70,15 +59,6 @@
 			background-color: rgba(0, 0, 0, 0.75);
 		}
 
-		.container {
-			padding: 5rem;
-			display: flex;
-			flex-direction: column;
-			gap: 5rem;
-			align-items: center;
-			justify-content: center;
-		}
-
 		.container>div:first-of-type {
 			display: flex;
 			flex-direction: row;
@@ -87,12 +67,13 @@
 
 		.container>p:first-of-type {
 			font-size: 1.5rem;
-			font-color: #000000;
+			color: #000000;
 		}
 
 		@media (max-width: 600px) {
 			.container {
 				padding: 2.5rem;
+				gap: 2.5rem;
 			}
 
 			.container a {
