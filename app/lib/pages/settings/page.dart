@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
@@ -7,6 +7,7 @@ import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -170,11 +171,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Text(
-                      SharedPreferencesUtil().uid,
-                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
+                    child: GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('UID copied to clipboard')));
+                      },
+                      child: Text(
+                        SharedPreferencesUtil().uid,
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                   Padding(
