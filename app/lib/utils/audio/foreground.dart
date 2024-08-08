@@ -10,17 +10,17 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
-  void onStart(DateTime timestamp, SendPort? sendPort) async {
+  void onStart(DateTime timestamp) async {
     print("Starting foreground task");
   }
 
   @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
+  void onRepeatEvent(DateTime timestamp) async {
     print("Foreground repeat event triggered");
   }
 
   @override
-  void onDestroy(DateTime timestamp, SendPort? sendPort) async {
+  void onDestroy(DateTime timestamp) async {
     print("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
@@ -57,11 +57,11 @@ class ForegroundUtil {
         channelDescription: 'Your Friend Device is connected',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.HIGH,
-        iconData: const NotificationIconData(
-          resType: ResourceType.mipmap,
-          resPrefix: ResourcePrefix.ic,
-          name: 'launcher',
-        ),
+        // iconData: const NotificationIconData(
+        //   resType: ResourceType.mipmap,
+        //   resPrefix: ResourcePrefix.ic,
+        //   name: 'launcher',
+        // ),
       ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: false,
@@ -80,14 +80,16 @@ class ForegroundUtil {
   static Future<bool> startForegroundTask() async {
     print('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
-      return FlutterForegroundTask.restartService();
+      var res = await FlutterForegroundTask.restartService();
+      return res.success;
     } else {
       print('starting service');
-      return FlutterForegroundTask.startService(
-        notificationTitle: 'Background Transcription connected.',
+      var res = await FlutterForegroundTask.startService(
+        notificationTitle: 'Your Friend Device is connected.',
         notificationText: 'Keep the app opened while your Friend listens in the background.',
         callback: _startForegroundCallback,
       );
+      return res.success;
     }
   }
 }
