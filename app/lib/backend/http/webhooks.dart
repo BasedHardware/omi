@@ -104,3 +104,36 @@ Future<String?> wavToBase64(String filePath) async {
     return null; // Handle error gracefully in your application
   }
 }
+
+Future<void> main() async {
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addHandler(_webhookOnGoogleCalendarEventCreated);
+
+  final server = await shelf_io.serve(handler, 'localhost', 8080);
+
+  print('Server listening on port ${server.port}');
+}
+
+Response _webhookOnGoogleCalendarEventCreated(Request request) {
+  if (request.method != 'POST') {
+    return Response.forbidden('Only POST requests are allowed');
+  }
+
+  try {
+    final payload = jsonDecode(request.readAsStringSync());
+
+    // Extract event details from the payload
+    final eventId = payload['id'];
+    final summary = payload['summary'];
+    final startTime = payload['start']['dateTime'];
+
+    print('Event Created: $summary at $startTime (ID: $eventId)');
+
+    // Perform additional processing here...
+
+    return Response.ok('Event received');
+  } catch (e) {
+    return Response.internalServerError(body: 'Error processing event: $e');
+  }
+}
