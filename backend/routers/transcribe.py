@@ -76,7 +76,7 @@ async def _websocket_util(
         # remove_downloaded_samples(uid) # do not remove them for now.
         single_file_path, duration = None, 0
         # TODO: what if opus? and the samples were created with pcm?
-        transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
+        transcript_socket = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(websocket, language, sample_rate, codec, channels)

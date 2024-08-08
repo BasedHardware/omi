@@ -211,6 +211,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       scanAndConnectDevice().then(_onConnected);
     }
 
+    _listenToMessagesFromNotification();
+
     NotificationService.instance.createNotification(
       title: 'Don\'t forget to wear Friend today',
       body: 'Wear your friend and capture your memories today.',
@@ -236,6 +238,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       SharedPreferencesUtil().subPageToShowFromNotification = '';
     }
     super.initState();
+  }
+
+  void _listenToMessagesFromNotification() {
+    NotificationService.instance.listenForServerMessages.listen((message) {
+      var messagesCopy = List<ServerMessage>.from(messages);
+      messagesCopy.insert(0, message);
+      setState(() => messages = messagesCopy);
+    });
   }
 
   Timer? _disconnectNotificationTimer;
