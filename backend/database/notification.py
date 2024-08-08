@@ -9,6 +9,14 @@ def save_token(uid: str, token: str, time_zone: str):
     user_ref = db.collection('users').document(uid)
     user_ref.set({'token': token, 'time_zone': time_zone}, merge=True)
 
+def get_token_only(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref = user_ref.get()
+    if user_ref.exists:
+        user_ref = user_ref.to_dict()
+        return user_ref.get('token')
+    return None
+
 def get_token(uid: str):
     user_ref = db.collection('users').document(uid)
     user_ref = user_ref.get()
