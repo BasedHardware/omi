@@ -8,7 +8,6 @@ from _multion import router as multion_router
 from advanced import realtime as advanced_realtime_router
 from basic import memory_created as basic_memory_created_router
 from basic import realtime as basic_realtime_router
-from basic_auth import memory_created as basic_auth_memory_created_router
 from oauth import memory_created as oauth_memory_created_router
 
 app = FastAPI()
@@ -39,8 +38,6 @@ def plugins_app():
 
 app.include_router(basic_memory_created_router.router)
 app.include_router(basic_realtime_router.router)
-
-app.include_router(basic_auth_memory_created_router.router)
 
 app.include_router(oauth_memory_created_router.router)
 
