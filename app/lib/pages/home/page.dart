@@ -72,6 +72,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   bool loadingNewMemories = true;
 
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
+    if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
     return await processTranscriptContent(
       memory.transcriptSegments,
       retrievedFromCache: true,
@@ -106,6 +107,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
         memories.insert(0, newCreatedMemory);
       } else {
+        var prefsMemory = SharedPreferencesUtil().failedMemories[i];
+        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
+          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
+          continue;
+        }
         if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
           CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
               userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});

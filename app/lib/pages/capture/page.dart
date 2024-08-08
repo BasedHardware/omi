@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -186,6 +186,8 @@ class CapturePageState extends State<CapturePage>
   _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return;
+    if (segments.isEmpty && photos.isEmpty) return;
+
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     File? file;
@@ -210,7 +212,7 @@ class CapturePageState extends State<CapturePage>
       language: SharedPreferencesUtil().recordingsLanguage,
     );
     debugPrint(memory.toString());
-    if (memory == null) {
+    if (memory == null && segments.isNotEmpty && photos.isNotEmpty) {
       memory = ServerMemory(
         id: const Uuid().v4(),
         createdAt: DateTime.now(),
@@ -277,21 +279,16 @@ class CapturePageState extends State<CapturePage>
   void _onReceiveTaskData(dynamic data) {
     if (data is Map<String, dynamic>) {
       if (data.containsKey('latitude') && data.containsKey('longitude')) {
-        setState(() {
-          geolocation = Geolocation(
-            latitude: data['latitude'],
-            longitude: data['longitude'],
-            accuracy: data['accuracy'],
-            altitude: data['altitude'],
-            time: DateTime.parse(data['time']),
-          );
-        });
-
+        geolocation = Geolocation(
+          latitude: data['latitude'],
+          longitude: data['longitude'],
+          accuracy: data['accuracy'],
+          altitude: data['altitude'],
+          time: DateTime.parse(data['time']),
+        );
         debugPrint('Location data received from background: $geolocation');
       } else {
-        setState(() {
-          geolocation = null;
-        });
+        geolocation = null;
       }
     }
   }
@@ -304,6 +301,7 @@ class CapturePageState extends State<CapturePage>
     startOpenGlass();
     initiateFriendAudioStreaming();
     processCachedTranscript();
+
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -344,11 +342,13 @@ class CapturePageState extends State<CapturePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     record.dispose();
+
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    closeWebSocket();
     _internetListener.cancel();
+
+    closeWebSocket();
+
     super.dispose();
   }
 
@@ -406,11 +406,7 @@ class CapturePageState extends State<CapturePage>
 
   _recordingToggled() async {
     if (recordingState == RecordingState.record) {
-      // if (Platform.isAndroid) {
-      //   stopRecordingOnAndroid();
-      // } else {
       await stopStreamRecording(wsConnectionState, websocketChannel);
-      // }
       setState(() => recordingState = RecordingState.stop);
       _memoryCreationTimer?.cancel();
       _createMemory();
