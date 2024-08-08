@@ -11,10 +11,10 @@ from oauth_client import getNotion
 
 router = APIRouter()
 # noinspection PyRedeclaration
-templates = Jinja2Templates(directory="templates/oauth")
+templates = Jinja2Templates(directory="templates")
 
 
-@router.get('/notion/setup-notion-crm', response_class=HTMLResponse, tags=['oauth'])
+@router.get('/setup-notion-crm', response_class=HTMLResponse, tags=['oauth'])
 async def setup_notion_crm(request: Request, uid: str):
     """
     Simple setup page Form page for Notion CRM plugin.
@@ -78,7 +78,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
 
 
-@router.post('/notion/creds/notion-crm', response_class=HTMLResponse, tags=['oauth'])
+@router.post('/creds/notion-crm', response_class=HTMLResponse, tags=['oauth'])
 def creds_notion_crm(request: Request, uid: str = Form(...), api_key: str = Form(...), database_id: str = Form(...)):
     """
     Store the Notion CRM API Key and Database ID in redis "authenticate the user".
@@ -100,7 +100,7 @@ def creds_notion_crm(request: Request, uid: str = Form(...), api_key: str = Form
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
 
 
-@router.get('/notion/setup/notion-crm', tags=['oauth'])
+@router.get('/setup/notion-crm', tags=['oauth'])
 def is_setup_completed(uid: str):
     """
     Check if the user has setup the Notion CRM plugin.
@@ -110,7 +110,7 @@ def is_setup_completed(uid: str):
     return {'is_setup_completed': notion_api_key is not None and notion_database_id is not None}
 
 
-@router.post('/notion/notion-crm', tags=['oauth', 'memory_created'], response_model=EndpointResponse)
+@router.post('/notion-crm', tags=['oauth', 'memory_created'], response_model=EndpointResponse)
 def notion_crm(memory: Memory, uid: str):
     """
     The actual plugin that gets triggered when a memory gets created, and adds the memory to the Notion CRM.
