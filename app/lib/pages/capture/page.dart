@@ -205,7 +205,7 @@ class CapturePageState extends State<CapturePage>
     // There's a delay to get the geolocation. This is because the location is requested in the background and it takes some time to get it.
     await Future.delayed(const Duration(seconds: 2));
     print("geolocation: $geolocation after delay");
-    // check if geolocation is empty, if so, add some more delay
+    // check if geolocation is empty, if so, add some more delay. Should we? or 2 seconds is enough?
     if (geolocation == null) {
       print('geolocation is null, retrying');
       await Future.delayed(const Duration(seconds: 2));
@@ -297,6 +297,9 @@ class CapturePageState extends State<CapturePage>
           geolocation = Geolocation(
             latitude: data['latitude'],
             longitude: data['longitude'],
+            accuracy: data['accuracy'],
+            altitude: data['altitude'],
+            time: data['time'],
           );
         });
 
