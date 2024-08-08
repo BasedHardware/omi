@@ -1,11 +1,11 @@
 <div align="center">
 
-# **Friend**
+# **Omi**
 
-Meet Friend, the world’s leading open-source AI wearable that revolutionizes how you capture and manage conversations. Simply connect Friend to your mobile device and enjoy automatic, high-quality
+Meet Omi, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
 
-![Friend Image](/docs/images/friend_banner.png)
+![Omi](https://github.com/user-attachments/assets/0c757e55-c030-4ae7-a15b-7218950c8ba0)
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/ZutWMTJnwA) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
