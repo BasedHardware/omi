@@ -24,7 +24,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
           "longitude": locationData.longitude,
           'altitude': locationData.altitude,
           'accuracy': locationData.accuracy,
-          'time': locationData.timestamp,
+          'time': locationData.timestamp.toIso8601String(),
         };
         print('Location data: $loc');
         FlutterForegroundTask.sendDataToMain(loc);
