@@ -200,7 +200,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // TODO: request only one more time if denied, but not again.
       // requestNotificationPermissions();
-      foregroundUtil.requestPermissionForAndroid();
+      ForegroundUtil.requestPermissions();
+      await ForegroundUtil.initializeForegroundService();
+      ForegroundUtil.startForegroundTask();
     });
     _refreshMessages();
     _initiatePlugins();
@@ -258,16 +260,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             );
           });
           MixpanelManager().deviceDisconnected();
-          foregroundUtil.stopForegroundTask();
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
-  }
-
-  _startForeground() async {
-    // if (!Platform.isAndroid) return;
-    await foregroundUtil.initForegroundTask();
-    var result = await foregroundUtil.startForegroundTask();
-    debugPrint('_startForeground: $result');
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
@@ -282,7 +276,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     SharedPreferencesUtil().deviceName = _device!.name;
-    _startForeground();
     setState(() {});
   }
 
