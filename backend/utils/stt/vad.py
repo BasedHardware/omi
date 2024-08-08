@@ -1,7 +1,8 @@
 # import numpy as np
 import requests
 import torch
-
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 from utils.endpoints import timeit
 
 # # Instantiate pretrained voice activity detection pipeline

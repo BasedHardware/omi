@@ -1,9 +1,10 @@
 import pytz
 import asyncio
 import concurrent.futures
+import database.notification as notification_db
+
 from datetime import datetime
 from routers.notifications import send_notification
-import database.notification as notification_db
 
 
 async def start_cron_job():

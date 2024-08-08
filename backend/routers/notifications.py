@@ -1,9 +1,7 @@
 import logging
-
 from firebase_admin import messaging
 from fastapi import APIRouter
 import database.notification as notification_db
-
 
 logger = logging.getLogger('uvicorn.error')
 logger.setLevel(logging.DEBUG)
@@ -25,14 +23,19 @@ def save_token(data: dict ):
 
 
 @router.post('/send-notification')
-def send_notification(token: str, title: str, body: str):
+def send_notification(token: str, title: str, body: str, data = None):
+    notification = messaging.Notification(
+        title=title,
+        body=body,
+    )
+
     message = messaging.Message(
-        notification=messaging.Notification(
-            title=title,
-            body=body,
-        ),
+        notification=notification,
         token=token,
     )
+
+    if data:
+        message.data = data
 
     try:
         response = messaging.send(message)

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 import 'dart:ui';
 
@@ -5,11 +7,20 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/http/api/notifications.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
+
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'channel',
+  'Friend Notifications',
+  description: 'Notification channel for Friend',
+  importance: Importance.high,
+);
 
 class NotificationService {
   NotificationService._();
@@ -21,26 +32,38 @@ class NotificationService {
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
   Future<void> initialize() async {
+    await _initializeAwesomeNotifications();
+    unawaited(_registerForegroundNotifications());
+    unawaited(_register());
+    listenForMessages();
+  }
+
+  Future<void> _initializeAwesomeNotifications() async {
     bool initialized = await _awesomeNotifications.initialize(
         // set the icon to null if you want to use the default app icon
         'resource://drawable/icon',
         [
           NotificationChannel(
-              channelGroupKey: 'channel_group_key',
-              channelKey: 'channel',
-              channelName: 'Friend Notifications',
-              channelDescription: 'Notification channel for Friend',
-              defaultColor: const Color(0xFF9D50DD),
-              ledColor: Colors.white)
+            channelGroupKey: 'channel_group_key',
+            channelKey: channel.id,
+            channelName: channel.name,
+            channelDescription: channel.description,
+            defaultColor: const Color(0xFF9D50DD),
+            ledColor: Colors.white,
+          )
         ],
         // Channel groups are only visual and are not required
         channelGroups: [
-          NotificationChannelGroup(channelGroupKey: 'channel_group_key', channelGroupName: 'Friend Notifications')
+          NotificationChannelGroup(
+            channelGroupKey: channel.id,
+            channelGroupName: channel.name,
+          )
         ],
         debug: false);
     debugPrint('initializeNotifications: $initialized');
-    await register();
   }
 
   Future<void> requestNotificationPermissions() async {
@@ -50,7 +73,7 @@ class NotificationService {
     }
   }
 
-  Future<void> register() async {
+  Future<void> _register() async {
     try {
       await platform.invokeMethod(
         'setNotificationOnKillService',
@@ -86,6 +109,7 @@ class NotificationService {
     _firebaseMessaging.onTokenRefresh.listen(saveToken);
   }
 
+  @Deprecated('Superceded by backend triggers')
   Future<NotificationCalendar?> _retrieveNotificationInterval({
     bool isMorningNotification = false,
     bool isDailySummaryNotification = false,
@@ -122,6 +146,7 @@ class NotificationService {
     return interval;
   }
 
+  @Deprecated('Superceded by backend triggers')
   Future<void> createNotification({
     String title = '',
     String body = '',
@@ -155,6 +180,52 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
+
+  Future<void> listenForMessages() async {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _showForegroundNotification(message.notification);
+
+      if (message.data.isEmpty) return;
+      if (message.data['path'] == 2) {
+        final data = message.data['message'];
+
+        _serverMessageStreamController.add(ServerMessage.fromJson(jsonDecode(data)));
+      }
+    });
+  }
+
+  final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
+  Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
+
+  Future<void> _registerForegroundNotifications() async {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
+
+  Future<void> _showForegroundNotification(RemoteNotification? notification) async {
+    if (notification != null) {
+      var androidPlatformChannelSpecifics = AndroidNotificationDetails(
+        channel.id,
+        channel.name,
+        channelDescription: channel.description,
+        icon: '@mipmap/ic_launcher',
+      );
+
+      var iOSChannelSpecifics = const DarwinNotificationDetails();
+      var platformChannelSpecifics = NotificationDetails(
+        android: androidPlatformChannelSpecifics,
+        iOS: iOSChannelSpecifics,
+      );
+      flutterLocalNotificationsPlugin.show(
+        0,
+        notification.title,
+        notification.body,
+        platformChannelSpecifics,
+        payload: notification.body,
+      );
+    }
+  }
 }
 
 class NotificationUtil {
