@@ -539,7 +539,7 @@
   },
   {
     "id": "notion-crm-oauth",
-    "name": "Notion Conversations CRM with OAuth",
+    "name": "Notion Conversations CRM with Easy",
     "author": "@thinhx",
     "description": "Stores all your conversations into a notion database. Easy setup with OAuth.",
     "image": "/plugins/logos/notion-crm-oauth.png",
