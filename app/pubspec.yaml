@@ -2,7 +2,7 @@ name: friend_private
 description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.0.21+70
+version: 1.0.21+71
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -46,13 +46,6 @@ dependencies:
   instabug_http_client: ^2.4.0
   #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-  flutter_silero_vad:
-    git:
-      url: https://github.com/char5742/flutter_silero_vad.git
-  #  fonnx:
-  #    git:
-  #      url: https://github.com/Telosnex/fonnx.git
-  #      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
@@ -67,10 +60,6 @@ dependencies:
   flutter_foreground_task: ^6.5.0
   deepgram_speech_to_text: ^2.1.1
   upgrader: ^10.3.0
-  workmanager:
-    git:
-      url: https://github.com/fluttercommunity/flutter_workmanager.git
-      ref: b783000
   crypto: ^3.0.3
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
