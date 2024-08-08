@@ -163,6 +163,25 @@ class SharedPreferencesUtil {
     }
   }
 
+  increaseFailedMemoryRetries(String memoryId) {
+    final List<ServerMemory> memories = failedMemories;
+    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
+    if (memory != null) {
+      memory.retries += 1;
+      failedMemories = memories;
+    }
+  }
+
+  ServerMemory? get modifiedMemoryDetails {
+    final String memory = getString('modifiedMemoryDetails') ?? '';
+    if (memory.isEmpty) return null;
+    return ServerMemory.fromJson(jsonDecode(memory));
+  }
+
+  set modifiedMemoryDetails(ServerMemory? value) {
+    saveString('modifiedMemoryDetails', value == null ? '' : jsonEncode(value.toJson()));
+  }
+
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
 
   set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);

@@ -97,6 +97,7 @@ dependencies:
   docx_template: ^0.4.0
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
+  firebase_messaging: ^15.0.4
 
 
 dependency_overrides:

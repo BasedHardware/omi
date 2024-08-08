@@ -21,7 +21,7 @@ def _get_data(uid: str, memory_id: str, vector: List[float]):
         'metadata': {
             'uid': uid,
             'memory_id': memory_id,
-            'created_at': datetime.utcnow().timestamp() / 1000,
+            'created_at': datetime.utcnow().timestamp() / 1000,  # TODO: check this
         }
     }
 

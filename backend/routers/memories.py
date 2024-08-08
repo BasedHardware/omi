@@ -20,16 +20,25 @@ from utils.plugins import trigger_external_integrations
 router = APIRouter()
 
 
-def _process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
+def _process_memory(
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
+):
     transcript = memory.get_transcript()
 
     photos = []
-    if memory.photos:
-        structured: Structured = summarize_open_glass(memory.photos)
-        photos = memory.photos
-        memory.photos = []  # Clear photos to avoid saving them in the memory
-    else:
-        structured: Structured = get_transcript_structure(transcript, memory.started_at, language_code, force_process)
+    try:
+        if memory.photos:
+            structured: Structured = summarize_open_glass(memory.photos)
+            photos = memory.photos
+            memory.photos = []  # Clear photos to avoid saving them in the memory
+        else:
+            structured: Structured = get_transcript_structure(
+                transcript, memory.started_at, language_code, force_process
+            )
+    except Exception as e:
+        if retries == 2:
+            raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
+        return _process_memory(uid, language_code, memory, force_process, retries + 1)
 
     discarded = structured.title == ''
 
@@ -78,6 +87,9 @@ def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
+    if not create_memory.transcript_segments and not create_memory.photos:
+        raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
+
     geolocation = create_memory.geolocation
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
@@ -248,7 +260,6 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
             deleted=False,
         )
         memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
-        print(len(str(memory_obj.dict())))
 
         if not memory_obj.discarded:
             memories_vectors.append(memory_obj)
