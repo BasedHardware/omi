@@ -23,9 +23,9 @@ modal_app = App(
 
 @modal_app.function(
     image=(
-        Image.debian_slim()
-        # .apt_install('libgl1-mesa-glx', 'libglib2.0-0')
-        .pip_install_from_requirements('requirements.txt')
+            Image.debian_slim()
+            # .apt_install('libgl1-mesa-glx', 'libglib2.0-0')
+            .pip_install_from_requirements('requirements.txt')
     ),
     keep_warm=1,  # need 7 for 1rps
     memory=(1024, 2048),
