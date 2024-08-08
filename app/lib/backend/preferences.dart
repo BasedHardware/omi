@@ -148,6 +148,16 @@ class SharedPreferencesUtil {
     saveStringList('failedServerMemories', memories);
   }
 
+  List<ServerMemory> get cachedMemories {
+    final List<String> memories = getStringList('cachedMemories') ?? [];
+    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set cachedMemories(List<ServerMemory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedMemories', memories);
+  }
+
   addFailedMemory(ServerMemory memory) {
     final List<ServerMemory> memories = failedMemories;
     memories.add(memory);

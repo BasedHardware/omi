@@ -122,6 +122,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = await getMemories();
+    if (memories.isEmpty) {
+      memories = SharedPreferencesUtil().cachedMemories;
+    } else {
+      SharedPreferencesUtil().cachedMemories = memories;
+    }
     loadingNewMemories = false;
     setState(() {});
     _retryFailedMemories();
