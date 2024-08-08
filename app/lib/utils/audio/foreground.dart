@@ -38,10 +38,9 @@ class ForegroundUtil {
     }
 
     if (Platform.isAndroid) {
-      if (!await FlutterForegroundTask.canDrawOverlays) {
-        // This function requires `android.permission.SYSTEM_ALERT_WINDOW` permission.
-        await FlutterForegroundTask.openSystemAlertWindowSettings();
-      }
+      // if (!await FlutterForegroundTask.canDrawOverlays) {
+      //   await FlutterForegroundTask.openSystemAlertWindowSettings();
+      // }
       if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
         await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       }
