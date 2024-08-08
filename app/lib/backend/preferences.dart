@@ -163,6 +163,8 @@ class SharedPreferencesUtil {
   }
 
   addFailedMemory(ServerMemory memory) {
+    if (memory.transcriptSegments.isEmpty && memory.photos.isEmpty) return;
+
     final List<ServerMemory> memories = failedMemories;
     memories.add(memory);
     failedMemories = memories;
