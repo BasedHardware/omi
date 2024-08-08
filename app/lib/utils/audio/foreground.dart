@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:location/location.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -11,6 +13,37 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onStart(DateTime timestamp) async {
     print("Starting foreground task");
+  }
+
+  Future locationInBackground() async {
+    if (await Geolocator.isLocationServiceEnabled()) {
+      if (await Geolocator.checkPermission() == LocationPermission.always) {
+        var locationData = await Geolocator.getCurrentPosition();
+        Object loc = {
+          "latitude": locationData.latitude,
+          "longitude": locationData.longitude,
+          'altitude': locationData.altitude,
+          'accuracy': locationData.accuracy,
+          'time': locationData.timestamp,
+        };
+        print('Location data: $loc');
+        FlutterForegroundTask.sendDataToMain(loc);
+      } else {
+        print('Location permission is not granted');
+        Object loc = {'error': 'Always location permission is not granted'};
+        FlutterForegroundTask.sendDataToMain(loc);
+      }
+    } else {
+      print('Location service is not enabled');
+      Object loc = {'error': 'Location service is not enabled'};
+      FlutterForegroundTask.sendDataToMain(loc);
+    }
+  }
+
+  @override
+  void onReceiveData(Object data) async {
+    print('onReceiveData: $data');
+    await locationInBackground();
   }
 
   @override
@@ -49,6 +82,7 @@ class ForegroundUtil {
   static Future<void> initializeForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) return;
     print('initializeForegroundService');
+    // await Location().requestPermission();
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'foreground_service',
@@ -70,8 +104,8 @@ class ForegroundUtil {
         interval: 5000,
         isOnceEvent: false,
         autoRunOnBoot: false,
-        allowWakeLock: false,
-        allowWifiLock: false,
+        allowWakeLock: true,
+        allowWifiLock: true,
       ),
     );
   }
