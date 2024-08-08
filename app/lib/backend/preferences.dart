@@ -100,6 +100,10 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
+  String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
+
+  set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -14,6 +16,7 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -21,6 +24,7 @@ import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:uuid/uuid.dart';
@@ -74,6 +78,8 @@ class CapturePageState extends State<CapturePage>
   double? streamStartedAtSecond;
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
+
+  Geolocation? geolocation;
 
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
@@ -181,6 +187,7 @@ class CapturePageState extends State<CapturePage>
   _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return;
+    FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     File? file;
@@ -193,16 +200,26 @@ class CapturePageState extends State<CapturePage>
         print("creating and uploading file error: $e");
       } // in case was a local recording and not a BLE recording
     }
-    Geolocation? geolocation;
-    // TODO: Location fails in bg on Android, awaits forever. Change package or fix the current one
-    // iOS too?
-    // if (Platform.isIOS) geolocation = await LocationService().getGeolocationDetails();
 
+    print("geolocation: $geolocation before delay");
+    // There's a delay to get the geolocation. This is because the location is requested in the background and it takes some time to get it.
+    await Future.delayed(const Duration(seconds: 2));
+    print("geolocation: $geolocation after delay");
+    // check if geolocation is empty, if so, add some more delay
+    if (geolocation == null) {
+      print('geolocation is null, retrying');
+      await Future.delayed(const Duration(seconds: 2));
+    }
+    Geolocation? geolocation2;
+    setState(() {
+      geolocation2 = geolocation;
+    });
+    print('geolocation2: $geolocation2');
     ServerMemory? memory = await processTranscriptContent(
       segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: geolocation,
+      geolocation: geolocation2,
       photos: photos,
       sendMessageToChat: sendMessageToChat,
       triggerIntegrations: true,
@@ -273,6 +290,25 @@ class CapturePageState extends State<CapturePage>
     // TODO: include created at and finished at for this cached transcript
   }
 
+  void _onReceiveTaskData(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      if (data.containsKey('latitude') && data.containsKey('longitude')) {
+        setState(() {
+          geolocation = Geolocation(
+            latitude: data['latitude'],
+            longitude: data['longitude'],
+          );
+        });
+
+        debugPrint('Location data received from background: $geolocation');
+      } else {
+        setState(() {
+          geolocation = null;
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     btDevice = widget.device;
@@ -281,7 +317,7 @@ class CapturePageState extends State<CapturePage>
     startOpenGlass();
     initiateFriendAudioStreaming();
     processCachedTranscript();
-
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (await LocationService().displayPermissionsDialog()) {
@@ -292,13 +328,11 @@ class CapturePageState extends State<CapturePage>
             () => Navigator.of(context).pop(),
             () async {
               await requestLocationPermission();
-              if (Platform.isAndroid) {
-                await LocationService().requestBackgroundPermission();
-              }
+              await LocationService().requestBackgroundPermission();
               if (mounted) Navigator.of(context).pop();
             },
             'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.${Platform.isAndroid ? '\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings' : ''}',
+            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
             singleButton: false,
           ),
         );
@@ -317,6 +351,20 @@ class CapturePageState extends State<CapturePage>
       }
     });
     super.initState();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      await Geolocator.checkPermission().then((LocationPermission permission) async {
+        if (permission.name != SharedPreferencesUtil().locationPermissionState) {
+          SharedPreferencesUtil().locationPermissionState = permission.name;
+          print('Permission: $permission');
+          await ForegroundUtil.startForegroundTask();
+        }
+      });
+    }
+    super.didChangeAppLifecycleState(state);
   }
 
   @override
