@@ -36,7 +36,7 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
     BleAudioCodec codec = BleAudioCodec.pcm8,
-    int? sampleRate,
+    required int sampleRate,
   }) async {
     if (_isConnecting) return;
     _isConnecting = true;
@@ -49,6 +49,7 @@ mixin WebSocketMixin {
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
         codec: codec,
+        sampleRate: sampleRate,
       );
       _internetListenerSetup = true;
     }
@@ -83,6 +84,7 @@ mixin WebSocketMixin {
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
             codec: codec,
+            sampleRate: sampleRate,
           );
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
@@ -98,6 +100,7 @@ mixin WebSocketMixin {
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
               codec: codec,
+              sampleRate: sampleRate,
             );
           }
         },
@@ -114,11 +117,12 @@ mixin WebSocketMixin {
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
             codec: codec,
+            sampleRate: sampleRate,
           );
         },
         onMessageReceived: onMessageReceived,
         codec: codec,
-        sampleRate: sampleRate ?? (codec == BleAudioCodec.opus ? 16000 : 8000),
+        sampleRate: sampleRate,
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');
@@ -134,6 +138,7 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
+    required int sampleRate,
   }) {
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
       _internetStatus = status;
@@ -151,6 +156,7 @@ mixin WebSocketMixin {
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
               codec: codec,
+              sampleRate: sampleRate,
             );
           }
           break;
@@ -174,6 +180,7 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
+    required int sampleRate,
   }) {
     if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
@@ -200,6 +207,7 @@ mixin WebSocketMixin {
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
         codec: codec,
+        sampleRate: sampleRate,
       );
     });
     if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
@@ -220,6 +228,7 @@ mixin WebSocketMixin {
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
+    required int sampleRate,
   }) async {
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('Cannot attempt reconnection: No internet connection');
@@ -235,6 +244,7 @@ mixin WebSocketMixin {
       onConnectionError: onConnectionError,
       onMessageReceived: onMessageReceived,
       codec: codec,
+      sampleRate: sampleRate,
     );
   }
 

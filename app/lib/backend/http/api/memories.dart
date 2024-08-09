@@ -48,7 +48,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateMemoryResponse.fromJson(jsonDecode(response.body));
-  } else {
+  } else { // TODO: Server returns 304 doesn't recover
     CrashReporting.reportHandledCrash(
       Exception('Failed to create memory'),
       StackTrace.current,
