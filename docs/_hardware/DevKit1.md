@@ -1,18 +1,22 @@
 ---
 layout: default
-title: Buying Guide
+title: Friend DevKit 1
 nav_order: 1
 ---
 
-### Buying Guide
+## Introduction
 
-You have two options:
+DevKit 1 is a necklace form factor device that can be worn around the neck. It runs on Xiao nRF52840, is powered by a rechargeable battery, and connects to your phone to stream the audio data. The device is designed to be used with the Friend app, which is available on the Apple App Store and Google Play Store.
 
-1. Buying an assembled device:
-[Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss){: .btn .btn-green .mr-4 }
+## How to get it
 
+### Assembled Device
 
-2. Assemble the Device yourself with off-the-shelf components:
+If you didn't get the original [Friend DevKit](https://basedhardware.com/products/friend-dev) from the Kickstarter campaign, you can purchase it from the Based Hardware website.
+
+### Parts
+
+If you prefer to assemble the device yourself, here's the list of the parts you need:
 
 | Item | Where To Buy | Unit Price |
 |--|--|--|
@@ -22,4 +26,6 @@ You have two options:
 |Wires | [Amazon US](https://www.amazon.com/dp/B09X4629C1) |
 |Case | [3D-print design of the case](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v1) |
 
-[Next Step: Build the device →](/assembly/Build_the_device/){: .btn .btn-purple }
+### Firmware
+
+You can get the latest firmware from [Omi Github repo](https://github.com/BasedHardware/Omi/releases/)
