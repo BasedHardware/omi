@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -75,8 +77,11 @@ class CapturePageState extends State<CapturePage>
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
 
+  Geolocation? geolocation;
+
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
+    sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
@@ -103,6 +108,7 @@ class CapturePageState extends State<CapturePage>
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
           //  losing from the audio the first part of the recording. All other parts are fine.
+          FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
           audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
           firstStreamReceivedAt = DateTime.now();
         }
@@ -181,6 +187,8 @@ class CapturePageState extends State<CapturePage>
   _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return;
+    if (segments.isEmpty && photos.isEmpty) return;
+
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     File? file;
@@ -193,9 +201,6 @@ class CapturePageState extends State<CapturePage>
         print("creating and uploading file error: $e");
       } // in case was a local recording and not a BLE recording
     }
-    Geolocation? geolocation;
-    // TODO: Location fails in bg on Android, awaits forever. Change package or fix the current one
-    if (Platform.isIOS) geolocation = await LocationService().getGeolocationDetails();
 
     ServerMemory? memory = await processTranscriptContent(
       segments,
@@ -208,7 +213,7 @@ class CapturePageState extends State<CapturePage>
       language: SharedPreferencesUtil().recordingsLanguage,
     );
     debugPrint(memory.toString());
-    if (memory == null) {
+    if (memory == null && segments.isNotEmpty && photos.isNotEmpty) {
       memory = ServerMemory(
         id: const Uuid().v4(),
         createdAt: DateTime.now(),
@@ -272,6 +277,23 @@ class CapturePageState extends State<CapturePage>
     // TODO: include created at and finished at for this cached transcript
   }
 
+  void _onReceiveTaskData(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      if (data.containsKey('latitude') && data.containsKey('longitude')) {
+        geolocation = Geolocation(
+          latitude: data['latitude'],
+          longitude: data['longitude'],
+          accuracy: data['accuracy'],
+          altitude: data['altitude'],
+          time: DateTime.parse(data['time']),
+        );
+        debugPrint('Location data received from background: $geolocation');
+      } else {
+        geolocation = null;
+      }
+    }
+  }
+
   @override
   void initState() {
     btDevice = widget.device;
@@ -281,6 +303,7 @@ class CapturePageState extends State<CapturePage>
     initiateFriendAudioStreaming();
     processCachedTranscript();
 
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (await LocationService().displayPermissionsDialog()) {
@@ -291,13 +314,11 @@ class CapturePageState extends State<CapturePage>
             () => Navigator.of(context).pop(),
             () async {
               await requestLocationPermission();
-              if (Platform.isAndroid) {
-                await LocationService().requestBackgroundPermission();
-              }
+              await LocationService().requestBackgroundPermission();
               if (mounted) Navigator.of(context).pop();
             },
             'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.${Platform.isAndroid ? '\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings' : ''}',
+            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
             singleButton: false,
           ),
         );
@@ -322,11 +343,13 @@ class CapturePageState extends State<CapturePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     record.dispose();
+
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    closeWebSocket();
     _internetListener.cancel();
+
+    closeWebSocket();
+
     super.dispose();
   }
 
@@ -401,7 +424,11 @@ class CapturePageState extends State<CapturePage>
             setState(() => recordingState = RecordingState.initialising);
             closeWebSocket();
             await initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            // if (Platform.isAndroid) {
+            //   await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+            // } else {
             await startStreamRecording(wsConnectionState, websocketChannel);
+            // }
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
