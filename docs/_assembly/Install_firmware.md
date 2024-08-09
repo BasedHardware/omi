@@ -13,7 +13,7 @@ If you purchased an unassembled Friend device or built it yourself using our har
 
 ### Official firmware:
 
-Go to [Releases](https://github.com/BasedHardware/Friend/releases) in Github, and find the latest official firmware release. To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
+Go to [Releases](https://github.com/BasedHardware/Omi/releases) in Github, and find the latest official firmware release. To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
 
 ### Build your own firmware:
 
@@ -42,8 +42,8 @@ Go to [Releases](https://github.com/BasedHardware/Friend/releases) in Github, an
 
    If you have an assembled device, you can put a stick pin/needle into this whole and double-click 2 times
 
-   
-   <img src="https://github.com/BasedHardware/Friend/assets/43514161/8136f688-8eac-4967-bd95-7aaeaac324cd)" alt="whole" width="300"> 
+
+   <img src="https://github.com/BasedHardware/Omi/assets/43514161/8136f688-8eac-4967-bd95-7aaeaac324cd" alt="whole" width="300">
 
 
 That's it! You have successfully installed the firmware on your device.
