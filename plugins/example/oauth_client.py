@@ -10,11 +10,11 @@ import requests
 class NotionDatabasePropertyModel:
     def __init__(
         self,
-        id, name, propertyType,
+        id, name, property_type,
     ) -> None:
         self.id = id
         self.name = name
-        self.propertyType = propertyType
+        self.property_type = property_type
         pass
 
     @classmethod
@@ -82,23 +82,23 @@ class NotionClient:
 
     def __init__(
         self,
-        oAuthClientId="",
-        oAuthClientSecret="",
-        oAuthRedirectUri="",
-        authUrl="",
+        oauth_client_id="",
+        oauth_client_secret="",
+        oauth_redirect_uri="",
+        auth_url="",
     ) -> None:
-        self.oAuthClientId = oAuthClientId
-        self.oAuthClientSecret = oAuthClientSecret
-        self.oAuthRedirectUri = oAuthRedirectUri
-        self.authUrl = authUrl
+        self.oauth_client_id = oauth_client_id
+        self.oauth_client_secret = oauth_client_secret
+        self.oauth_redirect_uri = oauth_redirect_uri
+        self.auth_url = auth_url
         pass
 
-    def getOAuthUrl(self, uid: str):
+    def get_oauth_url(self, uid: str):
         # Should use encryption on state (with some salt) to prevent attacks
         state = uid
-        return f"{self.authUrl}&state={state}"
+        return f"{self.auth_url}&state={state}"
 
-    def getDatabase(self, database_id: str, access_token: str):
+    def get_database(self, database_id: str, access_token: str):
         resp: requests.Response
         resp = requests.get(f'https://api.notion.com/v1/databases/{database_id}', headers={
             'Authorization': f'Bearer {access_token}',
@@ -121,10 +121,10 @@ class NotionClient:
 
         return {"result": NotionDatabaseModel.from_dict(resp.json())}
 
-    def getAccessToken(self, code: str):
-        client_id = self.oAuthClientId
-        client_secret = self.oAuthClientSecret
-        redirect_uri = self.oAuthRedirectUri
+    def get_access_token(self, code: str):
+        client_id = self.oauth_client_id
+        client_secret = self.oauth_client_secret
+        redirect_uri = self.oauth_redirect_uri
 
         # encode in base 64
         encoded = base64.b64encode(
@@ -156,7 +156,7 @@ class NotionClient:
 
         return {"result": NotionOAuthModel.from_dict(resp.json())}
 
-    def getDatabasesEditedTimeDesc(self, access_token: str):
+    def get_databases_edited_time_desc(self, access_token: str):
         data = {
             "filter": {
                 "value": "database",
@@ -190,12 +190,12 @@ class NotionClient:
 
 
 client = NotionClient(
-    oAuthClientId=os.getenv('NOTION_OAUTH_CLIENT_ID'),
-    oAuthClientSecret=os.getenv('NOTION_OAUTH_CLIENT_SECRET'),
-    oAuthRedirectUri=os.getenv('NOTION_OAUTH_REDIRECT_URI'),
-    authUrl=os.getenv('NOTION_AUTH_URL'),
+    oauth_client_id=os.getenv('NOTION_OAUTH_CLIENT_ID'),
+    oauth_client_secret=os.getenv('NOTION_OAUTH_CLIENT_SECRET'),
+    oauth_redirect_uri=os.getenv('NOTION_OAUTH_REDIRECT_URI'),
+    auth_url=os.getenv('NOTION_AUTH_URL'),
 )
 
 
-def getNotion():
+def get_notion():
     return client

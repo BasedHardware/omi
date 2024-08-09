@@ -7,7 +7,7 @@ import templates as templates
 from db import *
 from models import Memory, EndpointResponse
 
-from oauth_client import getNotion
+from oauth_client import get_notion
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -21,14 +21,14 @@ async def setup_notion_crm(request: Request, uid: str):
     """
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
-    oauth_url = getNotion().getOAuthUrl(uid)
+    oauth_url = get_notion().get_oauth_url(uid)
     return templates.TemplateResponse("setup_notion_crm.html", {"request": request, "uid": uid, "oauth_url": oauth_url})
 
 
 def response_setup_notion_crm_page(request: Request, uid: str, err: str):
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
-    oauth_url = getNotion().getOAuthUrl(uid)
+    oauth_url = get_notion().get_oauth_url(uid)
     return templates.TemplateResponse("setup_notion_crm.html", {
         "request": request, "uid": uid,
         "oauth_url": oauth_url,
@@ -45,13 +45,13 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     uid = state
 
     # Get access token
-    oauthOk = getNotion().getAccessToken(code)
-    if "error" in oauthOk:
-        err = oauthOk["error"]
+    oauth_ok = get_notion().get_access_token(code)
+    if "error" in oauth_ok:
+        err = oauth_ok["error"]
         print(err)
         return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400001)")
 
-    oauth = oauthOk["result"]
+    oauth = oauth_ok["result"]
 
     # Validate access token
     access_token = oauth.access_token
@@ -59,14 +59,14 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400002)")
 
     # Get database to create creds_notion_crm
-    databasesOk = getNotion().getDatabasesEditedTimeDesc(access_token)
-    if "error" in databasesOk:
-        err = databasesOk["error"]
+    databases_ok = get_notion().get_databases_edited_time_desc(access_token)
+    if "error" in databases_ok:
+        err = databases_ok["error"]
         print(err)
         return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400003)")
 
     # Pick top
-    databases = databasesOk["result"]
+    databases = databases_ok["result"]
     if len(databases) == 0 or databases[0].id == "":
         return response_setup_notion_crm_page(request, uid, f"There is no database. Please try again!  \n (code: 400004)")
     database_id = databases[0].id
@@ -126,16 +126,16 @@ def notion_crm(memory: Memory, uid: str):
 
 def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
     # Validate table exists and has correct fields
-    databaseOk = getNotion().getDatabase(database_id, notion_api_key)
-    if "error" in databaseOk:
-        err = databaseOk["error"]
+    database_ok = get_notion().get_database(database_id, notion_api_key)
+    if "error" in database_ok:
+        err = database_ok["error"]
         raise HTTPException(
             status_code=400, detail=f"Something went wrong.\n{err}")
         return
 
     # Use set to optimize exists validating
     property_set = set()
-    for field in databaseOk["result"].properties:
+    for field in database_ok["result"].properties:
         property_set.add(field.name)
 
     # Collect all miss fields
