@@ -65,7 +65,7 @@ dependencies:
   file_picker: ^8.0.5
   record: ^5.1.2
   onesignal_flutter: ^5.1.2
-  flutter_background_service: ^5.0.6
+  flutter_background_service: ^5.0.7
   opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
@@ -87,11 +87,17 @@ dependencies:
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
   webview_flutter: ^4.8.0
+  flutter_sound:
+    git:
+      url: https://github.com/mdmohsin7/flutter_sound.git
+      path: flutter_sound
+  audio_session:
 
 
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
+  js: ^0.7.1
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
