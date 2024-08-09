@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:location/location.dart';
 
 class LocationService {
@@ -32,6 +33,9 @@ class LocationService {
     if (permissionGranted == PermissionStatus.denied) {
       permissionGranted = await location.requestPermission();
     }
+    LocationPermission perm = await Geolocator.checkPermission();
+    print('Permission: $perm');
+    SharedPreferencesUtil().locationPermissionState = perm.name;
     return permissionGranted;
   }
 
@@ -40,6 +44,7 @@ class LocationService {
     if (!result) {
       await location.enableBackgroundMode(enable: true);
     }
+    return result;
   }
 
   Future<PermissionStatus> permissionStatus() => location.hasPermission();
@@ -47,12 +52,15 @@ class LocationService {
   Future hasPermission() async => (await location.hasPermission()) == PermissionStatus.granted;
 
   Future<void> getDeviceLocation() async {
+    print("Getting location data");
     locationData = await location.getLocation();
+    print("Location data: $locationData");
   }
 
   Future<Geolocation?> getGeolocationDetails() async {
     try {
       if (await hasPermission()) {
+        print('background mode enabled: ${await location.isBackgroundModeEnabled()}');
         if (await location.isBackgroundModeEnabled()) {
           if (await location.serviceEnabled()) {
             await location.requestService();
