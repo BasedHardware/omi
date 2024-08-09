@@ -9,7 +9,7 @@ nav_order: 4
 
 To submit your plugin to the FRIEND community:
 
-1. Fork the [FRIEND GitHub repository](https://github.com/BasedHardware/Friend).
+1. Fork the [FRIEND GitHub repository](https://github.com/BasedHardware/Omi).
 2. Locate the `community-plugins.json` file in the repository.
 3. Add your **plugin's JSON object** to the end of the array in this file.
 4. Double-check the formatting of your JSON
