@@ -87,6 +87,7 @@ dependencies:
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
   version: ^3.0.2
+  webview_flutter: ^4.8.0
 
 
 dependency_overrides:
