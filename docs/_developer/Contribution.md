@@ -6,7 +6,7 @@ nav_order: 4
 
 # Contribution
 
-We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Friend/issues) (Some of the tasks have paid bounties)
+We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Omi/issues) (Some of the tasks have paid bounties)
 
 # Rewards
 You can get rewards by submitting approved PRs (significant contribution):
@@ -22,16 +22,16 @@ You can get rewards by submitting approved PRs (significant contribution):
 
 To receive the reward, please send an email to team@basedhardware.com with a list of your contributions, address, email and phone number
 
-# Paid [Bounties](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+# Paid [Bounties](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
 Get paid to improve AI wearables!
 
-Some of the tickets are paid bounties! You can check which ones, but filtering with the ["Paid Bounty" label](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
+Some of the tickets are paid bounties! You can check which ones, but filtering with the ["Paid Bounty" label](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22)
 
 ## Bounty Rules
 
 * code must be merged into master branch
 * bounty eligibility is solely at our discretion
-* you can "lock" the bounty task, but only after your first pull request is merged. 
+* you can "lock" the bounty task, but only after your first pull request is merged.
 * send an email to team@basedhardware.com with a link to your bounty + paypal account to claim.
 
 
@@ -40,4 +40,4 @@ Some of the tickets are paid bounties! You can check which ones, but filtering w
 
 ### Join a community of builders
 [Based Hardware Discord](https://discord.gg/8MP3b9ymvx){: .btn .btn-purple }
-[Our official repository](https://github.com/BasedHardware/Friend){: .btn .btn-green }
+[Our official repository](https://github.com/BasedHardware/Omi){: .btn .btn-green }
