@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -20,7 +20,6 @@
 		42127D9B2C283C310005AB40 /* OneSignalExtension.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */; };
 		42127D9E2C283C400005AB40 /* OneSignalOSCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127D9D2C283C400005AB40 /* OneSignalOSCore.xcframework */; };
 		42127DA12C283C4E0005AB40 /* OneSignalOutcomes.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42127DA02C283C4E0005AB40 /* OneSignalOutcomes.xcframework */; };
-		42476A842C5E36DA00426330 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 42476A832C5E369200426330 /* libsqlite3.tbd */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -140,7 +139,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				42476A842C5E36DA00426330 /* libsqlite3.tbd in Frameworks */,
 				E225155EA8A910094FB18B4A /* Pods_Runner.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
