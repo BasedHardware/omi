@@ -14,9 +14,17 @@ You can see a demo of the first OpenGlass prototype in action [here](https://you
 
 ## How to get it
 
-### Device
+### Assembled Device
 
 Currently, the OpenGlass DevKit is not available for purchase. You can find the list of the parts and the 3D printed case in the OpenGlass section of the [Omi repository](https://github.com/BasedHardware/Omi/tree/main/OpenGlass) and assemble the device yourself.
+
+### Parts
+
+If you prefer to assemble the device yourself, here's the list of the parts you need:
+
+[Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
+[EEMB LP502030 3.7v 250mAH battery](https://www.amazon.com/EEMB-Battery-Rechargeable-Lithium-Connector/dp/B08VRZTHDL)
+[3D printed glasses mount case](https://storage.googleapis.com/scott-misc/openglass_case.stl)
 
 ### Firmware
 
