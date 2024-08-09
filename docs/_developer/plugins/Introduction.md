@@ -76,7 +76,7 @@ To contribute your plugin to the FRIEND community, follow these steps based on t
    understand the process.
 2. Develop and test your plugin following the guidelines provided.
 3. Submit a pull request to
-   our [community-plugins.json](https://github.com/BasedHardware/Friend/blob/main/community-plugins.json) file on
+   our [community-plugins.json](https://github.com/BasedHardware/Omi/blob/main/community-plugins.json) file on
    GitHub, appending your plugin details.
 
 We're excited to see how you'll expand FRIEND's capabilities. Happy developing!

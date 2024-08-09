@@ -20,7 +20,7 @@ Ensure you've purchased all required components from the [buying guide](https://
 
 <img src="/images/latest_assembly/components.png" alt="components" width="300">
 
-Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Friend/tree/main/assets/3d_printing_designs/Latest%20design).
+Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v1).
 
 If you don't have access to a 3D printer, send the file to a 3D printing service or check https://makerspace.com/ for 3D printing spaces.
 
