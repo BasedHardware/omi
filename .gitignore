@@ -127,7 +127,7 @@ docs/_site/
 plugins/example/tmp/
 
 backend/pretrained_models/
-/backend/scripts/
+/backend/scripts/data/
 /backend/pretrained_models/
 
 backend/google-credentials.json

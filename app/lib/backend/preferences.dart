@@ -100,6 +100,10 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
+  String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
+
+  set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
@@ -148,7 +152,19 @@ class SharedPreferencesUtil {
     saveStringList('failedServerMemories', memories);
   }
 
+  List<ServerMemory> get cachedMemories {
+    final List<String> memories = getStringList('cachedMemories') ?? [];
+    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set cachedMemories(List<ServerMemory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedMemories', memories);
+  }
+
   addFailedMemory(ServerMemory memory) {
+    if (memory.transcriptSegments.isEmpty && memory.photos.isEmpty) return;
+
     final List<ServerMemory> memories = failedMemories;
     memories.add(memory);
     failedMemories = memories;
@@ -161,6 +177,25 @@ class SharedPreferencesUtil {
       memories.remove(memory);
       failedMemories = memories;
     }
+  }
+
+  increaseFailedMemoryRetries(String memoryId) {
+    final List<ServerMemory> memories = failedMemories;
+    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
+    if (memory != null) {
+      memory.retries += 1;
+      failedMemories = memories;
+    }
+  }
+
+  ServerMemory? get modifiedMemoryDetails {
+    final String memory = getString('modifiedMemoryDetails') ?? '';
+    if (memory.isEmpty) return null;
+    return ServerMemory.fromJson(jsonDecode(memory));
+  }
+
+  set modifiedMemoryDetails(ServerMemory? value) {
+    saveString('modifiedMemoryDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
@@ -227,9 +262,9 @@ class SharedPreferencesUtil {
 
   bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
 
-  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack', value);
+  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
 
-  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack') ?? false;
+  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
 
   set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
 

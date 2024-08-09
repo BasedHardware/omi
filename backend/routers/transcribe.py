@@ -13,7 +13,7 @@ from starlette.websockets import WebSocketState
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
     get_speaker_audio_file
-from utils.stt.vad import vad_is_empty, VADIterator, model
+from utils.stt.vad import vad_is_empty, VADIterator, model, is_speech_present
 
 router = APIRouter()
 
@@ -70,12 +70,13 @@ async def _websocket_util(
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
     await websocket.accept()
     transcript_socket2 = None
+    websocket_active = True
     duration = 0
     try:
-        # single_file_path, duration = get_speaker_audio_file(uid) if language == 'en' else (None, 0)
-        # remove_downloaded_samples(uid) # do not remove them for now.
-        single_file_path, duration = None, 0
-        # TODO: what if opus? and the samples were created with pcm?
+        if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
+            single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
+        else:
+            single_file_path, duration = None, 0
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
@@ -89,64 +90,73 @@ async def _websocket_util(
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
+    frame_size = 160  # pcm8, opus might be different, same pcm16
 
     async def receive_audio(socket1, socket2):
-        # audio_buffer = bytearray()
+        nonlocal websocket_active
+        audio_buffer = bytearray()
         timer_start = time.time()
         try:
-            while True:
+            while websocket_active:
                 data = await websocket.receive_bytes()
-                # print(len(data))
-                # audio_buffer.extend(data)
-                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
+                audio_buffer.extend(data)
+
+                # print(f'len(data)={len(data)} len(audio_buffer)={len(audio_buffer)}')
                 # TODO: vad not working propperly.
-                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
                 # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
-                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
-                # if len(audio_buffer) >= window_size_samples * 2:
-                #     # TODO: vad doesn't work index.html
-                #     if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
-                #         print('*')
-                #         # pass
-                #     else:
-                #         print('-')
-                #         audio_buffer = audio_buffer[window_size_samples * 2:]
-                #         continue
-                #
-                #     audio_buffer = audio_buffer[window_size_samples * 2:]
+                if codec == 'pcm8':
+                    if len(audio_buffer) < frame_size * 4:
+                        continue
+                    # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
+                    # TODO: when this is called, literally the websocket doesn't work after
+                    has_speech = is_speech_present(
+                        audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples
+                    )
+                    # if not has_speech:
+                    #     audio_buffer = audio_buffer[frame_size * 3:]
+                    #     continue
+                    # print('has_speech', has_speech) # This is not reliable, thus if using `if not has_speech`
+                    # never works
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
-                    socket1.send(data)
-                    # print('Sending to socket 1')
+                    socket1.send(audio_buffer)
                     if socket2:
                         print('Killing transcript_socket2')
                         socket2.finish()
                         socket2 = None
                 else:
-                    # print('Sending to socket 2')
-                    socket2.send(data)
+                    socket2.send(audio_buffer)
+
+                audio_buffer = bytearray()
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Could not process audio: error {e}')
         finally:
+            websocket_active = False
             socket1.finish()
             if socket2:
                 socket2.finish()
 
     async def send_heartbeat():
+        nonlocal websocket_active
         try:
-            while True:
+            while websocket_active:
                 await asyncio.sleep(30)
                 print('send_heartbeat')
-                await websocket.send_json({"type": "ping"})
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "ping"})
+                else:
+                    break
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Heartbeat error: {e}')
+        finally:
+            websocket_active = False
 
     try:
         receive_task = asyncio.create_task(receive_audio(transcript_socket, transcript_socket2))
@@ -155,6 +165,7 @@ async def _websocket_util(
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
     finally:
+        websocket_active = False
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close()

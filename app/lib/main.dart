@@ -66,6 +66,7 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
+  FlutterForegroundTask.initCommunicationPort();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -158,7 +159,6 @@ class _MyAppState extends State<MyApp> {
               selectionColor: Colors.deepPurple,
             )),
         themeMode: ThemeMode.dark,
-        // home: const HasBackupPage(),
         home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
             ? const HomePageWrapper()
             : const OnboardingWrapper(),
