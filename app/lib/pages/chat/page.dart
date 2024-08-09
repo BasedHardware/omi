@@ -201,4 +201,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       debugPrint(e.toString());
     }
   }
+
+  void scrollToBottom() => _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
 }

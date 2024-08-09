@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -183,13 +183,12 @@ class NotificationService {
 
   Future<void> listenForMessages() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showForegroundNotification(message.notification);
-
-      if (message.data.isEmpty) return;
-      if (message.data['path'] == 2) {
-        final data = message.data['message'];
-
-        _serverMessageStreamController.add(ServerMessage.fromJson(jsonDecode(data)));
+      final data = message.data;
+      if (data.isEmpty) return;
+      if (data['notification_type'] == 'plugin') {
+        _showForegroundNotification(message.notification);
+        data['from_integration'] = data['from_integration'] == 'true';
+        _serverMessageStreamController.add(ServerMessage.fromJson(data));
       }
     });
   }
@@ -217,8 +216,9 @@ class NotificationService {
         android: androidPlatformChannelSpecifics,
         iOS: iOSChannelSpecifics,
       );
+      final id = Random().nextInt(10000);
       flutterLocalNotificationsPlugin.show(
-        0,
+        id,
         notification.title,
         notification.body,
         platformChannelSpecifics,
