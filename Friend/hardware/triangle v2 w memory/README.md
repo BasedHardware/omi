@@ -9,7 +9,7 @@
 - **Micro SD Card (any)**
 
 ## Circuit Diagram
-![Circuit diagram](https://github.com/Friend-based/Friend/blob/main/hardware/triangle%20v2%20w%20memory/circuit.png)
+![Circuit diagram](https://github.com/BasedHardware/Omi/blob/main/Friend/hardware/triangle%20v2%20w%20memory/circuit.png)
 
 ## Assembly Notes
 - The speaker connector on the 5769 board should be unsoldered/removed with clippers.

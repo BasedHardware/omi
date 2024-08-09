@@ -5,6 +5,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -168,6 +169,37 @@ class _SettingsPageState extends State<SettingsPage> {
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
                   }, icon: Icons.code, visibility: devModeEnabled),
+                  const SizedBox(height: 32.0),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'ABOUT US',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  getItemAddOn('Privacy Policy', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://basedhardware.com/pages/privacy',
+                          title: 'Privacy Policy',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.privacy_tip_outlined, visibility: true),
+                  getItemAddOn('Our Website', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://basedhardware.com/',
+                          title: 'Based Hardware',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.language_outlined, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),

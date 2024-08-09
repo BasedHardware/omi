@@ -13,7 +13,7 @@ adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --applicatio
 ### Upgrade firmware using UF2 file
 
 Download the latest version of the firmware ```xiao_nrf52840_ble_sense-XXXX.uf2```
-from [Friend firmware releases](https://github.com/BasedHardware/Friend/releases)
+from [Friend firmware releases](https://github.com/BasedHardware/Omi/releases)
 
 Put the board in bootloader mode by double pressing the reset button. The board should appear as a USB drive.
 

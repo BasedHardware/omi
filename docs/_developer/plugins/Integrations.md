@@ -101,8 +101,8 @@ expect:
 
 Your plugin should process this entire object and perform any necessary actions based on the full context of the memory.
 
-> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L85)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L359).
+> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L85)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L359).
 
 **For Real-Time Transcript Processors:**
 
@@ -135,8 +135,8 @@ uid as query parameters. Here's the structure:
 
 Remember to handle errors gracefully and consider performance, especially for lengthy conversations!
 
-> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L100)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Friend/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L379).
+> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L100)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L379).
 
 ### Step 3: Test Your Plugin 🧪
 
@@ -192,7 +192,7 @@ Create a JSON object defining your plugin:
     "webhook_url": "https://your-endpoint-url.com",
     // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your plugin doesn't require setup, set to null.
     "setup_completed_url": "https://your-setup-completion-url.com",
-    // Include a Readme with more details about your plugin in the PR 
+    // Include a Readme with more details about your plugin in the PR
     "setup_instructions_file_path": "/plugins/instructions/your-plugin/README.md"
   },
   "deleted": false
