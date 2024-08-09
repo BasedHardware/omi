@@ -70,6 +70,7 @@ async def _websocket_util(
     print('websocket_endpoint', uid, language, sample_rate, codec, channels)
     await websocket.accept()
     transcript_socket2 = None
+    websocket_active = True
     duration = 0
     try:
         if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
@@ -91,10 +92,11 @@ async def _websocket_util(
     window_size_samples = 256 if sample_rate == 8000 else 512
 
     async def receive_audio(socket1, socket2):
+        nonlocal websocket_active
         # audio_buffer = bytearray()
         timer_start = time.time()
         try:
-            while True:
+            while websocket_active:
                 data = await websocket.receive_bytes()
                 # print(len(data))
                 # audio_buffer.extend(data)
@@ -133,20 +135,27 @@ async def _websocket_util(
         except Exception as e:
             print(f'Could not process audio: error {e}')
         finally:
+            websocket_active = False
             socket1.finish()
             if socket2:
                 socket2.finish()
 
     async def send_heartbeat():
+        nonlocal websocket_active
         try:
-            while True:
+            while websocket_active:
                 await asyncio.sleep(30)
                 print('send_heartbeat')
-                await websocket.send_json({"type": "ping"})
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "ping"})
+                else:
+                    break
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Heartbeat error: {e}')
+        finally:
+            websocket_active = False
 
     try:
         receive_task = asyncio.create_task(receive_audio(transcript_socket, transcript_socket2))
@@ -155,6 +164,7 @@ async def _websocket_util(
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
     finally:
+        websocket_active = False
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close()
