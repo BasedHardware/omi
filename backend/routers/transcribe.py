@@ -13,7 +13,7 @@ from starlette.websockets import WebSocketState
 
 from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
     get_speaker_audio_file
-from utils.stt.vad import vad_is_empty, VADIterator, model
+from utils.stt.vad import vad_is_empty, VADIterator, model, is_speech_present
 
 router = APIRouter()
 
@@ -90,45 +90,46 @@ async def _websocket_util(
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
+    frame_size = 160  # pcm8, opus might be different, same pcm16
 
     async def receive_audio(socket1, socket2):
         nonlocal websocket_active
-        # audio_buffer = bytearray()
+        audio_buffer = bytearray()
         timer_start = time.time()
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
-                # print(len(data))
-                # audio_buffer.extend(data)
-                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
+                audio_buffer.extend(data)
+
+                # print(f'len(data)={len(data)} len(audio_buffer)={len(audio_buffer)}')
                 # TODO: vad not working propperly.
-                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
                 # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
-                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
-                # if len(audio_buffer) >= window_size_samples * 2:
-                #     # TODO: vad doesn't work index.html
-                #     if is_speech_present(audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples):
-                #         print('*')
-                #         # pass
-                #     else:
-                #         print('-')
-                #         audio_buffer = audio_buffer[window_size_samples * 2:]
-                #         continue
-                #
-                #     audio_buffer = audio_buffer[window_size_samples * 2:]
-                # print(data)
+                if codec == 'pcm8':
+                    if len(audio_buffer) < frame_size * 4:
+                        continue
+                    # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
+                    # TODO: when this is called, literally the websocket doesn't work after
+                    has_speech = is_speech_present(
+                        audio_buffer[:window_size_samples * 2], vad_iterator, window_size_samples
+                    )
+                    # if not has_speech:
+                    #     audio_buffer = audio_buffer[frame_size * 3:]
+                    #     continue
+                    # print('has_speech', has_speech) # This is not reliable, thus if using `if not has_speech`
+                    # never works
+
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
-                    socket1.send(data)
-                    # print('Sending to socket 1')
+                    socket1.send(audio_buffer)
                     if socket2:
                         print('Killing transcript_socket2')
                         socket2.finish()
                         socket2 = None
                 else:
-                    # print('Sending to socket 2')
-                    socket2.send(data)
+                    socket2.send(audio_buffer)
+
+                audio_buffer = bytearray()
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
