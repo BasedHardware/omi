@@ -25,7 +25,6 @@ class _PageWebViewState extends State<PageWebView> {
           onProgress: (int p) {
             setState(() {
               progress = p;
-              print("Progress: $progress");
             });
           },
           onPageStarted: (String url) {},
@@ -34,7 +33,6 @@ class _PageWebViewState extends State<PageWebView> {
           onWebResourceError: (WebResourceError error) {},
           onNavigationRequest: (NavigationRequest request) {
             if (request.url != widget.url) {
-              print("Redirecting to ${request.url}");
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
