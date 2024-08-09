@@ -18,7 +18,7 @@ nav_order: 1
 
 # Friend: Open-Source AI Wearable with 24h+ on single charge
 
-![Frame 208](https://github.com/BasedHardware/Friend/assets/43514161/35340b43-9bd9-4759-81ae-5ffd6e057f32)
+![Frame 208](https://github.com/BasedHardware/Omi/assets/43514161/35340b43-9bd9-4759-81ae-5ffd6e057f32)
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/kEXXsnb5b3?style=flat)](https://discord.gg/kEXXsnb5b3) &ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -72,10 +72,10 @@ Follow these steps to get started with your Friend.
 
    - For AppWithWearable, open file api_calls.dart located in `apps/AppWithWearable/lib/backend/api_requests ` Find "Whisper" and instead of "key", provide your own api-key for openai whisper for transcriptions to work
 
-      <img src="https://github.com/BasedHardware/Friend/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
+      <img src="https://github.com/BasedHardware/Omi/assets/43514161/d0fb89d2-07fd-44e3-8563-68f938bb2319" alt="CleanShot 2024-03-25 at 21 58 42" width="400">
 
    then, go to apps/AppWithWearable/lib/custom_code/actions and in the "stream_api_response" file, add your openai key instead of "<key>"
-   ![CleanShot 2024-04-11 at 00 17 32](https://github.com/BasedHardware/Friend/assets/43514161/c4d9a61d-df17-4dd5-912e-3e602fa5066c)
+   ![CleanShot 2024-04-11 at 00 17 32](https://github.com/BasedHardware/Omi/assets/43514161/c4d9a61d-df17-4dd5-912e-3e602fa5066c)
 
    - For AppStandalone, update variables in in .env.template file
 
@@ -150,25 +150,25 @@ That's it! You have now set up and tested audio recording on your computer.
 
 **Step 0:** Make sure you have bought everything from the buying guide above
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" alt="Components" width="300">
+<img src="https://github.com/BasedHardware/Omi/assets/43514161/fdc7f8bd-6205-49a8-aa31-ea4ef6655ba4" alt="Components" width="300">
 
-**Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
+**Step 1:** You need to design the case using 3D printer. Find .stl file [here](https://github.com/BasedHardware/Omi/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl). If you don't know how to do it, send this file to someone who has a 3d printer
 
 **Step 2:**
 Solder everything together like on the picture below. using a soldering kit. Don't have it? buy [this one for $9](https://a.co/d/0XdthUV)
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419" alt="Soldering" width="400">
+<img src="https://github.com/BasedHardware/Omi/assets/43514161/c254668c-1662-412f-8b2c-05a97fb68419" alt="Soldering" width="400">
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" alt="Soldered" width="300">
+<img src="https://github.com/BasedHardware/Omi/assets/43514161/5fe4cb81-eb64-41c6-b24c-e2da104b465e" alt="Soldered" width="300">
 
 **Step 3:**
 Fit everything in the case. Biggest hole is for the usb port. In my example, I put the battery first, then the board and then the switch, however it's not an ideal design. If you will figure out a better solution, please contribute!
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" alt="Assembled" width="300">
+<img src="https://github.com/BasedHardware/Omi/assets/43514161/4abae04c-2477-4b9a-a74c-077a463f4c29" alt="Assembled" width="300">
 
 **Step 4:** Use hot glue to attach the lid to the case. You can also use a scotch tape first for testing purposes. Last, on the USB-port side, you'll find 2 small round holes. This is where the thread should go through.
 
-<img src="https://github.com/BasedHardware/Friend/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" alt="Lid" width="200">
+<img src="https://github.com/BasedHardware/Omi/assets/43514161/2ffcfbf4-6637-4bb6-89e5-bd75cf78eebd" alt="Lid" width="200">
 
 Congratulations! you now have a fully working and assembled device!
 
