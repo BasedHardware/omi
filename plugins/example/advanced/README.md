@@ -1,6 +1,6 @@
 # Advanced Example
 
-This `openglass.py` example, requires you to have [openglass](https://github.com/BasedHardware/Friend/OpenGlass).
+This `openglass.py` example, requires you to have [openglass](https://github.com/BasedHardware/Omi/OpenGlass).
 
 OpenGlass can be connected with the current Friend App, and memories + retrieval will work with it.
 
