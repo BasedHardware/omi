@@ -12,12 +12,12 @@ class PageWebView extends StatefulWidget {
 }
 
 class _PageWebViewState extends State<PageWebView> {
-  late WebViewController webviewController;
+  late WebViewController webViewController;
   int progress = 0;
 
   @override
   initState() {
-    webviewController = WebViewController()
+    webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
@@ -55,7 +55,7 @@ class _PageWebViewState extends State<PageWebView> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: progress != 100
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : WebViewWidget(controller: webviewController),
+          : WebViewWidget(controller: webViewController),
     );
   }
 }
