@@ -20,6 +20,6 @@ You have two options:
 |Rechargeable Battery | $7 on [Amazon US](https://amzn.to/3TXlE9f) | $7/unit
 |Slider Switch | $8 for 30+ units [Amazon US](https://www.amazon.com/dp/B099MRCDG8) SS12D00-G3 (3mm) and also [Amazon EU](https://www.amazon.de/dp/B09TVFF6KW) and [Amazon UK](https://www.amazon.co.uk/dp/B09TVFF6KW/) but you only need one | <$1/unit
 |Wires | [Amazon US](https://www.amazon.com/dp/B09X4629C1) |
-|Case | [3D-print design of the case](https://github.com/BasedHardware/Omi/tree/main/assets/3d_printing_designs/Latest%20design) |
+|Case | [3D-print design of the case](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v1) |
 
 [Next Step: Build the device →](/assembly/Build_the_device/){: .btn .btn-purple }

@@ -12,9 +12,23 @@ You can see the new device [announcement on X](https://twitter.com/kodjima33/sta
 
 ## How to get it
 
-### Device
+### Assembled Device
 
-You can order the [Friend DevKit 2](https://basedhardware.com/products/friend-dev-kit-2) from the Based Hardware website.
+You can order assembled [Friend DevKit 2](https://basedhardware.com/products/friend-dev-kit-2) from the Based Hardware website.
+
+### Parts
+
+If you prefer to assemble the device yourself, here's the list of the parts you need:
+
+| Item | Where To Buy | Unit Price |
+|--|--|--|
+|Seeed Studio XIAO nRF52840 Sense Board | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon US](https://amzn.to/3TZD1pO), [Amazon EU](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-nrf52840-sense-tinyml-tensorflow-lite-imu-microphone-bluetooth5-0/) | <$15/unit
+|Memory board | ... | ...
+|Speaker | ... | ...
+|Button | ... | ...
+|Rechargeable Battery | $7 on [Amazon US](https://amzn.to/3TXlE9f) | $7/unit
+|Wires | [Amazon US](https://www.amazon.com/dp/B09X4629C1) |
+|Case | [3D-print design of the case](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v2%20w%20memory) |
 
 ### Firmware
 
