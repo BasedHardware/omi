@@ -29,7 +29,7 @@ If you prefer to assemble the device yourself, here's the list of the parts you 
 
 #### Circuit Diagram
 
-![Circuit diagram](https://github.com/Friend-based/Friend/blob/main/hardware/triangle%20v2%20w%20memory/circuit.png)
+![Circuit diagram](https://github.com/BasedHardware/Omi/blob/main/Friend/hardware/triangle%20v2%20w%20memory/circuit.png)
 
 #### Assembly Notes
 
