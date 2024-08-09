@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 class TranscriptSegment(BaseModel):
     text: str
-    speaker: Optional[str]
-    speaker_id: Optional[int]
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
     is_user: bool
     start: float
     end: float

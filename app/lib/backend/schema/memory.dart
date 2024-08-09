@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CreateMemoryResponse {
   final List<ServerMessage> messages;
@@ -20,22 +23,29 @@ class CreateMemoryResponse {
   }
 }
 
+enum MemorySource { friend, openglass, screenpipe }
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
-  final Structured structured;
   final DateTime? startedAt;
   final DateTime? finishedAt;
+
+  final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
-  final List<PluginResponse> pluginsResults;
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
+
+  final List<PluginResponse> pluginsResults;
+  final MemorySource? source;
+  final String? language; // applies to Friend only
+
   bool discarded;
   final bool deleted;
 
-  final bool failed; // local failed memories
-
-  final String? source;
+  // local failed memories
+  final bool failed;
+  int retries;
 
   ServerMemory({
     required this.id,
@@ -50,15 +60,15 @@ class ServerMemory {
     this.discarded = false,
     this.deleted = false,
     this.failed = false,
+    this.retries = 0,
     this.source,
+    this.language,
   });
-
-  MemoryType get type => photos.isEmpty ? MemoryType.audio : MemoryType.image;
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
     return ServerMemory(
       id: json['id'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
@@ -70,9 +80,11 @@ class ServerMemory {
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
+      source: json['source'] != null ? MemorySource.values.asNameMap()[json['source']] : MemorySource.friend,
+      language: json['language'],
       deleted: json['deleted'] ?? false,
       failed: json['failed'] ?? false,
-      source: json['source'],
+      retries: json['retries'] ?? 0,
     );
   }
 
@@ -89,9 +101,41 @@ class ServerMemory {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
+      'source': source?.toString(),
+      'language': language,
       'failed': failed,
-      'source': source,
+      'retries': retries,
     };
+  }
+
+  String getTag() {
+    if (source == MemorySource.screenpipe) return 'Screenpipe';
+    if (source == MemorySource.openglass) return 'Openglass';
+    if (failed) return 'Failed';
+    if (discarded) return 'Discarded';
+    return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
+  }
+
+  Color getTagTextColor() {
+    if (source == MemorySource.screenpipe) return Colors.deepPurple;
+    return Colors.white;
+  }
+
+  Color getTagColor() {
+    if (source == MemorySource.screenpipe) return Colors.white;
+    return Colors.grey.shade800;
+  }
+
+  VoidCallback? onTagPressed(BuildContext context) {
+    if (source == MemorySource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
+    if (failed) {
+      return () => showDialog(
+          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+              'Failed Memory', 'This memory failed to be created. Will be retried once you reopen the app.',
+              singleButton: true, okButtonText: 'OK'),
+          context: context);
+    }
+    return null;
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
