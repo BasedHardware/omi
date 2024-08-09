@@ -100,6 +100,10 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
+  String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
+
+  set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
@@ -148,7 +152,19 @@ class SharedPreferencesUtil {
     saveStringList('failedServerMemories', memories);
   }
 
+  List<ServerMemory> get cachedMemories {
+    final List<String> memories = getStringList('cachedMemories') ?? [];
+    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set cachedMemories(List<ServerMemory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedMemories', memories);
+  }
+
   addFailedMemory(ServerMemory memory) {
+    if (memory.transcriptSegments.isEmpty && memory.photos.isEmpty) return;
+
     final List<ServerMemory> memories = failedMemories;
     memories.add(memory);
     failedMemories = memories;

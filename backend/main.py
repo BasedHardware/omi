@@ -48,6 +48,7 @@ image = (
     memory=(1024, 2048),
     cpu=4,
     allow_concurrent_inputs=5,
+    timeout=24 * 60 * 60,  # avoid timeout with websocket
 )
 @asgi_app()
 def fastapi_app():

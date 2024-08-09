@@ -66,6 +66,7 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
+  FlutterForegroundTask.initCommunicationPort();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
