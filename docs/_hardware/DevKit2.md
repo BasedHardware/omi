@@ -20,15 +20,22 @@ You can order assembled [Friend DevKit 2](https://basedhardware.com/products/fri
 
 If you prefer to assemble the device yourself, here's the list of the parts you need:
 
-| Item | Where To Buy | Unit Price |
-|--|--|--|
-|Seeed Studio XIAO nRF52840 Sense Board | $15 on [Seedstudio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) and $24 on [Amazon US](https://amzn.to/3TZD1pO), [Amazon EU](https://amzn.eu/d/3eG6gaA) and [India](https://robu.in/product/seeed-studio-xiao-nrf52840-sense-tinyml-tensorflow-lite-imu-microphone-bluetooth5-0/) | <$15/unit
-|Memory board | ... | ...
-|Speaker | ... | ...
-|Button | ... | ...
-|Rechargeable Battery | $7 on [Amazon US](https://amzn.to/3TXlE9f) | $7/unit
-|Wires | [Amazon US](https://www.amazon.com/dp/B09X4629C1) |
-|Case | [3D-print design of the case](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v2%20w%20memory) |
+- **[Seeed Studio XIAO nRF52840 Sense](https://www.seeedstudio.com/Seeed-XIAO-nRF52840-Sense-p-5331.html)**
+- **[Adafruit 5769 Audio BFF Add-On for QT Py](https://www.adafruit.com/product/5769)**
+- **[OWS-091630W50A-8 Speaker (8Ω, 1W, Top Port, 95dB)](https://www.digikey.com/en/products/detail/ole-wolff-electronics-inc/OWS-091630W50A-8/17636881)**
+- **[502030 250mAh LiPo Battery](https://www.amazon.com/EEMB-Rechargeable-Connector-Parrott-Polarity/dp/B0B7R8CS2C)**
+- **[4x4x1.5 SMD Button](https://www.amazon.com/4x4x1-5mm-Momentary-Tactile-Button-Switch/dp/B00FZLECO4)**
+- **Micro SD Card (any)**
+
+#### Circuit Diagram
+
+![Circuit diagram](https://github.com/Friend-based/Friend/blob/main/hardware/triangle%20v2%20w%20memory/circuit.png)
+
+#### Assembly Notes
+
+- The speaker connector on the 5769 board should be unsoldered/removed with clippers.
+- Speaker connection polarity doesn't matter.
+- **ETC:** To be updated.
 
 ### Firmware
 
