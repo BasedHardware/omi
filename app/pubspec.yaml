@@ -49,8 +49,8 @@ dependencies:
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-  #  nordic_dfu: ^6.1.4+hotfix
-  package_info_plus: ^8.0.0
+  nordic_dfu: ^6.1.4+hotfix
+  package_info_plus: ^8.0.1
 
   path_provider: any
   ml_linalg: any
@@ -86,6 +86,7 @@ dependencies:
   docx_template: ^0.4.0
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
+  version: ^3.0.2
   webview_flutter: ^4.8.0
 
 

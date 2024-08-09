@@ -4,8 +4,10 @@ import os
 import firebase_admin
 from fastapi import FastAPI
 
+
 from modal import Image, App, asgi_app, Secret
-from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe
+from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware
+
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -22,6 +24,8 @@ app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 app.include_router(backups.router)
 app.include_router(screenpipe.router)
+
+app.include_router(firmware.router)
 
 modal_app = App(
     name='api',
