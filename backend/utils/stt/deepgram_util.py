@@ -4,7 +4,6 @@ import time
 from typing import Tuple, Optional
 import threading
 import requests
-import json
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 from pydub import AudioSegment
@@ -15,7 +14,6 @@ from utils.stt.vad import vad_is_empty
 from utils.plugins import trigger_realtime_integrations
 
 import database.notification as notification_db
-from  routers.notifications import send_notification
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
@@ -184,10 +182,7 @@ async def process_audio_dg(uid: str,
                         'text': word.punctuated_word,
                         'is_user': is_user
                     })
-        # print(json.dumps(segments, indent=2))
-        # Use asyncio.run_coroutine_threadsafe to call async function from sync context
-        # TODO: a new thread should be started, so that it calls utils.plugins.trigger_realtime_integrations
-        # + the app receives the notification message + get's added to the app.
+       
         asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
     
@@ -200,17 +195,10 @@ async def process_audio_dg(uid: str,
     return connect_to_deepgram(on_message, on_error, language, sample_rate, codec, channels)
 
 def process_segments(uid: str, segments: list[dict]):
-   
-    messages = trigger_realtime_integrations(uid, segments)
-    print('trigger_realtime_integrations', messages)
-
+    
     token = notification_db.get_token_only(uid)
-    if messages:
-        for message in messages:
-            data = message.json()
-            data = json.loads(data)
-            data = {"path":"2","message": data,}         
-            send_notification(token, message.plugin_id, message.text, data)
+    trigger_realtime_integrations(uid, token, segments)
+  
          
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, codec: str, channels: int):
