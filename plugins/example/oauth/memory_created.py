@@ -7,7 +7,7 @@ import templates as templates
 from db import *
 from models import Memory, EndpointResponse
 
-from oauth_client import get_notion
+from .client import get_notion
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -71,31 +71,15 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return response_setup_notion_crm_page(request, uid, f"There is no database. Please try again!  \n (code: 400004)")
     database_id = databases[0].id
 
+    # Validate the database
+    ok = validate_database(database_id, access_token)
+    if not ok:
+        # Follow response from validate function
+        return
+
     # Save
     print({'uid': uid, 'api_key': access_token, 'database_id': database_id})
     store_notion_crm_api_key(uid, access_token)
-    store_notion_database_id(uid, database_id)
-    return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
-
-
-@router.post('/creds/notion-crm', response_class=HTMLResponse, tags=['oauth'])
-def creds_notion_crm(request: Request, uid: str = Form(...), api_key: str = Form(...), database_id: str = Form(...)):
-    """
-    Store the Notion CRM API Key and Database ID in redis "authenticate the user".
-    This endpoint gets called from /setup-notion-crm page.
-    Parameters
-    ----------
-    request: Request -> FastAPI Request object
-    uid: str -> User ID from the query parameter
-    api_key: str -> Notion Integration created API key.
-    database_id: str -> Notion Database ID where the data will be stored.
-
-    """
-    if not api_key or not database_id:
-        raise HTTPException(
-            status_code=400, detail='API Key and Database ID are required')
-    print({'uid': uid, 'api_key': api_key, 'database_id': database_id})
-    store_notion_crm_api_key(uid, api_key)
     store_notion_database_id(uid, database_id)
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
 
@@ -124,14 +108,14 @@ def notion_crm(memory: Memory, uid: str):
     return {}
 
 
-def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
+def validate_database(database_id: str, notion_api_key: str):
     # Validate table exists and has correct fields
     database_ok = get_notion().get_database(database_id, notion_api_key)
     if "error" in database_ok:
         err = database_ok["error"]
         raise HTTPException(
             status_code=400, detail=f"Something went wrong.\n{err}")
-        return
+        return False
 
     # Use set to optimize exists validating
     property_set = set()
@@ -140,7 +124,7 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
 
     # Collect all miss fields
     missing_fields = []
-    for field in ["Title", "Category", "Overview", "Speakers", "Duration (seconds)"]:
+    for field in ["Title", "Speakers", "Category", "Duration (seconds)", "Overview"]:
         if field not in property_set:
             missing_fields.append(field)
 
@@ -149,9 +133,18 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
         value = ", ".join(missing_fields)
         raise HTTPException(
             status_code=400, detail=f"Fields are missing: {value}")
+        return False
+
+    return True
+
+
+def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
+    # Validate table exists and has correct fields
+    ok = validate_database(database_id, notion_api_key)
+    if not ok:
+        # Follow response from validate function
         return
 
-    # Create row
     try:
         emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
     except UnicodeEncodeError:
@@ -165,11 +158,11 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
         },
         "properties": {
             "Title": {"title": [{"text": {"content": f'{memory.structured.title}'}}]},
-            "Category": {"select": {"name": memory.structured.category}},
-            "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
             "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcript_segments)))},
+            "Category": {"select": {"name": memory.structured.category}},
             "Duration (seconds)": {'number': (
                 memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0},
+            "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
         }
     }
     resp = requests.post('https://api.notion.com/v1/pages', json=data, headers={
