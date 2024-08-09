@@ -244,6 +244,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     NotificationService.instance.listenForServerMessages.listen((message) {
       var messagesCopy = List<ServerMessage>.from(messages);
       messagesCopy.insert(0, message);
+      chatPageKey.currentState?.scrollToBottom();
       setState(() => messages = messagesCopy);
     });
   }
