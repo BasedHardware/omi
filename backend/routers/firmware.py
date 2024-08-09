@@ -1,17 +1,16 @@
 import os
 import re
-import httpx
-from fastapi import APIRouter, HTTPException, Depends
-from utils import auth
 
+import httpx
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 
-@router.get("/latest-version")
+
+@router.get("/v1/firmware/latest")
 async def get_latest_version():
     async with httpx.AsyncClient() as client:
-        # TODO: Change this to the official repo
-        url = "https://api.github.com/repos/basedhardware/Friend/releases/latest"
+        url = "https://api.github.com/repos/basedhardware/Omi/releases/latest"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
