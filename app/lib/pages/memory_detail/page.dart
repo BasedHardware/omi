@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
@@ -41,6 +42,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   bool canDisplaySeconds = true;
 
+  List<MemoryPhoto> photos = [];
+
   @override
   void initState() {
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
@@ -50,6 +53,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     pluginResponseExpanded = List.filled(widget.memory.pluginsResults.length, false);
     _controller = TabController(length: 2, vsync: this, initialIndex: 1);
     _controller!.addListener(() => setState(() {}));
+    if (widget.memory.source == MemorySource.openglass) {
+      getMemoryPhotos(widget.memory.id).then((value) {
+        photos = value;
+        setState(() {}); // TODO: if left before this closes, fails
+      });
+    }
     super.initState();
   }
 
@@ -139,7 +148,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               controller: _controller,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
               tabs: [
-                Tab(text: widget.memory.type == MemoryType.image ? 'Photos' : 'Transcript'),
+                Tab(text: widget.memory.source == MemorySource.openglass ? 'Photos' : 'Transcript'),
                 const Tab(text: 'Summary')
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
@@ -153,7 +162,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   children: [
                     ListView(
                       shrinkWrap: true,
-                      children: widget.memory.type == MemoryType.image ? _getImagesWidget() : _getTranscriptWidgets(),
+                      children:
+                          widget.memory.source == MemorySource.openglass ? _getImagesWidget() : _getTranscriptWidgets(),
                     ),
                     ListView(
                       shrinkWrap: true,
@@ -207,9 +217,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   List<Widget> _getImagesWidget() {
-    var photos = widget.memory.photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    var photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
     print('Images length ${photos.length}');
-    return [PhotosGridComponent(photos: photos), const SizedBox(height: 32)];
+    return [PhotosGridComponent(photos: photosData), const SizedBox(height: 32)];
   }
 
   _reProcessMemory(
@@ -237,6 +247,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     widget.memory.pluginsResults.clear();
     widget.memory.pluginsResults.addAll(newMemory.pluginsResults);
     widget.memory.discarded = newMemory.discarded;
+
+    SharedPreferencesUtil().modifiedMemoryDetails = widget.memory;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),

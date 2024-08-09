@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -71,6 +72,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   bool loadingNewMemories = true;
 
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
+    if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
     return await processTranscriptContent(
       memory.transcriptSegments,
       retrievedFromCache: true,
@@ -80,6 +82,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       geolocation: memory.geolocation,
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
+      language: memory.language,
     );
   }
 
@@ -104,7 +107,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
         memories.insert(0, newCreatedMemory);
       } else {
+        var prefsMemory = SharedPreferencesUtil().failedMemories[i];
+        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
+          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
+          continue;
+        }
+        if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
+          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
+              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
+          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
+          continue;
+        }
         memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
+        SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
       }
     }
     debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
@@ -113,6 +128,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateMemories() async {
     memories = await getMemories();
+    if (memories.isEmpty) {
+      memories = SharedPreferencesUtil().cachedMemories;
+    } else {
+      SharedPreferencesUtil().cachedMemories = memories;
+    }
     loadingNewMemories = false;
     setState(() {});
     _retryFailedMemories();
@@ -191,7 +211,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // TODO: request only one more time if denied, but not again.
       // requestNotificationPermissions();
-      foregroundUtil.requestPermissionForAndroid();
+      ForegroundUtil.requestPermissions();
+      await ForegroundUtil.initializeForegroundService();
+      ForegroundUtil.startForegroundTask();
     });
     _refreshMessages();
     _initiatePlugins();
@@ -249,16 +271,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             );
           });
           MixpanelManager().deviceDisconnected();
-          foregroundUtil.stopForegroundTask();
         },
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
-  }
-
-  _startForeground() async {
-    // if (!Platform.isAndroid) return;
-    await foregroundUtil.initForegroundTask();
-    var result = await foregroundUtil.startForegroundTask();
-    debugPrint('_startForeground: $result');
   }
 
   _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
@@ -273,7 +287,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     SharedPreferencesUtil().deviceName = _device!.name;
-    _startForeground();
     setState(() {});
   }
 
@@ -364,6 +377,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                         var messagesCopy = List<ServerMessage>.from(messages);
                         messagesCopy.insert(0, message);
                         setState(() => messages = messagesCopy);
+                      },
+                      updateMemory: (ServerMemory memory) {
+                        var memoriesCopy = List<ServerMemory>.from(memories);
+                        var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                        if (index != -1) {
+                          memoriesCopy[index] = memory;
+                          setState(() => memories = memoriesCopy);
+                        }
                       },
                     ),
                   ],
