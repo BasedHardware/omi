@@ -174,18 +174,18 @@ void configure_ble() {
 
   // Device Information Service
 
-  BLEService *deviceInfoService = server->createService(DEVICE_INFORMATION_SERVICE_UUID);
+  BLEService *deviceInfoService = server->createService(BLEUUID(DEVICE_INFORMATION_SERVICE_UUID));
   BLECharacteristic *manufacturerNameCharacteristic = deviceInfoService->createCharacteristic(
-      MANUFACTURER_NAME_STRING_CHAR_UUID,
+      BLEUUID(MANUFACTURER_NAME_STRING_CHAR_UUID),
       BLECharacteristic::PROPERTY_READ);
   BLECharacteristic *modelNumberCharacteristic = deviceInfoService->createCharacteristic(
-      MODEL_NUMBER_STRING_CHAR_UUID,
+      BLEUUID(MODEL_NUMBER_STRING_CHAR_UUID),
       BLECharacteristic::PROPERTY_READ);
   BLECharacteristic *firmwareRevisionCharacteristic = deviceInfoService->createCharacteristic(
-      FIRMWARE_REVISION_STRING_CHAR_UUID,
+      BLEUUID(FIRMWARE_REVISION_STRING_CHAR_UUID),
       BLECharacteristic::PROPERTY_READ);
   BLECharacteristic *hardwareRevisionCharacteristic = deviceInfoService->createCharacteristic(
-      HARDWARE_REVISION_STRING_CHAR_UUID,
+      BLEUUID(HARDWARE_REVISION_STRING_CHAR_UUID),
       BLECharacteristic::PROPERTY_READ);
 
   manufacturerNameCharacteristic->setValue("Based Hardware");
@@ -194,9 +194,9 @@ void configure_ble() {
   hardwareRevisionCharacteristic->setValue("Seeed Xiao ESP32S3 Sense");
 
   // Battery Service
-  BLEService *batteryService = server->createService(BATTERY_SERVICE_UUID);
+  BLEService *batteryService = server->createService(BLEUUID(BATTERY_SERVICE_UUID));
   batteryLevelCharacteristic = batteryService->createCharacteristic(
-      BATTERY_LEVEL_CHAR_UUID,
+      BLEUUID(BATTERY_LEVEL_CHAR_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   ccc = new BLE2902();
   ccc->setNotifications(true);
@@ -211,8 +211,8 @@ void configure_ble() {
   server->setCallbacks(new ServerHandler());
 
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID(BATTERY_SERVICE_UUID);
-  advertising->addServiceUUID(DEVICE_INFORMATION_SERVICE_UUID);
+  advertising->addServiceUUID(BLEUUID(BATTERY_SERVICE_UUID));
+  advertising->addServiceUUID(BLEUUID(DEVICE_INFORMATION_SERVICE_UUID));
   advertising->addServiceUUID(service->getUUID());
   advertising->setScanResponse(true);
   advertising->setMinPreferred(0x06);
