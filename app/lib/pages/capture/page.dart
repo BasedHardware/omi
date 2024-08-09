@@ -81,6 +81,7 @@ class CapturePageState extends State<CapturePage>
 
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
     BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
+    int sampleRate = (codec == BleAudioCodec.opus ? 16000 : 8000);
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,

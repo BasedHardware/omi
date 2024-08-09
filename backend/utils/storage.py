@@ -59,7 +59,7 @@ def retrieve_all_samples(uid: str):
 
     for i, blob in enumerate(blobs):
         path = f'{base_path}{blob.name.split("/")[-1]}'
-        if os.path.exists(path):
+        if os.path.exists(path):  # when opus uploaded? should refresh the download
             continue
         try:
             blob.download_to_filename(path)
