@@ -75,6 +75,9 @@ typedef struct sensors{
 	struct sensor_value a_x;
 	struct sensor_value a_y;
 	struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
 
 };
 static struct sensors mega_sensor;
@@ -102,9 +105,14 @@ static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
 
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &mega_sensor, sizeof(mega_sensor));
 }
-
+//use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
         if (value == BT_GATT_CCC_NOTIFY)
     {
@@ -139,6 +147,11 @@ int accel_start() {
 		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
 	printk("Cannot set sampling frequency for accelerometer.\n");
 		return 0;
+	}
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
+		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	printk("Cannot set sampling frequency for gyro.\n");
+	    return 0;
 	}
     if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
     printk("Sensor sample update error\n");
