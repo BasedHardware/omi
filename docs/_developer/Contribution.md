@@ -34,6 +34,12 @@ Some of the tickets are paid bounties! You can check which ones, but filtering w
 * you can "lock" the bounty task, but only after your first pull request is merged.
 * send an email to team@basedhardware.com with a link to your bounty + paypal account to claim.
 
+### What if there are no paid bounties available? 
+If there are no paid bounties available, you can suggest your own. Simply filter by [open issues](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+) with no "bounty" label and suggest your own bounty while pinging @ josancamon19 or @kodjima33
+
+
+## Docs Contribution
+Docs contributions are as important as code contributions! Our docs are located at docs.basedhardware.com but synced real-time with [github docs folder ](https://github.com/BasedHardware/Omi/tree/main/docs)
 
 
 
