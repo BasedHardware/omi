@@ -69,6 +69,7 @@ int main(void)
 	}
 	set_led_blue(true);
 
+	LOG_INF("Initializing storage...");
     err = storage_init();
     if (err) {
         LOG_ERR("Failed to initialize storage: %d", err);
