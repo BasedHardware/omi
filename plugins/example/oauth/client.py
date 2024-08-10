@@ -1,6 +1,8 @@
-import os
 import base64
+import os
+
 import requests
+
 
 # """
 #    Models
@@ -9,8 +11,8 @@ import requests
 
 class NotionDatabasePropertyModel:
     def __init__(
-        self,
-        id, name, property_type,
+            self,
+            id, name, property_type,
     ) -> None:
         self.id = id
         self.name = name
@@ -25,7 +27,7 @@ class NotionDatabasePropertyModel:
 
 class NotionDatabaseModel:
     def __init__(
-        self,
+            self,
     ) -> None:
         self.id = ""
         self.properties = []
@@ -39,9 +41,9 @@ class NotionDatabaseModel:
         # properties
         properties: [NotionDatabasePropertyModel] = []
         if data["properties"] is not None:
-            for property in data["properties"].values():
+            for prop in data["properties"].values():
                 properties.append(
-                    NotionDatabasePropertyModel.from_dict(property))
+                    NotionDatabasePropertyModel.from_dict(prop))
         model.properties = properties
 
         return model
@@ -57,7 +59,7 @@ class NotionDatabaseModel:
 
 class NotionOAuthModel:
     def __init__(
-        self,
+            self,
     ) -> None:
         self.access_token = ""
         pass
@@ -81,17 +83,16 @@ class NotionClient:
     """
 
     def __init__(
-        self,
-        oauth_client_id="",
-        oauth_client_secret="",
-        oauth_redirect_uri="",
-        auth_url="",
+            self,
+            oauth_client_id="",
+            oauth_client_secret="",
+            oauth_redirect_uri="",
+            auth_url="",
     ) -> None:
         self.oauth_client_id = oauth_client_id
         self.oauth_client_secret = oauth_client_secret
         self.oauth_redirect_uri = oauth_redirect_uri
         self.auth_url = auth_url
-        pass
 
     def get_oauth_url(self, uid: str):
         # Should use encryption on state (with some salt) to prevent attacks
