@@ -1,13 +1,14 @@
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/fs/fs.h>
 #include "lib/fatfs/include/ff.h"
 #include "sdcard.h"
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
-
 #define SD_MOUNT_POINT "/SD:"
+
+LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
 
 static FATFS fat_fs;
 static struct fs_mount_t mp = {
