@@ -57,9 +57,6 @@ def call_multion(books: List[str]):
 
 # print(call_multion(['Walter Isaacson by Elon Musk', ]))
 
-
-# "try again" prompt afterward in case
-
 # **************************************************
 # ************ On Memory Created Plugin ************
 # **************************************************
