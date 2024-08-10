@@ -33,6 +33,10 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 // Service and Characteristic
 //
 
+
+
+
+
 // Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
@@ -66,6 +70,42 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 
+
+
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+//button
+//
+//
+static struct gpio_callback button_cb_data;
+
+struct gpio_dt_spec spec = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
+struct gpio_dt_spec spec2 = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
+
+static struct bt_uuid_128 button_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000003,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+static struct bt_uuid_128 button_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000004,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+
+static struct bt_gatt_attr button_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&button_uuid),
+    BT_GATT_CHARACTERISTIC(&button_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, button_data_read_characteristic, NULL, NULL),
+    BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+};
+
+static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
+
+static inline uint32_t timed = 0;
+static inline uint32_t timer = 0;
+
+
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+    printk("butsdkffsdhjr\n");
+
+}
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
+
+
+}
+
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -86,6 +126,30 @@ static const struct bt_data bt_sd[] = {
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
+
+static int count_ = 0;
+
+const static int max_debounce_interval = 2000; //CHANGE THIS TO IMPROVE BUTTON PRESSES
+void button_pressed(const struct device *dev, struct gpio_callback *cb,
+		    uint32_t pins)
+{
+	timed = k_cycle_get_32();
+
+    count_++;
+
+	if (timed - timer < 2000) { //too low!
+
+    
+	}
+	else { //right...
+	    printk("actual button press?\n");
+        int err = bt_gatt_notify(current_connection, &button_service.attrs[1], &count_, sizeof(count_));
+
+	}
+	printk("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
+	timer = timed;
+
+}
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -453,7 +517,55 @@ int transport_start()
     }
     printk("Bluetooth initialized\n");
 
+
+    //sdfnj
+
+    	if (gpio_is_ready_dt(&spec)) {
+		printk("alright\n");
+	}
+    	else {
+		printk("not good\n");
+	}
+
+	if (gpio_pin_configure_dt(&spec, GPIO_OUTPUT_ACTIVE) < 0) {
+		printk("oh sfd\n");
+	}
+	else {
+		printk("looks good\n");
+	}
+	if (gpio_is_ready_dt(&spec2)) {
+		printk("alrighty\n");
+	}
+	else {
+		printk("not goody\n");
+	}
+
+	int err2 = gpio_pin_configure_dt(&spec2,GPIO_INPUT);
+
+	if (err2 != 0) {
+		printk("Something went wrong sir \n");
+		return 0;
+	}
+	else {
+		printk("yipee!\n");
+	}
+	err2 =  gpio_pin_interrupt_configure_dt(&spec2,GPIO_INT_EDGE_TO_ACTIVE);
+
+	if (err2 != 0) {
+		printk("Something went wrong on interrupts \n");
+		return 0;
+	}
+	else {
+		printk("yipee! again\n");
+	}
+
+    gpio_init_callback(&button_cb_data, button_pressed, BIT(spec2.pin));
+	gpio_add_callback(spec2.port, &button_cb_data);
+
+
+
     // Start advertising
+    bt_gatt_service_register(&button_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
