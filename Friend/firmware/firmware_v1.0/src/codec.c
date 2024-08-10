@@ -92,10 +92,13 @@ void codec_entry()
 
 int codec_start()
 {
-    
+
 // OPUS
 #if CODEC_OPUS
-    ASSERT_TRUE(opus_encoder_get_size(1) == sizeof(m_opus_encoder));
+	if (opus_encoder_get_size(1) != sizeof(m_opus_encoder)) {
+        LOG_ERR("Opus encoder size mismatch");
+        return -1;
+    }
     ASSERT_TRUE(opus_encoder_init(m_opus_state, 16000, 1, CODEC_OPUS_APPLICATION) == OPUS_OK);
     ASSERT_TRUE(opus_encoder_ctl(m_opus_state, OPUS_SET_BITRATE(CODEC_OPUS_BITRATE)) == OPUS_OK);
     ASSERT_TRUE(opus_encoder_ctl(m_opus_state, OPUS_SET_VBR(CODEC_OPUS_VBR)) == OPUS_OK);
