@@ -374,7 +374,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     tx_buffer_2[1] = (size >> 8) & 0xFF;
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
-    // Write to ring buffer
+    // Write to ring buffer .
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
