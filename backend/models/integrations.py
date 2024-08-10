@@ -1,6 +1,13 @@
 from pydantic import BaseModel
 
 
+class MemoryTimestampRange(BaseModel):
+    start: int
+    end: int
+
+
 class ScreenPipeCreateMemory(BaseModel):
-    memory_source: str
-    memory_text: str
+    request_id: str
+    source: str
+    text: str
+    timestamp_range: MemoryTimestampRange

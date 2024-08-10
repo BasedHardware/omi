@@ -25,6 +25,16 @@ class CreateMemoryResponse {
 
 enum MemorySource { friend, openglass, screenpipe }
 
+class MemoryExternalData {
+  final String text;
+
+  MemoryExternalData({required this.text});
+
+  factory MemoryExternalData.fromJson(Map<String, dynamic> json) => MemoryExternalData(text: json['text'] ?? '');
+
+  Map<String, dynamic> toJson() => {'text': text};
+}
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
@@ -39,6 +49,8 @@ class ServerMemory {
   final List<PluginResponse> pluginsResults;
   final MemorySource? source;
   final String? language; // applies to Friend only
+
+  final MemoryExternalData? externalIntegration;
 
   bool discarded;
   final bool deleted;
@@ -63,6 +75,7 @@ class ServerMemory {
     this.retries = 0,
     this.source,
     this.language,
+    this.externalIntegration,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -85,6 +98,7 @@ class ServerMemory {
       deleted: json['deleted'] ?? false,
       failed: json['failed'] ?? false,
       retries: json['retries'] ?? 0,
+      externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
     );
   }
 
@@ -105,6 +119,7 @@ class ServerMemory {
       'language': language,
       'failed': failed,
       'retries': retries,
+      'external_data': externalIntegration?.toJson(),
     };
   }
 

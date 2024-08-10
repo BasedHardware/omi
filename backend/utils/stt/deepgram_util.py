@@ -147,7 +147,7 @@ def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Op
 
     output = output[:seconds * 1000]
     output.export(single_file_path, format="wav")
-    return single_file_path, output.duration_seconds  # 30
+    return single_file_path, seconds
 
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))

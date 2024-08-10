@@ -183,7 +183,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Privacy Policy', () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => const Webview(
+                        builder: (c) => const PageWebView(
                           url: 'https://basedhardware.com/pages/privacy',
                           title: 'Privacy Policy',
                         ),
@@ -193,7 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Our Website', () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => const Webview(
+                        builder: (c) => const PageWebView(
                           url: 'https://basedhardware.com/',
                           title: 'Based Hardware',
                         ),
