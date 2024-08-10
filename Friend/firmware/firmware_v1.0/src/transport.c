@@ -14,6 +14,8 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 
+LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
+
 extern bool is_connected;
 
 //
