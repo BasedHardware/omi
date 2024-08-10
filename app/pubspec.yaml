@@ -87,10 +87,7 @@ dependencies:
   enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
   webview_flutter: ^4.8.0
-  flutter_sound:
-    git:
-      url: https://github.com/mdmohsin7/flutter_sound.git
-      path: flutter_sound
+  flutter_sound: ^9.10.0
   audio_session:
 
 
