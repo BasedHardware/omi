@@ -9,7 +9,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/ZutWMTJnwA) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
-[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Friend)](https://github.com/BasedHardware/Friend)
+[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
 
 <h3>
 
@@ -46,8 +46,8 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Contributions
 
 * Check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/).
-* Check out the [current tasks](https://github.com/BasedHardware/Friend/issues).
-* Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Friend/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
+* Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
+* Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
 * Join the [Discord](https://discord.gg/ZutWMTJnwA).
 * Build your own [Plugins/Integrations](https://docs.basedhardware.com/developer/plugins/Introduction/).
 
@@ -65,8 +65,8 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## Made by the Community, with -❤️-:
 
-<a href="https://github.com/BasedHardware/Friend/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=BasedHardware/Friend" />
+<a href="https://github.com/BasedHardware/Omi/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=BasedHardware/Omi" />
 </a>
 
 ## Licensing
