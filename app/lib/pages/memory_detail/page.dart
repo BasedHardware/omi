@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
@@ -148,7 +150,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               controller: _controller,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
               tabs: [
-                Tab(text: widget.memory.source == MemorySource.openglass ? 'Photos' : 'Transcript'),
+                Tab(
+                  text: widget.memory.source == MemorySource.openglass
+                      ? 'Photos'
+                      : widget.memory.source == MemorySource.screenpipe
+                          ? 'Raw Data'
+                          : 'Transcript',
+                ),
                 const Tab(text: 'Summary')
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
@@ -195,11 +203,16 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   List<Widget> _getTranscriptWidgets() {
+    String decodedRawText = widget.memory.externalIntegration?.text ?? '';
+    try {
+      decodedRawText = utf8.decode(decodedRawText.codeUnits);
+    } catch (e) {}
+
     return [
       SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
       widget.memory.transcriptSegments.isEmpty
           ? ExpandableTextWidget(
-              text: widget.memory.getTranscript(),
+              text: decodedRawText,
               maxLines: 10000,
               linkColor: Colors.grey.shade300,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
