@@ -7,7 +7,6 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/http/api/notifications.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -15,28 +14,27 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
 
-const AndroidNotificationChannel channel = AndroidNotificationChannel(
-  'channel',
-  'Friend Notifications',
-  description: 'Notification channel for Friend',
-  importance: Importance.high,
-);
-
 class NotificationService {
   NotificationService._();
   static NotificationService instance = NotificationService._();
   MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
+  final channel = NotificationChannel(
+    channelGroupKey: 'channel_group_key',
+    channelKey: 'channel',
+    channelName: 'Friend Notifications',
+    channelDescription: 'Notification channel for Friend',
+    defaultColor: const Color(0xFF9D50DD),
+    ledColor: Colors.white,
+  );
+
 // TODO: could install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    unawaited(_registerForegroundNotifications());
     unawaited(_register());
     listenForMessages();
   }
@@ -48,9 +46,9 @@ class NotificationService {
         [
           NotificationChannel(
             channelGroupKey: 'channel_group_key',
-            channelKey: channel.id,
-            channelName: channel.name,
-            channelDescription: channel.description,
+            channelKey: channel.channelKey,
+            channelName: channel.channelName,
+            channelDescription: channel.channelDescription,
             defaultColor: const Color(0xFF9D50DD),
             ledColor: Colors.white,
           )
@@ -58,12 +56,33 @@ class NotificationService {
         // Channel groups are only visual and are not required
         channelGroups: [
           NotificationChannelGroup(
-            channelGroupKey: channel.id,
-            channelGroupName: channel.name,
+            channelGroupKey: channel.channelKey!,
+            channelGroupName: channel.channelName!,
           )
         ],
         debug: false);
+
     debugPrint('initializeNotifications: $initialized');
+  }
+
+  void showNotification({
+    required int id,
+    required String title,
+    required String body,
+    Map<String, String?>? payload,
+    bool wakeUpScreen = false,
+    NotificationSchedule? schedule,
+  }) {
+    _awesomeNotifications.createNotification(
+      content: NotificationContent(
+        id: id,
+        channelKey: channel.channelKey!,
+        actionType: ActionType.Default,
+        title: title,
+        body: body,
+        payload: payload,
+      ),
+    );
   }
 
   Future<void> requestNotificationPermissions() async {
@@ -164,17 +183,12 @@ class NotificationService {
       isDailySummaryNotification: isDailySummaryNotification,
     );
     if (interval == null && (isMorningNotification || isDailySummaryNotification)) return;
-
-    _awesomeNotifications.createNotification(
-      content: NotificationContent(
-        id: notificationId,
-        channelKey: 'channel',
-        actionType: ActionType.Default,
-        title: title,
-        body: body,
-        wakeUpScreen: true,
-        payload: payload,
-      ),
+    showNotification(
+      id: notificationId,
+      title: title,
+      body: body,
+      wakeUpScreen: true,
+      payload: payload,
       schedule: interval,
     );
   }
@@ -196,33 +210,14 @@ class NotificationService {
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
-  Future<void> _registerForegroundNotifications() async {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-  }
-
   Future<void> _showForegroundNotification(RemoteNotification? notification) async {
     if (notification != null) {
-      var androidPlatformChannelSpecifics = AndroidNotificationDetails(
-        channel.id,
-        channel.name,
-        channelDescription: channel.description,
-        icon: '@mipmap/ic_launcher',
-      );
-
-      var iOSChannelSpecifics = const DarwinNotificationDetails();
-      var platformChannelSpecifics = NotificationDetails(
-        android: androidPlatformChannelSpecifics,
-        iOS: iOSChannelSpecifics,
-      );
       final id = Random().nextInt(10000);
-      flutterLocalNotificationsPlugin.show(
-        id,
-        notification.title,
-        notification.body,
-        platformChannelSpecifics,
-        payload: notification.body,
+
+      showNotification(
+        id: id,
+        title: notification.title!,
+        body: notification.body!,
       );
     }
   }
