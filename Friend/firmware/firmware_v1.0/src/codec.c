@@ -7,6 +7,8 @@
 #include "lib/opus-1.2.1/opus.h"
 #endif
 
+LOG_MODULE_REGISTER(codec, CONFIG_LOG_DEFAULT_LEVEL);
+
 //
 // Output
 //
@@ -159,10 +161,10 @@ uint16_t execute_codec()
     opus_int32 size = opus_encode(m_opus_state, codec_input_samples, CODEC_PACKAGE_SAMPLES, codec_output_bytes, sizeof(codec_output_bytes));
     if (size < 0)
     {
-        printk("Opus encoding failed: %d\n", size);
+        LOG_ERR("Opus encoding failed: %d", size);
         return 0;
     }
-    // printk("Opus encoding success: %i\n", size);
+    LOG_DBG("Opus encoding success: %i", size);
     return size;
 }
 
