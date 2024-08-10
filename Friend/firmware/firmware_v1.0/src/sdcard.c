@@ -17,7 +17,10 @@ static struct fs_mount_t mp = {
 };
 
 bool sd_card_mounted = false;
-
+bool is_sd_card_inserted(void) {
+	// TODO: logic here to check if the SD card is inserted
+	return true;  // Placeholder
+}
 int mount_sd_card(void)
 {
     if (disk_access_init("SD") != 0) {
