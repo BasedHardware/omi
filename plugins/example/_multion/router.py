@@ -38,12 +38,27 @@ def call_multion(books: List[str]):
         url="https://amazon.com",
         local=False,
         use_proxy=True,
+        include_screenshot=True,
     )
-    return response.message
+    print(response.metadata)
+    print(response.message)
+    print(response.url)
+    print(response.screenshot)
+    if not response.status == "DONE":
+        return multion.browse(
+            session_id=response.session_id,
+            cmd="Try again",
+            url="https://amazon.com",
+            local=False,
+            use_proxy=True,
+            include_screenshot=True,
+        ).message
 
 
-# print(call_multion(['Cracking the code', ]))
+# print(call_multion(['Walter Isaacson by Elon Musk', ]))
 
+
+# "try again" prompt afterward in case
 
 # **************************************************
 # ************ On Memory Created Plugin ************

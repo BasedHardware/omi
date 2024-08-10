@@ -27,11 +27,15 @@ parser = PydanticOutputParser(pydantic_object=Structured)
 llm_with_parser = llm.with_structured_output(Structured)
 
 
+# groq_llm = llm = ChatGroq(model="llama-3.1-70b-versatile", temperature=0, max_retries=2)
+# groq_llm_with_parser = groq_llm.with_structured_output(Structured)
+
+
 # TODO: include caching layer, redis
 
 
 def get_transcript_structure(transcript: str, started_at: datetime, language_code: str,
-                             force_process: bool) -> Structured:
+                             force_process: bool, use_cheaper_model: bool = False) -> Structured:
     if len(transcript.split(' ')) > 100:
         force_process = True
 
@@ -56,7 +60,11 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
         {format_instructions}'''.replace('    ', '').strip()
     )])
+    # if use_cheaper_model:
+    #     chain = prompt | groq_llm | parser
+    # else:
     chain = prompt | llm | parser
+
     response = chain.invoke({
         'transcript': transcript.strip(),
         'format_instructions': parser.get_format_instructions(),
@@ -91,6 +99,7 @@ def summarize_screen_pipe(description: str) -> Structured:
     
       Screenshots: ```{description}```
       '''.replace('    ', '').strip()
+    # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)
 
 
