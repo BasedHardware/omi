@@ -14,6 +14,8 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 
+#include <zephyr/drivers/sensor.h>
+
 extern bool is_connected;
 
 //
@@ -65,7 +67,88 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
+//Acceleration data
+//this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
+//
+typedef struct sensors{
 
+	struct sensor_value a_x;
+	struct sensor_value a_y;
+	struct sensor_value a_z;
+
+};
+static struct sensors mega_sensor;
+static struct device *lsm6dsl_dev;
+//Arbritrary uuid, feel free to change
+static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000000,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000001,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+
+static struct bt_gatt_attr accel_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&accel_uuid),//primary description
+    BT_GATT_CHARACTERISTIC(&accel_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, accel_data_read_characteristic, NULL, NULL),//data type
+    BT_GATT_CCC(accel_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),//scheduler
+};
+static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr);
+
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    printk("audio_data_read_characteristic\n");
+	struct sensor_value val = mega_sensor.a_x;
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &mega_sensor, sizeof(mega_sensor));
+}
+
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+        if (value == BT_GATT_CCC_NOTIFY)
+    {
+        printk("Client subscribed for notifications\n");
+    }
+    else if (value == 0)
+    {
+        printk("Client unsubscribed from notifications\n");
+    }
+    else
+    {
+        printk("Invalid CCC value: %u\n", value);
+    }
+}
+
+int accel_start() {
+    struct sensor_value odr_attr;
+    lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
+    k_msleep(50);
+    if (lsm6dsl_dev == NULL) {
+        printk("Could not get LSM6DSL device\n");
+        return 0;
+	}
+    if (!device_is_ready(lsm6dsl_dev)) {
+		printk("LSM6DSL: not ready\n");
+		return 0;
+	}
+    odr_attr.val1 = 52;
+	odr_attr.val2 = 0;
+
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	printk("Cannot set sampling frequency for accelerometer.\n");
+		return 0;
+	}
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
+    printk("Sensor sample update error\n");
+    return 0;
+	}
+
+    printk("accelerometer is ready for use \n");
+    
+    return 1;
+}
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -452,6 +535,15 @@ int transport_start()
         return err;
     }
     printk("Bluetooth initialized\n");
+
+    err = accel_start();
+
+    if (!err) {
+        printk("accelerometer failed to activate\n");
+    }
+    else {
+        bt_gatt_service_register(&accel_service);
+    }
 
     // Start advertising
     bt_gatt_service_register(&audio_service);
