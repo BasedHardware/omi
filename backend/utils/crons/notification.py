@@ -1,7 +1,7 @@
 import pytz
 import asyncio
 import concurrent.futures
-import database.notification as notification_db
+import database.notifications as notification_db
 
 from datetime import datetime
 from routers.notifications import send_notification
