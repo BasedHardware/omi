@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 
 from modal import Image, App, asgi_app, Secret
-from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, notifications
+from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe,firmware, notifications
 
 from fastapi_utilities import repeat_at
 from utils.crons.notification import start_cron_job
@@ -31,6 +31,8 @@ app.include_router(screenpipe.router)
 app.include_router(notifications.router)
 app.include_router(screenpipe.router)
 
+app.include_router(firmware.router)
+
 modal_app = App(
     name='api',
     secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
@@ -48,7 +50,8 @@ image = (
     memory=(1024, 2048),
     cpu=4,
     allow_concurrent_inputs=5,
-    timeout=24 * 60 * 60,  # avoid timeout with websocket
+    # timeout=24 * 60 * 60,  # avoid timeout with websocket
+    timeout=60 * 10,
 )
 @asgi_app()
 def fastapi_app():
