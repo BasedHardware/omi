@@ -1,10 +1,15 @@
-title: Friend Docs
+title: Omi Docs
 description: Open Source AI Wearable device
 theme: just-the-docs
 url: https://basedhardware.github.io
 logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
 color_scheme: dark
+
+exclude:
+  - readme.md
+  - Gemfile
+  - CNAME
 
 collections:
   get_started:
@@ -14,6 +19,9 @@ collections:
     permalink: "/:collection/:path/"
     output: true
   developer:
+    permalink: "/:collection/:path/"
+    output: true
+  hardware:
     permalink: "/:collection/:path/"
     output: true
   info:
@@ -28,6 +36,8 @@ just_the_docs:
       name: Assembly
     developer:
       name: Developer
+    hardware:
+      name: Devices
     info:
       name: Info
 
@@ -49,7 +59,7 @@ mermaid:
   version: "9.1.3"
 
 aux_links:
-  Github: https://github.com/BasedHardware/Friend
+  Github: https://github.com/BasedHardware/Omi
 
 aux_links_new_tab: true
 
@@ -59,5 +69,5 @@ nav_external_links:
     opens_in_new_tab: true
 
   - title: 🧑‍💻 | GitHub
-    url: https://github.com/BasedHardware/Friend
+    url: https://github.com/BasedHardware/Omi
     opens_in_new_tab: true

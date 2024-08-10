@@ -5,11 +5,6 @@ from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 
 
-def handle_api_key(header_api_key: str, correct_api_key: str):
-    if header_api_key != correct_api_key:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-
-
 def get_current_user_uid(authorization: str = Header(None)):
     if os.getenv('ADMIN_KEY') in authorization:
         return authorization.split(os.getenv('ADMIN_KEY'))[1]

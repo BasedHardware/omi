@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-class Webview extends StatefulWidget {
+class PageWebView extends StatefulWidget {
   final String url;
   final String title;
-  const Webview({super.key, required this.url, required this.title});
+
+  const PageWebView({super.key, required this.url, required this.title});
 
   @override
-  State<Webview> createState() => _WebviewState();
+  State<PageWebView> createState() => _PageWebViewState();
 }
 
-class _WebviewState extends State<Webview> {
-  late WebViewController webviewController;
+class _PageWebViewState extends State<PageWebView> {
+  late WebViewController webViewController;
   int progress = 0;
 
   @override
   initState() {
-    webviewController = WebViewController()
+    webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
@@ -24,7 +25,6 @@ class _WebviewState extends State<Webview> {
           onProgress: (int p) {
             setState(() {
               progress = p;
-              print("Progress: $progress");
             });
           },
           onPageStarted: (String url) {},
@@ -33,7 +33,6 @@ class _WebviewState extends State<Webview> {
           onWebResourceError: (WebResourceError error) {},
           onNavigationRequest: (NavigationRequest request) {
             if (request.url != widget.url) {
-              print("Redirecting to ${request.url}");
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
@@ -51,13 +50,10 @@ class _WebviewState extends State<Webview> {
         title: Text(widget.title),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       body: progress != 100
-          ? Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-              ),
-            )
-          : WebViewWidget(controller: webviewController),
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : WebViewWidget(controller: webViewController),
     );
   }
 }
