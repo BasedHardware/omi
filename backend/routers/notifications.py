@@ -9,7 +9,7 @@ logger.setLevel(logging.DEBUG)
 router = APIRouter()
 
 
-@router.post('v1/users/fcm-token')
+@router.post('/v1/users/fcm-token')
 def save_token(data: dict ):
     try:
         user_id = data['user_id']
@@ -22,7 +22,6 @@ def save_token(data: dict ):
     return {'status': 'success'}
 
 
-@router.post('v1/users/notification')
 def send_notification(token: str, title: str, body: str, data = None):
     notification = messaging.Notification(
         title=title,

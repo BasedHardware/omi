@@ -29,7 +29,6 @@ app.include_router(speech_profile.router)
 app.include_router(backups.router)
 app.include_router(screenpipe.router)
 app.include_router(notifications.router)
-
 app.include_router(firmware.router)
 
 modal_app = App(
