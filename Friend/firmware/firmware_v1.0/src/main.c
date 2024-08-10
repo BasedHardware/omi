@@ -66,10 +66,8 @@ int main(void)
     if (err) {
         LOG_ERR("Failed to initialize LEDs: %d", err);
         return err;
-    }else{
-		// initial state
-		set_led_blue(true);
 	}
+	set_led_blue(true);
 
     err = storage_init();
     if (err) {

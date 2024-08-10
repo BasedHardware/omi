@@ -1,7 +1,6 @@
 #pragma once
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/gatt.h>
-LOG_MODULE_REGISTER(util, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define ASSERT_OK(result)                                          \
     if ((result) < 0)                                              \
