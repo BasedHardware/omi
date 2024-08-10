@@ -1,18 +1,19 @@
 #pragma once
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/gatt.h>
+LOG_MODULE_REGISTER(util, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define ASSERT_OK(result)                                          \
     if ((result) < 0)                                              \
     {                                                              \
-        printk("Error at %s:%d:%d\n", __FILE__, __LINE__, result); \
+        LOG_ERR("Error at %s:%d:%d\n", __FILE__, __LINE__, result); \
         return (result);                                           \
     }
 
 #define ASSERT_TRUE(result)                                        \
     if (!result)                                                   \
     {                                                              \
-        printk("Error at %s:%d:%d\n", __FILE__, __LINE__, result); \
+        LOG_ERR("Error at %s:%d:%d\n", __FILE__, __LINE__, result); \
         return -1;                                                 \
     }
 
