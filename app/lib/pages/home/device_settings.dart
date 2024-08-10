@@ -7,6 +7,7 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 import 'device.dart';
+import 'support.dart';
 
 class DeviceSettings extends StatelessWidget {
   final DeviceInfo deviceInfo;
@@ -23,8 +24,7 @@ class DeviceSettings extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(4.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
           children: [
             ListTile(
               title: const Text('Device Name'),
@@ -65,7 +65,14 @@ class DeviceSettings extends StatelessWidget {
               subtitle: Text(deviceInfo.manufacturerName),
             ),
             GestureDetector(
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SupportPage(),
+                  ),
+                );
+              },
               child: const ListTile(
                 title: Text('Guides & Support'),
                 trailing: Icon(Icons.arrow_forward_ios),
