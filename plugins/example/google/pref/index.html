@@ -1,0 +1,21 @@
+<html>
+    <head>
+        <title>
+            Preferences
+        </title>
+        <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900,1,2&display=swap" rel="stylesheet">
+        <style>
+            * {
+                font-family: 'Satoshi', sans-serif;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Preferences</h1>
+        <form method = "POST" action = "http://localhost:3000/user_preferences">
+            <input type = "checkbox"  name = 'options' id = '1' class = 'checkbox' value = 'Transcription'>Transcription</input>
+            <input type = "checkbox" name = 'options' id = '2' class = 'checkbox' value="Photo">Photo</input>
+            <button type = "submit">Submit</button>
+        </form>
+    </body>
+</html>
