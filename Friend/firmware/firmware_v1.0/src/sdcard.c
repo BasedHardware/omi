@@ -4,11 +4,10 @@
 #include <zephyr/fs/fs.h>
 #include "lib/fatfs/include/ff.h"
 #include "sdcard.h"
-#include <zephyr/logging/log.h>
-
-#define SD_MOUNT_POINT "/SD:"
 
 LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
+
+#define SD_MOUNT_POINT "/SD:"
 
 static FATFS fat_fs;
 static struct fs_mount_t mp = {
@@ -23,19 +22,25 @@ bool is_sd_card_inserted(void) {
 }
 int mount_sd_card(void)
 {
-    if (disk_access_init("SD") != 0) {
-        LOG_ERR("Failed to initialize SD card");
+    int ret;
+
+    LOG_INF("Initializing SD card...");
+    ret = disk_access_init("SD");
+    if (ret != 0) {
+        LOG_ERR("Failed to initialize SD card. Error code: %d", ret);
         return -1;
     }
+    LOG_INF("SD card initialized successfully.");
 
+    LOG_INF("Mounting SD card...");
     mp.mnt_point = SD_MOUNT_POINT;
-    int ret = fs_mount(&mp);
+    ret = fs_mount(&mp);
     if (ret == 0) {
         sd_card_mounted = true;
-        LOG_INF("SD card mounted successfully");
+        LOG_INF("SD card mounted successfully at %s", SD_MOUNT_POINT);
         return 0;
     } else {
-        LOG_ERR("Failed to mount SD card: %d", ret);
+        LOG_ERR("Failed to mount SD card. Error code: %d", ret);
         return -1;
     }
 }
