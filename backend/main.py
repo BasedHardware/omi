@@ -10,12 +10,12 @@ from modal import Image, App, asgi_app, Secret
 from routers import chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, notifications, workflow
 from utils.crons.notifications import start_cron_job
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
-else:
-    firebase_admin.initialize_app()
+# if os.environ.get('SERVICE_ACCOUNT_JSON'):
+#     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+#     credentials = firebase_admin.credentials.Certificate(service_account_info)
+#     firebase_admin.initialize_app(credentials)
+# else:
+#     firebase_admin.initialize_app()
 
 app = FastAPI()
 app.include_router(transcribe.router)
