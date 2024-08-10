@@ -81,7 +81,7 @@ async def _websocket_util(
     window_size_samples = 256 if sample_rate == 8000 else 512
 
     async def receive_audio(socket1, socket2):
-        audio_buffer = deque(maxlen=sample_rate * 3)  # 3 secs
+        audio_buffer = deque(maxlen=sample_rate * 1)  # 1 secs
         nonlocal is_speech_active, last_speech_time, websocket_active
         timer_start = time.time()
         speech_state = SpeechState.no_speech
@@ -106,10 +106,6 @@ async def _websocket_util(
                 
                 audio_buffer.extend(samples)
                 # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
-                # TODO: vad not working propperly.
-                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
-                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
-
                 # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
                 if len(audio_buffer) >= window_size_samples * 2:
                     tensor_audio = torch.tensor(list(audio_buffer))
@@ -120,6 +116,8 @@ async def _websocket_util(
                     elif is_speech_active:
                         if time.time() - last_speech_time > speech_timeout:
                             is_speech_active = False
+                            # Clear only happens after the speech timeout
+                            audio_buffer.clear()
                             print('-NO Detected speech')
                             continue
                         print('+Detected speech')
