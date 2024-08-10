@@ -9,7 +9,7 @@
 #define MAX_DATA_SIZE 2048*4 //2048
 
 extern bool sd_card_mounted;
-
+bool is_sd_card_inserted(void);
 int mount_sd_card(void);
 int create_file(const char *file_path);
 int write_file(const char *file_path, const uint8_t *data, size_t length, bool append);
