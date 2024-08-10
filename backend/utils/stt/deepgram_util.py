@@ -13,7 +13,7 @@ from utils.storage import retrieve_all_samples
 from utils.stt.vad import vad_is_empty
 from utils.plugins import trigger_realtime_integrations
 
-import database.notification as notification_db
+import database.notifications as notification_db
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
