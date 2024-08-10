@@ -7,10 +7,13 @@ from fastapi import APIRouter, UploadFile
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
+import torch
+import numpy as np
+from collections import deque
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
-from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty
+from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty, is_speech_present
 
 router = APIRouter()
 
@@ -50,6 +53,9 @@ async def _websocket_util(
     transcript_socket2 = None
     websocket_active = True
     duration = 0
+    is_speech_active = False
+    speech_timeout = 1.0  # Configurable even better if we can decade from user needs/behaviour
+    last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
             speech_profile = get_user_speech_profile(uid)
@@ -75,8 +81,8 @@ async def _websocket_util(
     window_size_samples = 256 if sample_rate == 8000 else 512
 
     async def receive_audio(socket1, socket2):
-        nonlocal websocket_active
-        audio_buffer = bytearray()
+        audio_buffer = deque(maxlen=sample_rate * 3)  # 3 secs
+        nonlocal is_speech_active, last_speech_time, websocket_active
         timer_start = time.time()
         speech_state = SpeechState.no_speech
         voice_found, not_voice = 0, 0
@@ -87,30 +93,40 @@ async def _websocket_util(
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
-                audio_buffer.extend(data)
+                # print(len(data))
+                if codec == 'opus':
+                    audio = AudioSegment(data=data, sample_width=2, frame_rate=sample_rate, channels=channels)
+                    samples = torch.tensor(audio.get_array_of_samples()).float() / 32768.0
+                elif codec in ['pcm8', 'pcm16']:
+                    dtype = torch.int8 if codec == 'pcm8' else torch.int16
+                    samples = torch.frombuffer(data, dtype=dtype).float()
+                    samples = samples / (128.0 if codec == 'pcm8' else 32768.0)
+                else:
+                    raise ValueError(f"Unsupported codec: {codec}")
+                
+                audio_buffer.extend(samples)
+                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
+                # TODO: vad not working propperly.
+                # - PCM still has to collect samples, and while it collects them, still sends them to the socket, so it's like nothing
+                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
-                if codec == 'pcm8':
-                    frame_size, frames_count = 160, 16
-                    if len(audio_buffer) < (frame_size * frames_count):
-                        continue
-
-                    latest_speech_state = get_speech_state(
-                        audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
-                    )
-                    if latest_speech_state:
-                        speech_state = latest_speech_state
-
-                    if (voice_found or not_voice) and (voice_found + not_voice) % 100 == 0:
-                        print(uid, '\t', str(int((voice_found / (voice_found + not_voice)) * 100)) + '% \thas voice.')
-
-                    if speech_state == SpeechState.no_speech:
-                        not_voice += 1
-                        # audio_buffer = bytearray()
-                        # continue
+                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
+                if len(audio_buffer) >= window_size_samples * 2:
+                    tensor_audio = torch.tensor(list(audio_buffer))
+                    if is_speech_present(tensor_audio, vad_iterator, window_size_samples):
+                        print('+Detected speech')
+                        is_speech_active = True
+                        last_speech_time = time.time()
+                    elif is_speech_active:
+                        if time.time() - last_speech_time > speech_timeout:
+                            is_speech_active = False
+                            print('-NO Detected speech')
+                            continue
+                        print('+Detected speech')
                     else:
-                        # audio_file.write(audio_buffer.hex() + "\n")
-                        voice_found += 1
-
+                        print('-NO Detected speech')
+                        continue
+            
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
                     socket1.send(audio_buffer)
