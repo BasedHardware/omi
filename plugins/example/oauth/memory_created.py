@@ -1,12 +1,11 @@
 import requests
-from fastapi import HTTPException, Request, Form, APIRouter
+from fastapi import HTTPException, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 import templates as templates
 from db import *
 from models import Memory, EndpointResponse
-
 from .client import get_notion
 
 router = APIRouter()
@@ -49,26 +48,30 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     if "error" in oauth_ok:
         err = oauth_ok["error"]
         print(err)
-        return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400001)")
+        return response_setup_notion_crm_page(request, uid,
+                                              f"Something went wrong. Please try again! \n (code: 400001)")
 
     oauth = oauth_ok["result"]
 
     # Validate access token
     access_token = oauth.access_token
     if oauth.access_token == "":
-        return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400002)")
+        return response_setup_notion_crm_page(request, uid,
+                                              f"Something went wrong. Please try again! \n (code: 400002)")
 
     # Get database to create creds_notion_crm
     databases_ok = get_notion().get_databases_edited_time_desc(access_token)
     if "error" in databases_ok:
         err = databases_ok["error"]
         print(err)
-        return response_setup_notion_crm_page(request, uid, f"Something went wrong. Please try again! \n (code: 400003)")
+        return response_setup_notion_crm_page(request, uid,
+                                              f"Something went wrong. Please try again! \n (code: 400003)")
 
     # Pick top
     databases = databases_ok["result"]
     if len(databases) == 0 or databases[0].id == "":
-        return response_setup_notion_crm_page(request, uid, f"There is no database. Please try again!  \n (code: 400004)")
+        return response_setup_notion_crm_page(request, uid,
+                                              f"There is no database. Please try again!  \n (code: 400004)")
     database_id = databases[0].id
 
     # Validate the database
@@ -113,9 +116,7 @@ def validate_database(database_id: str, notion_api_key: str):
     database_ok = get_notion().get_database(database_id, notion_api_key)
     if "error" in database_ok:
         err = database_ok["error"]
-        raise HTTPException(
-            status_code=400, detail=f"Something went wrong.\n{err}")
-        return False
+        raise HTTPException(status_code=400, detail=f"Something went wrong.\n{err}")
 
     # Use set to optimize exists validating
     property_set = set()
@@ -131,9 +132,7 @@ def validate_database(database_id: str, notion_api_key: str):
     # If any missing, raise error
     if len(missing_fields) > 0:
         value = ", ".join(missing_fields)
-        raise HTTPException(
-            status_code=400, detail=f"Fields are missing: {value}")
-        return False
+        raise HTTPException(status_code=400, detail=f"Fields are missing: {value}")
 
     return True
 
@@ -161,7 +160,7 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
             "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcript_segments)))},
             "Category": {"select": {"name": memory.structured.category}},
             "Duration (seconds)": {'number': (
-                memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0},
+                    memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0},
             "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
         }
     }
