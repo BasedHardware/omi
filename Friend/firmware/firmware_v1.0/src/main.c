@@ -6,6 +6,7 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
+#include "storage.h"
 
 static void codec_handler(uint8_t *data, size_t len)
 {
