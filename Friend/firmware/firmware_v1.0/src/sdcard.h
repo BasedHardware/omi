@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_PATH_SIZE 32 //1024
-#define MAX_DATA_SIZE 2048 //2048
 #define MAX_PATH_SIZE 64
 
 extern bool sd_card_mounted;
