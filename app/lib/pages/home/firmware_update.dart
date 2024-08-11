@@ -69,11 +69,19 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                 valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                                 backgroundColor: Colors.grey[800],
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Please do not close the app or turn off the device',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white),
+                              const SizedBox(height: 18),
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.warning, color: Colors.yellow),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Please do not close the app or turn off the device.\nIt could result in a corrupted device.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -85,7 +93,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                 const Text('Firmware Updated Successfully'),
                                 const SizedBox(height: 10),
                                 const Text(
-                                  'Please turn off and turn on the Friend device to complete the update',
+                                  'Please restart the Friend device to complete the update',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 20),
@@ -111,7 +119,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           (route) => false);
                                     },
                                     child: const Text(
-                                      "Go Back",
+                                      "Finalize",
                                       style: TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                   ),

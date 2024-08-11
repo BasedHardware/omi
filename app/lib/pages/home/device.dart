@@ -96,21 +96,20 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             actions: [
-              deviceConnected
-                  ? IconButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => DeviceSettings(
-                              device: widget.device,
-                              deviceInfo: snapshot.data!,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.settings),
-                    )
-                  : const SizedBox.shrink(),
+              IconButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DeviceSettings(
+                        device: widget.device,
+                        deviceInfo: snapshot.data,
+                        isDeviceConnected: deviceConnected,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+              )
             ],
           ),
           body: Column(
