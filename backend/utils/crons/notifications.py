@@ -9,6 +9,7 @@ from routers.notifications import send_notification
 
 
 async def start_cron_job():
+    print('start_cron_job')
     await send_daily_notification()
 
 
@@ -26,6 +27,7 @@ async def send_daily_notification():
         await _send_notification_for_time(daily_summary_target_time, daily_summary_title, daily_summary_body)
 
     except Exception as e:
+        print(e)
         print("Error sending message:", e)
         return None
 

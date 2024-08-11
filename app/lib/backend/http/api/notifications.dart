@@ -9,7 +9,7 @@ Future<void> saveFcmTokenServer({required String token, required String timeZone
     url: '${Env.apiBaseUrl}v1/users/fcm-token',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
-    body: jsonEncode({'token': token, 'time_zone': timeZone}),
+    body: jsonEncode({'fcm_token': token, 'time_zone': timeZone}),
   );
 
   debugPrint('saveToken: ${response?.body}');
