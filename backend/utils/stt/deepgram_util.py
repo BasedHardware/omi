@@ -156,6 +156,7 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 async def process_audio_dg(
         fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int, preseconds: int = 0,
 ):
+    print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
