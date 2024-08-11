@@ -8,9 +8,13 @@ router = APIRouter()
 
 
 @router.get("/v1/firmware/latest")
-async def get_latest_version():
+async def get_latest_version(device: int):
+    # if device = 1 : Friend
+    # if device = 2 : OpenGlass
+    if device != 1 and device != 2:
+        raise HTTPException(status_code=404, detail="Device not found")
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/basedhardware/Omi/releases/latest"
+        url = "https://api.github.com/repos/basedhardware/omi/releases"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -19,20 +23,40 @@ async def get_latest_version():
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
-
-        release_data = response.json()
+        releases = response.json()
+        latest_release = None
+        device_type = "friend" if device == 1 else "openglass"
+        for release in releases:
+            if (
+                release.get("published_at")
+                and release.get("tag_name")
+                and (device_type in release.get("tag_name", "").lower() or device_type in release.get("name", "").lower())
+                and "firmware" in release.get("tag_name", "").lower()
+                and not release.get("draft")
+            ):
+                if not latest_release:
+                    latest_release = release
+                else:
+                    if release.get("published_at") > latest_release.get("published_at"):
+                        latest_release = release
+        if not latest_release:
+            raise HTTPException(status_code=404, detail="No latest release found for the device")
+        release_data = latest_release
         kv = extract_key_value_pairs(release_data.get("body"))
         assets = release_data.get("assets")
         asset = None
-        for asset in assets:
-            if asset.get("content_type") == "application/zip":
-                asset = asset
+        for a in assets:
+            if "ota" in a.get("name", "").lower():
+                asset = a
                 break
+        if not asset:
+            raise HTTPException(status_code=500, detail="No OTA zip found in the release")
         return {
             "version": kv.get("release_firmware_version"),
             "min_version": kv.get("minimum_firmware_required"),
             "min_app_version": kv.get("minimum_app_version"),
             "min_app_version_code": kv.get("minimum_app_version_code"),
+            "device_type": kv.get("device_type"),
             "id": release_data.get("id"),
             "tag_name": release_data.get("tag_name"),
             "published_at": release_data.get("published_at"),
