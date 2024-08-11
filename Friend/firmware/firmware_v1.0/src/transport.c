@@ -102,7 +102,9 @@ static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, u
 
 }
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-
+     printk("button_data_read_characteristic\n");
+     int result_ = 10;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &result_, sizeof(result_));
 
 }
 
