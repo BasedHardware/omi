@@ -22,12 +22,17 @@ static OpusEncoder *opus_encoder = NULL;
 
 int storage_init(void)
 {
-    int err = mount_sd_card();
+    int err;
+
+    LOG_INF("Initializing storage...");
+
+    err = mount_sd_card();
     if (err) {
         LOG_ERR("Failed to mount SD card: %d", err);
         return err;
     }
 
+    LOG_INF("Creating audio directory...");
     err = fs_mkdir(AUDIO_DIR);
     if (err && err != -EEXIST) {
         LOG_ERR("Failed to create audio directory: %d", err);
@@ -42,6 +47,7 @@ int storage_init(void)
     }
 
     // Create initial info.txt file
+    LOG_INF("Creating info file...");
     err = create_file(INFO_FILE);
     if (err) {
         LOG_ERR("Failed to create info.txt: %d", err);
