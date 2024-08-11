@@ -71,7 +71,6 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
 
   stopStreamRecordingOnAndroid() {
     stopBackgroundService();
-    if (wsConnectionState2 == WebsocketConnectionStatus.connected) websocketChannel2?.sink.close();
   }
 
   startStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
@@ -92,7 +91,6 @@ mixin PhoneRecorderMixin<T extends StatefulWidget> on State<T> {
 
   stopStreamRecording(WebsocketConnectionStatus wsConnectionState, IOWebSocketChannel? websocketChannel) async {
     if (await record.isRecording()) await record.stop();
-    if (wsConnectionState == WebsocketConnectionStatus.connected) websocketChannel?.sink.close();
     setState(() => recordingState = RecordingState.stop);
   }
 
