@@ -17,30 +17,6 @@ int led_start()
     return 0;
 }
 
-void set_led_state(bool is_connected, bool is_recording)
-{
-    // Connected and recording - Solid Blue
-    if (is_connected && is_recording) {
-        set_led_red(false);
-        set_led_green(false);
-        set_led_blue(true);
-    }
-    // Connected but not recording - Blinking Blue
-    else if (is_connected && !is_recording) {
-        static bool blink_state = false;
-        blink_state = !blink_state;
-        set_led_red(false);
-        set_led_green(false);
-        set_led_blue(blink_state);
-    }
-    // Not connected - Solid Red
-    else if (!is_connected) {
-        set_led_red(true);
-        set_led_green(false);
-        set_led_blue(false);
-    }
-}
-
 void set_led_red(bool on)
 {
     gpio_pin_set_dt(&led_red, on);
