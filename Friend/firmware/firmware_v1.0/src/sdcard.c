@@ -2,7 +2,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/fs/fs.h>
-#include "lib/fatfs/include/ff.h"
 #include "sdcard.h"
 
 LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
@@ -10,120 +9,154 @@ LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
 #define SD_MOUNT_POINT "/SD:"
 
 static FATFS fat_fs;
-static struct fs_mount_t mp = {
-    .type = FS_FATFS,
-    .fs_data = &fat_fs,
-};
+static bool sd_mounted = false;
 
-bool sd_card_mounted = false;
 int mount_sd_card(void)
 {
-    int ret;
+    static const char *disk_pdrv = "SD";
+    uint64_t memory_size_mb;
+    uint32_t block_count;
+    uint32_t block_size;
 
-    LOG_INF("Initializing SD card...");
-    ret = disk_access_init("SD");
-    if (ret != 0) {
-        LOG_ERR("Failed to initialize SD card. Error code: %d", ret);
-        return -1;
+    if (sd_mounted) {
+        LOG_INF("SD card already mounted");
+        return 0;
     }
-    LOG_INF("SD card initialized successfully.");
 
-    LOG_INF("Mounting SD card...");
-    mp.mnt_point = SD_MOUNT_POINT;
-    ret = fs_mount(&mp);
-    if (ret == 0) {
-        sd_card_mounted = true;
-        LOG_INF("SD card mounted successfully at %s", SD_MOUNT_POINT);
+    if (disk_access_init(disk_pdrv) != 0) {
+        LOG_ERR("Storage init ERROR!");
+        return -EIO;
+    }
+
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
+        LOG_ERR("Unable to get sector count");
+        return -EIO;
+    }
+    LOG_INF("Block count %u", block_count);
+
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
+        LOG_ERR("Unable to get sector size");
+        return -EIO;
+    }
+    LOG_INF("Sector size %u", block_size);
+
+    memory_size_mb = (uint64_t)block_count * block_size;
+    LOG_INF("Memory Size(MB) %u", (uint32_t)(memory_size_mb >> 20));
+
+    static const FATFS_MKFS_PARAM mkfs_opts = {
+        .fm_type = FM_ANY,
+        .n_fat = 1,
+        .align = 0,
+        .n_root = 512,
+        .au_size = 0
+    };
+
+    FRESULT res = f_mount(&fat_fs, SD_MOUNT_POINT, 1);
+    if (res != FR_OK) {
+        LOG_INF("Formatting SD card...");
+        res = f_mkfs(SD_MOUNT_POINT, &mkfs_opts, NULL, 0);
+        if (res != FR_OK) {
+            LOG_ERR("Error formatting SD card: %d", res);
+            return -EIO;
+        }
+        LOG_INF("SD card formatted successfully");
+
+        res = f_mount(&fat_fs, SD_MOUNT_POINT, 1);
+    }
+
+    if (res == FR_OK) {
+        sd_mounted = true;
+        LOG_INF("SD card mounted successfully");
         return 0;
     } else {
-        LOG_ERR("Failed to mount SD card. Error code: %d", ret);
-        return -1;
+        LOG_ERR("Error mounting SD card: %d", res);
+        return -EIO;
+    }
+}
+
+int create_directory(const char *dir_path)
+{
+    FRESULT res = f_mkdir(dir_path);
+    if (res == FR_OK || res == FR_EXIST) {
+        return 0;
+    } else {
+        LOG_ERR("Error creating directory: %d", res);
+        return -EIO;
     }
 }
 
 int create_file(const char *file_path)
 {
-    char full_path[MAX_PATH_SIZE];
-    struct fs_file_t file;
-
-    snprintf(full_path, sizeof(full_path), "%s/%s", SD_MOUNT_POINT, file_path);
-
-    fs_file_t_init(&file);
-    int ret = fs_open(&file, full_path, FS_O_CREATE | FS_O_WRITE);
-    if (ret) {
-        LOG_ERR("Failed to create file %s: %d", full_path, ret);
-        return -1;
+    FIL file;
+    FRESULT res = f_open(&file, file_path, FA_WRITE | FA_CREATE_ALWAYS);
+    if (res == FR_OK) {
+        f_close(&file);
+        return 0;
+    } else {
+        LOG_ERR("Error creating file: %d", res);
+        return -EIO;
     }
-
-    fs_close(&file);
-    return 0;
 }
 
 int write_file(const char *file_path, const uint8_t *data, size_t length, bool append)
 {
-    char full_path[MAX_PATH_SIZE];
-    struct fs_file_t file;
+    FIL file;
+    FRESULT res;
+    UINT bw;
 
-    snprintf(full_path, sizeof(full_path), "%s/%s", SD_MOUNT_POINT, file_path);
-
-    fs_file_t_init(&file);
-    int flags = FS_O_WRITE;
-    if (append) {
-        flags |= FS_O_APPEND;
-    }
-    int ret = fs_open(&file, full_path, flags);
-    if (ret) {
-        LOG_ERR("Failed to open file %s for writing: %d", full_path, ret);
-        return -1;
+    res = f_open(&file, file_path, append ? (FA_WRITE | FA_OPEN_APPEND) : (FA_WRITE | FA_CREATE_ALWAYS));
+    if (res != FR_OK) {
+        LOG_ERR("Error opening file for writing: %d", res);
+        return -EIO;
     }
 
-    ret = fs_write(&file, data, length);
-    if (ret < 0) {
-        LOG_ERR("Failed to write to file %s: %d", full_path, ret);
-        fs_close(&file);
-        return -1;
+    res = f_write(&file, data, length, &bw);
+    f_close(&file);
+
+    if (res != FR_OK) {
+        LOG_ERR("Error writing to file: %d", res);
+        return -EIO;
     }
 
-    fs_close(&file);
+    if (bw != length) {
+        LOG_ERR("Error: wrote %u bytes instead of %u", bw, length);
+        return -EIO;
+    }
+
     return 0;
 }
 
 int read_file(const char *file_path, uint8_t *buffer, size_t buffer_size, size_t *bytes_read)
 {
-    char full_path[MAX_PATH_SIZE];
-    struct fs_file_t file;
+    FIL file;
+    FRESULT res;
+    UINT br;
 
-    snprintf(full_path, sizeof(full_path), "%s/%s", SD_MOUNT_POINT, file_path);
-
-    fs_file_t_init(&file);
-    int ret = fs_open(&file, full_path, FS_O_READ);
-    if (ret) {
-        LOG_ERR("Failed to open file %s for reading: %d", full_path, ret);
-        return -1;
+    res = f_open(&file, file_path, FA_READ);
+    if (res != FR_OK) {
+        LOG_ERR("Error opening file for reading: %d", res);
+        return -EIO;
     }
 
-    ret = fs_read(&file, buffer, buffer_size);
-    if (ret < 0) {
-        LOG_ERR("Failed to read file %s: %d", full_path, ret);
-        fs_close(&file);
-        return -1;
+    res = f_read(&file, buffer, buffer_size, &br);
+    f_close(&file);
+
+    if (res != FR_OK) {
+        LOG_ERR("Error reading file: %d", res);
+        return -EIO;
     }
 
-    *bytes_read = ret;
-    fs_close(&file);
+    *bytes_read = br;
     return 0;
 }
 
 int delete_file(const char *file_path)
 {
-    char full_path[MAX_PATH_SIZE];
-    snprintf(full_path, sizeof(full_path), "%s/%s", SD_MOUNT_POINT, file_path);
-
-    int ret = fs_unlink(full_path);
-    if (ret) {
-        LOG_ERR("Failed to delete file %s: %d", full_path, ret);
-        return -1;
+    FRESULT res = f_unlink(file_path);
+    if (res == FR_OK) {
+        return 0;
+    } else {
+        LOG_ERR("Error deleting file: %d", res);
+        return -EIO;
     }
-
-    return 0;
 }
