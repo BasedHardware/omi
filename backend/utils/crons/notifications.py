@@ -1,9 +1,10 @@
-import pytz
 import asyncio
 import concurrent.futures
-import database.notifications as notification_db
-
 from datetime import datetime
+
+import pytz
+
+import database.notifications as notification_db
 from routers.notifications import send_notification
 
 
@@ -29,21 +30,15 @@ async def send_daily_notification():
         return None
 
 
-async def _send_notification_for_time(target_time: str, morning_alert_title: str, morning_alert_body: str):
-
+async def _send_notification_for_time(target_time: str, title: str, body: str):
     user_in_time_zone = await _get_users_in_timezone(target_time)
-
-    await _send_bulk_notification(user_in_time_zone, morning_alert_title, morning_alert_body)
-
+    await _send_bulk_notification(user_in_time_zone, title, body)
     return user_in_time_zone
 
 
 async def _get_users_in_timezone(target_time: str):
-    timezones_in_time =  _get_timezones_at_time(target_time)
-    
-    user_in_time_zone = await notification_db.get_users_in_timezones(timezones_in_time)
- 
-    return user_in_time_zone
+    timezones_in_time = _get_timezones_at_time(target_time)
+    return await notification_db.get_users_in_timezones(timezones_in_time)
 
 
 def _get_timezones_at_time(target_time):
