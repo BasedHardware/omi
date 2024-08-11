@@ -59,18 +59,11 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
 
 int mic_start()
 {
-    LOG_INF("Starting microphone initialization");
 
     // Start the high frequency clock
     if (!nrf_clock_hf_is_running(NRF_CLOCK, NRF_CLOCK_HFCLK_HIGH_ACCURACY))
     {
-        LOG_INF("Starting high frequency clock");
         nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_HFCLKSTART);
-        while (!nrf_clock_hf_is_running(NRF_CLOCK, NRF_CLOCK_HFCLK_HIGH_ACCURACY))
-        {
-            // Wait for the clock to start
-        }
-        LOG_INF("High frequency clock started");
     }
 
     // Configure PDM
