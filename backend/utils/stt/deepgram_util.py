@@ -150,7 +150,7 @@ def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Op
 
     output = output[:seconds * 1000]
     output.export(single_file_path, format="wav")
-    return single_file_path, output.duration_seconds  # 30
+    return single_file_path, seconds
 
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
@@ -159,6 +159,7 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 async def process_audio_dg(uid: str,
         fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int, preseconds: int = 0,
 ):
+    print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
