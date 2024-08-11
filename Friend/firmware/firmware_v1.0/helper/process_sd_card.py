@@ -32,32 +32,18 @@ def join_pcm_data(directory):
 
 # Function to decode µ-law encoded data to PCM
 def ulaw2linear(ulaw_byte):
-    """Convert a µ-law byte to a 16-bit linear PCM value."""
-    # Define the lookup table for the exponent
     EXPONENT_LUT = [0, 132, 396, 924, 1980, 4092, 8316, 16764]
-
-    # Invert the bits of the input byte
     ulaw_byte = ~ulaw_byte & 0xFF
-
-    # Extract the sign, exponent, and mantissa
-    sign = ulaw_byte & 0x80  # Sign bit
-    exponent = (ulaw_byte >> 4) & 0x07  # Exponent (3 bits)
-    mantissa = ulaw_byte & 0x0F  # Mantissa (4 bits)
-
-    # Calculate the linear PCM value
+    sign = (ulaw_byte & 0x80)
+    exponent = (ulaw_byte >> 4) & 0x07
+    mantissa = ulaw_byte & 0x0F
     sample = EXPONENT_LUT[exponent] + (mantissa << (exponent + 3))
-
-    # Apply the sign
     if sign != 0:
         sample = -sample
-
-    # Return the final 16-bit PCM value
-    return sample & 0xFFFF
-
+    return sample
 
 def ulaw_bytes_to_pcm16(ulaw_data):
-    """Convert a sequence of µ-law encoded bytes to a list of 16-bit PCM values."""
-    return np.array([ulaw2linear(byte) for byte in ulaw_data], dtype=np.int16)
+    return [ulaw2linear(byte) for byte in ulaw_data]
 
 # Function to process and decode the audio data
 def process_audio_data(audio_data):
