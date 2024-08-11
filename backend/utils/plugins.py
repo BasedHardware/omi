@@ -33,7 +33,7 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     if response.status_code != 200:
         return []
     user_enabled = set(get_enabled_plugins(uid))
-    print('get_plugins_data, user_enabled', user_enabled)
+    # print('get_plugins_data, user_enabled', user_enabled)
     data = response.json()
     plugins = []
     for plugin in data:
