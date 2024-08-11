@@ -7,8 +7,8 @@ import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
 from utils import auth
 
-logger = logging.getLogger('uvicorn.error')
-logger.setLevel(logging.DEBUG)
+# logger = logging.getLogger('uvicorn.error')
+# logger.setLevel(logging.DEBUG)
 router = APIRouter()
 
 
@@ -19,6 +19,7 @@ def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_us
 
 
 def send_notification(token: str, title: str, body: str, data: dict = None):
+    print('send_notification', token, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     message = messaging.Message(notification=notification, token=token)
 
