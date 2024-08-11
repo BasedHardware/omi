@@ -10,8 +10,8 @@
 #include "storage.h"
 #include <stdbool.h>
 
-#define BOOT_BLINK_DURATION_MS 200
-#define BOOT_PAUSE_DURATION_MS 100
+#define BOOT_BLINK_DURATION_MS 600
+#define BOOT_PAUSE_DURATION_MS 200
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
