@@ -35,8 +35,8 @@ class MixpanelManager {
     setUserProperty('Backups Enabled', _preferences.backupsEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
 
-    setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
-    setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
+    // setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
+    // setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
     // setUserProperty('Messages Count', MessageProvider().getMessagesCount());
   }
 
