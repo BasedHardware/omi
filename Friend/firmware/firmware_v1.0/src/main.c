@@ -35,7 +35,7 @@ static void mic_handler(int16_t *buffer)
 
 void bt_ctlr_assert_handle(char *name, int type)
 {
-    LOG_ERR("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
+    LOG_INF("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
 }
 
 bool is_connected = false;
