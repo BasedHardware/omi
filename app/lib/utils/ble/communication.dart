@@ -8,7 +8,7 @@ import 'package:friend_private/utils/ble/gatt_utils.dart';
 
 import 'package:friend_private/utils/ble/errors.dart';
 
-Future<int> retrieveBatteryLevel(String deviceId) async {
+Future<int> retrieveBatteryLevel(String deviceId) async { 
   final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
   if (batteryService == null) {
     logServiceNotFoundError('Battery', deviceId);
@@ -44,6 +44,8 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     logCharacteristicNotFoundError('Battery level', deviceId);
     return null;
   }
+
+  debugPrint('IVE BEEN CALLED');
 
   var currValue = await batteryLevelCharacteristic.read();
   if (currValue.isNotEmpty) {
@@ -198,6 +200,75 @@ Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   }
   var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
   return imageCaptureControlCharacteristic != null;
+}
+
+Future<int> retrieveButtonLevel(String deviceId) async {
+  final buttonService = await getServiceByUuid(deviceId, buttonDataStreamCharacteristicUuid);
+  if (buttonService == null) {
+    logServiceNotFoundError('Button no good', deviceId);
+    return -1;
+  }
+  var buttonLevelCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
+  if (buttonLevelCharacteristic == null) {
+    logCharacteristicNotFoundError('Button level', deviceId);
+    return -1;
+  }
+
+  var currValue = await buttonLevelCharacteristic.read();
+  if (currValue.isNotEmpty) {
+    return currValue[0];
+  }
+
+  return -1;
+}
+
+Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
+  String deviceId, {
+  void Function(int)? onButtonLevelChange,
+}) async {
+  final buttonService = await getServiceByUuid(deviceId,buttonDataStreamCharacteristicUuid);
+  if (buttonService == null) {
+    logServiceNotFoundError('Button isnt working', deviceId);
+    return null;
+  }
+
+  debugPrint('Hello there');
+  var buttonLevelCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
+  if (buttonLevelCharacteristic == null) {
+    logCharacteristicNotFoundError('Button level', deviceId);
+    return null;
+  }
+
+  var currValue = await buttonLevelCharacteristic.read();
+
+  if (currValue.isNotEmpty) {
+    debugPrint('Button level: ${currValue[0]}');
+    onButtonLevelChange!(currValue[0]);
+  }
+
+  try {
+    await buttonLevelCharacteristic.setNotifyValue(true);
+  } catch (e, stackTrace) {
+    logSubscribeError('Button level', deviceId, e, stackTrace);
+    return null;
+  }
+
+  debugPrint('IVE BEEN CALLED');
+
+  var listener = buttonLevelCharacteristic.lastValueStream.listen((value) {
+    // debugPrint('Battery level listener: $value');
+    if (value.isNotEmpty) {
+      onButtonLevelChange!(value[0]);
+      debugPrint('Button level at the end: ${value[0]}');
+    }
+  });
+
+  final device = BluetoothDevice.fromId(deviceId);
+  device.cancelWhenDisconnected(listener);
+
+
+
+  return listener;
 }
 
 Future<StreamSubscription?> getBleImageBytesListener(

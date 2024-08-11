@@ -15,8 +15,9 @@ class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
   final BTDeviceStruct? device;
   final int batteryLevel;
+  final int buttonLevel;
 
-  const ConnectedDevice({super.key, required this.device, required this.batteryLevel});
+  const ConnectedDevice({super.key, required this.device, required this.batteryLevel,required this.buttonLevel});
 
   @override
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
