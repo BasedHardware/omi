@@ -9,6 +9,7 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 import torch
 from collections import deque
+import opuslib
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram, convert_pcm8_to_pcm16
@@ -79,17 +80,19 @@ async def _websocket_util(
     threshold = 0.6 # Currently most fitting threshold
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
+    if codec == 'opus':
+        decoder = opuslib.Decoder(sample_rate, channels)
 
     async def receive_audio(socket1, socket2):
-        nonlocal is_speech_active, last_speech_time, websocket_active
+        nonlocal is_speech_active, last_speech_time, decoder, websocket_active
         audio_buffer = deque(maxlen=sample_rate * 1)  # 1 secs
         databuffer = bytearray(b"")
         
         REALTIME_RESOLUTION = 0.01
-        if codec == 'opus':
-            sample_width = 2
-        else:
+        if codec == 'pcm8':
             sample_width = 1
+        else:
+            sample_width = 2
         if sample_width:
             byte_rate = sample_width * sample_rate * channels
             chunk_size = int(byte_rate * REALTIME_RESOLUTION)
@@ -108,8 +111,10 @@ async def _websocket_util(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 if codec == 'opus':
-                    audio = AudioSegment(data=data, sample_width=2, frame_rate=sample_rate, channels=channels)
-                    samples = torch.tensor(audio.get_array_of_samples()).float() / 32768.0
+                    data = decoder.decode(data, frame_size=320) # 160 if want lower latency
+                    # audio = AudioSegment(data=data, sample_width=sample_width, frame_rate=sample_rate, channels=channels, format='opus')
+                    # samples = torch.tensor(audio.get_array_of_samples()).float() / 32768.0
+                    samples = torch.frombuffer(data, dtype=torch.int16).float() / 32768.0
                 elif codec in ['pcm8', 'pcm16']:
                     dtype = torch.int8 if codec == 'pcm8' else torch.int16
                     writeable_data = bytearray(data)
