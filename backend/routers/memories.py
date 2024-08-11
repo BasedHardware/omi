@@ -36,6 +36,7 @@ def _process_memory(
                 transcript, memory.started_at, language_code, force_process
             )
     except Exception as e:
+        print(e)
         if retries == 2:
             raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
         return _process_memory(uid, language_code, memory, force_process, retries + 1)
