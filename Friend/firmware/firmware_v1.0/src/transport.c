@@ -18,6 +18,7 @@
 
 extern bool is_connected;
 
+struct bt_conn *current_connection = NULL;
 //
 // Internal
 //
@@ -99,7 +100,31 @@ static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr
 static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     printk("audio_data_read_characteristic\n");
-	struct sensor_value val = mega_sensor.a_x;
+    // sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+
+    // sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+
+    int axis_mode = 6; //3 for accel, 6 for (also) gyro
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &axis_mode, sizeof(axis_mode));
+}
+
+
+//struct k_work_delayable accel_work;
+#define ACCEL_REFRESH_INTERVAL 500 // 0.1 seconds
+
+void broadcast_accel(struct k_work *work_item);
+K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
+//battery_work
+
+void broadcast_accel(struct k_work *work_item) {
+
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
@@ -110,8 +135,15 @@ static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
 	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
 
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &mega_sensor, sizeof(mega_sensor));
+   //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
+    int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
+    if (err) {
+        printk("Error updating accelerometer data\n");
+    }
+    k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
+
+
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
         if (value == BT_GATT_CCC_NOTIFY)
@@ -179,7 +211,6 @@ static const struct bt_data bt_sd[] = {
 // State and Characteristics
 //
 
-struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
@@ -305,7 +336,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
-
+    k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
     is_connected = true;
 }
 
