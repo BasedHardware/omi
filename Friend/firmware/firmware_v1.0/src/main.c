@@ -171,7 +171,17 @@ int main(void)
         return err;
     }
 
-    LOG_INF("Omi firmware initialized successfully");
+	// Add a delay here to see if we reach this point
+	k_msleep(1000);
+	set_led_blue(true);
+	k_msleep(1000);
+	set_led_blue(false);
+
+	LOG_INF("Omi firmware initialized successfully");
+    // Indicate successful initialization
+    set_led_blue(true);
+    k_msleep(1000);
+    set_led_blue(false);
 
     while (1) {
         // Main loop indicator
