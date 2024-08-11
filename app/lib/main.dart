@@ -17,10 +17,10 @@ import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -34,7 +34,7 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  await initializeNotifications();
+  await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await ObjectBoxUtil.init();
   await MixpanelManager.init();
@@ -115,6 +115,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
+    NotificationService.instance.saveNotificationToken();
     super.initState();
   }
 
@@ -122,7 +123,9 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return WithForegroundTask(
       child: MaterialApp(
-        navigatorObservers: [InstabugNavigatorObserver()],
+        navigatorObservers: [
+          if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+        ],
         debugShowCheckedModeBanner: F.env == Environment.dev,
         title: F.title,
         navigatorKey: MyApp.navigatorKey,

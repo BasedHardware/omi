@@ -3,8 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
@@ -69,7 +69,7 @@ mixin WebSocketMixin {
           _reconnectionAttempts = 0;
           _isConnecting = false;
           onConnectionSuccess();
-          clearNotification(2); // clear connection server conn issue?
+          NotificationService.instance.clearNotification(2); // clear connection server conn issue?
         },
         onWebsocketConnectionFailed: (err) {
           debugPrint('WebSocket connection failed: $err');
@@ -249,8 +249,8 @@ mixin WebSocketMixin {
   }
 
   void _notifyReconnectionFailure() {
-    clearNotification(2);
-    createNotification(
+    NotificationService.instance.clearNotification(2);
+    NotificationService.instance.createNotification(
       notificationId: 2,
       title: 'Connection Issue 🚨',
       body: 'Unable to connect to the transcript service.'
@@ -259,8 +259,8 @@ mixin WebSocketMixin {
   } // TODO: should trigger a connection restored? as with internet?
 
   void _notifyInternetLost() {
-    clearNotification(3);
-    createNotification(
+    NotificationService.instance.clearNotification(3);
+    NotificationService.instance.createNotification(
       notificationId: 3,
       title: 'Internet Connection Lost',
       body: 'Your device is offline. Transcription is paused until connection is restored.',
@@ -268,8 +268,8 @@ mixin WebSocketMixin {
   }
 
   void _notifyInternetRestored() {
-    clearNotification(3);
-    createNotification(
+    NotificationService.instance.clearNotification(3);
+    NotificationService.instance.createNotification(
       notificationId: 3,
       title: 'Internet Connection Restored',
       body: 'Your device is back online. Transcription will resume shortly.',

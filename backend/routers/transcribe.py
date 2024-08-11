@@ -80,7 +80,7 @@ async def _websocket_util(
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
-            transcript_socket2 = await process_audio_dg(websocket, language, sample_rate, codec, channels)
+            transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
             await send_initial_file(single_file_path, transcript_socket)
 
     except Exception as e:
