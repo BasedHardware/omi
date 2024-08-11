@@ -40,21 +40,36 @@ void bt_ctlr_assert_handle(char *name, int type)
 bool is_connected = false;
 bool is_charging = false;
 
-static void update_led_state(bool is_connected, bool is_charging)
+static void set_led_state(bool is_connected, bool is_charging)
 {
-    if (is_connected) {
-        set_led_blue(true);
-        set_led_red(false);
-        set_led_green(false);
-    } else if (is_charging) {
-        set_led_red(true);
-        set_led_green(true);
-        set_led_blue(true);
-    } else {
-        set_led_red(true);
-        set_led_green(false);
-        set_led_blue(false);
-    }
+	// Recording and connected state - BLUE
+	if (is_connected)
+	{
+		set_led_red(false);
+		set_led_green(false);
+		set_led_blue(true);
+		return;
+	}
+	// Recording but lost connection - RED
+	if (!is_connected)
+	{
+		set_led_red(true);
+		set_led_green(false);
+		set_led_blue(false);
+		return;
+	}
+	// Not recording, but charging - WHITE
+	if (is_charging)
+	{
+		set_led_red(true);
+		set_led_green(true);
+		set_led_blue(true);
+		return;
+	}
+	// Not recording - OFF
+	set_led_red(false);
+	set_led_green(false);
+	set_led_blue(false);
 }
 int main(void)
 {
@@ -99,9 +114,10 @@ int main(void)
     LOG_INF("Omi firmware initialized successfully");
 
     while (1) {
-        update_led_state(is_connected, is_charging);
+        set_led_state(is_connected, is_charging);
         k_msleep(500);
     }
 
+	// Unreachable
     return 0;
 }
