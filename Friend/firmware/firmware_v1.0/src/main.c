@@ -37,20 +37,40 @@ void bt_ctlr_assert_handle(char *name, int type)
     LOG_ERR("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
 }
 
-static bool is_connected = false;
-static bool is_recording = false;
+bool is_connected = false;
+bool is_charging = false;
 
-static void update_led_state(void)
+static void set_led_state(bool is_connected, bool is_charging)
 {
-    set_led_state(is_connected, is_recording);
+	// Recording and connected state - BLUE
+	if (is_connected)
+	{
+		set_led_red(false);
+		set_led_green(false);
+		set_led_blue(true);
+		return;
+	}
+	// Recording but lost connection - RED
+	if (!is_connected)
+	{
+		set_led_red(true);
+		set_led_green(false);
+		set_led_blue(false);
+		return;
+	}
+	// Not recording, but charging - WHITE
+	if (is_charging)
+	{
+		set_led_red(true);
+		set_led_green(true);
+		set_led_blue(true);
+		return;
+	}
+	// Not recording - OFF
+	set_led_red(false);
+	set_led_green(false);
+	set_led_blue(false);
 }
-
-static void connection_callback(bool connected)
-{
-    is_connected = connected;
-    update_led_state();
-}
-
 int main(void)
 {
     int err;
@@ -61,17 +81,17 @@ int main(void)
     if (err) {
         LOG_ERR("Failed to initialize LEDs: %d", err);
         return err;
-    }
-    set_led_red(true);  // Indicate startup with red LED
+	}
+	set_led_blue(true);
 
-    LOG_INF("Initializing storage...");
+	LOG_INF("Initializing storage...");
     err = storage_init();
     if (err) {
         LOG_ERR("Failed to initialize storage: %d", err);
         return err;
     }
 
-    err = transport_start(connection_callback);
+    err = transport_start();
     if (err) {
         LOG_ERR("Failed to start transport: %d", err);
         return err;
@@ -92,35 +112,12 @@ int main(void)
     }
 
     LOG_INF("Omi firmware initialized successfully");
-    set_led_red(false);  // Turn off red LED after successful initialization
 
     while (1) {
-        // Check if recording should start or stop based on connection state
-        bool should_record = is_connected;
-        if (should_record != is_recording) {
-            is_recording = should_record;
-            if (is_recording) {
-                LOG_INF("Starting recording");
-                err = mic_start_recording();
-                if (err) {
-                    LOG_ERR("Failed to start recording: %d", err);
-                    is_recording = false;
-                }
-            } else {
-                LOG_INF("Stopping recording");
-                err = mic_stop_recording();
-                if (err) {
-                    LOG_ERR("Failed to stop recording: %d", err);
-                }
-            }
-            update_led_state();
-        }
-
-        // Perform any necessary periodic tasks here
-
-        k_sleep(K_MSEC(100));  // Sleep for 100ms to prevent busy-waiting
+        set_led_state(is_connected, is_charging);
+        k_msleep(500);
     }
 
-    // Unreachable
+	// Unreachable
     return 0;
 }
