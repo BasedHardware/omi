@@ -238,3 +238,71 @@ Future<StreamSubscription?> getBleImageBytesListener(
 
   return listener;
 }
+
+Future<StreamSubscription<List<int>>?> getAccelListener(
+  String deviceId, {
+  void Function(int)? onAccelChange,
+}) async {
+  final accelService = await getServiceByUuid(deviceId, accelDataStreamServiceUuid);
+  if (accelService == null) {
+    logServiceNotFoundError('Accelerometer', deviceId);
+    return null;
+  }
+
+  var accelCharacteristic = getCharacteristicByUuid(accelService, accelDataStreamCharacteristicUuid);
+  if (accelCharacteristic == null) {
+    logCharacteristicNotFoundError('Accelerometer', deviceId);
+    return null;
+  }
+
+  var currValue = await accelCharacteristic.read();
+  if (currValue.isNotEmpty) {
+    debugPrint('Accelerometer level: ${currValue[0]}');
+    onAccelChange!(currValue[0]);
+  }
+
+  try {
+    await accelCharacteristic.setNotifyValue(true);
+  } catch (e, stackTrace) {
+    logSubscribeError('Accelerometer level', deviceId, e, stackTrace);
+    return null;
+  }
+
+  var listener = accelCharacteristic.lastValueStream.listen((value) {
+    // debugPrint('Battery level listener: $value');
+    int result = 100;
+    int temp = 100;
+    if (value.length > 4) { //for some reason, the very first reading is four bytes
+
+
+    if (value.isNotEmpty) {
+       onAccelChange!(value[0]);
+      result = (value[0] | (value[1] << 8) | (value[2] << 16) | (value[3] << 24));
+      //temp = value[0][0];
+      temp = value[4];
+      temp = (value[4] | (value[5] << 8) | (value[6] << 16) | (value[7] << 24));
+       if (value[0] > 127) { 
+       result = ~result & 0xFFFF;  
+       result += 1; 
+       result = -result; 
+
+       temp = ~temp & 0xFFFF;  
+       temp += 1; 
+       temp = -temp;      
+       }
+       double x = result + (temp / 1000000);
+   //    debugPrint('Accelerometer reading: $value');
+      // debugPrint('first reading: $result');
+       debugPrint('result: $x');
+      }
+    //   debugPrint('Accelerometer reading: $value');
+
+
+    }
+    });
+
+  final device = BluetoothDevice.fromId(deviceId);
+  device.cancelWhenDisconnected(listener);
+
+  return listener;
+}
