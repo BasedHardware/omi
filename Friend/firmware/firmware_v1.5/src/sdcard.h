@@ -1,7 +1,6 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
-#include "../storage/config.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
