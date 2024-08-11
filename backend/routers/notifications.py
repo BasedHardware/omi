@@ -14,8 +14,8 @@ router = APIRouter()
 
 @router.post('/v1/users/fcm-token')
 def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_user_uid)):
-    notification_db.save_token(uid, data.token, data.time_zone)
-    return {'status': 'success'}
+    notification_db.save_token(uid, data.dict())
+    return {'status': 'Ok'}
 
 
 def send_notification(token: str, title: str, body: str, data: dict = None):
