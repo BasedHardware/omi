@@ -15,6 +15,8 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
+int create_file(const char *filename);
+int write_file(uint8_t *data, size_t length, bool append, bool flush);
 static void codec_handler(uint8_t *data, size_t len)
 {
     int err = broadcast_audio_packets(data, len);
@@ -112,13 +114,11 @@ void test_sd_card(void) {
     int ret = create_file("test.txt");
     if (ret) {
         LOG_ERR("Failed to create test file: %d", ret);
-        return;
     }
 
     ret = write_file((uint8_t *)test_data, strlen(test_data), false, true);
     if (ret) {
         LOG_ERR("Failed to write test data: %d", ret);
-        return;
     }
 
     LOG_INF("Successfully wrote test data to SD card");
@@ -141,7 +141,7 @@ int main(void)
 	boot_led_sequence();
 
     LOG_INF("Initializing storage...");
-    err = init_storage();
+    err = storage_init();
     if (err) {
         LOG_ERR("Failed to initialize storage: %d", err);
 		// Don't return here, continue with other initializations
