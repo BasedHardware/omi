@@ -167,7 +167,7 @@ async def process_audio_dg(
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
-        print(f"Received message from Deepgram")  # Log when message is received
+        # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
