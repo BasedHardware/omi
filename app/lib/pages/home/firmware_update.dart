@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -24,8 +25,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       setState(() {
         isLoading = true;
       });
-      await getLatestVersion();
-      var (a, b) = await shouldUpdateFirmware(widget.deviceInfo.firmwareRevision);
+      await getLatestVersion(deviceName: widget.device!.name);
+      var (a, b) = await shouldUpdateFirmware(
+          currentFirmware: widget.deviceInfo.firmwareRevision, deviceName: widget.device!.name);
       setState(() {
         shouldUpdate = b;
         updateMessage = a;
@@ -77,15 +79,43 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                           ),
                         )
                       : isInstalled
-                          ? const Column(
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('Firmware Updated Successfully'),
-                                SizedBox(height: 10),
-                                Text(
-                                  'Please close the app and turn off and turn on the Friend device to complete the update',
+                                const Text('Firmware Updated Successfully'),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Please turn off and turn on the Friend device to complete the update',
                                   textAlign: TextAlign.center,
                                 ),
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                  decoration: BoxDecoration(
+                                    border: const GradientBoxBorder(
+                                      gradient: LinearGradient(colors: [
+                                        Color.fromARGB(127, 208, 208, 208),
+                                        Color.fromARGB(127, 188, 99, 121),
+                                        Color.fromARGB(127, 86, 101, 182),
+                                        Color.fromARGB(127, 126, 190, 236)
+                                      ]),
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: TextButton(
+                                    onPressed: () async {
+                                      Navigator.pushAndRemoveUntil(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+                                          (route) => false);
+                                    },
+                                    child: const Text(
+                                      "Go Back",
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ),
+                                )
                               ],
                             )
                           : Column(
