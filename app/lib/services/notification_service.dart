@@ -16,6 +16,7 @@ import 'package:friend_private/pages/home/page.dart';
 
 class NotificationService {
   NotificationService._();
+
   static NotificationService instance = NotificationService._();
   MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -111,24 +112,19 @@ class NotificationService {
     return currentTimeZone;
   }
 
-  Future<void> saveToken(String? token) async {
+  Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
-    final userId = SharedPreferencesUtil().uid;
     String timeZone = await getTimeZone();
-    await saveTokenToBackend(
-      userId: userId,
-      token: token,
-      timeZone: timeZone,
-    );
+    await saveFcmTokenServer(token: token, timeZone: timeZone);
   }
 
   void saveNotificationToken() async {
     String? token = await _firebaseMessaging.getToken();
-    await saveToken(token);
-    _firebaseMessaging.onTokenRefresh.listen(saveToken);
+    await saveFcmToken(token);
+    _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
-  @Deprecated('Superceded by backend triggers')
+  @Deprecated('Superseded by backend triggers')
   Future<NotificationCalendar?> _retrieveNotificationInterval({
     bool isMorningNotification = false,
     bool isDailySummaryNotification = false,
@@ -208,6 +204,7 @@ class NotificationService {
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
+
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
   Future<void> _showForegroundNotification(RemoteNotification? notification) async {
