@@ -2,6 +2,8 @@
 import requests
 import torch
 
+from utils.endpoints import timeit
+
 # # Instantiate pretrained voice activity detection pipeline
 # vad = Pipeline.from_pretrained(
 #     "pyannote/voice-activity-detection",
@@ -25,7 +27,6 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
             return True
     # vad_iterator.reset_states()
     return False
-
 
 
 @timeit
