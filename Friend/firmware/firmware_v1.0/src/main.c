@@ -10,6 +10,9 @@
 #include "storage.h"
 #include <stdbool.h>
 
+#define BOOT_BLINK_DURATION_MS 200
+#define BOOT_PAUSE_DURATION_MS 100
+
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void codec_handler(uint8_t *data, size_t len)
@@ -40,6 +43,37 @@ void bt_ctlr_assert_handle(char *name, int type)
 
 bool is_connected = false;
 bool is_charging = false;
+static void boot_led_sequence(void)
+{
+    // Red blink
+    set_led_red(true);
+    k_msleep(BOOT_BLINK_DURATION_MS);
+    set_led_red(false);
+    k_msleep(BOOT_PAUSE_DURATION_MS);
+
+    // Green blink
+    set_led_green(true);
+    k_msleep(BOOT_BLINK_DURATION_MS);
+    set_led_green(false);
+    k_msleep(BOOT_PAUSE_DURATION_MS);
+
+    // Blue blink
+    set_led_blue(true);
+    k_msleep(BOOT_BLINK_DURATION_MS);
+    set_led_blue(false);
+    k_msleep(BOOT_PAUSE_DURATION_MS);
+
+    // All LEDs on
+    set_led_red(true);
+    set_led_green(true);
+    set_led_blue(true);
+    k_msleep(BOOT_BLINK_DURATION_MS);
+
+    // All LEDs off
+    set_led_red(false);
+    set_led_green(false);
+    set_led_blue(false);
+}
 
 static void set_led_state(bool is_connected, bool is_charging)
 {
@@ -102,6 +136,9 @@ int main(void)
         return err;
     }
     set_led_blue(true);
+
+	// Run the boot LED sequence
+	boot_led_sequence();
 
     LOG_INF("Initializing storage...");
     err = init_storage();
