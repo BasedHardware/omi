@@ -1,39 +1,41 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
-#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "lib/sdcard/sdcard.h"
-#include "lib/sdcard/sdcard.h"
-#include "lib/storage/config.h"
+#include <stdbool.h>
 
-extern const size_t written_max_count;
-extern int notification_value;
+#define MAX_PATH_SIZE 256
+#define MAX_DATA_SIZE 1024
 
 typedef struct {
-    uint8_t name;
     int ret;
+    char *data;
+} ReadParams;
+
+typedef struct {
+    int ret;
+    uint8_t name;
 } ReadInfo;
 
 int init_storage(void);
-
+ReadInfo get_current_file(void);
 ReadParams verify_info(void);
-
+int if_file_exist(void);
+int save_audio_in_storage(uint8_t *buffer, size_t length);
+char *generate_next_filename(const char *input_filename);
+void process_file(const char *file, char *path, int *status);
 char *extract_after(const char *data);
-
 int extract_number(const char *input, uint8_t *number);
 
-int save_audio_in_storage(uint8_t *buffer, size_t lenght);
+// Declare these functions if they're defined elsewhere
+int mount_sd_card(void);
+int create_file(const char *filename);
+int write_info(const char *info);
+ReadParams read_file(const char *filename);
+int write_file(uint8_t *buffer, size_t length, bool append, bool endBuffer);
 
-void process_file(const char *file, char *path, int *status);
-
-void uint8_buffer_to_char_data(const uint8_t *buffer, size_t length, char *data, size_t data_size);
-
-char *generate_next_filename(const char *current_filename);
-
-ReadInfo get_current_file(void);
-
-int generate_info_data(void);
+// Declare this variable as extern if it's defined in another file
+extern bool mounted;
 
 #endif // STORAGE_H
