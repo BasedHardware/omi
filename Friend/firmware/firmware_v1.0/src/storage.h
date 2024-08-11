@@ -2,6 +2,8 @@
 #define STORAGE_H
 
 #include <zephyr/kernel.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 int storage_init(void);
 int save_audio_to_storage(const uint8_t *data, size_t len);
