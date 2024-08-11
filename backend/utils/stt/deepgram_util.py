@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 from typing import Tuple, Optional
-
+import threading
 import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
@@ -11,6 +11,9 @@ from starlette.websockets import WebSocket
 
 from utils.storage import retrieve_all_samples
 from utils.stt.vad import vad_is_empty
+from utils.plugins import trigger_realtime_integrations
+
+import database.notifications as notification_db
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
@@ -153,7 +156,7 @@ def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Op
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
 
 
-async def process_audio_dg(
+async def process_audio_dg(uid: str,
         fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int, preseconds: int = 0,
 ):
     print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
@@ -192,11 +195,11 @@ async def process_audio_dg(
                         'text': word.punctuated_word,
                         'is_user': is_user
                     })
-        # print(json.dumps(segments, indent=2))
-        # Use asyncio.run_coroutine_threadsafe to call async function from sync context
-        # TODO: a new thread should be started, so that it calls utils.plugins.trigger_realtime_integrations
-        # + the app receives the notification message + get's added to the app.
+       
         asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
+        threading.Thread(target=process_segments, args=(uid, segments)).start()
+    
+   
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")
@@ -204,6 +207,12 @@ async def process_audio_dg(
     print("Connecting to Deepgram")  # Log before connection attempt
     return connect_to_deepgram(on_message, on_error, language, sample_rate, codec, channels)
 
+def process_segments(uid: str, segments: list[dict]):
+    
+    token = notification_db.get_token_only(uid)
+    trigger_realtime_integrations(uid, token, segments)
+  
+         
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, codec: str, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'

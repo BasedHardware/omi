@@ -11,6 +11,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 
 class AIMessage extends StatefulWidget {
   final ServerMessage message;
@@ -45,6 +46,11 @@ class _AIMessageState extends State<AIMessage> {
   Widget build(BuildContext context) {
     var messageMemories =
         widget.message.memories.length > 3 ? widget.message.memories.sublist(0, 3) : widget.message.memories;
+    final message = widget.message.text;
+    final messageText = message.isEmpty
+        ? '...'
+        // : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
+        : message.decodeSting;
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,10 +102,8 @@ class _AIMessageState extends State<AIMessage> {
               widget.message.type == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                widget.message.text.isEmpty
-                    ? '...'
-                    // : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
-                    : utf8.decode(widget.message.text.codeUnits),
+                messageText,
+                // : utf8.decode(widget.message.text.codeUnits),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME

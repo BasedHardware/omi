@@ -2,8 +2,6 @@
 import requests
 import torch
 
-from utils.endpoints import timeit
-
 # # Instantiate pretrained voice activity detection pipeline
 # vad = Pipeline.from_pretrained(
 #     "pyannote/voice-activity-detection",
