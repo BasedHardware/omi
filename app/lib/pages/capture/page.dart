@@ -320,6 +320,7 @@ class CapturePageState extends State<CapturePage>
             'Enable Location Services?  🌍',
             'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
             singleButton: false,
+            okButtonText: 'Continue',
           ),
         );
       }
@@ -407,7 +408,11 @@ class CapturePageState extends State<CapturePage>
 
   _recordingToggled() async {
     if (recordingState == RecordingState.record) {
-      await stopStreamRecording(wsConnectionState, websocketChannel);
+      if (Platform.isAndroid) {
+        stopStreamRecordingOnAndroid();
+      } else {
+        await stopStreamRecording(wsConnectionState, websocketChannel);
+      }
       setState(() => recordingState = RecordingState.stop);
       _memoryCreationTimer?.cancel();
       _createMemory();
@@ -424,11 +429,11 @@ class CapturePageState extends State<CapturePage>
             setState(() => recordingState = RecordingState.initialising);
             closeWebSocket();
             await initiateWebsocket(BleAudioCodec.pcm16, 16000);
-            // if (Platform.isAndroid) {
-            //   await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
-            // } else {
-            await startStreamRecording(wsConnectionState, websocketChannel);
-            // }
+            if (Platform.isAndroid) {
+              await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+            } else {
+              await startStreamRecording(wsConnectionState, websocketChannel);
+            }
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',

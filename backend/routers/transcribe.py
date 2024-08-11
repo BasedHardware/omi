@@ -73,10 +73,10 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     try:
-        if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
-            single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
-        else:
-            single_file_path, duration = None, 0
+        # if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
+        #     single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
+        # else:
+        single_file_path, duration = None, 0
         transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
@@ -120,10 +120,10 @@ async def _websocket_util(
                     # never works
 
                 elapsed_seconds = time.time() - timer_start
-                if elapsed_seconds > duration or not socket2:
+                if elapsed_seconds > (duration * 2) or not socket2:
                     socket1.send(audio_buffer)
                     if socket2:
-                        print('Killing transcript_socket2')
+                        print('Killing socket2')
                         socket2.finish()
                         socket2 = None
                 else:
