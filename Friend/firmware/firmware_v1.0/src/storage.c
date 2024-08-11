@@ -1,6 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/fs/fs.h>
+#include "lib/fatfs/include/ff.h"
 #include "storage.h"
 #include "sdcard.h"
 #include "config.h"
@@ -28,14 +28,14 @@ int storage_init(void)
 
     LOG_INF("Creating audio directory...");
     err = create_directory(AUDIO_DIR);
-    if (err && err != -EEXIST) {
+    if (err) {
         LOG_ERR("Failed to create audio directory: %d", err);
         return err;
     }
 
     LOG_INF("Creating info file...");
     err = create_file(INFO_FILE);
-    if (err && err != -EEXIST) {
+    if (err) {
         LOG_ERR("Failed to create info file: %d", err);
         return err;
     }
@@ -89,7 +89,7 @@ int save_audio_to_storage(const uint8_t *data, size_t len)
     }
 
     total_bytes += len;
-    if (total_bytes >= CONFIG_MAX_FILE_SIZE) {
+    if (total_bytes >= 200000) {
         total_bytes = 0;
         // Update info.txt to mark the file as complete
         char info[MAX_INFO_LEN];
