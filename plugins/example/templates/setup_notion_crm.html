@@ -1,107 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <title>Setup Notion CRM</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Setup Completed</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..800&display=swap" rel="stylesheet">
+	<style>
+		body {
+			font-family: Assistant, sans-serif;
+			background-color: #f4f4f4;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+		}
 
-        .container {
-            background-color: #fff;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
-        }
+		a,
+		p {
+			font-family: Assistant, sans-serif;
+		}
 
-        h1 {
-            color: #333;
-        }
+		.container {
+			margin: 0.5rem;
+			background-color: #fff;
+			padding: 5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 5rem;
+			align-items: center;
+			justify-content: center;
+			border-radius: 4px;
+			box-shadow: 0 0 0.075rem rgb(0, 0, 0);
+			max-width: 600px;
+			text-align: center;
+		}
 
-        p {
-            color: #666;
-        }
+		.container a {
+			text-decoration: none;
+			padding-top: 1.5rem;
+			padding-bottom: 1.5rem;
+			padding-left: 3.75rem;
+			padding-right: 3.75rem;
+			border: none;
+			border-radius: 4px;
+			background-color: #000000;
+			color: #FFFFFF;
+			font-size: 1.5rem;
+			cursor: pointer;
+			box-sizing: border-box;
+			display: block;
+		}
 
-        form {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-        }
+		.container a:hover {
+			background-color: rgba(0, 0, 0, 0.75);
+		}
 
-        label {
-            margin-bottom: 0.5rem;
-            color: #333;
-            text-align: left;
-        }
+		.container>div:first-of-type {
+			display: flex;
+			flex-direction: row;
+			gap: 40px;
+		}
 
-        input[type="text"] {
-            padding: 0.5rem;
-            margin-bottom: 1rem;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            width: 100%;
-            box-sizing: border-box;
-        }
+		.container>p:first-of-type {
+			font-size: 1.5rem;
+			color: #000000;
+		}
 
-        button {
-            padding: 0.5rem;
-            border: none;
-            border-radius: 4px;
-            background-color: #007bff;
-            color: white;
-            cursor: pointer;
-            width: 100%;
-            box-sizing: border-box;
-        }
+		@media (max-width: 600px) {
+			.container {
+				padding: 2.5rem;
+				gap: 2.5rem;
+			}
 
-        button:hover {
-            background-color: #0056b3;
-        }
+			.container div:last-of-type {
+				width: 100%;
+			}
 
-        @media (max-width: 600px) {
-            .container {
-                padding: 1rem;
-            }
-
-            label {
-                margin-bottom: 0.3rem;
-                font-size: 0.9rem;
-            }
-
-            input[type="text"], button {
-                width: 100%;
-                padding: 0.75rem;
-                font-size: 1rem;
-            }
-        }
-    </style>
+			.container a {
+				width: 100%;
+				padding-left: 0rem;
+				padding-right: 0rem;
+			}
+		}
+	</style>
 </head>
+
 <body>
-<div class="container">
-    <h1>Setup Notion Personal CRM</h1>
-    <p>This page allows you to configure your Notion Personal CRM for conversations.</p>
-    <form action="/creds/notion-crm" method="post">
-        <input type="hidden" name="uid" value="{{ uid }}">
-        <div>
-            <label for="api_key">API Key:</label>
-            <input type="text" id="api_key" name="api_key" required>
-        </div>
-        <div>
-            <label for="database_id">Database ID:</label>
-            <input type="text" id="database_id" name="database_id" required>
-        </div>
-        <button type="submit">Submit</button>
-    </form>
-</div>
+	<div class="container">
+		<div>
+			<img src="/templates/static/images/friend_logo.svg" />
+			<img src="/templates/static/images/notion_logo.svg" />
+		</div>
+		<p>Sync your memory directly with Notion</p>
+		<div>
+			{% if error_message %}
+			<p>{{ error_message }}</p>
+			{% endif %}
+			<a href="{{ oauth_url }}">Connect with Notion</a>
+		</div>
+	</div>
 </body>
+
 </html>
