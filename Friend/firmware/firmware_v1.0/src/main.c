@@ -8,6 +8,7 @@
 #include "audio.h"
 #include "codec.h"
 #include "storage.h"
+#include <stdbool.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -18,10 +19,10 @@ static void codec_handler(uint8_t *data, size_t len)
         LOG_ERR("Failed to broadcast audio packets: %d", err);
     }
 
-    err = save_audio_to_storage(data, len);
-    if (err) {
-        LOG_ERR("Failed to save audio to storage: %d", err);
-    }
+    // err = save_audio_to_storage(data, len);
+    // if (err) {
+    //     LOG_ERR("Failed to save audio to storage: %d", err);
+    // }
 }
 
 static void mic_handler(int16_t *buffer)
@@ -71,6 +72,24 @@ static void set_led_state(bool is_connected, bool is_charging)
 	set_led_green(false);
 	set_led_blue(false);
 }
+
+void test_sd_card(void) {
+    char test_data[] = "Hello, SD card!";
+    int ret = create_file("test.txt");
+    if (ret) {
+        LOG_ERR("Failed to create test file: %d", ret);
+        return;
+    }
+
+    ret = write_file((uint8_t *)test_data, strlen(test_data), false, true);
+    if (ret) {
+        LOG_ERR("Failed to write test data: %d", ret);
+        return;
+    }
+
+    LOG_INF("Successfully wrote test data to SD card");
+}
+
 int main(void)
 {
     int err;
@@ -81,15 +100,19 @@ int main(void)
     if (err) {
         LOG_ERR("Failed to initialize LEDs: %d", err);
         return err;
-	}
-	set_led_blue(true);
+    }
+    set_led_blue(true);
 
-	LOG_INF("Initializing storage...");
-    err = storage_init();
+    LOG_INF("Initializing storage...");
+    err = init_storage();
     if (err) {
         LOG_ERR("Failed to initialize storage: %d", err);
-        return err;
-    }
+		// Don't return here, continue with other initializations
+        // return err;
+    }else{
+		LOG_INF("Storage initialized successfully");
+		test_sd_card();
+	}
 
     err = transport_start();
     if (err) {
@@ -114,10 +137,10 @@ int main(void)
     LOG_INF("Omi firmware initialized successfully");
 
     while (1) {
+        // Simplified main loop for initial testing
         set_led_state(is_connected, is_charging);
         k_msleep(500);
     }
 
-	// Unreachable
     return 0;
 }
