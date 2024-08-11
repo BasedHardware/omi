@@ -85,25 +85,22 @@ int mic_start()
     IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_irq_handler, 0); // IMPORTANT!
     if (nrfx_pdm_init(&pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
     {
-        LOG_ERR("Unable to initialize PDM: %d", err);
+        printk("Unable to initialize PDM\n");
         return -1;
     }
 
     // Power on Mic
-    LOG_INF("Powering on microphone");
     nrfy_gpio_cfg_output(PDM_PWR_PIN);
     nrfy_gpio_pin_set(PDM_PWR_PIN);
 
     // Start PDM
-    LOG_INF("Starting PDM");
-    err = nrfx_pdm_start();
-    if (err != NRFX_SUCCESS)
+    if (nrfx_pdm_start() != NRFX_SUCCESS)
     {
-        LOG_ERR("Unable to start PDM: %d", err);
+        printk("Unable to start PDM\n");
         return -1;
     }
 
-    LOG_INF("Microphone started successfully");
+    printk("Microphone started\n");
     return 0;
 }
 
