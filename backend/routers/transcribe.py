@@ -120,10 +120,10 @@ async def _websocket_util(
                     # never works
 
                 elapsed_seconds = time.time() - timer_start
-                if elapsed_seconds > duration or not socket2:
+                if elapsed_seconds > (duration * 2) or not socket2:
                     socket1.send(audio_buffer)
                     if socket2:
-                        print('Killing transcript_socket2')
+                        print('Killing socket2')
                         socket2.finish()
                         socket2 = None
                 else:
