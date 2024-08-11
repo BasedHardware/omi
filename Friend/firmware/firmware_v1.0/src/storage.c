@@ -83,7 +83,7 @@ int save_audio_to_storage(const uint8_t *data, size_t len)
 	// static uint8_t opus_packet[MAX_PACKET_SIZE];
     int err;
 
-	LOG_INF("Creating audio file: %d");
+	LOG_INF("Creating audio file: %s", current_filename);
     if (total_bytes == 0) {
         err = create_new_file();
         if (err) {
@@ -108,7 +108,7 @@ int save_audio_to_storage(const uint8_t *data, size_t len)
     //     return err;
     // }
 
-	LOG_INF("Writing audio file: %d");
+	LOG_INF("Writing audio file: %s", current_filename);
     // err = write_file(current_filename, opus_packet, encoded_size, true);
     err = write_file(current_filename, data, len, true);
     if (err) {
