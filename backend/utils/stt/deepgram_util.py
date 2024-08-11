@@ -128,6 +128,9 @@ def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Op
         aseg = AudioSegment.from_wav(single_file_path)
         if aseg.frame_rate == target_sample_rate:  # sample sample rate
             print('get_speaker_audio_file Cached Duration:', aseg.duration_seconds)
+            if aseg.duration_seconds > 30:
+                aseg = aseg[:30 * 1000]
+                aseg.export(single_file_path, format="wav")
             return single_file_path, aseg.duration_seconds
 
     single_file_path = get_single_file(path, target_sample_rate)
