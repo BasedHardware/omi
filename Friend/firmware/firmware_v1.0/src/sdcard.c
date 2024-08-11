@@ -9,10 +9,6 @@ LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
 #define SD_MOUNT_POINT "SD:"
 
 static FATFS fat_fs;
-/* mounted is used by FatFs to track the mounting status
- * of the volume/drive, not to be confused with sd_card_mounted
- * which tracks the mounting status of the SD card itself.
- */
 static bool mounted = false;
 bool sd_card_mounted = false;
 
@@ -23,34 +19,39 @@ int mount_sd_card(void)
     uint32_t block_count;
     uint32_t block_size;
 
-    if (disk_access_init(disk_pdrv) != 0) {
-        LOG_ERR("Storage init ERROR!");
+    LOG_INF("Initializing SD card...");
+
+    int ret = disk_access_init(disk_pdrv);
+    if (ret != 0) {
+        LOG_ERR("disk_access_init failed: %d", ret);
         return -1;
     }
 
-    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
-        LOG_ERR("Unable to get sector count");
+    ret = disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count);
+    if (ret != 0) {
+        LOG_ERR("Unable to get sector count: %d", ret);
         return -1;
     }
-    LOG_INF("Block count %u", block_count);
+    LOG_INF("Block count: %u", block_count);
 
-    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
-        LOG_ERR("Unable to get sector size");
+    ret = disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size);
+    if (ret != 0) {
+        LOG_ERR("Unable to get sector size: %d", ret);
         return -1;
     }
-    LOG_INF("Sector size %u", block_size);
+    LOG_INF("Sector size: %u", block_size);
 
     memory_size_mb = (uint64_t)block_count * block_size;
-    LOG_INF("Memory Size(MB) %u", (uint32_t)(memory_size_mb >> 20));
+    LOG_INF("Memory Size (MB): %u", (uint32_t)(memory_size_mb >> 20));
 
     FRESULT res = f_mount(&fat_fs, SD_MOUNT_POINT, 1);
     if (res == FR_OK) {
         mounted = true;
         sd_card_mounted = true;
-        LOG_INF("Disk mounted");
+        LOG_INF("SD card mounted successfully");
         return 0;
     } else {
-        LOG_ERR("Error mounting disk: %d", res);
+        LOG_ERR("f_mount failed: %d", res);
         return -1;
     }
 }
