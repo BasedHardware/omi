@@ -164,12 +164,27 @@ int main(void)
         return err;
     }
 
-    set_mic_callback(mic_handler);
-    err = mic_start();
-    if (err) {
-        LOG_ERR("Failed to start microphone: %d", err);
-        return err;
-    }
+	// Indicate microphone initialization
+	set_led_red(true);
+	set_led_green(true);
+	LOG_INF("Starting microphone initialization");
+	set_mic_callback(mic_handler);
+	err = mic_start();
+	if (err) {
+		LOG_ERR("Failed to start microphone: %d", err);
+		// Blink red and green LEDs to indicate error
+		for (int i = 0; i < 5; i++) {
+			set_led_red(false);
+			set_led_green(false);
+			k_msleep(200);
+			set_led_red(true);
+			set_led_green(true);
+			k_msleep(200);
+		}
+		return err;
+	}
+	set_led_red(false);
+	set_led_green(false);
 
 	// Add a delay here to see if we reach this point
 	k_msleep(1000);
