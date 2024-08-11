@@ -225,20 +225,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     }
 
     _listenToMessagesFromNotification();
-
-    NotificationService.instance.createNotification(
-      title: 'Don\'t forget to wear Friend today',
-      body: 'Wear your friend and capture your memories today.',
-      notificationId: 4,
-      isMorningNotification: true,
-    );
-    NotificationService.instance.createNotification(
-      title: 'Here is your action plan for tomorrow',
-      body: 'Check out your daily summary to see what you should do tomorrow.',
-      notificationId: 5,
-      isDailySummaryNotification: true,
-      payload: {'path': '/chat'},
-    );
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
       final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
       WidgetsBinding.instance.addPostFrameCallback((_) async {

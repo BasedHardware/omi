@@ -30,7 +30,7 @@ class NotificationService {
     ledColor: Colors.white,
   );
 
-// TODO: could install the latest version due to podfile issues, so installed 0.8.3
+// TODO: could not install the latest version due to podfile issues, so installed 0.8.3
 // https://pub.dev/packages/awesome_notifications/versions/0.8.3
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
@@ -124,69 +124,17 @@ class NotificationService {
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
-  @Deprecated('Superseded by backend triggers')
-  Future<NotificationCalendar?> _retrieveNotificationInterval({
-    bool isMorningNotification = false,
-    bool isDailySummaryNotification = false,
-  }) async {
-    NotificationCalendar? interval;
-    // TODO: allow people to set a notification time in settings
-    if (isMorningNotification) {
-      var scheduled = await _awesomeNotifications.listScheduledNotifications();
-      var hasMorningNotification = scheduled.any((element) => element.content?.id == 4);
-      debugPrint('hasMorningNotification: $hasMorningNotification');
-      if (hasMorningNotification) return null;
-      interval = NotificationCalendar(
-        hour: 8,
-        minute: 0,
-        second: 0,
-        repeats: true,
-        preciseAlarm: false,
-        allowWhileIdle: true,
-      );
-    } else if (isDailySummaryNotification) {
-      var scheduled = await _awesomeNotifications.listScheduledNotifications();
-      var hasDailySummaryNotification = scheduled.any((element) => element.content?.id == 5);
-      debugPrint('hasDailySummaryNotification: $hasDailySummaryNotification');
-      if (hasDailySummaryNotification) return null;
-      interval = NotificationCalendar(
-        hour: 20,
-        minute: 0,
-        second: 0,
-        repeats: true,
-        preciseAlarm: false,
-        allowWhileIdle: false,
-      );
-    }
-    return interval;
-  }
-
-  @Deprecated('Superceded by backend triggers')
   Future<void> createNotification({
     String title = '',
     String body = '',
     int notificationId = 1,
     Map<String, String?>? payload,
-    bool isMorningNotification = false,
-    bool isDailySummaryNotification = false,
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     debugPrint('createNotification: $allowed');
     if (!allowed) return;
     debugPrint('createNotification ~ Creating notification: $title');
-    NotificationCalendar? interval = await _retrieveNotificationInterval(
-      isMorningNotification: isMorningNotification,
-      isDailySummaryNotification: isDailySummaryNotification,
-    );
-    if (interval == null && (isMorningNotification || isDailySummaryNotification)) return;
-    showNotification(
-      id: notificationId,
-      title: title,
-      body: body,
-      wakeUpScreen: true,
-      payload: payload,
-      schedule: interval,
-    );
+    showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
@@ -210,12 +158,7 @@ class NotificationService {
   Future<void> _showForegroundNotification(RemoteNotification? notification) async {
     if (notification != null) {
       final id = Random().nextInt(10000);
-
-      showNotification(
-        id: id,
-        title: notification.title!,
-        body: notification.body!,
-      );
+      showNotification(id: id, title: notification.title!, body: notification.body!);
     }
   }
 }
