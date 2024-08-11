@@ -135,65 +135,82 @@ int main(void)
         LOG_ERR("Failed to initialize LEDs: %d", err);
         return err;
     }
-    set_led_blue(true);
 
-	// Run the boot LED sequence
-	boot_led_sequence();
+    // Run the boot LED sequence
+    boot_led_sequence();
 
+    // Indicate storage initialization
+    set_led_red(true);
     LOG_INF("Initializing storage...");
     err = storage_init();
     if (err) {
         LOG_ERR("Failed to initialize storage: %d", err);
-		// Don't return here, continue with other initializations
-        // return err;
-    }else{
-		LOG_INF("Storage initialized successfully");
-		test_sd_card();
-	}
+        // Blink red LED to indicate error
+        for (int i = 0; i < 5; i++) {
+            set_led_red(!gpio_pin_get_dt(&led_red));
+            k_msleep(200);
+        }
+        set_led_red(false);
+        return err;
+    }
+    LOG_INF("Storage initialized successfully");
+    set_led_red(false);
+    test_sd_card();
 
+    // Indicate transport initialization
+    set_led_green(true);
     err = transport_start();
     if (err) {
         LOG_ERR("Failed to start transport: %d", err);
+        // Blink green LED to indicate error
+        for (int i = 0; i < 5; i++) {
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_green(false);
         return err;
     }
+    set_led_green(false);
 
+    // Indicate codec initialization
+    set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
     if (err) {
         LOG_ERR("Failed to start codec: %d", err);
+        // Blink blue LED to indicate error
+        for (int i = 0; i < 5; i++) {
+            set_led_blue(!gpio_pin_get_dt(&led_blue));
+            k_msleep(200);
+        }
+        set_led_blue(false);
         return err;
     }
+    set_led_blue(false);
 
-	// Indicate microphone initialization
-	set_led_red(true);
-	set_led_green(true);
-	LOG_INF("Starting microphone initialization");
-	set_mic_callback(mic_handler);
-	err = mic_start();
-	if (err) {
-		LOG_ERR("Failed to start microphone: %d", err);
-		// Blink red and green LEDs to indicate error
-		for (int i = 0; i < 5; i++) {
-			set_led_red(false);
-			set_led_green(false);
-			k_msleep(200);
-			set_led_red(true);
-			set_led_green(true);
-			k_msleep(200);
-		}
-		return err;
-	}
-	set_led_red(false);
-	set_led_green(false);
+    // Indicate microphone initialization
+    set_led_red(true);
+    set_led_green(true);
+    LOG_INF("Starting microphone initialization");
+    set_mic_callback(mic_handler);
+    err = mic_start();
+    if (err) {
+        LOG_ERR("Failed to start microphone: %d", err);
+        // Blink red and green LEDs to indicate error
+        for (int i = 0; i < 5; i++) {
+            set_led_red(!gpio_pin_get_dt(&led_red));
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_red(false);
+        set_led_green(false);
+        return err;
+    }
+    set_led_red(false);
+    set_led_green(false);
 
-	// Add a delay here to see if we reach this point
-	k_msleep(1000);
-	set_led_blue(true);
-	k_msleep(1000);
-	set_led_blue(false);
-
-	LOG_INF("Omi firmware initialized successfully");
     // Indicate successful initialization
+    LOG_INF("Omi firmware initialized successfully");
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);
