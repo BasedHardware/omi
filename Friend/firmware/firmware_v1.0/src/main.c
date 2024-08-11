@@ -174,7 +174,7 @@ int main(void)
     LOG_INF("Omi firmware initialized successfully");
 
     while (1) {
-        // Simplified main loop for initial testing
+        // Main loop indicator
         set_led_state(is_connected, is_charging);
         k_msleep(500);
     }
