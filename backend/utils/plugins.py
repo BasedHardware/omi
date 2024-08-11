@@ -1,15 +1,16 @@
 import threading
+import uuid
 from datetime import datetime
 from typing import List, Optional
-import uuid
+
 import requests
 
 from database.chat import add_plugin_message
 from models.memory import Memory
 from models.plugin import Plugin
+from routers.notifications import send_notification
 from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
 
-from  routers.notifications import send_notification
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     if not plugin_id:
@@ -118,7 +119,7 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
         else:
             url += '?uid=' + uid
 
-        new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]       
+        new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]
 
         payload = {
             "session_id": uid,
@@ -129,17 +130,16 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
             response = requests.post(url, json=payload)
             if response.status_code != 200:
                 print('Plugin integration failed', plugin.id, 'result:', response.content)
-                return        
-            
+                return
+
             response_data = response.json()
             print('response', response_data)
-            if message := response_data.get('message', ''):             
-                send_plugin_notification(token, plugin.id, message)      
+            if message := response_data.get('message', ''):
+                send_plugin_notification(token, plugin.id, message)
                 results[plugin.id] = message
         except Exception as e:
             print(f"Plugin integration error: {e}")
-            return  
-             
+            return
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=_single, args=(plugin,)))
@@ -149,12 +149,12 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
     messages = []
     for key, message in results.items():
         if not message:
-            continue  
+            continue
         messages.append(add_plugin_message(message, key, uid))
     return messages
 
-def send_plugin_notification( token: str, plugin_id: str, message: str,):
-    
+
+def send_plugin_notification(token: str, plugin_id: str, message: str):
     data = {
         "text": message,
         "plugin_id": plugin_id,
@@ -164,5 +164,5 @@ def send_plugin_notification( token: str, plugin_id: str, message: str,):
         'type': 'text',
         'from_integration': 'true',
         'notification_type': 'plugin',
-    }         
-    send_notification(token, plugin_id +' says', message, data)
+    }
+    send_notification(token, plugin_id + ' says', message, data)
