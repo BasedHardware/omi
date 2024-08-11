@@ -11,8 +11,7 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
-    get_speaker_audio_file
+from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file
 from utils.stt.vad import vad_is_empty, VADIterator, model, is_speech_present
 
 router = APIRouter()
@@ -77,7 +76,7 @@ async def _websocket_util(
         #     single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
         # else:
         single_file_path, duration = None, 0
-        transcript_socket = await process_audio_dg(websocket, language, sample_rate, codec, channels,
+        transcript_socket = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
