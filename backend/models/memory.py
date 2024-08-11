@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -117,6 +117,8 @@ class Memory(BaseModel):
     photos: List[MemoryPhoto] = []
 
     plugins_results: List[PluginResult] = []
+
+    external_data: Optional[Dict] = None
 
     discarded: bool = False
     deleted: bool = False
