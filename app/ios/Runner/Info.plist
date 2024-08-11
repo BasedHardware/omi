@@ -63,11 +63,11 @@
 	<key>NSContactsUsageDescription</key>
 	<string>Access contacts for event attendee editing.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Always and when in use!</string>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>Older devices need location.</string>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Need location when in use</string>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
