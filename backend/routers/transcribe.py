@@ -4,36 +4,17 @@ import time
 import uuid
 
 from fastapi import APIRouter
-from fastapi import UploadFile, Request
-from fastapi.responses import HTMLResponse
+from fastapi import UploadFile
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file
+from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
+    get_speaker_audio_file
 from utils.stt.vad import vad_is_empty, VADIterator, model, is_speech_present
 
 router = APIRouter()
-
-
-@router.post("/transcribe")
-def transcribe(file: UploadFile, uid: str, language: str = 'en'):
-    upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
-    aseg = AudioSegment.from_wav(file_path)
-    print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
-
-    if vad_is_empty(file_path):
-        os.remove(file_path)
-        return []
-    transcript = transcribe_file_deepgram(file_path, language=language)
-
-    os.remove(file_path)
-    return transcript  # result
 
 
 @router.post("/v1/transcribe", tags=['v1'])
@@ -57,9 +38,9 @@ def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
 templates = Jinja2Templates(directory="templates")
 
 
-@router.get("/", response_class=HTMLResponse)
-def get(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# @router.get("/", response_class=HTMLResponse) // FIXME
+# def get(request: Request):
+#     return templates.TemplateResponse("index.html", {"request": request})
 
 
 async def _websocket_util(
@@ -72,10 +53,13 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     try:
-        # if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
-        #     single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
-        # else:
-        single_file_path, duration = None, 0
+        if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
+            single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
+            print('get_speaker_audio_file:', single_file_path, duration, uid, codec, sample_rate)
+            duration += 10
+        else:
+            single_file_path, duration = None, 0
+
         transcript_socket = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
@@ -119,7 +103,7 @@ async def _websocket_util(
                     # never works
 
                 elapsed_seconds = time.time() - timer_start
-                if elapsed_seconds > (duration * 2) or not socket2:
+                if elapsed_seconds > duration or not socket2:
                     socket1.send(audio_buffer)
                     if socket2:
                         print('Killing socket2')
