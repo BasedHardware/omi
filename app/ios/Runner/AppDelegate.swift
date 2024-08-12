@@ -2,7 +2,7 @@ import UIKit
 import Flutter
 import UserNotifications
 
-@UIApplicationMain
+@main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
 
