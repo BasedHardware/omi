@@ -107,6 +107,7 @@ src/recordings
 
 # vscode configuration
 .vscode/
+!.vscode/extensions.json
 
 # test output
 test/recordings
