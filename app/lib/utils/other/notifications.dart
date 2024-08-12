@@ -105,6 +105,7 @@ void createNotification({
   Map<String, String?>? payload,
   bool isMorningNotification = false,
   bool isDailySummaryNotification = false,
+  bool personFell = false,
 }) async {
   var allowed = await AwesomeNotifications().isNotificationAllowed();
   debugPrint('createNotification: $allowed');

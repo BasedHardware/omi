@@ -239,6 +239,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       isDailySummaryNotification: true,
       payload: {'path': '/chat'},
     );
+    createNotification(
+      title: 'Ouch....',
+      body: 'Did you fall?',
+      notificationId: 6,
+      personFell: true,
+    );
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
       final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
       WidgetsBinding.instance.addPostFrameCallback((_) async {

@@ -100,28 +100,15 @@ static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr
 static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     printk("audio_data_read_characteristic\n");
-    // sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
-
-    // sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
-	// sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
-
     int axis_mode = 6; //3 for accel, 6 for (also) gyro
-
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &axis_mode, sizeof(axis_mode));
 }
 
 
-//struct k_work_delayable accel_work;
-#define ACCEL_REFRESH_INTERVAL 500 // 0.1 seconds
+#define ACCEL_REFRESH_INTERVAL 500 // 0.5 seconds
 
 void broadcast_accel(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
-//battery_work
 
 void broadcast_accel(struct k_work *work_item) {
 
