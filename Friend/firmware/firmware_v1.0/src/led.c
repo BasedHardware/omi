@@ -1,7 +1,9 @@
-#include "led.h"
+#include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
+#include "led.h"
 #include "utils.h"
 
+LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
 int led_start()
 {
     ASSERT_TRUE(gpio_is_ready_dt(&led_red));
@@ -10,7 +12,7 @@ int led_start()
     ASSERT_OK(gpio_pin_configure_dt(&led_green, GPIO_OUTPUT_INACTIVE));
     ASSERT_TRUE(gpio_is_ready_dt(&led_blue));
     ASSERT_OK(gpio_pin_configure_dt(&led_blue, GPIO_OUTPUT_INACTIVE));
-    printk("LEDs started\n");
+    LOG_INF("LEDs started");
     return 0;
 }
 
