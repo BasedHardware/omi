@@ -1,5 +1,8 @@
 source "Kconfig.zephyr"
 
+menu "Friend Configuration"
 config CODEC_OPUS
     bool "Opus Audio Codec Support"
     default n
+
+endmenu
