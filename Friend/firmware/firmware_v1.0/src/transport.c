@@ -464,7 +464,7 @@ int transport_start()
     }
     else
     {
-        LOG_ERR("Advertising successfully started");
+        LOG_INF("Advertising successfully started");
     }
 
     int battErr = 0;
