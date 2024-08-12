@@ -232,7 +232,6 @@ Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
     return null;
   }
 
-  debugPrint('Hello there');
   var buttonLevelCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
   if (buttonLevelCharacteristic == null) {
     logCharacteristicNotFoundError('Button level', deviceId);
@@ -253,13 +252,22 @@ Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
     return null;
   }
 
-  debugPrint('IVE BEEN CALLED');
-
   var listener = buttonLevelCharacteristic.lastValueStream.listen((value) {
     // debugPrint('Battery level listener: $value');
     if (value.isNotEmpty) {
+      if (value.length > 1) {
       onButtonLevelChange!(value[0]);
-      debugPrint('Button level at the end: ${value[0]}');
+     // debugPrint('Button level at the end: ${value[0]}');
+
+      if (value[0] < 20 && value[0] > 0) {
+        debugPrint('Button pressed');
+      }
+      else if (value[0]  == 20) {
+        debugPrint('Button long pressed');
+      }
+     // var result = value[4] | (value[5] << 8) | (value[6] << 16) | (value[7] << 24);
+    //  debugPrint('Timer: $result');
+      }
     }
   });
 
