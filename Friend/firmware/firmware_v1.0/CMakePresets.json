@@ -8,6 +8,7 @@
 	"configurePresets": [
 		{
 			"name": "build_xiao_ble_sense_devkitv1",
+			"displayName": "Devkit V1",
 			"configuration": "Debug",
 			"hidden": false,
 			"description": "Debug build for devkit v1 device with no external modules",
@@ -18,11 +19,11 @@
 				"CMAKE_BUILD_TYPE": "Debug",
 				"PLATFORM": "nrf52840",
 				"BOARD": "xiao_ble_sense",
-				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf",
-				// No overlay file for this configuration
+				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf"
             }
 		},{
 			"name": "build_xiao_ble_sense_devkitv1-spisd.",
+			"displayName": "Devkit V1 (with SPI SD)",
 			"configuration": "Debug",
 			"hidden": false,
 			"description": "Debug build for devkit v1 device with external SPI SD card module",
@@ -38,6 +39,7 @@
             }
         },{
 			"name": "build_xiao_ble_sense_devkitv2-adafruit.",
+			"displayName": "Devkit V2 (with Adafruit BFF Module)",
 			"configuration": "Debug",
 			"hidden": false,
 			"description": "Debug build for devkit v2 device with adafruit audio bff module",
