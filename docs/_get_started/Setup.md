@@ -17,6 +17,7 @@ Before starting, make sure you have the following installed:
 - Xcode (for iOS)
 - Android Studio (for Android)
 - CocoaPods (for iOS dependencies)
+- NDK 26.3.11579264 or above (to build Opus for ARM Devices)
 
 ### Setup Instructions
 
@@ -27,7 +28,7 @@ Before starting, make sure you have the following installed:
     ```
 
 2. **Get Flutter Dependencies**:
-   From within `apps/AppWithWearable`, install flutter packages:
+   From within `app` directory, install flutter packages:
     ```
     flutter pub get
     ```
