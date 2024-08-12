@@ -1,0 +1,26 @@
+{
+    "version": 2,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 20,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "build_v2_testdevice",
+			"configuration": "Debug",
+			"hidden": false,
+			"description": "Debug build for test device with SPIO SD card",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build/build_v2_testdevice",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"PLATFORM": "nrf52840",
+				"BOARD": "xiao_ble_sense",
+				"CACHED_CONF_FILE": "${sourceDir}/prj.conf",
+				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/build_v2_testdevice_xiao_ble_sense.overlay"
+            }
+        }
+    ]
+}
