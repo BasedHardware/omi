@@ -77,7 +77,7 @@ getConnectionStateWidgets(
               Text(
                 isWifiDisconnected
                     ? 'No Internet'
-                    : isWebsocketError
+                    : (!isWifiDisconnected && isWebsocketError)
                         ? 'Server Issue'
                         : 'Listening',
                 style: TextStyle(
