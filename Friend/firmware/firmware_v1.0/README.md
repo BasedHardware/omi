@@ -39,7 +39,7 @@ The Friend firmware is built on the Zephyr RTOS and provides functionality for a
 
 ## Device-Specific Builds
 
-For different device versions (e.g., V1 and V2), use separate overlay files. For now a single device overlay file is provided for the V1 device.
+For different device versions (e.g., V1 and V2), use separate overlay files and project configuration files. See `CMakePresets.json` for the available configurations.
 
 These overlay files provide context on pins and device functions to the firmware when building. Each device will need its own unique build.
 
@@ -61,4 +61,3 @@ To enable USB serial debugging:
 - **Transport**: Manages Bluetooth connectivity and audio streaming.
 - **Storage**: Handles SD card operations and audio file management.
 - **LED Control**: Provides visual feedback about device status.
-
