@@ -362,6 +362,22 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
                         ),
                       );
                     },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    },
                     imageUrl: MapsUtil.getMapImageUrl(
                       memory.geolocation!.latitude!,
                       memory.geolocation!.longitude!,
