@@ -8,6 +8,7 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +17,7 @@ class ChatPage extends StatefulWidget {
   final List<ServerMessage> messages;
   final Function(ServerMessage) addMessage;
   final Function(ServerMemory) updateMemory;
+  final bool isLoadingMessages;
 
   const ChatPage({
     super.key,
@@ -23,6 +25,7 @@ class ChatPage extends StatefulWidget {
     required this.messages,
     required this.addMessage,
     required this.updateMemory,
+    required this.isLoadingMessages,
   });
 
   @override
@@ -70,31 +73,44 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.build(context);
     return Stack(
       children: [
-        SingleChildScrollView(
-          controller: scrollController,
-          child: ListView.builder(
-            shrinkWrap: true,
-            reverse: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: widget.messages.length,
-            itemBuilder: (context, chatIndex) {
-              final message = widget.messages[chatIndex];
-              double topPadding = chatIndex == widget.messages.length - 1 ? 24 : 16;
-              double bottomPadding = chatIndex == 0 ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
-              return Padding(
-                key: ValueKey(message.id),
-                padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
-                child: message.sender == MessageSender.ai
-                    ? AIMessage(
-                        message: message,
-                        sendMessage: _sendMessageUtil,
-                        displayOptions: widget.messages.length <= 1,
-                        pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
-                        updateMemory: widget.updateMemory,
-                      )
-                    : HumanMessage(message: message),
-              );
-            },
+        Center(
+          child: SingleChildScrollView(
+            controller: scrollController,
+            child: widget.isLoadingMessages
+                ? const CircularProgressIndicator(
+                    color: Colors.white,
+                  )
+                : (widget.messages.isEmpty)
+                    ? Text(
+                        ConnectivityController().isConnected.value
+                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                            : 'Please check your internet connection and try again',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white))
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        reverse: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: widget.messages.length,
+                        itemBuilder: (context, chatIndex) {
+                          final message = widget.messages[chatIndex];
+                          double topPadding = chatIndex == widget.messages.length - 1 ? 24 : 16;
+                          double bottomPadding = chatIndex == 0 ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
+                          return Padding(
+                            key: ValueKey(message.id),
+                            padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                            child: message.sender == MessageSender.ai
+                                ? AIMessage(
+                                    message: message,
+                                    sendMessage: _sendMessageUtil,
+                                    displayOptions: widget.messages.length <= 1,
+                                    pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                                    updateMemory: widget.updateMemory,
+                                  )
+                                : HumanMessage(message: message),
+                          );
+                        },
+                      ),
           ),
         ),
         Align(
@@ -139,7 +155,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       : () async {
                           String message = textController.text;
                           if (message.isEmpty) return;
-                          _sendMessageUtil(message);
+                          if (ConnectivityController().isConnected.value) {
+                            _sendMessageUtil(message);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please check your internet connection and try again'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         },
                   icon: loading
                       ? const SizedBox(

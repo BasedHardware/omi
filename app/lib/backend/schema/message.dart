@@ -11,6 +11,13 @@ class MessageMemoryStructured {
   static MessageMemoryStructured fromJson(Map<String, dynamic> json) {
     return MessageMemoryStructured(json['title'], json['emoji']);
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'emoji': emoji,
+    };
+  }
 }
 
 class MessageMemory {
@@ -26,6 +33,14 @@ class MessageMemory {
       DateTime.parse(json['created_at']),
       MessageMemoryStructured.fromJson(json['structured']),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'created_at': createdAt.toIso8601String(),
+      'structured': structured.toJson(),
+    };
   }
 }
 
@@ -63,5 +78,18 @@ class ServerMessage {
       json['from_integration'] ?? false,
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'created_at': createdAt.toIso8601String(),
+      'text': text,
+      'sender': sender.toString().split('.').last,
+      'type': type.toString().split('.').last,
+      'plugin_id': pluginId,
+      'from_integration': fromIntegration,
+      'memories': memories.map((m) => m.toJson()).toList(),
+    };
   }
 }
