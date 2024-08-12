@@ -79,8 +79,8 @@ static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struc
 //
 static struct gpio_callback button_cb_data;
 
-struct gpio_dt_spec spec = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
-struct gpio_dt_spec spec2 = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
+struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
+struct gpio_dt_spec d5_pin_input = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
 
 static struct bt_uuid_128 button_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000003,0x0000,0x1000,0x7450,0xBE2E44B06B00));
 static struct bt_uuid_128 button_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000004,0x0000,0x1000,0x7450,0xBE2E44B06B00));
@@ -93,18 +93,8 @@ static struct bt_gatt_attr button_service_attr[] = {
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
-static inline uint32_t timed = 0;
-static inline uint32_t timer = 0;
-
-
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-    printk("butsdkffsdhjr\n");
-
-}
-static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-     printk("button_data_read_characteristic\n");
-     int result_ = 10;
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &result_, sizeof(result_));
+    printk("Handler\n");
 
 }
 
@@ -129,29 +119,66 @@ struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
-static int count_ = 0;
 
-const static int max_debounce_interval = 2000; //CHANGE THIS TO IMPROVE BUTTON PRESSES
+
+
+static uint32_t current_button_time = 0;
+static uint32_t previous_button_time = 0;
+
+
+const int max_debounce_interval = 750;
+static bool was_pressed = false;
+
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
-	timed = k_cycle_get_32();
-
-    count_++;
-
-	if (timed - timer < 2000) { //too low!
-
-    
+    current_button_time = k_cycle_get_32();
+	if (current_button_time - previous_button_time < max_debounce_interval) { //too low!
 	}
-	else { //right...
-	    printk("actual button press?\n");
-        int err = bt_gatt_notify(current_connection, &button_service.attrs[1], &count_, sizeof(count_));
-
+	else { //right...    
+        int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
+        if (temp) {
+            was_pressed = true;
+        }
+        else {
+            was_pressed = false;
+        }
 	}
-	printk("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
-	timer = timed;
+	previous_button_time = current_button_time;
+}
+#define BUTTON_CHECK_INTERVAL 50 // 15 seconds
+
+static int consecutive_hold_count = 0;
+
+void check_button_level(struct k_work *work_item);
+
+K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
+
+void check_button_level(struct k_work *work_item) {
+   printk("consecutive_hold_count: %d\n", consecutive_hold_count);
+    if(was_pressed) {
+        consecutive_hold_count++;
+    }
+    else {
+        if(consecutive_hold_count< 20) {
+            bt_gatt_notify(current_connection, &button_service.attrs[1], &consecutive_hold_count, sizeof(consecutive_hold_count));
+        }
+        consecutive_hold_count = 0;
+    }
+    if(consecutive_hold_count == 20) {
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &consecutive_hold_count, sizeof(consecutive_hold_count));
+    }
+    k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
+}
+
+
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
+     printk("button_data_read_characteristic\n");
+     printk("was_pressed: %d\n", was_pressed);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &was_pressed, sizeof(was_pressed));
 
 }
+
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -234,12 +261,9 @@ K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 void broadcast_battery_level(struct k_work *work_item) {
     uint16_t battery_millivolt;
     uint8_t battery_percentage;
-
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
-
         printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
-
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
         if (err) {
@@ -275,6 +299,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+    k_work_schedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
 
     is_connected = true;
 }
@@ -519,58 +544,54 @@ int transport_start()
     }
     printk("Bluetooth initialized\n");
 
-
-    //sdfnj
-
-    	if (gpio_is_ready_dt(&spec)) {
-		printk("alright\n");
+    	if (gpio_is_ready_dt(&d4_pin)) {
+		printk("D4 Pin ready\n");
 	}
     	else {
-		printk("not good\n");
+		printk("Error setting up D4 Pin\n");
 	}
 
-	if (gpio_pin_configure_dt(&spec, GPIO_OUTPUT_ACTIVE) < 0) {
-		printk("oh sfd\n");
+	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) {
+		printk("Error setting up D4 Pin Voltage\n");
 	}
 	else {
-		printk("looks good\n");
+		printk("D4 ready to transmit voltage\n");
 	}
-	if (gpio_is_ready_dt(&spec2)) {
-		printk("alrighty\n");
+	if (gpio_is_ready_dt(&d5_pin_input)) {
+		printk("D5 Pin ready\n");
 	}
 	else {
-		printk("not goody\n");
+		printk("D5 Pin not ready\n");
 	}
 
-	int err2 = gpio_pin_configure_dt(&spec2,GPIO_INPUT);
+	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
 	if (err2 != 0) {
-		printk("Something went wrong sir \n");
+		printk("Error setting up D5 Pin\n");
 		return 0;
 	}
 	else {
-		printk("yipee!\n");
+		printk("D5 ready\n");
 	}
-	err2 =  gpio_pin_interrupt_configure_dt(&spec2,GPIO_INT_EDGE_TO_ACTIVE);
+	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) {
-		printk("Something went wrong on interrupts \n");
+		printk("D5 unable to detect button presses\n");
 		return 0;
 	}
 	else {
-		printk("yipee! again\n");
+		printk("D5 ready to detect button presses\n");
 	}
 
-    gpio_init_callback(&button_cb_data, button_pressed, BIT(spec2.pin));
-	gpio_add_callback(spec2.port, &button_cb_data);
 
-
-
+    gpio_init_callback(&button_cb_data, button_pressed, BIT(d5_pin_input.pin));
+	gpio_add_callback(d5_pin_input.port, &button_cb_data);
     // Start advertising
     bt_gatt_service_register(&button_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+
     if (err)
     {
         printk("Advertising failed to start (err %d)\n", err);
