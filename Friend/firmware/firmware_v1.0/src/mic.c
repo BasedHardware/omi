@@ -1,3 +1,4 @@
+#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -8,6 +9,8 @@
 #include "mic.h"
 #include "utils.h"
 #include "led.h"
+
+LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
 // Port of this code: https://github.com/Seeed-Studio/Seeed_Arduino_Mic/blob/master/src/hardware/nrf52840_adc.cpp
