@@ -7,19 +7,49 @@
 	},
 	"configurePresets": [
 		{
-			"name": "build_v2_testdevice",
+			"name": "build_xiao_ble_sense_devkitv1",
 			"configuration": "Debug",
 			"hidden": false,
-			"description": "Debug build for test device with SPIO SD card",
+			"description": "Debug build for devkit v1 device with no external modules",
 			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/build_v2_testdevice",
+			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv1",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
 				"PLATFORM": "nrf52840",
 				"BOARD": "xiao_ble_sense",
-				"CACHED_CONF_FILE": "${sourceDir}/prj.conf",
-				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/build_v2_testdevice_xiao_ble_sense.overlay"
+				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf",
+				// No overlay file for this configuration
+            }
+		},{
+			"name": "build_xiao_ble_sense_devkitv1-spisd.",
+			"configuration": "Debug",
+			"hidden": false,
+			"description": "Debug build for devkit v1 device with external SPI SD card module",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv1-spisd",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"PLATFORM": "nrf52840",
+				"BOARD": "xiao_ble_sense",
+				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1-spisd.conf",
+				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv1-spisd.overlay"
+            }
+        },{
+			"name": "build_xiao_ble_sense_devkitv2-adafruit.",
+			"configuration": "Debug",
+			"hidden": false,
+			"description": "Debug build for devkit v2 device with adafruit audio bff module",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv2-adafruit",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"PLATFORM": "nrf52840",
+				"BOARD": "xiao_ble_sense",
+				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv2-adafruit.conf",
+				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv2-adafruit.overlay"
             }
         }
     ]
