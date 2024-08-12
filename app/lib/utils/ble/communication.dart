@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
-
+import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/ble/errors.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 
 Future<int> retrieveBatteryLevel(String deviceId) async {
   final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
@@ -270,34 +272,46 @@ Future<StreamSubscription<List<int>>?> getAccelListener(
 
   var listener = accelCharacteristic.lastValueStream.listen((value) {
     // debugPrint('Battery level listener: $value');
-    int result = 100;
-    int temp = 100;
+
     if (value.length > 4) { //for some reason, the very first reading is four bytes
 
 
     if (value.isNotEmpty) {
+       List<double> accelerometerData = [];
        onAccelChange!(value[0]);
-      result = (value[0] | (value[1] << 8) | (value[2] << 16) | (value[3] << 24));
-      //temp = value[0][0];
-      temp = value[4];
-      temp = (value[4] | (value[5] << 8) | (value[6] << 16) | (value[7] << 24));
-       if (value[0] > 127) { 
-       result = ~result & 0xFFFF;  
-       result += 1; 
-       result = -result; 
 
-       temp = ~temp & 0xFFFF;  
-       temp += 1; 
-       temp = -temp;      
-       }
-       double x = result + (temp / 1000000);
-   //    debugPrint('Accelerometer reading: $value');
-      // debugPrint('first reading: $result');
-       debugPrint('result: $x');
+      for (int i = 0; i < 6; i++) {
+        int baseIndex = i * 8;
+        var result = ((value[baseIndex] | (value[baseIndex + 1] << 8) | (value[baseIndex + 2] << 16) | (value[baseIndex + 3] << 24)) & 0xFFFFFFFF as int).toSigned(32);
+        var temp = ((value[baseIndex + 4] | (value[baseIndex + 5] << 8) | (value[baseIndex + 6] << 16) | (value[baseIndex + 7] << 24)) & 0xFFFFFFFF as int).toSigned(32);
+        double axisValue = result + (temp / 1000000);
+        accelerometerData.add(axisValue);
       }
-    //   debugPrint('Accelerometer reading: $value');
+      debugPrint('Accelerometer x direction: ${accelerometerData[0]}');
+      debugPrint('Gyroscope x direction: ${accelerometerData[3]}\n');
 
+      debugPrint('Accelerometer y direction: ${accelerometerData[1]}');
+      debugPrint('Gyroscope y direction: ${accelerometerData[4]}\n');
 
+      debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
+      debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
+      //simple threshold fall calcaultor
+      var fall_number = sqrt( pow(accelerometerData[0],2) + pow(accelerometerData[1],2) + pow(accelerometerData[2],2) );
+     if(fall_number > 30.0) {
+      AwesomeNotifications().createNotification(
+    content: NotificationContent(
+      id: 6,
+      channelKey: 'channel',
+      actionType: ActionType.Default,
+      title: 'ouch',
+      body: 'did you fall?',
+      wakeUpScreen: true,
+    ),
+  );
+     }
+      
+      
+      }
     }
     });
 
