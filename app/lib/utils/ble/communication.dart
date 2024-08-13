@@ -259,11 +259,17 @@ Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
       onButtonLevelChange!(value[0]);
      // debugPrint('Button level at the end: ${value[0]}');
 
-      if (value[0] < 20 && value[0] > 0) {
-        debugPrint('Button pressed');
+      if (value[0] == 1) {
+        debugPrint('Button tapped');
       }
-      else if (value[0]  == 20) {
+      else if (value[0]  == 2) {
+        debugPrint('Button double tapped');
+      }
+      else if (value[0]  == 3) {
         debugPrint('Button long pressed');
+      }
+      else {
+        debugPrint('invalid command');
       }
      // var result = value[4] | (value[5] << 8) | (value[6] << 16) | (value[7] << 24);
     //  debugPrint('Timer: $result');

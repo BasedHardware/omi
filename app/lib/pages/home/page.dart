@@ -589,6 +589,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                         builder: (c) => ConnectedDevice(
                                               device: _device!,
                                               batteryLevel: batteryLevel,
+                                              buttonLevel: buttonLevel
                                             )));
                                     MixpanelManager().batteryIndicatorClicked();
                                   },
@@ -635,7 +636,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {
-                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
+                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0,buttonLevel: 0));
                               }
                               setState(() {});
                             },

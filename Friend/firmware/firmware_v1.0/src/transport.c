@@ -127,8 +127,8 @@ uint16_t current_package_index = 0;
 static uint32_t current_button_time = 0;
 static uint32_t previous_button_time = 0;
 
-
-const int max_debounce_interval = 750;
+static uint32_t pressed_time = 0;
+const int max_debounce_interval = 700;
 static bool was_pressed = false;
 
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
@@ -143,34 +143,153 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
             was_pressed = true;
         }
         else {
+            if(!was_pressed) {
+                pressed_time = k_cycle_get_32();  
+            }
             was_pressed = false;
         }
 	}
 	previous_button_time = current_button_time;
 }
-#define BUTTON_CHECK_INTERVAL 50 // 15 seconds
-
-static int consecutive_hold_count = 0;
+#define BUTTON_CHECK_INTERVAL 40 // 0.04 seconds, 25 Hz
 
 void check_button_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
+typedef enum {
+    IDLE, ONE_PRESS,TWO_PRESS,GRACE
+} FSM_STATE_T;
+
+static FSM_STATE_T current_button_state = IDLE;
+static uint32_t inc_count_1 = 0;
+static uint32_t inc_count_0 = 0;
+
+
+static int final_button_state = 0;
+const static int threshold = 10;
+static void reset_inc_count_0 () {
+    inc_count_0 = 0;
+}
+static void reset_inc_count_1 () {
+    inc_count_1 = 0;
+}
+
 void check_button_level(struct k_work *work_item) {
-   printk("consecutive_hold_count: %d\n", consecutive_hold_count);
-    if(was_pressed) {
-        consecutive_hold_count++;
-    }
-    else {
-        if(consecutive_hold_count< 20) {
-            bt_gatt_notify(current_connection, &button_service.attrs[1], &consecutive_hold_count, sizeof(consecutive_hold_count));
+     //insert the current button state here
+    int state_ = was_pressed ? 1 : 0;
+    if (current_button_state == IDLE) {
+
+        if (state_ == 0) {
+            //Do nothing!
         }
-        consecutive_hold_count = 0;
+
+        else if (state_ == 1) {
+            //Also do nothing, but transition to the next state
+            current_button_state = ONE_PRESS;
+        }
+
     }
-    if(consecutive_hold_count == 20) {
-    bt_gatt_notify(current_connection, &button_service.attrs[1], &consecutive_hold_count, sizeof(consecutive_hold_count));
+
+
+    else if (current_button_state == ONE_PRESS) {
+
+        if (state_ == 0) {
+            inc_count_0++; //button is unpressed
+
+            if (inc_count_0 > 2) {
+                //If button is not pressed for a little while....... 
+                //transition to Two_press. button could be a single or double tap
+                current_button_state = TWO_PRESS;
+                reset_inc_count_0();
+                reset_inc_count_1();            
+            }
+        }
+        if (state_ == 1) {
+
+            inc_count_1++; //button is pressed
+
+            if (inc_count_1 > 50) {
+                //If button is pressed for a long time.......
+                final_button_state = 3;
+                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+                printk("long tap\n");
+                //Fire the long mode notify and enter a grace period
+                current_button_state = GRACE;
+                reset_inc_count_0();
+                reset_inc_count_1();
+            }
+
+        }
+
     }
+
+    else if (current_button_state == TWO_PRESS) {
+
+        if (state_ == 0) {
+             inc_count_0++; //not pressed
+             if (inc_count_0 > 10) { //10 instances of unpressing
+               
+                if (inc_count_1 > 0) { // if button has been pressed......
+
+                final_button_state = 2;
+                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+                printk("double tap\n");
+                //Fire the notify and enter a grace period
+                current_button_state = GRACE;
+                reset_inc_count_0();
+                reset_inc_count_1();
+                
+             }
+             //single button press
+            else {
+                final_button_state = 1;
+                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+                printk("single tap\n");
+                //Fire the notify and enter a grace period
+                current_button_state = GRACE;
+                reset_inc_count_0();
+                reset_inc_count_1();
+
+             }
+
+             }
+
+
+        }
+        else if (state_ == 1 ) {
+            inc_count_1++;
+
+            if (inc_count_1 > threshold) {
+                final_button_state = 2;
+                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+                printk("double tap\n");
+                //Fire the notify and enter a grace period
+                current_button_state = GRACE;
+                reset_inc_count_0();
+                reset_inc_count_1();
+            }
+        }
+
+
+    }
+
+    else if (current_button_state == GRACE) {
+        if (state_ == 0) {
+            inc_count_0++;
+            if (inc_count_0 > 10) {
+            current_button_state = IDLE;
+            reset_inc_count_0();
+            
+            }
+        }
+        else if (state_ == 1) {
+              //do nothing
+        }
+    }
+
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
+
 }
 
 
@@ -296,6 +415,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         LOG_ERR("Failed to get connection info (err %d)", err);
         return;
     }
+
+    printk("bluetooth activated\n");
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
