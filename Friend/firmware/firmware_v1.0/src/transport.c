@@ -302,7 +302,7 @@ void check_button_level(struct k_work *work_item) {
             }
         }
         else if (state_ == 1) {
-              //do nothing
+              inc_count_1++;
         }
     }
 
