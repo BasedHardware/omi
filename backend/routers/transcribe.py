@@ -94,12 +94,12 @@ async def _websocket_util(
                 # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
 
                 if codec == 'pcm8':
-                    frame_size, frames_count = 160, 24
+                    frame_size, frames_count = 160, 16
                     if len(audio_buffer) < (frame_size * frames_count):
                         continue
 
                     latest_speech_state = get_speech_state(
-                        audio_buffer[:window_size_samples * 15], vad_iterator, window_size_samples
+                        audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
                     )
                     if latest_speech_state:
                         speech_state = latest_speech_state
