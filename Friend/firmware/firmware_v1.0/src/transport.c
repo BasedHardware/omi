@@ -161,6 +161,7 @@ typedef enum {
     IDLE, ONE_PRESS,TWO_PRESS,GRACE
 } FSM_STATE_T;
 
+// 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
 static uint32_t inc_count_1 = 0;
 static uint32_t inc_count_0 = 0;
@@ -186,6 +187,9 @@ void check_button_level(struct k_work *work_item) {
 
         else if (state_ == 1) {
             //Also do nothing, but transition to the next state
+            final_button_state[0] = 4; //button press
+            printk("pressed\n");
+            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
             current_button_state = ONE_PRESS;
         }
 
@@ -195,8 +199,13 @@ void check_button_level(struct k_work *work_item) {
     else if (current_button_state == ONE_PRESS) {
 
         if (state_ == 0) {
+            
+            if(inc_count_0 == 0) {
+            final_button_state[0] = 5; //release
+            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+            printk("unpressed\n");
+            }
             inc_count_0++; //button is unpressed
-
             if (inc_count_0 > 2) {
                 //If button is not pressed for a little while....... 
                 //transition to Two_press. button could be a single or double tap
@@ -206,7 +215,6 @@ void check_button_level(struct k_work *work_item) {
             }
         }
         if (state_ == 1) {
-
             inc_count_1++; //button is pressed
 
             if (inc_count_1 > 50) {
@@ -243,7 +251,8 @@ void check_button_level(struct k_work *work_item) {
              }
              //single button press
             else {
-                final_button_state[0] = 1;
+
+                final_button_state[0] = 1; //single tap
                 bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
                 printk("single tap\n");
                 //Fire the notify and enter a grace period
@@ -258,7 +267,14 @@ void check_button_level(struct k_work *work_item) {
 
         }
         else if (state_ == 1 ) {
+            if (inc_count_1 == 0) {
+                final_button_state[0] = 4; //pressed
+                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+                printk("pressed\n");
+            }
             inc_count_1++;
+
+
 
             if (inc_count_1 > threshold) {
                 final_button_state[0] = 2;
@@ -276,6 +292,11 @@ void check_button_level(struct k_work *work_item) {
 
     else if (current_button_state == GRACE) {
         if (state_ == 0) {
+            if (inc_count_0 == 0) {
+            final_button_state[0] = 5; //released
+            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+            printk("unpressed\n");
+            }
             inc_count_0++;
             if (inc_count_0 > 10) {
             current_button_state = IDLE;
