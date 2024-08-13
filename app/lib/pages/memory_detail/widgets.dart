@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -159,7 +158,8 @@ List<Widget> getSummaryWidgets(
                     ));
                     return;
                   }
-                  MemoryProvider().setEventCreated(event);
+                  // TODO: calendar events in memory detail.
+                  // MemoryProvider().setEventCreated(event);
                   setState(() => event.created = true);
                   CalendarUtil().createEvent(
                     event.title,
@@ -358,6 +358,22 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
                           image: DecorationImage(
                             image: imageProvider,
                             fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       );
