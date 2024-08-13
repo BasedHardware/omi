@@ -25,7 +25,7 @@ Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async 
 Future bleDisconnectDevice(BTDeviceStruct btDevice) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   try {
-    await device.disconnect();
+    await device.disconnect(queue: false);
   } catch (e) {
     debugPrint('bleDisconnectDevice failed: $e');
   }

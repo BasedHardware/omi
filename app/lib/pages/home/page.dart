@@ -41,9 +41,7 @@ import 'package:tuple/tuple.dart';
 import 'package:upgrader/upgrader.dart';
 
 class HomePageWrapper extends StatefulWidget {
-  final dynamic btDevice;
-
-  const HomePageWrapper({super.key, this.btDevice});
+  const HomePageWrapper({super.key});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
@@ -191,6 +189,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {
       event = 'App is detached';
+    } else {
+      return;
     }
     debugPrint(event);
     InstabugLog.logInfo(event);
@@ -209,6 +209,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   };
   ConnectivityController connectivityController = ConnectivityController();
   bool? previousConnection;
+
   @override
   void initState() {
     connectivityController.init();
@@ -222,8 +223,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // TODO: request only one more time if denied, but not again.
-      // requestNotificationPermissions();
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
@@ -265,7 +264,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
-    // TODO: when disconnected manually need to remove this connection state listener
+    _connectionStateListener?.cancel();
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
@@ -782,6 +781,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _AccelListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
+    ForegroundUtil.stopForegroundTask();
     super.dispose();
   }
 }

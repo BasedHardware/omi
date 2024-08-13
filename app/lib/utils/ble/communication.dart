@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -9,6 +10,7 @@ import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/ble/errors.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+
 
 Future<int> retrieveBatteryLevel(String deviceId) async {
   final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
@@ -24,10 +26,7 @@ Future<int> retrieveBatteryLevel(String deviceId) async {
   }
 
   var currValue = await batteryLevelCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    return currValue[0];
-  }
-
+  if (currValue.isNotEmpty) return currValue[0];
   return -1;
 }
 
