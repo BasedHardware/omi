@@ -22,7 +22,7 @@ class FoundDevices extends StatefulWidget {
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+class _FoundDevicesState extends State<FoundDevices> {
   bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
@@ -62,6 +62,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
     await bleConnectDevice(device.id);
     deviceId = device.id;
     deviceName = device.name;
+    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
   }
 

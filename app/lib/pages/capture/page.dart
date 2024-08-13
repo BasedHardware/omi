@@ -16,11 +16,13 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -117,7 +119,8 @@ class CapturePageState extends State<CapturePage>
   Geolocation? geolocation;
 
   Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
-    BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
+    print('initiateWebsocket');
+    BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
     await initWebSocket(
       codec: codec,
@@ -173,13 +176,30 @@ class CapturePageState extends State<CapturePage>
   Future<void> initiateFriendAudioStreaming() async {
     if (btDevice == null) return;
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    if (codec != BleAudioCodec.pcm8) restartWebSocket();
+    if (SharedPreferencesUtil().deviceCodec != codec) {
+      SharedPreferencesUtil().deviceCodec = codec;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => getDialog(
+          context,
+          () => routeToPage(context, const HomePageWrapper(), replace: true),
+          () => {},
+          'Firmware change detected!',
+          'You are currently using a different firmware version than the one you were using before. Please restart the app to apply the changes.',
+          singleButton: true,
+          okButtonText: 'Restart',
+        ),
+      );
+      return;
+    }
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
+        // print(value);
         value.removeRange(0, 3);
         if (wsConnectionState == WebsocketConnectionStatus.connected) {
           websocketChannel?.sink.add(value);
@@ -193,9 +213,7 @@ class CapturePageState extends State<CapturePage>
   Future<void> startOpenGlass() async {
     if (btDevice == null) return;
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
-    debugPrint('startOpenGlass isGlasses: $isGlasses');
     if (!isGlasses) return;
-
     await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();
   }
@@ -213,6 +231,7 @@ class CapturePageState extends State<CapturePage>
   }
 
   void restartWebSocket() {
+    debugPrint('restartWebSocket');
     closeWebSocket();
     initiateWebsocket();
   }
@@ -301,7 +320,6 @@ class CapturePageState extends State<CapturePage>
 
   processCachedTranscript() async {
     // TODO: only applies to friend, not openglass, fix it
-    debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
