@@ -67,3 +67,10 @@ def get_plugin_reviews(plugin_id: str) -> dict:
         return {}
     return eval(reviews)
 
+
+def user_has_speech_profile(uid: str) -> bool:
+    return r.exists(f'speech_profiles:{uid}') != 0
+
+
+def set_user_has_speech_profile(uid: str):
+    r.set(f'speech_profiles:{uid}', 1)

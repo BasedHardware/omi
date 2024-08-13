@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -160,6 +161,16 @@ class SharedPreferencesUtil {
   set cachedMemories(List<ServerMemory> value) {
     final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMemories', memories);
+  }
+
+  List<ServerMessage> get cachedMessages {
+    final List<String> messages = getStringList('cachedMessages') ?? [];
+    return messages.map((e) => ServerMessage.fromJson(jsonDecode(e))).toList();
+  }
+
+  set cachedMessages(List<ServerMessage> value) {
+    final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedMessages', messages);
   }
 
   addFailedMemory(ServerMemory memory) {

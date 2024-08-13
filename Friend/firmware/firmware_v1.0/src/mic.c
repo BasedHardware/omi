@@ -1,3 +1,4 @@
+#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -8,6 +9,8 @@
 #include "mic.h"
 #include "utils.h"
 #include "led.h"
+
+LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
 // Port of this code: https://github.com/Seeed-Studio/Seeed_Arduino_Mic/blob/master/src/hardware/nrf52840_adc.cpp
@@ -23,14 +26,14 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
     // Ignore error (how to handle?)
     if (event->error)
     {
-        printk("PDM error\n");
+        LOG_ERR("PDM error: %d", event->error);
         return;
     }
 
     // Assign buffer
     if (event->buffer_requested)
     {
-        // printk("Buffer requested\n");
+        LOG_DBG("Audio buffer requested");
         if (_next_buffer_index == 0)
         {
             nrfx_pdm_buffer_set(_buffer_0, MIC_BUFFER_SAMPLES);
@@ -46,7 +49,7 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
     // Release buffer
     if (event->buffer_released)
     {
-        // printk("Buffer released\n");
+        LOG_DBG("Audio buffer requested");
         if (_callback)
         {
             _callback(event->buffer_released);
@@ -75,7 +78,7 @@ int mic_start()
     IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_irq_handler, 0); // IMPORTANT!
     if (nrfx_pdm_init(&pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
     {
-        printk("Unable to initialize PDM\n");
+        LOG_ERR("Audio unable to initialize PDM");
         return -1;
     }
 
@@ -86,11 +89,11 @@ int mic_start()
     // Start PDM
     if (nrfx_pdm_start() != NRFX_SUCCESS)
     {
-        printk("Unable to start PDM\n");
+        LOG_ERR("Audio unable to start PDM");
         return -1;
     }
 
-    printk("Microphone started\n");
+    LOG_INF("Audio microphone started");
     return 0;
 }
 

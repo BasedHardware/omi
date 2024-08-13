@@ -1,4 +1,5 @@
 import threading
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,7 +8,7 @@ import requests
 from database.chat import add_plugin_message
 from models.memory import Memory
 from models.plugin import Plugin
-from models.transcript_segment import TranscriptSegment
+from routers.notifications import send_notification
 from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
 
 
@@ -32,7 +33,7 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     if response.status_code != 200:
         return []
     user_enabled = set(get_enabled_plugins(uid))
-    print('get_plugins_data, user_enabled', user_enabled)
+    # print('get_plugins_data, user_enabled', user_enabled)
     data = response.json()
     plugins = []
     for plugin in data:
@@ -99,7 +100,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     return messages
 
 
-def trigger_realtime_integrations(uid: str, segments: List[TranscriptSegment]) -> dict:
+def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.triggers_realtime() and plugin.enabled]
     if not filtered_plugins:
@@ -118,14 +119,27 @@ def trigger_realtime_integrations(uid: str, segments: List[TranscriptSegment]) -
         else:
             url += '?uid=' + uid
 
-        response = requests.post(url, json=[segment.dict() for segment in segments])
-        if response.status_code != 200:
-            print('Plugin integration failed', plugin.id, 'result:', response.content)
-            return
+        new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]
 
-        print('response', response.json())
-        if message := response.json().get('message', ''):
-            results[plugin.id] = message
+        payload = {
+            "session_id": uid,
+            "segments": new_segments
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code != 200:
+                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                return
+
+            response_data = response.json()
+            print('response', response_data)
+            if message := response_data.get('message', ''):
+                send_plugin_notification(token, plugin.id, message)
+                results[plugin.id] = message
+        except Exception as e:
+            print(f"Plugin integration error: {e}")
+            return
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=_single, args=(plugin,)))
@@ -138,3 +152,17 @@ def trigger_realtime_integrations(uid: str, segments: List[TranscriptSegment]) -
             continue
         messages.append(add_plugin_message(message, key, uid))
     return messages
+
+
+def send_plugin_notification(token: str, plugin_id: str, message: str):
+    data = {
+        "text": message,
+        "plugin_id": plugin_id,
+        'id': str(uuid.uuid4()),
+        'created_at': datetime.now().isoformat(),
+        'sender': 'ai',
+        'type': 'text',
+        'from_integration': 'true',
+        'notification_type': 'plugin',
+    }
+    send_notification(token, plugin_id + ' says', message, data)
