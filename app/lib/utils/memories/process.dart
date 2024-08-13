@@ -5,7 +5,7 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:tuple/tuple.dart';
 
 // Perform actions periodically
@@ -34,12 +34,16 @@ Future<ServerMemory?> processTranscriptContent(
   if (result == null || result.memory == null) return null;
 
   webhookOnMemoryCreatedCall(result.memory).then((s) {
-    if (s.isNotEmpty) createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
+    if (s.isNotEmpty) {
+      NotificationService.instance
+          .createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
+    }
   });
 
   for (var message in result.messages) {
     String pluginId = message.pluginId ?? '';
-    createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
+    NotificationService.instance
+        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
     if (sendMessageToChat != null) sendMessageToChat(message);
   }
   return result.memory;
