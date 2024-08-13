@@ -169,11 +169,40 @@ static uint32_t inc_count_0 = 0;
 
 static int final_button_state[2] = {0,0};
 const static int threshold = 10;
-static void reset_inc_count_0 () {
+
+
+static void reset_count() {
     inc_count_0 = 0;
-}
-static void reset_inc_count_1 () {
     inc_count_1 = 0;
+}
+static void notify_press() {
+    final_button_state[0] = 4; //button press
+    printk("pressed\n");
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+}
+
+static void notify_unpress() {
+      final_button_state[0] = 5; //button press
+    printk("unpressed\n");
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+}
+
+static void notify_tap() {
+      final_button_state[0] = 1; //button press
+    printk("tap\n");
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+}
+
+static void notify_double_tap() {
+      final_button_state[0] = 2; //button press
+    printk("double tap\n");
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+}
+
+static void notify_long_tap() {
+    final_button_state[0] = 3; //button press
+    printk("long tap\n");
+    bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
 void check_button_level(struct k_work *work_item) {
@@ -187,9 +216,7 @@ void check_button_level(struct k_work *work_item) {
 
         else if (state_ == 1) {
             //Also do nothing, but transition to the next state
-            final_button_state[0] = 4; //button press
-            printk("pressed\n");
-            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+            notify_press();
             current_button_state = ONE_PRESS;
         }
 
@@ -201,17 +228,14 @@ void check_button_level(struct k_work *work_item) {
         if (state_ == 0) {
             
             if(inc_count_0 == 0) {
-            final_button_state[0] = 5; //release
-            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-            printk("unpressed\n");
+            notify_unpress();
             }
             inc_count_0++; //button is unpressed
             if (inc_count_0 > 2) {
                 //If button is not pressed for a little while....... 
                 //transition to Two_press. button could be a single or double tap
                 current_button_state = TWO_PRESS;
-                reset_inc_count_0();
-                reset_inc_count_1();            
+                reset_count();          
             }
         }
         if (state_ == 1) {
@@ -219,13 +243,10 @@ void check_button_level(struct k_work *work_item) {
 
             if (inc_count_1 > 50) {
                 //If button is pressed for a long time.......
-                final_button_state[0] = 3;
-                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-                printk("long tap\n");
+                notify_long_tap();
                 //Fire the long mode notify and enter a grace period
                 current_button_state = GRACE;
-                reset_inc_count_0();
-                reset_inc_count_1();
+                reset_count();
             }
 
         }
@@ -235,73 +256,49 @@ void check_button_level(struct k_work *work_item) {
     else if (current_button_state == TWO_PRESS) {
 
         if (state_ == 0) {
-             inc_count_0++; //not pressed
-             if (inc_count_0 > 10) { //10 instances of unpressing
-               
+             
                 if (inc_count_1 > 0) { // if button has been pressed......
-
-                final_button_state[0] = 2;
-                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-                printk("double tap\n");
+                notify_unpress();
+                notify_double_tap();
+                
                 //Fire the notify and enter a grace period
                 current_button_state = GRACE;
-                reset_inc_count_0();
-                reset_inc_count_1();
-                
+                reset_count();
              }
              //single button press
-            else {
-
-                final_button_state[0] = 1; //single tap
-                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-                printk("single tap\n");
-                //Fire the notify and enter a grace period
+            else if (inc_count_0 > 10){
+                notify_tap(); //Fire the notify and enter a grace period
                 current_button_state = GRACE;
-                reset_inc_count_0();
-                reset_inc_count_1();
+                reset_count();
 
              }
-
+             else {
+                inc_count_0++; //not pressed
              }
-
-
         }
         else if (state_ == 1 ) {
             if (inc_count_1 == 0) {
-                final_button_state[0] = 4; //pressed
-                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-                printk("pressed\n");
+                notify_press();
+                inc_count_1++;
             }
-            inc_count_1++;
-
-
-
             if (inc_count_1 > threshold) {
-                final_button_state[0] = 2;
-                bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-                printk("double tap\n");
+                notify_long_tap();
                 //Fire the notify and enter a grace period
                 current_button_state = GRACE;
-                reset_inc_count_0();
-                reset_inc_count_1();
+                reset_count();
             }
         }
-
-
     }
 
     else if (current_button_state == GRACE) {
         if (state_ == 0) {
-            if (inc_count_0 == 0) {
-            final_button_state[0] = 5; //released
-            bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-            printk("unpressed\n");
+            if (inc_count_0 == 0 && (inc_count_1 > 0)) {
+            notify_unpress();
             }
             inc_count_0++;
             if (inc_count_0 > 10) {
             current_button_state = IDLE;
-            reset_inc_count_0();
-            
+            reset_count();
             }
         }
         else if (state_ == 1) {
