@@ -24,7 +24,7 @@ extern bool is_connected;
 //
 
 static struct bt_conn_cb _callback_references;
-
+struct bt_conn *current_connection = NULL;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
@@ -105,7 +105,7 @@ static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct
 }
 
 
-#define ACCEL_REFRESH_INTERVAL 500 // 0.5 seconds
+#define ACCEL_REFRESH_INTERVAL 1000 // 0.5 seconds
 
 void broadcast_accel(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
@@ -323,7 +323,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
-    k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+     k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
     is_connected = true;
 }
 

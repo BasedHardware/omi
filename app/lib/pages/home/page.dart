@@ -586,6 +586,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                         builder: (c) => ConnectedDevice(
                                               device: _device!,
                                               batteryLevel: batteryLevel,
+                      
                                             )));
                                     MixpanelManager().batteryIndicatorClicked();
                                   },
@@ -778,6 +779,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
+    _AccelListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     super.dispose();
