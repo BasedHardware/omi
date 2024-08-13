@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Setup Completed</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..800&display=swap" rel="stylesheet">
+	<style>
+		body {
+			font-family: Assistant, sans-serif;
+			background-color: #f4f4f4;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+		}
+
+		a,
+		p {
+			font-family: Assistant, sans-serif;
+		}
+
+		.container {
+			margin: 0.5rem;
+			background-color: #fff;
+			padding: 5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 5rem;
+			align-items: center;
+			justify-content: center;
+			border-radius: 4px;
+			box-shadow: 0 0 0.075rem rgb(0, 0, 0);
+			max-width: 600px;
+			text-align: center;
+		}
+
+		.container button[type="submit"] {
+			text-decoration: none;
+			padding-top: 1.5rem;
+			padding-bottom: 1.5rem;
+			padding-left: 3.75rem;
+			padding-right: 3.75rem;
+			border: none;
+			border-radius: 4px;
+			background-color: #000000;
+			color: #FFFFFF;
+			font-size: 1.5rem;
+			cursor: pointer;
+			box-sizing: border-box;
+			display: block;
+		}
+
+		.container button[type="submit"]::hover {
+			background-color: rgba(0, 0, 0, 0.75);
+		}
+
+		.container>div:first-of-type {
+			display: flex;
+			flex-direction: row;
+			gap: 40px;
+		}
+
+		.container>p:first-of-type {
+			font-size: 1.5rem;
+			color: #000000;
+		}
+
+		@media (max-width: 600px) {
+			.container {
+				padding: 2.5rem;
+				gap: 2.5rem;
+			}
+
+			.container button[type="submit"] {
+				width: 100%;
+				padding-left: 2.5rem;
+				padding-right: 2.5rem;
+			}
+		}
+	</style>
+	<script>
+		function handleShowClick() {
+			document.querySelector("#password").innerHTML = "{{ uid }}";
+		}
+	</script>
+</head>
+
+<body>
+	<div class="container">
+		{% if status == "enabled" %}
+		<div>
+			<img src="/templates/static/images/done_icon.svg" />
+		</div>
+		<p>Your Omi is connected to Zapier</p>
+		{% else %}
+		<div>
+			<img src="/templates/static/images/friend_logo.svg" />
+			<img src="/templates/static/images/zapier_logo.svg" />
+		</div>
+
+		<p>Connect to Zapier Workflow</p>
+		{% endif %}
+		<div>
+			{% if error_message %}
+			<p>{{ error_message }}</p>
+			{% endif %}
+			{% if status == "enabled" %}
+			<div style="padding: 1rem; diplay: flex; flex-direction: row; gap: 0.5rem; align-items: center;">
+				<span><strong>Secret Key:</strong> </span>
+				<span id="password">
+					<span>***</span>
+					<span onclick="handleShowClick()">👀 (show)</span>
+				</span>
+			</div>
+			<form action="/zapier/disconnect" method="post">
+				<input type="hidden" name="uid" value="{{ uid }}">
+				<button type="submit">Disconnect</button>
+			</form>
+			{% else %}
+			<form action="/zapier/connect" method="post">
+				<input type="hidden" name="uid" value="{{ uid }}">
+				<button type="submit">Connect to Zapier</button>
+			</form>
+			{% endif %}
+		</div>
+	</div>
+</body>
+
+</html>
