@@ -9,22 +9,6 @@ class EmptyMemoriesWidget extends StatefulWidget {
 
 class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
   @override
-  void setState(VoidCallback callback) {
-    super.setState(callback);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.only(top: 200.0),
