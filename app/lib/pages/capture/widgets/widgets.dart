@@ -94,7 +94,7 @@ getConnectionStateWidgets(
                 textAlign: TextAlign.center,
               ),
               Text(
-                '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                '${device.name} (${device.getShortId()})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16.0,

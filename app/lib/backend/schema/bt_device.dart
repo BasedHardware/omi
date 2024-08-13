@@ -11,6 +11,16 @@ class BTDeviceStruct {
     this.fwver,
   });
 
+  String getShortId() => BTDeviceStruct.shortId(id);
+
+  static shortId(String id) {
+    try {
+      return id.replaceAll(':', '').split('-').last.substring(0, 6);
+    } catch (e) {
+      return id.length > 6 ? id.substring(0, 6) : id;
+    }
+  }
+
   factory BTDeviceStruct.fromJson(Map<String, dynamic> json) {
     return BTDeviceStruct(
       id: json['id'] as String,

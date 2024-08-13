@@ -121,7 +121,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                    '$deviceName (${widget.device?.getShortId() ?? ''})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
