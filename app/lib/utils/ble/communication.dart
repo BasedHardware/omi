@@ -268,6 +268,12 @@ Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
       else if (value[0]  == 3) {
         debugPrint('Button long pressed');
       }
+      else if (value[0]  == 4) {
+      debugPrint('Button pressed');
+      }
+      else if (value[0]  == 5) {
+        debugPrint('Button released');
+      }
       else {
         debugPrint('invalid command');
       }
