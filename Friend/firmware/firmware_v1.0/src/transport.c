@@ -166,7 +166,7 @@ static uint32_t inc_count_1 = 0;
 static uint32_t inc_count_0 = 0;
 
 
-static int final_button_state = 0;
+static int final_button_state[2] = {0,0};
 const static int threshold = 10;
 static void reset_inc_count_0 () {
     inc_count_0 = 0;
@@ -211,7 +211,7 @@ void check_button_level(struct k_work *work_item) {
 
             if (inc_count_1 > 50) {
                 //If button is pressed for a long time.......
-                final_button_state = 3;
+                final_button_state[0] = 3;
                 bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
                 printk("long tap\n");
                 //Fire the long mode notify and enter a grace period
@@ -232,7 +232,7 @@ void check_button_level(struct k_work *work_item) {
                
                 if (inc_count_1 > 0) { // if button has been pressed......
 
-                final_button_state = 2;
+                final_button_state[0] = 2;
                 bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
                 printk("double tap\n");
                 //Fire the notify and enter a grace period
@@ -243,7 +243,7 @@ void check_button_level(struct k_work *work_item) {
              }
              //single button press
             else {
-                final_button_state = 1;
+                final_button_state[0] = 1;
                 bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
                 printk("single tap\n");
                 //Fire the notify and enter a grace period
@@ -261,7 +261,7 @@ void check_button_level(struct k_work *work_item) {
             inc_count_1++;
 
             if (inc_count_1 > threshold) {
-                final_button_state = 2;
+                final_button_state[0] = 2;
                 bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
                 printk("double tap\n");
                 //Fire the notify and enter a grace period
