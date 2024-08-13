@@ -24,19 +24,41 @@ class SpeechState(str, Enum):
 
 
 def get_speech_state(data, vad_iterator, window_size_samples=256):
+    has_start, has_end = False, False
     for i in range(0, len(data), window_size_samples):
         chunk = data[i: i + window_size_samples]
         if len(chunk) < window_size_samples:
             break
         speech_dict = vad_iterator(chunk, return_seconds=False)
-        if speech_dict:
-            if 'start' in speech_dict:
-                return SpeechState.has_speech
-            elif 'end' in speech_dict:
-                return SpeechState.no_speech
+        # TODO: should have like a buffer of start? or some way to not keep it, it ends appear first
+        #   maybe like, if `end` was last, then return end? TEST THIS
 
-    # vad_iterator.reset_states()
+        if speech_dict:
+            # print(speech_dict)
+            if 'start' in speech_dict:
+                has_start = True
+            elif 'end' in speech_dict:
+                has_end = True
+    # print('----')
+    if has_start:
+        return SpeechState.has_speech
+    elif has_end:
+        return SpeechState.no_speech
     return None
+
+    # for i in range(0, len(data), window_size_samples):
+    #     chunk = data[i: i + window_size_samples]
+    #     if len(chunk) < window_size_samples:
+    #         break
+    #     speech_dict = vad_iterator(chunk, return_seconds=False)
+    #     if speech_dict:
+    #         print(speech_dict)
+    #         # how many times this triggers?
+    #         if 'start' in speech_dict:
+    #             return SpeechState.has_speech
+    #         elif 'end' in speech_dict:
+    #             return SpeechState.no_speech
+    # return None
 
 
 @timeit
