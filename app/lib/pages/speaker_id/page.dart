@@ -14,6 +14,7 @@ import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
 class SpeakerIdPage extends StatefulWidget {
@@ -101,7 +102,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                 ? const SizedBox()
                 : TextButton(
                     onPressed: () {
-                      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+                      routeToPage(context, const HomePageWrapper(), replace: true);
                     },
                     child: const Text(
                       'Skip',
@@ -181,7 +182,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   _goNext() async {
     if (_currentIdx == _controller!.length - 1) {
       if (widget.onbording) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+        routeToPage(context, const HomePageWrapper(), replace: true);
       } else {
         Navigator.pop(context);
       }
