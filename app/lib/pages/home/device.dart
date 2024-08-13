@@ -97,21 +97,20 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             actions: [
-              deviceConnected
-                  ? IconButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => DeviceSettings(
-                              device: widget.device,
-                              deviceInfo: snapshot.data!,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.settings),
-                    )
-                  : const SizedBox.shrink(),
+              IconButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DeviceSettings(
+                        device: widget.device,
+                        deviceInfo: snapshot.data,
+                        isDeviceConnected: deviceConnected,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+              )
             ],
           ),
           body: Column(
@@ -123,7 +122,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                    '$deviceName (${widget.device?.getShortId() ?? ''})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
