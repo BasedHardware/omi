@@ -92,7 +92,7 @@ mixin WebSocketMixin {
           wsConnectionState = WebsocketConnectionStatus.closed;
           _isConnecting = false;
           onConnectionClosed(closeCode, closeReason);
-          if (closeCode != 1000 && !websocketReconnecting) {
+          if (closeCode != 999 && closeCode != 1000 && !websocketReconnecting) {
             _scheduleReconnection(
               onConnectionSuccess: onConnectionSuccess,
               onConnectionFailed: onConnectionFailed,
@@ -269,8 +269,8 @@ mixin WebSocketMixin {
   }
 
   void closeWebSocket() {
-    websocketChannel?.sink.close(1000);
     _reconnectionTimer?.cancel();
     _internetListener?.cancel();
+    websocketChannel?.sink.close(1000);
   }
 }
