@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 
 from modal import Image, App, asgi_app, Secret
-from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware
+from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, workflow
 
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -24,6 +24,7 @@ app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 app.include_router(backups.router)
 app.include_router(screenpipe.router)
+app.include_router(workflow.router)
 
 app.include_router(firmware.router)
 

@@ -100,6 +100,7 @@ class MemorySource(str, Enum):
     friend = 'friend'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
+    workflow = 'workflow'
 
 
 class Memory(BaseModel):

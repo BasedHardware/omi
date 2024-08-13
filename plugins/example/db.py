@@ -70,3 +70,27 @@ def clean_all_transcripts_except(uid: str, session_id: str):
     for key in r.scan_iter(f'transcript:{uid}:*'):
         if key.decode().split(':')[2] != session_id:
             r.delete(key)
+
+
+# **********************************************************
+# ************ ZAPIER UTILS ************
+# **********************************************************
+def store_zapier_user_status(uid: str, status: str):
+    r.set(f'zapier_user_status:{uid}', status)
+
+
+def get_zapier_user_status(uid: str) -> str:
+    val = r.get(f'zapier_user_status:{uid}')
+    return val.decode('utf-8') if val else None
+
+
+def get_zapier_subscribes(uid: str):
+    return r.smembers(f'zapier_subscribes:{uid}')
+
+
+def store_zapier_subscribes(uid: str, target_url: str):
+    r.sadd(f'zapier_subscribes:{uid}', target_url)
+
+
+def remove_zapier_subscribes(uid: str, target_url: str):
+    r.srem(f'zapier_subscribes:{uid}', target_url)
