@@ -325,13 +325,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: ValueListenableBuilder(
           valueListenable: connectivityController.isConnected,
-          builder: (context, isConnected, child) {
+          builder: (ctx, isConnected, child) {
             previousConnection ??= true;
             if (previousConnection != isConnected) {
               previousConnection = isConnected;
               if (!isConnected) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('No internet connection. Please check your connection.'),
                       backgroundColor: Colors.red,
@@ -348,7 +348,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                 });
               } else {
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('Internet connection is restored.'),
                       backgroundColor: Colors.green,
@@ -363,7 +363,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     ),
                   );
                   Future.delayed(const Duration(seconds: 2), () {
-                    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                    ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                   });
                   if (memories.isEmpty) {
                     await _initiateMemories();
