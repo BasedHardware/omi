@@ -25,13 +25,14 @@ import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/scripts.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -72,6 +73,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool loadingNewMemories = true;
+  bool loadingNewMessages = true;
 
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
     if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
@@ -141,7 +143,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   }
 
   _refreshMessages() async {
+    loadingNewMessages = true;
     messages = await getMessagesServer();
+    if (messages.isEmpty) {
+      messages = SharedPreferencesUtil().cachedMessages;
+    } else {
+      SharedPreferencesUtil().cachedMessages = messages;
+    }
+    loadingNewMessages = false;
     setState(() {});
   }
 
@@ -198,9 +207,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   final Map<String, Widget> screensWithRespectToPath = {
     '/settings': const SettingsPage(),
   };
-
+  ConnectivityController connectivityController = ConnectivityController();
+  bool? previousConnection;
   @override
   void initState() {
+    connectivityController.init();
     _controller = TabController(
       length: 3,
       vsync: this,
@@ -226,25 +237,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       scanAndConnectDevice().then(_onConnected);
     }
 
-    createNotification(
-      title: 'Don\'t forget to wear Friend today',
-      body: 'Wear your friend and capture your memories today.',
-      notificationId: 4,
-      isMorningNotification: true,
-    );
-    createNotification(
-      title: 'Here is your action plan for tomorrow',
-      body: 'Check out your daily summary to see what you should do tomorrow.',
-      notificationId: 5,
-      isDailySummaryNotification: true,
-      payload: {'path': '/chat'},
-    );
-    createNotification(
-      title: 'Ouch....',
-      body: 'Did you fall?',
-      notificationId: 6,
-      personFell: true,
-    );
+    _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
       final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -257,6 +250,15 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       SharedPreferencesUtil().subPageToShowFromNotification = '';
     }
     super.initState();
+  }
+
+  void _listenToMessagesFromNotification() {
+    NotificationService.instance.listenForServerMessages.listen((message) {
+      var messagesCopy = List<ServerMessage>.from(messages);
+      messagesCopy.insert(0, message);
+      chatPageKey.currentState?.scrollToBottom();
+      setState(() => messages = messagesCopy);
+    });
   }
 
   Timer? _disconnectNotificationTimer;
@@ -273,7 +275,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
           InstabugLog.logInfo('Friend Device Disconnected');
           _disconnectNotificationTimer?.cancel();
           _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-            createNotification(
+            NotificationService.instance.createNotification(
               title: 'Friend Device Disconnected',
               body: 'Please reconnect to continue using your Friend.',
             );
@@ -287,7 +289,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     _disconnectNotificationTimer?.cancel();
-    clearNotification(1);
+    NotificationService.instance.clearNotification(1);
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
@@ -338,322 +340,376 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         child: MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            chatTextFieldFocusNode.unfocus();
-            memoriesTextFieldFocusNode.unfocus();
-          },
-          child: Stack(
-            children: [
-              Center(
-                child: TabBarView(
-                  controller: _controller,
-                  physics: const NeverScrollableScrollPhysics(),
+      child: ValueListenableBuilder(
+          valueListenable: connectivityController.isConnected,
+          builder: (context, isConnected, child) {
+            previousConnection ??= true;
+            if (previousConnection != isConnected) {
+              previousConnection = isConnected;
+              if (!isConnected) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  ScaffoldMessenger.of(context).showMaterialBanner(
+                    MaterialBanner(
+                      content: const Text('No internet connection. Please check your connection.'),
+                      backgroundColor: Colors.red,
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                          },
+                          child: const Text('Dismiss'),
+                        ),
+                      ],
+                    ),
+                  );
+                });
+              } else {
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  ScaffoldMessenger.of(context).showMaterialBanner(
+                    MaterialBanner(
+                      content: const Text('Internet connection is restored.'),
+                      backgroundColor: Colors.green,
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                          },
+                          child: const Text('Dismiss'),
+                        ),
+                      ],
+                    ),
+                  );
+                  Future.delayed(const Duration(seconds: 2), () {
+                    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                  });
+                  if (memories.isEmpty) {
+                    await _initiateMemories();
+                  }
+                  if (messages.isEmpty) {
+                    await _refreshMessages();
+                  }
+                });
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              body: GestureDetector(
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                  chatTextFieldFocusNode.unfocus();
+                  memoriesTextFieldFocusNode.unfocus();
+                },
+                child: Stack(
                   children: [
-                    MemoriesPage(
-                      memories: memories,
-                      updateMemory: (ServerMemory memory, int index) {
-                        var memoriesCopy = List<ServerMemory>.from(memories);
-                        memoriesCopy[index] = memory;
-                        setState(() => memories = memoriesCopy);
-                      },
-                      deleteMemory: (ServerMemory memory, int index) {
-                        var memoriesCopy = List<ServerMemory>.from(memories);
-                        memoriesCopy.removeAt(index);
-                        setState(() => memories = memoriesCopy);
-                      },
-                      loadMoreMemories: () async {
-                        if (memories.length % 50 != 0) return;
-                        if (loadingNewMemories) return;
-                        setState(() => loadingNewMemories = true);
-                        var newMemories = await getMemories(offset: memories.length);
-                        memories.addAll(newMemories);
-                        loadingNewMemories = false;
-                        setState(() {});
-                      },
-                      loadingNewMemories: loadingNewMemories,
-                      textFieldFocusNode: memoriesTextFieldFocusNode,
-                    ),
-                    CapturePage(
-                      key: capturePageKey,
-                      device: _device,
-                      addMemory: (ServerMemory memory) {
-                        var memoriesCopy = List<ServerMemory>.from(memories);
-                        memoriesCopy.insert(0, memory);
-                        setState(() => memories = memoriesCopy);
-                      },
-                      addMessage: (ServerMessage message) {
-                        var messagesCopy = List<ServerMessage>.from(messages);
-                        messagesCopy.insert(0, message);
-                        setState(() => messages = messagesCopy);
-                      },
-                    ),
-                    ChatPage(
-                      key: chatPageKey,
-                      textFieldFocusNode: chatTextFieldFocusNode,
-                      messages: messages,
-                      addMessage: (ServerMessage message) {
-                        var messagesCopy = List<ServerMessage>.from(messages);
-                        messagesCopy.insert(0, message);
-                        setState(() => messages = messagesCopy);
-                      },
-                      updateMemory: (ServerMemory memory) {
-                        var memoriesCopy = List<ServerMemory>.from(memories);
-                        var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
-                        if (index != -1) {
-                          memoriesCopy[index] = memory;
-                          setState(() => memories = memoriesCopy);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
-                const SizedBox.shrink()
-              else
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
-                      border: GradientBoxBorder(
-                        gradient: LinearGradient(colors: [
-                          Color.fromARGB(127, 208, 208, 208),
-                          Color.fromARGB(127, 188, 99, 121),
-                          Color.fromARGB(127, 86, 101, 182),
-                          Color.fromARGB(127, 126, 190, 236)
-                        ]),
-                        width: 2,
-                      ),
-                      shape: BoxShape.rectangle,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: MaterialButton(
-                            onPressed: () => _tabChange(0),
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 20, bottom: 20),
-                              child: Text('Memories',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: MaterialButton(
-                            onPressed: () => _tabChange(1),
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                top: 20,
-                                bottom: 20,
-                              ),
-                              child: Text('Capture',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: MaterialButton(
-                            onPressed: () => _tabChange(2),
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 20, bottom: 20),
-                              child: Text('Chat',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (scriptsInProgress)
-                Center(
-                  child: Container(
-                    height: 150,
-                    width: 250,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                        SizedBox(height: 16),
-                        Center(
-                            child: Text(
-                          'Running migration, please wait! 🚨',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                          textAlign: TextAlign.center,
-                        )),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                const SizedBox.shrink(),
-            ],
-          ),
-        ),
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _device != null && batteryLevel != -1
-                  ? GestureDetector(
-                      onTap: _device == null
-                          ? null
-                          : () {
-                              Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (c) => ConnectedDevice(
-                                        device: _device!,
-                                        batteryLevel: batteryLevel,
-                                        accelLevel: accelLevel,
-                                      )));
-                              MixpanelManager().batteryIndicatorClicked();
+                    Center(
+                      child: TabBarView(
+                        controller: _controller,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          MemoriesPage(
+                            memories: memories,
+                            updateMemory: (ServerMemory memory, int index) {
+                              var memoriesCopy = List<ServerMemory>.from(memories);
+                              memoriesCopy[index] = memory;
+                              setState(() => memories = memoriesCopy);
                             },
-                      child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.grey,
-                              width: 1,
+                            deleteMemory: (ServerMemory memory, int index) {
+                              var memoriesCopy = List<ServerMemory>.from(memories);
+                              memoriesCopy.removeAt(index);
+                              setState(() => memories = memoriesCopy);
+                            },
+                            loadMoreMemories: () async {
+                              if (memories.length % 50 != 0) return;
+                              if (loadingNewMemories) return;
+                              setState(() => loadingNewMemories = true);
+                              var newMemories = await getMemories(offset: memories.length);
+                              memories.addAll(newMemories);
+                              loadingNewMemories = false;
+                              setState(() {});
+                            },
+                            loadingNewMemories: loadingNewMemories,
+                            textFieldFocusNode: memoriesTextFieldFocusNode,
+                          ),
+                          CapturePage(
+                            key: capturePageKey,
+                            device: _device,
+                            addMemory: (ServerMemory memory) {
+                              var memoriesCopy = List<ServerMemory>.from(memories);
+                              memoriesCopy.insert(0, memory);
+                              setState(() => memories = memoriesCopy);
+                            },
+                            addMessage: (ServerMessage message) {
+                              var messagesCopy = List<ServerMessage>.from(messages);
+                              messagesCopy.insert(0, message);
+                              setState(() => messages = messagesCopy);
+                            },
+                          ),
+                          ChatPage(
+                            key: chatPageKey,
+                            textFieldFocusNode: chatTextFieldFocusNode,
+                            messages: messages,
+                            isLoadingMessages: loadingNewMessages,
+                            addMessage: (ServerMessage message) {
+                              var messagesCopy = List<ServerMessage>.from(messages);
+                              messagesCopy.insert(0, message);
+                              setState(() => messages = messagesCopy);
+                            },
+                            updateMemory: (ServerMemory memory) {
+                              var memoriesCopy = List<ServerMemory>.from(memories);
+                              var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                              if (index != -1) {
+                                memoriesCopy[index] = memory;
+                                setState(() => memories = memoriesCopy);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
+                      const SizedBox.shrink()
+                    else
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                          decoration: const BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.all(Radius.circular(16)),
+                            border: GradientBoxBorder(
+                              gradient: LinearGradient(colors: [
+                                Color.fromARGB(127, 208, 208, 208),
+                                Color.fromARGB(127, 188, 99, 121),
+                                Color.fromARGB(127, 86, 101, 182),
+                                Color.fromARGB(127, 126, 190, 236)
+                              ]),
+                              width: 2,
                             ),
+                            shape: BoxShape.rectangle,
                           ),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: batteryLevel > 75
-                                      ? const Color.fromARGB(255, 0, 255, 8)
-                                      : batteryLevel > 20
-                                          ? Colors.yellow.shade700
-                                          : Colors.red,
-                                  shape: BoxShape.circle,
+                              Expanded(
+                                child: MaterialButton(
+                                  onPressed: () => _tabChange(0),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 20, bottom: 20),
+                                    child: Text('Memories',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8.0),
-                              Text(
-                                '${batteryLevel.toString()}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: MaterialButton(
+                                  onPressed: () => _tabChange(1),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 20,
+                                      bottom: 20,
+                                    ),
+                                    child: Text('Capture',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: MaterialButton(
+                                  onPressed: () => _tabChange(2),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 20, bottom: 20),
+                                    child: Text('Chat',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
+                                  ),
                                 ),
                               ),
                             ],
-                          )),
-                    )
-                  : TextButton(
+                          ),
+                        ),
+                      ),
+                    if (scriptsInProgress)
+                      Center(
+                        child: Container(
+                          height: 150,
+                          width: 250,
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                              SizedBox(height: 16),
+                              Center(
+                                  child: Text(
+                                'Running migration, please wait! 🚨',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                                textAlign: TextAlign.center,
+                              )),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                  ],
+                ),
+              ),
+              appBar: AppBar(
+                automaticallyImplyLeading: false,
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _device != null && batteryLevel != -1
+                        ? GestureDetector(
+                            onTap: _device == null
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(MaterialPageRoute(
+                                        builder: (c) => ConnectedDevice(
+                                              device: _device!,
+                                              batteryLevel: batteryLevel,
+                                            )));
+                                    MixpanelManager().batteryIndicatorClicked();
+                                  },
+                            child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.grey,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: batteryLevel > 75
+                                            ? const Color.fromARGB(255, 0, 255, 8)
+                                            : batteryLevel > 20
+                                                ? Colors.yellow.shade700
+                                                : Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8.0),
+                                    Text(
+                                      '${batteryLevel.toString()}%',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )),
+                          )
+                        : TextButton(
+                            onPressed: () async {
+                              if (SharedPreferencesUtil().deviceId.isEmpty) {
+                                routeToPage(context, const ConnectDevicePage());
+                                MixpanelManager().connectFriendClicked();
+                              } else {
+                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
+                              }
+                              setState(() {});
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: const BorderSide(color: Colors.white, width: 1),
+                              ),
+                            ),
+                            child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                          ),
+                    _controller!.index == 2
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 0),
+                            child: Container(
+                              // decoration: BoxDecoration(
+                              //   border: Border.all(color: Colors.grey),
+                              //   borderRadius: BorderRadius.circular(30),
+                              // ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: DropdownButton<String>(
+                                menuMaxHeight: 350,
+                                value: SharedPreferencesUtil().selectedChatPluginId,
+                                onChanged: (s) async {
+                                  if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) ||
+                                      s == 'enable') {
+                                    await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                                    plugins = SharedPreferencesUtil().pluginsList;
+                                    setState(() {});
+                                    return;
+                                  }
+                                  print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
+                                  if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+
+                                  SharedPreferencesUtil().selectedChatPluginId = s;
+                                  var plugin = plugins.firstWhereOrNull((p) => p.id == s);
+                                  chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                                  setState(() {});
+                                },
+                                icon: Container(),
+                                alignment: Alignment.center,
+                                dropdownColor: Colors.black,
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                                underline: Container(height: 0, color: Colors.transparent),
+                                isExpanded: false,
+                                itemHeight: 48,
+                                padding: EdgeInsets.zero,
+                                items: _getPluginsDropdownItems(context),
+                              ),
+                            ),
+                          )
+                        : const SizedBox(width: 16),
+                    IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
-                        if (SharedPreferencesUtil().deviceId.isEmpty) {
-                          routeToPage(context, const ConnectDevicePage());
-                          MixpanelManager().connectFriendClicked();
-                        } else {
-                          await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0, accelLevel: 0));
+                        MixpanelManager().settingsOpened();
+                        String language = SharedPreferencesUtil().recordingsLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        await routeToPage(context, const SettingsPage());
+                        // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                        if (language != SharedPreferencesUtil().recordingsLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
+                          capturePageKey.currentState?.restartWebSocket();
                         }
+                        plugins = SharedPreferencesUtil().pluginsList;
                         setState(() {});
                       },
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Colors.white, width: 1),
-                        ),
-                      ),
-                      child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
-                    ),
-              _controller!.index == 2
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 0),
-                      child: Container(
-                        // decoration: BoxDecoration(
-                        //   border: Border.all(color: Colors.grey),
-                        //   borderRadius: BorderRadius.circular(30),
-                        // ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: DropdownButton<String>(
-                          menuMaxHeight: 350,
-                          value: SharedPreferencesUtil().selectedChatPluginId,
-                          onChanged: (s) async {
-                            if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                              await routeToPage(context, const PluginsPage(filterChatOnly: true));
-                              plugins = SharedPreferencesUtil().pluginsList;
-                              setState(() {});
-                              return;
-                            }
-                            print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
-                            if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
-
-                            SharedPreferencesUtil().selectedChatPluginId = s;
-                            var plugin = plugins.firstWhereOrNull((p) => p.id == s);
-                            chatPageKey.currentState?.sendInitialPluginMessage(plugin);
-                            setState(() {});
-                          },
-                          icon: Container(),
-                          alignment: Alignment.center,
-                          dropdownColor: Colors.black,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          underline: Container(height: 0, color: Colors.transparent),
-                          isExpanded: false,
-                          itemHeight: 48,
-                          padding: EdgeInsets.zero,
-                          items: _getPluginsDropdownItems(context),
-                        ),
-                      ),
                     )
-                  : const SizedBox(width: 16),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                onPressed: () async {
-                  MixpanelManager().settingsOpened();
-                  String language = SharedPreferencesUtil().recordingsLanguage;
-                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                  await routeToPage(context, const SettingsPage());
-                  // TODO: this fails like 10 times, connects reconnects, until it finally works.
-                  if (language != SharedPreferencesUtil().recordingsLanguage ||
-                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
-                    capturePageKey.currentState?.restartWebSocket();
-                  }
-                  plugins = SharedPreferencesUtil().pluginsList;
-                  setState(() {});
-                },
-              )
-            ],
-          ),
-          elevation: 0,
-          centerTitle: true,
-        ),
-      ),
+                  ],
+                ),
+                elevation: 0,
+                centerTitle: true,
+              ),
+            );
+          }),
     ));
   }
 
@@ -722,8 +778,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
-    _AccelListener?.cancel();
-
+    connectivityController.isConnected.dispose();
     _controller?.dispose();
     super.dispose();
   }

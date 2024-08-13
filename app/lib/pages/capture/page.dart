@@ -57,6 +57,42 @@ class CapturePageState extends State<CapturePage>
 
   /// ----
   List<TranscriptSegment> segments = [];
+  // List<TranscriptSegment> segments = List.filled(100, '')
+  //     .mapIndexed((i, e) => TranscriptSegment(
+  //           text:
+  //               '''[00:00:00 - 00:02:23] Speaker 0: The tech giants already know these techniques.
+  //               My goal is to unlock their secrets for the benefit of businesses who to design and help users develop healthy habits.
+  //               To that end, there's so much I wanted to put in this book that just didn't fit. Before you reading, please take a moment to download these
+  //               supplementary materials included free with the purchase of this audiobook. Please go to nirandfar.com forward slash hooked.
+  //               Near is spelled like my first name, speck, n I r. Andfar.com/hooked. There you will find the hooked model workbook, an ebook of case studies,
+  //               and a free email course about product psychology. Also, if you'd like to connect with me, you can reach me through my blog at nirafar.com.
+  //               You can schedule office hours to discuss your questions. Look forward to hearing from you as you build habits for good.
+  //
+  //               Introduction. 79% of smartphone owners check their device within 15 minutes of waking up every morning. Perhaps most startling,
+  //               fully 1 third of Americans say they would rather give up sex than lose their cell phones. A 2011 university study suggested people check their
+  //               phones 34 times per day. However, industry insiders believe that number is closer to an astounding 150 daily sessions. We are hooked.
+  //               It's the poll to visit YouTube, Facebook, or Twitter for just a few minutes only to find yourself still capping and scrolling an hour later.
+  //               It's the urge you likely feel throughout your day but hardly notice. Cognitive psychologists define habits as, quote, automatic behaviors triggered
+  //               by situational cues. Things we do with little or no conscious thought. The products and services we use habitually alter our everyday behavior.
+  //               Just as their designers intended. Our actions have been engineered. How do companies producing little more than bits of code displayed on a screen
+  //               seemingly control users' minds? What makes some products so habit forming? Forming habit is imperative for the survival of many products.
+  //
+  //               As infinite distractions compete for our attention, companies are learning to master novel tactics that stay relevant in users' minds.
+  //               Amassing millions of users is no longer good enough. Companies increasingly find that their economic value is a function of the strength of the habits they create.
+  //
+  //               In order to win the loyalty of their users and create a product that's regularly used, companies must learn not only what compels users to click,
+  //               but also what makes them click. Although some companies are just waking up to this new reality, others are already cashing in. By mastering habit
+  //               forming product design, companies profiles in this book make their goods indispensable. First to mind wins. Companies that form strong user habits enjoy
+  //               several benefits to their bottom line. These companies attach their product to internal triggers. A result, users show up without any external prompting.
+  //               Instead of relying on expensive marketing, how did forming companies link their services to users' daily routines and emotions.
+  //               A habit is at work when users feel a tad bored and instantly open Twitter. Feel a hang of loneliness, and before rational thought occurs,
+  //               they're scrolling through their Facebook feeds.''',
+  //           speaker: 'SPEAKER_0${i % 2}',
+  //           isUser: false,
+  //           start: 0,
+  //           end: 10,
+  //         ))
+  //     .toList();
 
   StreamSubscription? _bleBytesStream;
   WavBytesUtil? audioStorage;
@@ -213,7 +249,7 @@ class CapturePageState extends State<CapturePage>
       language: SharedPreferencesUtil().recordingsLanguage,
     );
     debugPrint(memory.toString());
-    if (memory == null && segments.isNotEmpty && photos.isNotEmpty) {
+    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
       memory = ServerMemory(
         id: const Uuid().v4(),
         createdAt: DateTime.now(),
@@ -238,7 +274,8 @@ class CapturePageState extends State<CapturePage>
       // TODO: store anyways something temporal and retry once connected again.
     }
 
-    widget.addMemory(memory);
+    if (memory != null) widget.addMemory(memory);
+
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
@@ -320,6 +357,7 @@ class CapturePageState extends State<CapturePage>
             'Enable Location Services?  🌍',
             'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
             singleButton: false,
+            okButtonText: 'Continue',
           ),
         );
       }
