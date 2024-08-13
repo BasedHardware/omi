@@ -15,7 +15,7 @@ mixin WebSocketMixin {
   IOWebSocketChannel? websocketChannel;
   int _reconnectionAttempts = 0;
   Timer? _reconnectionTimer;
-  late StreamSubscription<InternetStatus> _internetListener;
+  StreamSubscription<InternetStatus>? _internetListener;
   InternetStatus _internetStatus = InternetStatus.connected;
 
   final int _initialReconnectDelay = 1;
@@ -140,6 +140,7 @@ mixin WebSocketMixin {
     required BleAudioCodec codec,
     required int sampleRate,
   }) {
+    _internetListener?.cancel();
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
       _internetStatus = status;
       switch (status) {
@@ -267,18 +268,9 @@ mixin WebSocketMixin {
     );
   }
 
-  void _notifyInternetRestored() {
-    NotificationService.instance.clearNotification(3);
-    NotificationService.instance.createNotification(
-      notificationId: 3,
-      title: 'Internet Connection Restored',
-      body: 'Your device is back online. Transcription will resume shortly.',
-    );
-  }
-
   void closeWebSocket() {
     websocketChannel?.sink.close(1000);
     _reconnectionTimer?.cancel();
-    _internetListener.cancel();
+    _internetListener?.cancel();
   }
 }
