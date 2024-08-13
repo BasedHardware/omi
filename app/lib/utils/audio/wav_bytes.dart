@@ -4,7 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -156,7 +156,6 @@ class WavBytesUtil {
         }
       }
     }
-
 
     // for (var i = 1; i < 10; i++) {
     //   var file = File('${directory.path}/temp$i.wav');

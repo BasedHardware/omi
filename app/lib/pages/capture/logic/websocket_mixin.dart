@@ -3,8 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/services/notification_service.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
@@ -35,12 +35,13 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
-    BleAudioCodec codec = BleAudioCodec.pcm8,
+    required BleAudioCodec codec,
     required int sampleRate,
   }) async {
     if (_isConnecting) return;
     _isConnecting = true;
 
+    debugPrint('initWebSocket ${codec} ${sampleRate}');
     if (!_internetListenerSetup) {
       _setupInternetListener(
         onConnectionSuccess: onConnectionSuccess,
@@ -88,11 +89,11 @@ mixin WebSocketMixin {
           );
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
-          debugPrint('WebSocket connection closed: $closeCode, $closeReason');
+          debugPrint('WebSocket connection closed: code ~ $closeCode, reason ~ $closeReason');
           wsConnectionState = WebsocketConnectionStatus.closed;
           _isConnecting = false;
           onConnectionClosed(closeCode, closeReason);
-          if (closeCode != 999 && closeCode != 1000 && !websocketReconnecting) {
+          if (closeCode != 1000 && !websocketReconnecting) {
             _scheduleReconnection(
               onConnectionSuccess: onConnectionSuccess,
               onConnectionFailed: onConnectionFailed,
