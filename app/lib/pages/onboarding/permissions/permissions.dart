@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class PermissionsPage extends StatefulWidget {
@@ -33,7 +33,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
               setState(() {
                 switchValue = s!;
               });
-              requestNotificationPermissions();
+              NotificationService.instance.requestNotificationPermissions();
             },
             title: const Text(
               'Enable notification access for Friend\'s full experience.',

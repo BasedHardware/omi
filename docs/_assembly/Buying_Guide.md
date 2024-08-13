@@ -9,7 +9,7 @@ nav_order: 1
 You have two options:
 
 1. Buying an assembled device:
-[Buy Assembled Device](https://buy.stripe.com/6oE04101u6yx8Wk7ss){: .btn .btn-green .mr-4 }
+[Buy Assembled Device](https://basedhardware.com/products/friend-dev){: .btn .btn-green .mr-4 }
 
 
 2. Assemble the Device yourself with off-the-shelf components:
