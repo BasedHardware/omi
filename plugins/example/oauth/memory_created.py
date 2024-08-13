@@ -1,11 +1,11 @@
 import requests
+import templates as templates
+from db import *
 from fastapi import HTTPException, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-
-import templates as templates
-from db import *
 from models import Memory, EndpointResponse
+
 from .client import get_notion
 
 router = APIRouter()
@@ -170,6 +170,6 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
         'Accept': 'application/json',
         'Notion-Version': '2022-06-28'
     })
-    print(resp.json())
+    print('create_notion_row:', resp.status_code, resp.json())
     # TODO: after, write inside the page the transcript and everything else.
     return resp.status_code == 200

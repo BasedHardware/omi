@@ -1,13 +1,18 @@
 import json
 import os
+import asyncio
 
 import firebase_admin
 from fastapi import FastAPI
 
 
 from modal import Image, App, asgi_app, Secret
-from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, workflow
 
+from routers import backups, chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, notifications, workflow
+
+
+from fastapi_utilities import repeat_at
+from utils.crons.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -24,8 +29,10 @@ app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 app.include_router(backups.router)
 app.include_router(screenpipe.router)
+
 app.include_router(workflow.router)
 
+app.include_router(notifications.router)
 app.include_router(firmware.router)
 
 modal_app = App(
@@ -58,3 +65,9 @@ paths = ['_temp', '_samples', '_segments', '_speaker_profile']
 for path in paths:
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+@app.on_event('startup')
+@repeat_at(cron="* * * * *")
+def start_job():
+    asyncio.run(start_cron_job())

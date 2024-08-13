@@ -1,5 +1,12 @@
 source "Kconfig.zephyr"
 
+menu "Friend Configuration"
 config CODEC_OPUS
     bool "Opus Audio Codec Support"
     default n
+
+config OFFLINE_STORAGE
+	bool "Offline SD Card Storage Support"
+	default n
+
+endmenu

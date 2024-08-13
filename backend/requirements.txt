@@ -13,12 +13,15 @@ certifi==2024.7.4
 cffi==1.16.0
 charset-normalizer==3.3.2
 click==8.1.7
+click-spinner==0.1.10
+croniter==1.4.1
 cryptography==43.0.0
 dataclasses-json==0.6.7
 deepgram-sdk==3.4.0
 deprecation==2.1.0
 distro==1.9.0
 fastapi==0.112.0
+fastapi-utilities==0.2.0
 filelock==3.15.4
 firebase-admin==6.5.0
 frozenlist==1.4.1
@@ -84,8 +87,10 @@ pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.9.0
 pyparsing==3.1.2
+python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-multipart==0.0.9
+pytz==2024.1
 PyYAML==6.0.1
 redis==5.0.8
 regex==2024.7.24
@@ -94,6 +99,7 @@ rich==13.7.1
 rsa==4.9
 shellingham==1.5.4
 sigtools==4.0.1
+six==1.16.0
 sniffio==1.3.1
 SQLAlchemy==2.0.32
 starlette==0.37.2
