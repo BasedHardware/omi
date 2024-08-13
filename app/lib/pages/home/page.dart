@@ -262,7 +262,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateConnectionListener() async {
     if (_connectionStateListener != null) return;
-    // TODO: when disconnected manually need to remove this connection state listener
+    _connectionStateListener?.cancel();
     _connectionStateListener = getConnectionStateListener(
         deviceId: _device!.id,
         onDisconnected: () {
