@@ -57,6 +57,7 @@ class CapturePageState extends State<CapturePage>
 
   /// ----
   List<TranscriptSegment> segments = [];
+
   // List<TranscriptSegment> segments = List.filled(100, '')
   //     .mapIndexed((i, e) => TranscriptSegment(
   //           text:
@@ -132,7 +133,7 @@ class CapturePageState extends State<CapturePage>
       onConnectionFailed: (err) => setState(() {}),
       onConnectionClosed: (int? closeCode, String? closeReason) {
         // connection was closed, either on resetState, or by backend, or by some other reason.
-        setState(() {});
+        // setState(() {});
       },
       onConnectionError: (err) {
         // connection was okay, but then failed.
@@ -385,7 +386,7 @@ class CapturePageState extends State<CapturePage>
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _internetListener.cancel();
-
+    // websocketChannel
     closeWebSocket();
 
     super.dispose();

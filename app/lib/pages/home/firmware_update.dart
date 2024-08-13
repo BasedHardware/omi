@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -113,10 +114,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                   ),
                                   child: TextButton(
                                     onPressed: () async {
-                                      Navigator.pushAndRemoveUntil(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => const HomePageWrapper()),
-                                          (route) => false);
+                                      routeToPage(context, const HomePageWrapper(), replace: true);
                                     },
                                     child: const Text(
                                       "Finalize",
