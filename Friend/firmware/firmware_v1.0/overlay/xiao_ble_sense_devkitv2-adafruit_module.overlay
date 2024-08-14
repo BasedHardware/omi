@@ -31,6 +31,12 @@
     };
 };
 
+&gpio0 {
+    status = "okay";
+    pinctrl-0 = <&gpio0_default>;
+    pinctrl-names = "default";
+};
+
 &pinctrl {
     spi2_default: spi2_default {
         group1 {
@@ -46,6 +52,13 @@
                     <NRF_PSEL(SPIM_MOSI, 1, 13)>,
                     <NRF_PSEL(SPIM_MISO, 1, 14)>;
             low-power-enable;
+        };
+    };
+
+    gpio0_default: gpio0_default {
+        group1 {
+            psels = <NRF_PSEL(GPIO, 0, 4)>,  // Button pin 1
+                    <NRF_PSEL(GPIO, 0, 5)>;  // Button pin 2
         };
     };
 };
