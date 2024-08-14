@@ -20,7 +20,7 @@ The micro-SD card module communicates via the SPI communication protocol. You ca
 |  Pin  | SD Card Module | XIAO-nRF52840 |
 |-------|----------------|---------------|
 |   1   |      3V3       |     VDD       |
-|   2   |      CS        |     P1.12     |
+|   2   |      CS        |     P0.28     |
 |   3   |      MOSI      |     P1.15     |
 |   4   |      CLK       |     P1.13     |
 |   5   |      MISO      |     P1.14     |
