@@ -15,6 +15,32 @@ speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 backups_bucket = os.getenv('BUCKET_BACKUPS')
 
 
+def upload_profile_audio(file_path: str, uid: str):
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    path = f'{uid}/speech_profile.wav'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
+
+
+def get_speech_profile(uid: str):
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    path = f'{uid}/speech_profile.wav'
+    blob = bucket.blob(path)
+    if not blob.exists():
+        return None
+
+    os.makedirs('_speech_profiles/', exist_ok=True)
+    profile_path = f'_speech_profiles/{uid}.wav'
+    blob.download_to_filename(profile_path)
+    return profile_path
+
+
+# ***********
+# *** OLD ***
+# ***********
+# soon to be deprecated
+
 def upload_sample_storage(file_path: str, uid: str):
     print('upload_sample_storage', file_path)
     bucket = storage_client.bucket(speech_profiles_bucket)
@@ -36,19 +62,6 @@ def upload_speaker_profile(profile_path: str, uid: str):
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def retrieve_speaker_profile(uid: str):
-    try:
-        bucket = storage_client.bucket(speech_profiles_bucket)
-        path = f'{uid}/profile.pt'
-        blob = bucket.blob(path)
-        profile_path = f'_speaker_profile/{uid}.pt'
-        blob.download_to_filename(profile_path)
-        return profile_path
-    except Exception as e:
-        print(f'retrieve_speaker_profile not found {uid}')
-        return None
-
-
 def retrieve_all_samples(uid: str):
     print('retrieve_all_samples')
     # retrieve each of the _samples in the user folder, and store them in _samples/{uid}
@@ -66,34 +79,3 @@ def retrieve_all_samples(uid: str):
         except Exception as e:
             print(f'Error downloading {blob.name}', e)
     return base_path
-
-
-def upload_user_backup(uid: str, data: str):
-    print('upload_user_backup')
-    bucket = storage_client.bucket(backups_bucket)
-    path = f'{uid}/backup.txt'
-    blob = bucket.blob(path)
-    blob.upload_from_string(data)
-    return f'https://storage.googleapis.com/{backups_bucket}/{path}'
-
-
-def retrieve_user_backup(uid: str):
-    try:
-        bucket = storage_client.bucket(backups_bucket)
-        path = f'{uid}/backup.txt'
-        blob = bucket.blob(path)
-        # retrieve content and return it
-        return blob.download_as_string().decode('utf-8')
-    except Exception as e:
-        print(f'retrieve_user_backup not found {uid}')
-        return None
-
-
-def delete_backup_storage(uid: str):
-    bucket = storage_client.bucket(backups_bucket)
-    path = f'{uid}/backup.txt'
-    blob = bucket.blob(path)
-    blob.delete()
-    return True
-
-# migrate()
