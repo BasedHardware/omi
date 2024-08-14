@@ -127,7 +127,7 @@ void broadcast_accel(struct k_work *work_item) {
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
     if (err) {
-        printk("Error updating accelerometer data\n");
+       LOG_INF("Error updating accelerometer data\n");
     }
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
@@ -145,7 +145,7 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
     else
     {
-        LOG_INF("Invalid CCC value");
+        LOG_INF("Invalid CCC value: %u", value);
     }
 }
 
@@ -405,7 +405,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     tx_buffer_2[1] = (size >> 8) & 0xFF;
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
-    // Write to ring buffer .
+    // Write to ring buffer 
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
@@ -570,7 +570,7 @@ int transport_start()
     err = accel_start();
 
     if (!err) {
-        printk("accelerometer failed to activate\n");
+        LOG_INF("accelerometer failed to activate\n");
     }
     else {
         bt_gatt_service_register(&accel_service);
