@@ -12,6 +12,7 @@
 #include "config.h"
 #include "utils.h"
 #include "btutils.h"
+#include "deep_sleep.h"
 #include "lib/battery/battery.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
@@ -261,6 +262,10 @@ void check_button_level(struct k_work *work_item) {
                 //If button is pressed for a long time.......
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
+
+                //Enter Deep Sleep
+                enter_deep_sleep();
+
                 current_button_state = GRACE;
                 reset_count();
             }
@@ -300,6 +305,10 @@ void check_button_level(struct k_work *work_item) {
             if (inc_count_1 > threshold) {
                 notify_long_tap();
                 //Fire the notify and enter a grace period
+
+                //Enter Deep Sleep
+                enter_deep_sleep();
+
                 current_button_state = GRACE;
                 reset_count();
             }
