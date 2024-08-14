@@ -1,18 +1,8 @@
-// To get started, press Ctrl+Space (or Option+Esc) to bring up the completion menu and view the available nodes.
-
-// You can also use the buttons in the sidebar to perform actions on nodes.
-// Actions currently available include:
-
-// * Enabling / disabling the node
-// * Adding the bus to a bus
-// * Removing the node
-// * Connecting ADC channels
-
-// For more help, browse the DeviceTree documentation at https: //docs.zephyrproject.org/latest/guides/dts/index.html
-// You can also visit the nRF DeviceTree extension documentation at https: //nrfconnect.github.io/vscode-nrf-connect/devicetree/nrfdevicetree.html
 / {
     aliases {
         sw0 = &button0;
+        // Add an alias for the new button if needed
+        sw1 = &button1;
     };
     buttons {
         compatible = "gpio-keys";
@@ -21,17 +11,16 @@
             label = "User button";
         };
 
-
-        //Added the button for deep sleep mode.
+        // Added the button for deep sleep mode.
         button1: button_1 {
             gpios = <&gpio0 4 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
-            label = "User button 1";
+            label = "Deep Sleep Button (GPIO4)";
         };
+        
         button2: button_2 {
             gpios = <&gpio0 5 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
-            label = "User button 2";
+            label = "Deep Sleep Button (GPIO5)";
         };
-        //
     };
 };
 

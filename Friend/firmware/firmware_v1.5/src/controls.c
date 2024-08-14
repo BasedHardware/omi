@@ -14,6 +14,12 @@ static void long_press_detected(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(cooldown_work, cooldown_expired);
 static K_WORK_DELAYABLE_DEFINE(long_press_work, long_press_detected);
 
+static const struct device *button_devices[] = {
+    DEVICE_DT_GET(DT_NODELABEL(button0)),
+    DEVICE_DT_GET(DT_NODELABEL(button1)),
+    DEVICE_DT_GET(DT_NODELABEL(button2)),
+};
+
 void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     k_work_reschedule(&cooldown_work, K_MSEC(15));
@@ -23,32 +29,51 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t
 static void cooldown_expired(struct k_work *work)
 {
     ARG_UNUSED(work);
-    int val = gpio_pin_get_dt(&button);
-    if (val && button_cb)
-    {
-        button_cb();
+    for (size_t i = 0; i < ARRAY_SIZE(button_devices); i++) {
+        int val = gpio_pin_get(button_devices[i], DT_GPIO_PIN(DT_ALIAS(button0), gpios));
+        if (val && button_cb)
+        {
+            button_cb();
+            return;
+        }
     }
 }
 
-
-//deep sleep mode functionality added
+// Deep sleep mode functionality added
 static void long_press_detected(struct k_work *work)
 {
     ARG_UNUSED(work);
-    int val = gpio_pin_get_dt(&button);
-    if (val)
-    {
-        enter_deep_sleep();
+    for (size_t i = 0; i < ARRAY_SIZE(button_devices); i++) {
+        int val = gpio_pin_get(button_devices[i], DT_GPIO_PIN(DT_ALIAS(button0), gpios));
+        if (val)
+        {
+            enter_deep_sleep();
+            return;
+        }
     }
 }
 
 int start_controls()
 {
-    ASSERT_OK(gpio_is_ready_dt(&button));
-    ASSERT_OK(gpio_pin_configure_dt(&button, GPIO_INPUT));
-    gpio_init_callback(&button_cb_data, button_pressed, BIT(button.pin));
-    ASSERT_OK(gpio_add_callback(button.port, &button_cb_data));
-    ASSERT_OK(gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_BOTH));
+    for (size_t i = 0; i < ARRAY_SIZE(button_devices); i++) {
+        if (!device_is_ready(button_devices[i])) {
+            return -ENODEV;
+        }
+
+        int pin = DT_GPIO_PIN(DT_ALIAS(button0), gpios);
+        if (gpio_pin_configure(button_devices[i], pin, GPIO_INPUT | GPIO_PULL_UP)) {
+            return -EIO;
+        }
+
+        gpio_init_callback(&button_cb_data, button_pressed, BIT(pin));
+        if (gpio_add_callback(button_devices[i], &button_cb_data)) {
+            return -EIO;
+        }
+
+        if (gpio_pin_interrupt_configure(button_devices[i], pin, GPIO_INT_EDGE_BOTH)) {
+            return -EIO;
+        }
+    }
 
     return 0;
 }
