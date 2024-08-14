@@ -1,45 +1,87 @@
 {
   "project_info": {
-    "project_number": "628811116024",
-    "project_id": "friend-test-c07c1",
-    "storage_bucket": "friend-test-c07c1.appspot.com"
+    "project_number": "789679157101",
+    "project_id": "test-65797",
+    "storage_bucket": "test-65797.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:628811116024:android:c5d443ecf9ca790074fa0d",
+        "mobilesdk_app_id": "1:789679157101:android:599d3b8c598b80e97af464",
         "android_client_info": {
           "package_name": "com.friend.ios"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "789679157101-13p443rdothhfm9ss4olvmosu660vgq1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios",
+            "certificate_hash": "d0edc5fbd8e4303533a53052987e4fda76d9184e"
+          }
+        },
+        {
+          "client_id": "789679157101-cbdo3l48qtu8uklbk60879ssfeg8ntfa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDIQHi1NpYSg2_SmRLuejYKUDtfy5zKh-I"
+          "current_key": "AIzaSyDfBjFuOo9eYIsEAkCqmBr3YCRnV_oDeDU"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "789679157101-cbdo3l48qtu8uklbk60879ssfeg8ntfa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "789679157101-ek2cgq7o498cfhcinn4d89tpv3rsg9va.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12.develop"
+              }
+            }
+          ]
         }
       }
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:628811116024:android:417f18fab4fb5b8474fa0d",
+        "mobilesdk_app_id": "1:789679157101:android:7b7da11cc7d67d137af464",
         "android_client_info": {
           "package_name": "com.friend.ios.dev"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "789679157101-cbdo3l48qtu8uklbk60879ssfeg8ntfa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDIQHi1NpYSg2_SmRLuejYKUDtfy5zKh-I"
+          "current_key": "AIzaSyDfBjFuOo9eYIsEAkCqmBr3YCRnV_oDeDU"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "789679157101-cbdo3l48qtu8uklbk60879ssfeg8ntfa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "789679157101-ek2cgq7o498cfhcinn4d89tpv3rsg9va.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12.develop"
+              }
+            }
+          ]
         }
       }
     }

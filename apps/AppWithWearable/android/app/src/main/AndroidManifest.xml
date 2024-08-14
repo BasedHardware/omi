@@ -36,6 +36,7 @@
 
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
 
     <!--    INSTABUG PERMISSIONS    -->
@@ -47,12 +48,22 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Refer https://developer.android.com/about/versions/14/changes/fgs-types-required#connected-device -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
 
     <!-- In the permission part of your manifest, these permission are needed if you target Android 14 phones -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+   <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.FOREGROUND_CHANGE_NETWORK_STATE" />
 
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -67,11 +78,12 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice"
+            android:foregroundServiceType="dataSync|connectedDevice"
             android:stopWithTask="true" />
          <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="microphone"/>
+            android:foregroundServiceType="microphone"
+            tools:node="merge" />
 
         <service
             android:name=".NotificationOnKillService"

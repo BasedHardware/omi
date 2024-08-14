@@ -1,11 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+
+import 'device_settings.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
@@ -18,51 +22,51 @@ class ConnectedDevice extends StatefulWidget {
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
 }
 
-class _DeviceInfo {
+class DeviceInfo {
   String modelNumber;
   String firmwareRevision;
   String hardwareRevision;
   String manufacturerName;
 
-  _DeviceInfo(this.modelNumber, this.firmwareRevision, this.hardwareRevision, this.manufacturerName);
+  DeviceInfo(this.modelNumber, this.firmwareRevision, this.hardwareRevision, this.manufacturerName);
 
-  static Future<_DeviceInfo> getDeviceInfo(BTDeviceStruct? device) async {
+  static Future<DeviceInfo> getDeviceInfo(BTDeviceStruct? device) async {
     var modelNumber = 'Friend';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
 
-    if (device == null) return _DeviceInfo(modelNumber, firmwareRevision, hardwareRevision, manufacturerName);
+    if (device == null) return DeviceInfo(modelNumber, firmwareRevision, hardwareRevision, manufacturerName);
 
     String deviceId = device.id;
 
-    // var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
-    // if (deviceInformationService != null) {
-    //   var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
-    //   if (modelNumberCharacteristic != null) {
-    //     modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
-    //   }
-    //
-    //   var firmwareRevisionCharacteristic =
-    //       getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
-    //   if (firmwareRevisionCharacteristic != null) {
-    //     firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
-    //   }
-    //
-    //   var hardwareRevisionCharacteristic =
-    //       getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
-    //   if (hardwareRevisionCharacteristic != null) {
-    //     hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
-    //   }
-    //
-    //   var manufacturerNameCharacteristic =
-    //       getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
-    //   if (manufacturerNameCharacteristic != null) {
-    //     manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
-    //   }
-    // }
+    var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
+    if (deviceInformationService != null) {
+      var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
+      if (modelNumberCharacteristic != null) {
+        modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
+      }
 
-    return _DeviceInfo(
+      var firmwareRevisionCharacteristic =
+          getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
+      if (firmwareRevisionCharacteristic != null) {
+        firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
+      }
+
+      var hardwareRevisionCharacteristic =
+          getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
+      if (hardwareRevisionCharacteristic != null) {
+        hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
+      }
+
+      var manufacturerNameCharacteristic =
+          getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
+      if (manufacturerNameCharacteristic != null) {
+        manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
+      }
+    }
+
+    return DeviceInfo(
       modelNumber,
       firmwareRevision,
       hardwareRevision,
@@ -83,16 +87,33 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-      ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: FutureBuilder<_DeviceInfo>(
-        future: _DeviceInfo.getDeviceInfo(widget.device),
-        builder: (BuildContext context, AsyncSnapshot<_DeviceInfo> snapshot) {
-          return Column(
+    return FutureBuilder<DeviceInfo>(
+      future: DeviceInfo.getDeviceInfo(widget.device),
+      builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: AppBar(
+            title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            actions: [
+              deviceConnected
+                  ? IconButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => DeviceSettings(
+                              device: widget.device,
+                              deviceInfo: snapshot.data!,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.settings),
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          ),
+          body: Column(
             children: [
               const SizedBox(height: 32),
               const DeviceAnimationWidget(),
@@ -175,38 +196,40 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               const SizedBox(height: 32),
               Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  decoration: BoxDecoration(
-                    border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236)
-                      ]),
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                decoration: BoxDecoration(
+                  border: const GradientBoxBorder(
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
+                    width: 2,
                   ),
-                  child: TextButton(
-                      onPressed: () {
-                        if (widget.device != null) bleDisconnectDevice(widget.device!);
-                        Navigator.of(context).pop();
-                        SharedPreferencesUtil().deviceId = '';
-                        SharedPreferencesUtil().deviceName = '';
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('Your Friend is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
-                        ));
-                        MixpanelManager().disconnectFriendClicked();
-                      },
-                      child: Text(
-                        widget.device == null ? "Unpair" : "Disconnect",
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      )))
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextButton(
+                  onPressed: () {
+                    if (widget.device != null) bleDisconnectDevice(widget.device!);
+                    Navigator.of(context).pop();
+                    SharedPreferencesUtil().deviceId = '';
+                    SharedPreferencesUtil().deviceName = '';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Your Friend is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
+                    ));
+                    MixpanelManager().disconnectFriendClicked();
+                  },
+                  child: Text(
+                    widget.device == null ? "Unpair" : "Disconnect",
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

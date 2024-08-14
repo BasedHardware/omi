@@ -1,21 +1,8 @@
 name: friend_private
 description: A new Flutter project.
 
-# The following line prevents the package from being accidentally published to
-# pub.dev using `pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
-# The following defines the version and build number for your application.
-# A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
-# Both the version and the builder number may be overridden in flutter
-# build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
-# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
-# In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
-# Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.0.19+61
+version: 1.0.23+74
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -57,41 +44,29 @@ dependencies:
   mime: ^1.0.5
   instabug_flutter: ^13.0.0
   instabug_http_client: ^2.4.0
-  #  flutter_foreground_task: ^6.2.0
   mixpanel_flutter: ^2.2.0
-  flutter_silero_vad:
-    git:
-      url: https://github.com/char5742/flutter_silero_vad.git
-  #  fonnx:
-  #    git:
-  #      url: https://github.com/Telosnex/fonnx.git
-  #      ref: main
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
-  #  nordic_dfu: ^6.1.4+hotfix
-  package_info_plus: ^8.0.0
+  nordic_dfu: ^6.1.4+hotfix
+  package_info_plus: ^8.0.1
 
   path_provider: any
   ml_linalg: any
   objectbox: ^4.0.1
   objectbox_flutter_libs: any
-  flutter_foreground_task: ^6.5.0
+  flutter_foreground_task: ^8.2.0
   deepgram_speech_to_text: ^2.1.1
   upgrader: ^10.3.0
-  workmanager:
-    git:
-      url: https://github.com/fluttercommunity/flutter_workmanager.git
-      ref: b783000
   crypto: ^3.0.3
   encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
   record: ^5.1.2
   onesignal_flutter: ^5.1.2
-  flutter_background_service: ^5.0.6
-  #opus_flutter: ^3.0.3
+  flutter_background_service: ^5.0.7
+  opus_flutter: ^3.0.2
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1
@@ -106,14 +81,21 @@ dependencies:
   cached_network_image: ^3.3.1
   map_launcher: ^3.3.1
   internet_connection_checker_plus: ^2.5.0
+  geolocator: 
   
   docx_template: ^0.4.0
   enum_to_string: ^2.0.1
+  visibility_detector: ^0.4.0+2
+  version: ^3.0.2
+  webview_flutter: ^4.8.0
+  flutter_sound: ^9.10.0
+  audio_session:
 
 
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
+  js: ^0.7.1
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
@@ -151,6 +133,7 @@ flutter:
     - assets/lottie_animations/
     - assets/pdfs/
     - assets/silero_vad.onnx
+    - shorebird.yaml
   fonts:
     - family: 'SF Pro Display'
       fonts:

@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
@@ -24,11 +21,11 @@ class PluginDetailPage extends StatefulWidget {
 class _PluginDetailPageState extends State<PluginDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
+  bool pluginLoading = false;
 
   checkSetupCompleted() {
+    // TODO: move check to backend
     isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
-      print('Setup completed: $value');
-      print(SharedPreferencesUtil().uid);
       setState(() => setupCompleted = value);
     });
   }
@@ -106,32 +103,40 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                       : Container(),
                 ],
               ),
-              trailing: IconButton(
-                icon: Icon(
-                  widget.plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                  color: widget.plugin.enabled ? Colors.white : Colors.grey,
-                ),
-                onPressed: () {
-                  if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context),
-                        () {
-                          Navigator.pop(context);
-                          _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
-                        },
-                        'Authorize External Plugin',
-                        'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                        okButtonText: 'Confirm',
+              trailing: pluginLoading
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
-                    );
-                  } else {
-                    _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
-                  }
-                },
-              ),
+                    )
+                  : IconButton(
+                      icon: Icon(
+                        widget.plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: widget.plugin.enabled ? Colors.white : Colors.grey,
+                      ),
+                      onPressed: () {
+                        if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
+                          showDialog(
+                            context: context,
+                            builder: (c) => getDialog(
+                              context,
+                              () => Navigator.pop(context),
+                              () {
+                                Navigator.pop(context);
+                                _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                              },
+                              'Authorize External Plugin',
+                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              okButtonText: 'Confirm',
+                            ),
+                          );
+                        } else {
+                          _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                        }
+                      },
+                    ),
             ),
             const SizedBox(height: 16),
             widget.plugin.worksWithMemories()
@@ -329,15 +334,32 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
   Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
-    setState(() {
-      widget.plugin.enabled = isEnabled;
-    });
+    setState(() => pluginLoading = true);
     if (isEnabled) {
+      var enabled = await enablePluginServer(pluginId);
+      if (!enabled) {
+        showDialog(
+            context: context,
+            builder: (c) => getDialog(
+                  context,
+                  () => Navigator.pop(context),
+                  () => Navigator.pop(context),
+                  'Error activating the plugin',
+                  'If this is an integration plugin, make sure the setup is completed.',
+                  singleButton: true,
+                ));
+        setState(() => pluginLoading = false);
+        return;
+      }
+
       prefs.enablePlugin(pluginId);
       MixpanelManager().pluginEnabled(pluginId);
     } else {
       prefs.disablePlugin(pluginId);
+      await enablePluginServer(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
+    setState(() => widget.plugin.enabled = isEnabled);
+    setState(() => pluginLoading = false);
   }
 }

@@ -3,14 +3,15 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/sample.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speaker_id/tabs/completed.dart';
 import 'package:friend_private/pages/speaker_id/tabs/instructions.dart';
 import 'package:friend_private/pages/speaker_id/tabs/record_sample.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -34,6 +35,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
   _init() async {
     _device = await getConnectedDevice();
+    // TODO: improve the UX of this.
     _device ??= await scanAndConnectDevice(timeout: true);
     _samples = await getUserSamplesState();
     _controller = TabController(length: 2 + _samples.length, vsync: this);

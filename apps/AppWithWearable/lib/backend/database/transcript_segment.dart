@@ -60,7 +60,6 @@ class TranscriptSegment {
       'speaker': speaker,
       'speaker_id': speakerId,
       'is_user': isUser,
-      // 'created_at': createdAt?.toIso8601String(),
       'start': start,
       'end': end,
     };

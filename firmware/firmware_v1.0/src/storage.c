@@ -62,10 +62,10 @@ ReadParams verify_info(void)
 
         if (strlen(res.data) == 0)
         {
-            create_file("audio/0.txt");
-            write_info("audio/0.txt,status:NO");
+            create_file("audio/1.txt");
+            write_info("audio/1.txt,status:NO");
 
-            res.data = "audio/0.txt";
+            res.data = "audio/1.txt";
             res.ret = 0;
             
             return res;

@@ -39,11 +39,13 @@ Future<http.Response?> makeApiCall({
     }
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
+      // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = InstabugHttpClient();
 
     if (method == 'POST') {
+      headers['Content-Type'] = 'application/json';
       return await client.post(Uri.parse(url), headers: headers, body: body);
     } else if (method == 'GET') {
       return await client.get(Uri.parse(url), headers: headers);

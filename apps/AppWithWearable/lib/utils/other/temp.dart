@@ -2,13 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/message.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:intl/intl.dart';
-
-List<Message> retrieveMostRecentMessages(List<Message> ogChatHistory, {int count = 5}) {
-  if (ogChatHistory.length > count) return ogChatHistory.sublist(ogChatHistory.length - count);
-  return ogChatHistory;
-}
 
 String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
   if (dateTime == null) return '';

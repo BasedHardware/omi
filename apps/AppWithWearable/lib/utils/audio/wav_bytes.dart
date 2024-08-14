@@ -7,14 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intl/intl.dart';
-//import 'package:opus_dart/opus_dart.dart';
+import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tuple/tuple.dart';
 
 class WavBytesUtil {
   BleAudioCodec codec;
   List<List<int>> frames = [];
-  //final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
+  final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
 
   WavBytesUtil({this.codec = BleAudioCodec.pcm8});
 
@@ -205,7 +205,7 @@ class WavBytesUtil {
     } else if (codec == BleAudioCodec.opus) {
       List<int> decodedSamples = [];
       for (var frame in frames) {
-        //decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
+        decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
       }
       wavBytes = getUInt8ListBytes(decodedSamples, 16000);
     } else {

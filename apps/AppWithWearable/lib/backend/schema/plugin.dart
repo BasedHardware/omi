@@ -1,5 +1,3 @@
-import 'package:friend_private/backend/preferences.dart';
-
 class PluginReview {
   String uid;
   DateTime ratedAt;
@@ -98,7 +96,7 @@ class Plugin {
   double? ratingAvg;
   int ratingCount;
 
-  bool enabled = false;
+  bool enabled;
   bool deleted;
 
   Plugin({
@@ -115,6 +113,7 @@ class Plugin {
     this.userReview,
     this.ratingAvg,
     required this.ratingCount,
+    required this.enabled,
     required this.deleted,
   });
 
@@ -145,6 +144,7 @@ class Plugin {
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
+      enabled: json['enabled'] ?? false,
     );
   }
 
@@ -166,25 +166,9 @@ class Plugin {
       'user_review': userReview?.toJson(),
       'rating_count': ratingCount,
       'deleted': deleted,
+      'enabled': enabled,
     };
   }
 
-  static List<Plugin> fromJsonList(List<dynamic> jsonList) {
-    // TODO: move me out of this, bad performance, every time .pluginList is read
-    // TODO: handle plugins that are deleted
-    var pluginsId = SharedPreferencesUtil().pluginsEnabled;
-    List<Plugin> plugins = jsonList.map((e) {
-      var plugin = Plugin.fromJson(e);
-      plugin.enabled = pluginsId.contains(plugin.id);
-      return plugin;
-    }).toList();
-    plugins.sort((a, b) {
-      var aRating = a.ratingAvg ?? 0;
-      var bRating = b.ratingAvg ?? 0;
-      var aCount = a.ratingCount;
-      var bCount = b.ratingCount;
-      return (aRating * aCount).compareTo(bRating * bCount);
-    });
-    return plugins.reversed.toList();
-  }
+  static List<Plugin> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Plugin.fromJson(e)).toList();
 }

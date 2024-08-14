@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
-  final List<Memory> memories;
-  final Function refreshMemories;
+  final List<ServerMemory> memories;
+  final Function(ServerMemory, int) updateMemory;
+  final Function(ServerMemory, int) deleteMemory;
+  final Function loadMoreMemories;
+  final bool loadingNewMemories;
   final FocusNode textFieldFocusNode;
 
   const MemoriesPage({
     super.key,
     required this.memories,
-    required this.refreshMemories,
+    required this.updateMemory,
+    required this.deleteMemory,
     required this.textFieldFocusNode,
+    required this.loadMoreMemories,
+    required this.loadingNewMemories,
   });
 
   @override
@@ -26,14 +33,7 @@ class MemoriesPage extends StatefulWidget {
 class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   FocusNode textFieldFocusNode = FocusNode();
-  bool loading = false;
   bool displayDiscardMemories = false;
-
-  changeLoadingState() {
-    setState(() {
-      loading = !loading;
-    });
-  }
 
   _toggleDiscardMemories() async {
     MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
@@ -43,30 +43,16 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
-  // void _onAddButtonPressed() {
-  //   MixpanelManager().addManualMemoryClicked();
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AddMemoryDialog(
-  //         onMemoryAdded: (Memory memory) {
-  //           widget.memories.insert(0, memory);
-  //           setState(() {});
-  //         },
-  //       );
-  //     },
-  //   );
-  // }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     var memories =
         displayDiscardMemories ? widget.memories : widget.memories.where((memory) => !memory.discarded).toList();
     memories = textController.text.isEmpty
         ? memories
         : memories
             .where(
-              (memory) => (memory.transcript + memory.structured.target!.title + memory.structured.target!.overview)
+              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
                   .toLowerCase()
                   .contains(textController.text.toLowerCase()),
             )
@@ -146,13 +132,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // IconButton(
-                //     onPressed: _onAddButtonPressed,
-                //     icon: const Icon(
-                //       Icons.add_circle_outline,
-                //       size: 24,
-                //       color: Colors.white,
-                //     )),
                 const SizedBox(width: 1),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -178,7 +157,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
           ),
         ),
-        if (memories.isEmpty)
+        if (memories.isEmpty && !widget.loadingNewMemories)
           const SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -187,20 +166,56 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
               ),
             ),
           )
+        else if (memories.isEmpty && widget.loadingNewMemories)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 32.0),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
+          )
         else
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
+                if (index == memoriesWithDates.length) {
+                  if (widget.loadingNewMemories) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 32.0),
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                    );
+                  }
+                  // widget.loadMoreMemories(); // CALL this only when visible
+                  return VisibilityDetector(
+                    key: const Key('memory-loader'),
+                    onVisibilityChanged: (visibilityInfo) {
+                      if (visibilityInfo.visibleFraction > 0 && !widget.loadingNewMemories) {
+                        widget.loadMoreMemories();
+                      }
+                    },
+                    child: const SizedBox(height: 80, width: double.maxFinite),
+                  );
+                }
+
                 if (memoriesWithDates[index].runtimeType == DateTime) {
                   return DateListItem(date: memoriesWithDates[index] as DateTime, isFirst: index == 0);
                 }
+                var memory = memoriesWithDates[index] as ServerMemory;
                 return MemoryListItem(
-                  memoryIdx: index,
-                  memory: memoriesWithDates[index] as Memory,
-                  loadMemories: widget.refreshMemories,
+                  memoryIdx: memories.indexOf(memory),
+                  memory: memory,
+                  updateMemory: widget.updateMemory,
+                  deleteMemory: widget.deleteMemory,
                 );
               },
-              childCount: memoriesWithDates.length,
+              childCount: memoriesWithDates.length + 1,
             ),
           ),
         const SliverToBoxAdapter(

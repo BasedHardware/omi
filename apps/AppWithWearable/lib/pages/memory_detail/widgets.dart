@@ -1,37 +1,34 @@
-import 'dart:convert';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
-import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'maps_util.dart';
 
 List<Widget> getSummaryWidgets(
   BuildContext context,
-  Memory memory,
+  ServerMemory memory,
   TextEditingController overviewController,
   bool editingOverview,
   FocusNode focusOverviewField,
   StateSetter setState,
 ) {
-  var structured = memory.structured.target!;
+  var structured = memory.structured;
   String time = memory.startedAt == null
       ? dateTimeFormat('h:mm a', memory.createdAt)
       : '${dateTimeFormat('h:mm a', memory.startedAt)} to ${dateTimeFormat('h:mm a', memory.finishedAt)}';
@@ -49,15 +46,16 @@ List<Widget> getSummaryWidgets(
     const SizedBox(height: 16),
     Row(
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            structured.category.isEmpty ? ' ' : structured.category[0].toUpperCase() + structured.category.substring(1),
-            style: Theme.of(context).textTheme.titleLarge,
+        GestureDetector(
+          onTap: memory.onTagPressed(context),
+          child: Container(
+            decoration: BoxDecoration(color: memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              memory.getTag(),
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(color: memory.getTagTextColor()),
+              maxLines: 1,
+            ),
           ),
         )
       ],
@@ -65,13 +63,10 @@ List<Widget> getSummaryWidgets(
     const SizedBox(height: 40),
     memory.discarded
         ? const SizedBox.shrink()
-        : Text(
-            'Overview',
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-          ),
+        : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
     memory.discarded
         ? const SizedBox.shrink()
-        : ((memory.geolocation.target != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
+        : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
     memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
     memory.discarded
         ? const SizedBox.shrink()
@@ -94,7 +89,7 @@ List<Widget> getSummaryWidgets(
                       content: Text('Action items copied to clipboard'),
                       duration: Duration(seconds: 2),
                     ));
-                    MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
+                    // MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
                   },
                   icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20))
             ],
@@ -184,7 +179,7 @@ List<Widget> getSummaryWidgets(
   ];
 }
 
-_getEditTextField(Memory memory, TextEditingController controller, bool enabled, FocusNode focusNode) {
+_getEditTextField(ServerMemory memory, TextEditingController controller, bool enabled, FocusNode focusNode) {
   if (memory.discarded) return const SizedBox.shrink();
   return enabled
       ? TextField(
@@ -209,12 +204,12 @@ _getEditTextField(Memory memory, TextEditingController controller, bool enabled,
 
 List<Widget> getPluginsWidgets(
   BuildContext context,
-  Memory memory,
+  ServerMemory memory,
   List<Plugin> pluginsList,
   List<bool> pluginResponseExpanded,
   Function(int) onItemToggled,
 ) {
-  if (memory.pluginsResponse.isEmpty) {
+  if (memory.pluginsResults.isEmpty) {
     return [
       const SizedBox(height: 32),
       Text(
@@ -256,14 +251,14 @@ List<Widget> getPluginsWidgets(
   }
   return [
     // TODO: include a way to trigger specific plugins
-    if (memory.pluginsResponse.isNotEmpty && !memory.discarded) ...[
-      memory.structured.target!.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+    if (memory.pluginsResults.isNotEmpty && !memory.discarded) ...[
+      memory.structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
       Text(
         'Plugins 🧑‍💻',
         style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
       ),
       const SizedBox(height: 24),
-      ...memory.pluginsResponse.mapIndexed((i, pluginResponse) {
+      ...memory.pluginsResults.mapIndexed((i, pluginResponse) {
         if (pluginResponse.content.length < 5) return const SizedBox.shrink();
         Plugin? plugin = pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
         return Container(
@@ -333,8 +328,8 @@ List<Widget> getPluginsWidgets(
   ];
 }
 
-List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
-  return memory.geolocation.target == null || memory.discarded
+List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
+  return memory.geolocation == null || memory.discarded
       ? []
       : [
           Text(
@@ -343,21 +338,15 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
           ),
           const SizedBox(height: 8),
           Text(
-            '${memory.geolocation.target!.address}',
+            '${memory.geolocation!.address}',
             style: TextStyle(color: Colors.grey.shade300),
           ),
           const SizedBox(height: 8),
-          memory.geolocation.target != null
+          memory.geolocation != null
               ? GestureDetector(
                   onTap: () async {
                     // TODO: open google maps URL if available
-                    // if (await canLaunchUrl(
-                    //         Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!))) ==
-                    //     true) {
-                    //   await launchUrl(
-                    //       Uri.parse(MapsUtil.getGoogleMapsPlaceUrl(memory.geolocation.target!.googlePlaceId!)));
-                    // }
-                    MapsUtil.launchMap(memory.geolocation.target!.latitude!, memory.geolocation.target!.longitude!);
+                    MapsUtil.launchMap(memory.geolocation!.latitude!, memory.geolocation!.longitude!);
                   },
                   child: CachedNetworkImage(
                     imageBuilder: (context, imageProvider) {
@@ -374,8 +363,8 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
                       );
                     },
                     imageUrl: MapsUtil.getMapImageUrl(
-                      memory.geolocation.target!.latitude!,
-                      memory.geolocation.target!.longitude!,
+                      memory.geolocation!.latitude!,
+                      memory.geolocation!.longitude!,
                     ),
                   ),
                 )
@@ -387,14 +376,12 @@ List<Widget> getGeolocationWidgets(Memory memory, BuildContext context) {
 showOptionsBottomSheet(
   BuildContext context,
   StateSetter setState,
-  Memory memory,
-  Function(BuildContext, StateSetter, Memory, Function) reprocessMemory,
+  ServerMemory memory,
+  Function(BuildContext, StateSetter, ServerMemory, Function) reprocessMemory,
 ) async {
   bool loadingReprocessMemory = false;
   bool displayDevTools = false;
-  bool displayMemoryPromptField = false;
   bool loadingPluginIntegrationTest = false;
-  TextEditingController controller = TextEditingController();
 
   var result = await showModalBottomSheet(
       context: context,
@@ -461,18 +448,6 @@ showOptionsBottomSheet(
                       ]
                     : [
                         ListTile(
-                          title: const Text('Share memory'),
-                          leading: const Icon(Icons.send),
-                          onTap: loadingReprocessMemory
-                              ? null
-                              : () {
-                                  // share loading
-                                  MixpanelManager().memoryShareButtonClick(memory);
-                                  Share.share(memory.structured.target!.toString());
-                                  HapticFeedback.lightImpact();
-                                },
-                        ),
-                        ListTile(
                           title: const Text('Re-summarize'),
                           leading: loadingReprocessMemory
                               ? const SizedBox(
@@ -512,7 +487,7 @@ showOptionsBottomSheet(
                                             memory: memory,
                                             onDelete: () {
                                               Navigator.pop(context, true);
-                                              Navigator.pop(context, true);
+                                              Navigator.pop(context, {'deleted': true});
                                             }),
                                       );
                                     },
@@ -540,24 +515,4 @@ showOptionsBottomSheet(
           }));
   if (result == true) setState(() {});
   debugPrint('showBottomSheet result: $result');
-}
-
-_getMemoryPromptDialogContent(BuildContext context, TextEditingController controller) {
-  return SizedBox(
-    height: 200,
-    child: Column(
-      children: [
-        TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter the prompt',
-            border: OutlineInputBorder(borderSide: BorderSide.none),
-            contentPadding: EdgeInsets.all(0),
-          ),
-          keyboardType: TextInputType.multiline,
-          maxLines: 8,
-        ),
-      ],
-    ),
-  );
 }

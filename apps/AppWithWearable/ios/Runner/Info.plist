@@ -79,6 +79,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>location</string>
 		<string>bluetooth-central</string>
 		<string>fetch</string>
 		<string>processing</string>

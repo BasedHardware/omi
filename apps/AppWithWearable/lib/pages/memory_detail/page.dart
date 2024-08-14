@@ -1,19 +1,24 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
-  final Memory memory;
+  final ServerMemory memory;
 
   const MemoryDetailPage({super.key, required this.memory});
 
@@ -39,29 +44,23 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   bool canDisplaySeconds = true;
 
-  _determineCanDisplaySeconds() {
-    var segments = widget.memory.transcriptSegments;
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          canDisplaySeconds = false;
-          break;
-        }
-      }
-    }
-  }
+  List<MemoryPhoto> photos = [];
 
   @override
   void initState() {
-    _determineCanDisplaySeconds();
-    // triggerMemoryCreatedEvents(widget.memory);
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
-    structured = widget.memory.structured.target!;
+    structured = widget.memory.structured;
     titleController.text = structured.title;
     overviewController.text = structured.overview;
-    pluginResponseExpanded = List.filled(widget.memory.pluginsResponse.length, false);
+    pluginResponseExpanded = List.filled(widget.memory.pluginsResults.length, false);
     _controller = TabController(length: 2, vsync: this, initialIndex: 1);
     _controller!.addListener(() => setState(() {}));
+    if (widget.memory.source == MemorySource.openglass) {
+      getMemoryPhotos(widget.memory.id).then((value) {
+        photos = value;
+        setState(() {}); // TODO: if left before this closes, fails
+      });
+    }
     super.initState();
   }
 
@@ -103,6 +102,19 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               IconButton(
                 onPressed: () {
+                  if (widget.memory.failed) {
+                    showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                            context,
+                            () => Navigator.pop(context),
+                            () => Navigator.pop(context),
+                            'Options not available',
+                            'This memory failed when processing. Options are not available yet, please try again later.',
+                            singleButton: true,
+                            okButtonText: 'Ok'));
+                    return;
+                  }
                   showOptionsBottomSheet(context, setState, widget.memory, _reProcessMemory);
                 },
                 icon: const Icon(Icons.more_horiz),
@@ -138,7 +150,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               controller: _controller,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
               tabs: [
-                Tab(text: widget.memory.type == MemoryType.image ? 'Photos' : 'Transcript'),
+                Tab(
+                  text: widget.memory.source == MemorySource.openglass
+                      ? 'Photos'
+                      : widget.memory.source == MemorySource.screenpipe
+                          ? 'Raw Data'
+                          : 'Transcript',
+                ),
                 const Tab(text: 'Summary')
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
@@ -152,7 +170,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   children: [
                     ListView(
                       shrinkWrap: true,
-                      children: widget.memory.type == MemoryType.image ? _getImagesWidget() : _getTranscriptWidgets(),
+                      children:
+                          widget.memory.source == MemorySource.openglass ? _getImagesWidget() : _getTranscriptWidgets(),
                     ),
                     ListView(
                       shrinkWrap: true,
@@ -184,11 +203,16 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   List<Widget> _getTranscriptWidgets() {
+    String decodedRawText = widget.memory.externalIntegration?.text ?? '';
+    try {
+      decodedRawText = utf8.decode(decodedRawText.codeUnits);
+    } catch (e) {}
+
     return [
       SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
       widget.memory.transcriptSegments.isEmpty
           ? ExpandableTextWidget(
-              text: widget.memory.getTranscript(),
+              text: decodedRawText,
               maxLines: 10000,
               linkColor: Colors.grey.shade300,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
@@ -199,29 +223,45 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               segments: widget.memory.transcriptSegments,
               horizontalMargin: false,
               topMargin: false,
-              canDisplaySeconds: canDisplaySeconds),
+              canDisplaySeconds: canDisplaySeconds,
+            ),
       const SizedBox(height: 32)
     ];
   }
 
   List<Widget> _getImagesWidget() {
-    var photos = widget.memory.photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    var photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
     print('Images length ${photos.length}');
-    return [PhotosGridComponent(photos: photos), const SizedBox(height: 32)];
+    return [PhotosGridComponent(photos: photosData), const SizedBox(height: 32)];
   }
 
-  _reProcessMemory(BuildContext context, StateSetter setModalState, Memory memory, Function changeLoadingState) async {
-    Memory? newMemory = await reProcessMemory(
+  _reProcessMemory(
+    BuildContext context,
+    StateSetter setModalState,
+    ServerMemory memory,
+    Function changeLoadingState,
+  ) async {
+    ServerMemory? newMemory = await reProcessMemory(
       context,
       memory,
       () => ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Error while processing memory. Please try again later.'))),
       changeLoadingState,
     );
+    if (newMemory == null) return;
 
-    pluginResponseExpanded = List.filled(memory.pluginsResponse.length, false);
-    overviewController.text = newMemory!.structured.target!.overview;
-    titleController.text = newMemory.structured.target!.title;
+    pluginResponseExpanded = List.filled(newMemory.pluginsResults.length, false);
+    overviewController.text = newMemory.structured.overview;
+    titleController.text = newMemory.structured.title;
+    widget.memory.structured.title = newMemory.structured.title;
+    widget.memory.structured.overview = newMemory.structured.overview;
+    widget.memory.structured.actionItems.clear();
+    widget.memory.structured.actionItems.addAll(newMemory.structured.actionItems);
+    widget.memory.pluginsResults.clear();
+    widget.memory.pluginsResults.addAll(newMemory.pluginsResults);
+    widget.memory.discarded = newMemory.discarded;
+
+    SharedPreferencesUtil().modifiedMemoryDetails = widget.memory;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),

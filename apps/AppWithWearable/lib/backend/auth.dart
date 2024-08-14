@@ -42,7 +42,6 @@ Future<UserCredential> signInWithApple() async {
     SharedPreferencesUtil().givenName = appleCredential.givenName!;
     SharedPreferencesUtil().familyName = appleCredential.familyName ?? '';
   }
-  // TODO: this would not be set again if the user uninstalls and installs the app again :/ as name and email are only given once.
 
   // Create an `OAuthCredential` from the credential returned by Apple.
   final oauthCredential = OAuthProvider("apple.com").credential(
@@ -111,7 +110,10 @@ listenAuthTokenChanges() {
     } else {
       debugPrint('User is signed in!');
       try {
-        SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+        if (SharedPreferencesUtil().authToken.isEmpty ||
+            DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
+          await getIdToken();
+        }
       } catch (e) {
         debugPrint('Failed to get token: $e');
       }
@@ -144,18 +146,4 @@ Future<void> signOut(BuildContext context) async {
   // context.pushReplacementNamed('auth');
 }
 
-listenAuthStateChanges() {
-  FirebaseAuth.instance.authStateChanges().listen((User? user) {
-    if (user == null) {
-      debugPrint('User is currently signed out!');
-      SharedPreferencesUtil().onboardingCompleted = false;
-      SharedPreferencesUtil().authToken = '';
-    } else {
-      debugPrint('User is signed in!');
-    }
-  });
-}
-
-Future isSignedIn() async {
-  return FirebaseAuth.instance.currentUser != null;
-}
+bool isSignedIn() => FirebaseAuth.instance.currentUser != null;

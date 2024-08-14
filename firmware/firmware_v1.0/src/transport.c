@@ -397,6 +397,8 @@ static bool push_to_gatt(struct bt_conn *conn)
         return false;
     }
 
+    printf("Sending audio...\n");
+
     // Push each frame
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
@@ -444,6 +446,8 @@ static bool push_to_storage(struct bt_conn *conn)
         return false;
     }
 
+    //printf("Saving files...\n");
+
     // Push each frame
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
@@ -476,26 +480,29 @@ static bool push_to_storage(struct bt_conn *conn)
     return true;
 }
 
+uint32_t id = 0;
+
 int read_audio_in_storage(void)
 {
     if(storage_action == 2 && notification_value > -1)
 	{
         char *file = (char *)malloc(20);
 
-        snprintf(file, 20, "audio/%u.txt", notification_value);
+        snprintf(file, 20, "audio/%u.txt", notification_value + 1);
+
+        printf("Sending files...\n");
 
         size_t index = 0;
 
         while (1)
         {
-			ReadParams audio_frame = read_file_fragmment(file, 651, (651*(index+1))+index);
+			ReadParams audio_frame = read_file_fragmment(file, 651,(651*(index))+index);
             if(audio_frame.ret != 651)
             {
-                printf("fin del archivo\n");
-                if(notification_value > -2)
+                if(notification_value > -1)
                 {
                     char *prev_file = (char *)malloc(30);
-                    snprintf(prev_file, 30, "audio/%u.txt,status:OK", notification_value);
+                    snprintf(prev_file, 30, "audio/%u.txt,status:OK", notification_value + 1);
                     notification_value = notification_value - 1;
                     write_info(prev_file);
                     free(prev_file);
@@ -524,7 +531,11 @@ int read_audio_in_storage(void)
             uint8_t *audio = convert_to_uint8_array(revert, &size);
             free(revert);
 
-            bt_gatt_notify(current_connection, &audio_service.attrs[1], audio, size); // Try send notification
+            for(uint8_t i = 0; i < 2; i++)
+            {
+                bt_gatt_notify(current_connection, &audio_service.attrs[1], audio, size); // Try send notification
+            }
+            
 
             free(audio);
 

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -20,7 +21,8 @@ class PluginsPage extends StatefulWidget {
 class _PluginsPageState extends State<PluginsPage> {
   bool isLoading = true;
   String searchQuery = '';
-  List<Plugin> plugins = [];
+  List<Plugin> plugins = SharedPreferencesUtil().pluginsList;
+  late List<bool> pluginLoading;
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -33,19 +35,38 @@ class _PluginsPageState extends State<PluginsPage> {
       filterMemories = false;
       filterExternal = false;
     }
-    plugins = SharedPreferencesUtil().pluginsList;
+    pluginLoading = List.filled(plugins.length, false);
     super.initState();
   }
 
-  Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
+  Future<void> _togglePlugin(String pluginId, bool isEnabled, int idx) async {
+    if (pluginLoading[idx]) return;
+    setState(() => pluginLoading[idx] = true);
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
+      var enabled = await enablePluginServer(pluginId);
+      if (!enabled) {
+        showDialog(
+            context: context,
+            builder: (c) => getDialog(
+                  context,
+                  () => Navigator.pop(context),
+                  () => Navigator.pop(context),
+                  'Error activating the plugin',
+                  'If this is an integration plugin, make sure the setup is completed.',
+                  singleButton: true,
+                ));
+        setState(() => pluginLoading[idx] = false);
+        return;
+      }
       prefs.enablePlugin(pluginId);
       MixpanelManager().pluginEnabled(pluginId);
     } else {
+      await disablePluginServer(pluginId);
       prefs.disablePlugin(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
+    setState(() => pluginLoading[idx] = false);
     setState(() => plugins = SharedPreferencesUtil().pluginsList);
   }
 
@@ -331,33 +352,41 @@ class _PluginsPageState extends State<PluginsPage> {
                         )
                       ],
                     ),
-                    trailing: IconButton(
-                      icon: Icon(
-                        plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: plugin.enabled ? Colors.white : Colors.grey,
-                      ),
-                      onPressed: () {
-                        if (plugin.worksExternally() && !plugin.enabled) {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () async {
-                                Navigator.pop(context);
-                                await routeToPage(context, PluginDetailPage(plugin: plugin));
-                                setState(() => plugins = SharedPreferencesUtil().pluginsList);
-                              },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                              okButtonText: 'Confirm',
+                    trailing: pluginLoading[index]
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
-                          );
-                        } else {
-                          _togglePlugin(plugin.id.toString(), !plugin.enabled);
-                        }
-                      },
-                    ),
+                          )
+                        : IconButton(
+                            icon: Icon(
+                              plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                              color: plugin.enabled ? Colors.white : Colors.grey,
+                            ),
+                            onPressed: () {
+                              if (plugin.worksExternally() && !plugin.enabled) {
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.pop(context),
+                                    () async {
+                                      Navigator.pop(context);
+                                      await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                      setState(() => plugins = SharedPreferencesUtil().pluginsList);
+                                    },
+                                    'Authorize External Plugin',
+                                    'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                                    okButtonText: 'Confirm',
+                                  ),
+                                );
+                              } else {
+                                _togglePlugin(plugin.id.toString(), !plugin.enabled, index);
+                              }
+                            },
+                          ),
                     // trailing: Switch(
                     //   value: plugin.isEnabled,
                     //   activeColor: Colors.deepPurple,

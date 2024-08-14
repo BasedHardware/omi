@@ -3,10 +3,8 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/api_requests/api/other.dart';
-import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/http/api/transcribe.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -134,11 +132,7 @@ mixin AudioChunksMixin {
   Future<List<TranscriptSegment>> _processFileToTranscript(File f) async {
     print('transcribing file: ${f.path}');
     _printFileSize(f);
-    if (SharedPreferencesUtil().useTranscriptServer) {
-      return await transcribe(f);
-    } else {
-      return await deepgramTranscribe(f);
-    }
+    return await transcribe(f);
   }
 
   void _printFileSize(File file) async {

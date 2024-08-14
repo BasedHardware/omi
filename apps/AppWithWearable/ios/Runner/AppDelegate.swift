@@ -1,9 +1,7 @@
 import UIKit
-
 import Flutter
-import workmanager
-
 import UserNotifications
+
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
@@ -16,7 +14,6 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
-
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
     methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)
@@ -25,16 +22,10 @@ import UserNotifications
     }
 
     // here, Without this code the task will not work.
-    // SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
+    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback(registerPlugins)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
-    // In AppDelegate.application method
-    WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "daily-summary")
-
-    // Register a periodic task in iOS 13+
-    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "com.friend-app-with-wearable.ios12.daily-summary", frequency: NSNumber(value: 60))
-//     UIApplication.shared.setMinimumBackgroundFetchInterval(TimeInterval(60*15))
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -86,6 +77,6 @@ import UserNotifications
 }
 
 // here
-// func registerPlugins(registry: FlutterPluginRegistry) {
-//   GeneratedPluginRegistrant.register(with: registry)
-// }
+func registerPlugins(registry: FlutterPluginRegistry) {
+  GeneratedPluginRegistrant.register(with: registry)
+}

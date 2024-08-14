@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/mixpanel.dart';
+import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-/* start fragment added */
-var filesInStorage = "0";
-/* end fragment added */
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -27,7 +25,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
   late bool devModeEnabled;
-  late bool backupsEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
   String? version;
@@ -40,7 +37,6 @@ class _SettingsPageState extends State<SettingsPage> {
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
-    backupsEnabled = SharedPreferencesUtil().backupsEnabled;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -98,13 +94,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
-
-                  /* start fragment added */
-                  StorageSettingsWidget(filesInStorage: filesInStorage),
-                  /* end fragment added */
-
-                  // TODO: do not works like this, fix if reusing
-                  // ...getNotificationsWidgets(setState, postMemoryNotificationIsChecked, reconnectNotificationIsChecked),
                   ...getPreferencesWidgets(
                     onOptInAnalytics: () {
                       setState(() {
@@ -131,34 +120,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           SharedPreferencesUtil().devModeEnabled = true;
                         }
                       });
-                    },
-                    backupsEnabled: backupsEnabled,
-                    onBackupsClicked: () {
-                      // setState(() {
-                      //   if (backupsEnabled) {
-                      //     showDialog(
-                      //         context: context,
-                      //         builder: (c) => getDialog(
-                      //               context,
-                      //               () => Navigator.of(context).pop(),
-                      //               () {
-                      //                 backupsEnabled = false;
-                      //                 SharedPreferencesUtil().backupsEnabled = false;
-                      //                 MixpanelManager().backupsDisabled();
-                      //                 deleteBackupApi();
-                      //                 Navigator.of(context).pop();
-                      //                 setState(() {});
-                      //               },
-                      //               'Disable Automatic Backups',
-                      //               'You will be responsible for backing up your own data. We will not be able to restore it automatically once you disable this feature. Are you sure?',
-                      //             ));
-                      //   } else {
-                      //     SharedPreferencesUtil().backupsEnabled = true;
-                      //     setState(() => backupsEnabled = true);
-                      //     MixpanelManager().backupsEnabled();
-                      //     executeBackupWithUid();
-                      //   }
-                      // });
                     },
                   ),
                   const SizedBox(height: 16),
@@ -197,27 +158,63 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  SharedPreferencesUtil().useTranscriptServer
-                      ? getItemAddOn('Speech Profile', () {
-                          routeToPage(context, const SpeakerIdPage());
-                        }, icon: Icons.multitrack_audio)
-                      : Container(),
+                  getItemAddOn('Speech Profile', () {
+                    routeToPage(context, const SpeakerIdPage());
+                  }, icon: Icons.multitrack_audio),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  getItemAddOn('Developer Mode', () async {
+                  getItemAddOn('-Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
                   }, icon: Icons.code, visibility: devModeEnabled),
+                  const SizedBox(height: 32.0),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'ABOUT US',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  getItemAddOn('Privacy Policy', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://basedhardware.com/pages/privacy',
+                          title: 'Privacy Policy',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.privacy_tip_outlined, visibility: true),
+                  getItemAddOn('Our Website', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://basedhardware.com/',
+                          title: 'Based Hardware',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.language_outlined, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Text(
-                      SharedPreferencesUtil().uid,
-                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
+                    child: GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('UID copied to clipboard')));
+                      },
+                      child: Text(
+                        SharedPreferencesUtil().uid,
+                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                   Padding(

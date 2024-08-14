@@ -1,17 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/utils.dart';
-import 'package:friend_private/pages/capture/page.dart';
 
-import '../../backend/schema/bt_device.dart';
-import '../../utils/ble/communication.dart';
+final Map<String, String> availableLanguages = {
+  'Bulgarian': 'bg',
+  'Catalan': 'ca',
+  'Chinese': 'zh',
+  'Czech': 'cs',
+  'Danish': 'da',
+  'Dutch': 'nl',
+  'English': 'en',
+  'Finnish': 'fi',
+  'French': 'fr',
+  'German': 'de',
+  'Greek': 'el',
+  'Hindi': 'hi',
+  'Hungarian': 'hu',
+  'Indonesian': 'id',
+  'Italian': 'it',
+  'Japanese': 'ja',
+  'Korean': 'ko',
+  'Latvian': 'lv',
+  'Lithuanian': 'lt',
+  'Malay': 'ms',
+  'Norwegian': 'no',
+  'Polish': 'pl',
+  'Portuguese': 'pt',
+  'Russian': 'ru',
+  'Spanish': 'es',
+  'Swedish': 'sv',
+  'Thai': 'th',
+  'Turkish': 'tr',
+  'Ukrainian': 'uk',
+  'Vietnamese': 'vi',
+};
+
+getLanguageName(String code) {
+  return availableLanguages.entries.firstWhere((element) => element.value == code).key;
+}
 
 getNotificationsWidgets(
   StateSetter setState,
   bool postMemoryNotificationIsChecked,
   bool reconnectNotificationIsChecked,
-    Future<String> Function() getFilesInStorage,
-    ) {
+) {
   return [
     const Align(
       alignment: Alignment.centerLeft,
@@ -165,89 +196,12 @@ getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguag
   ];
 }
 
-/* start section added */
-class StorageSettingsWidget extends StatefulWidget {
-  final String filesInStorage;
-
-  StorageSettingsWidget({required this.filesInStorage});
-
-  @override
-  _StorageSettingsWidgetState createState() => _StorageSettingsWidgetState();
-}
-
-class _StorageSettingsWidgetState extends State<StorageSettingsWidget> {
-  BTDeviceStruct? _device;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'STORAGE SETTINGS',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: Container(
-            height: 120,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      storageMode ? 'Get storage data' : 'Normal mode',
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    Switch(
-                      value: storageMode,
-                      onChanged: (bool value) {
-                        setState(() async {
-                          storageMode = value;
-                          await setStorageMode("C6:52:FE:D9:D9:80", storageMode ? 2 : 1);
-                          //debugPrint('Storage mode: ${_device!.id}');
-                        });
-                      },
-                      activeTrackColor: Colors.green,
-                      activeColor: Colors.white,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'files in storage: ${widget.filesInStorage}',
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 32.0),
-      ],
-    );
-  }
-}
-/* end section added */
-
 getPreferencesWidgets({
   required VoidCallback onOptInAnalytics,
   required VoidCallback viewPrivacyDetails,
   required bool optInAnalytics,
   required VoidCallback onDevModeClicked,
   required bool devModeEnabled,
-  required VoidCallback onBackupsClicked,
-  required bool backupsEnabled,
 }) {
   return [
     const Align(
