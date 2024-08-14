@@ -21,6 +21,7 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
+import 'package:friend_private/pages/home/storage.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -62,8 +63,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
+  StreamSubscription<List<int>>? _bleStorageListener;
 
   int batteryLevel = -1;
+  int filesInStorage = -1;
   BTDeviceStruct? _device;
 
   List<Plugin> plugins = [];
@@ -290,6 +293,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
+    _initiateStorageListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
@@ -304,6 +308,18 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       onBatteryLevelChange: (int value) {
         setState(() {
           batteryLevel = value;
+        });
+      },
+    );
+  }
+
+  _initiateStorageListener() async {
+    _bleStorageListener?.cancel();
+    _bleStorageListener = await getFilesInStorageListener(
+      _device!.id,
+      onFilesInStorageChange: (int value) {
+        setState(() async {
+          filesInStorage = value;
         });
       },
     );
@@ -629,6 +645,44 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             ),
                             child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                           ),
+                    _device != null && filesInStorage != -1
+                        ? GestureDetector(
+                      onTap: _device == null
+                          ? null
+                          : () {
+                        Navigator.of(context).push(MaterialPageRoute(
+                            builder: (c) => StorageManager(
+                              device: _device!,
+                              filesInStorage: filesInStorage,
+                            )));
+                        MixpanelManager().batteryIndicatorClicked();
+                      },
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.insert_drive_file,
+                                color: filesInStorage > 15
+                                    ? Colors.red
+                                    : filesInStorage > 5
+                                    ? Colors.yellow.shade700
+                                    : const Color.fromARGB(255, 0, 255, 8),
+                                size: 15,
+                              ),
+                            ],
+                          )),
+                    )
+                        : const Row(), // Empty element
                     _controller!.index == 2
                         ? Padding(
                             padding: const EdgeInsets.only(left: 0),
@@ -761,6 +815,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
+    _bleStorageListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     ForegroundUtil.stopForegroundTask();

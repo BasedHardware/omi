@@ -29,6 +29,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:location/location.dart';
 import 'package:uuid/uuid.dart';
 
+import '../home/storage.dart';
 import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
@@ -194,6 +195,8 @@ class CapturePageState extends State<CapturePage>
       return;
     }
     audioStorage = WavBytesUtil(codec: codec);
+    await setStorageMode(btDevice!.id, 1);
+    storageMode = false;
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) {

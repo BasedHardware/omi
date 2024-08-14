@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -231,4 +232,76 @@ Future<StreamSubscription?> getBleImageBytesListener(
   // if (Platform.isAndroid) await device.requestMtu(512);
 
   return listener;
+}
+
+// Storage service & characteristics starts here
+
+Future<StreamSubscription<List<int>>?> getFilesInStorageListener(
+    String deviceId, {
+      void Function(int)? onFilesInStorageChange,
+    }) async {
+  final storageService = await getServiceByUuid(deviceId, storageServiceUuid);
+  if (storageService == null) {
+    logServiceNotFoundError('Storage files', deviceId);
+    return null;
+  }
+
+  var filesInStorageCharacteristic = getCharacteristicByUuid(storageService, filesInStorageNotifyCharacteristicUuid);
+  if (filesInStorageCharacteristic == null) {
+    logCharacteristicNotFoundError('Files in storage', deviceId);
+    return null;
+  }
+
+  var currValue = await filesInStorageCharacteristic.read();
+  if (currValue.isNotEmpty) {
+    debugPrint('Files in storage: ${currValue[0]}');
+    onFilesInStorageChange!(currValue[0]);
+  }
+
+  try {
+    await filesInStorageCharacteristic.setNotifyValue(true);
+  } catch (e, stackTrace) {
+    logSubscribeError('files in storage', deviceId, e, stackTrace);
+    return null;
+  }
+
+  var listener = filesInStorageCharacteristic.lastValueStream.listen((value) {
+    if (value.isNotEmpty) {
+      onFilesInStorageChange!(value[0]);
+    }
+  });
+
+  final device = BluetoothDevice.fromId(deviceId);
+  device.cancelWhenDisconnected(listener);
+
+  return listener;
+}
+
+Future<void> setStorageMode(String deviceId, int mode) async {
+  final storageService = await getServiceByUuid(deviceId, storageServiceUuid);
+  if (storageService == null) {
+    logServiceNotFoundError('Storage', deviceId);
+    return;
+  }
+
+  var storageModeSelectorCharacteristic = getCharacteristicByUuid(storageService, storageModeSelectorCharacteristicUuid);
+  if (storageModeSelectorCharacteristic == null) {
+    logCharacteristicNotFoundError('Storage Mode Selector', deviceId);
+    return;
+  }
+
+  try {
+    final byteData = ByteData(4);
+    byteData.setInt32(0, mode, Endian.little);
+    final bytes = byteData.buffer.asUint8List();
+
+    if (bytes.length != 4) {
+      debugPrint('Error: Expected 4 bytes, but got ${bytes.length} bytes');
+      return;
+    }
+
+    await storageModeSelectorCharacteristic.write(bytes);
+    debugPrint('Storage mode set to $mode');
+    print("data device: $deviceId");
+  } catch (e) {}
 }

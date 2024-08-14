@@ -15,6 +15,10 @@ const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d1
 const String batteryServiceUuid = '0000180f-0000-1000-8000-00805f9b34fb';
 const String batteryLevelCharacteristicUuid = '00002a19-0000-1000-8000-00805f9b34fb';
 
+const String storageServiceUuid = '87654321-4321-8765-4321-1234567890ab';
+const String filesInStorageNotifyCharacteristicUuid = '87654321-4321-8765-4321-1234567890ac';
+const String storageModeSelectorCharacteristicUuid = '87654321-4321-8765-4321-1234567890ad';
+
 const String deviceInformationServiceUuid = '0000180a-0000-1000-8000-00805f9b34fb';
 const String modelNumberCharacteristicUuid = '00002a24-0000-1000-8000-00805f9b34fb';
 const String firmwareRevisionCharacteristicUuid = '00002a26-0000-1000-8000-00805f9b34fb';
