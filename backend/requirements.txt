@@ -71,6 +71,7 @@ mypy-extensions==1.0.0
 networkx==3.3
 numpy==1.26.4
 openai==1.39.0
+opuslib==3.0.1
 orjson==3.10.6
 packaging==24.1
 pinecone-client==5.0.1
@@ -86,6 +87,7 @@ pydantic_core==2.20.1
 pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.9.0
+PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1

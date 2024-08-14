@@ -1,6 +1,7 @@
 import os
 
-from fastapi import APIRouter, UploadFile, Depends
+from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from pydub import AudioSegment
 
 from utils import auth
 from utils.storage import retrieve_all_samples, upload_sample_storage, upload_profile_audio, get_speech_profile
@@ -95,5 +96,11 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     file_path = f"_temp/{uid}/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
+
+    aseg = AudioSegment.from_wav(file_path)
+    if aseg.frame_rate != 16000:
+        raise HTTPException(status_code=400, detail="Invalid codec, must opus 16khz.")
+
+    # TODO: vad api, get start,end segments, and trim to 1 minute?
 
     return {"url": upload_profile_audio(file_path, uid)}
