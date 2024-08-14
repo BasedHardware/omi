@@ -99,7 +99,7 @@ static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr
 
 static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("audio_data_read_characteristic\n");
+    LOG_INF("Acceleration data read characteristic");
     int axis_mode = 6; //3 for accel, 6 for (also) gyro
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &axis_mode, sizeof(axis_mode));
 }
