@@ -12,7 +12,7 @@ This solution integrates a microSD memory to provide redundant storage on the de
 ## MicroSD Card Module Pin Configuration - SPI
 
 <div align="center">
-    <img src="assets/media/local_storage_connection_diagram.png" alt="#">
+    <img src="assets/media/Local_storage_connection_diagram.png" alt="#">
 </div>
 
 The micro-SD card module communicates via the SPI communication protocol. You can connect it to the XIAO-nRF52840 Sense using the default SPI pins. You can buy this module in [Amazon](https://www.amazon.com/RedTagCanada-Storage-Expansion-Soldered-Arduino/dp/B09LTMLJ12/ref=sr_1_61?crid=186EM4TGBRTT&dib=eyJ2IjoiMSJ9.ysWkCOQcBTdneiBpSvvAKKrtj7srmVoT71imrzeFa0enSmZvw0bG4MnVgIHU80dJ1zWteuQVzG4TlX2TxajJ8cVh79vZ1S1Eu3v5B0XQIuI-qvzZg566tzu60kRMY-mrgCmq7vkAS5yNwVG-lAFufuAdS2GNjGKbPUImbbQkh58zZ5YdNiGHNQXyScVS9l3o.81e3AigkNOWHioavXqN1PWDc-NdvahtwwMaEmpgkarc&dib_tag=se&keywords=micro%2Bsd%2Bcard%2Bbreakout&qid=1719634567&sprefix=micro%2Bsd%2Bcard%2Bbre%2Caps%2C210&sr=8-61&th=1)
