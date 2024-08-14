@@ -16,6 +16,7 @@ target_sources(app PRIVATE
     src/controls.c
     src/battery.c
     src/settings.c
+    src/deep_sleep.c
 )
 
 target_sources_ifdef(CONFIG_BUBBLE_CODEC_OPUS app PRIVATE
