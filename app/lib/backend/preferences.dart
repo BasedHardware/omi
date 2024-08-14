@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
@@ -25,6 +26,7 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
+  // TODO: store device object rather
   set deviceId(String value) => saveString('deviceId', value);
 
   String get deviceId => getString('deviceId') ?? '';
@@ -32,6 +34,10 @@ class SharedPreferencesUtil {
   set deviceName(String value) => saveString('deviceName', value);
 
   String get deviceName => getString('deviceName') ?? '';
+
+  set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
+
+  BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
