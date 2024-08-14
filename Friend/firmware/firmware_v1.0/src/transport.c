@@ -18,8 +18,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 
-
-
 //
 // Internal
 //
