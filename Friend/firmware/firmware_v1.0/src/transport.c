@@ -18,6 +18,8 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 
+
+
 //
 // Internal
 //
@@ -35,50 +37,8 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 // Service and Characteristic
 //
 
-
-
-
-
-// Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
-// exposes following characteristics:
-// - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
-// - Audio codec (UUID 19B10002-E8F2-537E-4F6C-D104768A1214) to send audio codec type (read)
-// TODO: The current audio service UUID seems to come from old Intel sample code,
-// we should change it to UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
-static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-
-static struct bt_gatt_attr audio_service_attr[] = {
-    BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-};
-
-static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
-
-// Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
-// exposes following characteristics:
-// - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
-static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-
-static struct bt_gatt_attr dfu_service_attr[] = {
-    BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
-    BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
-    BT_GATT_CCC(dfu_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-};
-
-static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
-
-
-
-static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+ static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
-//button
-//
-//
 static struct gpio_callback button_cb_data;
 
 struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
@@ -99,6 +59,50 @@ static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, u
     printk("Handler\n");
 
 }
+
+
+
+// Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
+// exposes following characteristics:
+// - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
+// - Audio codec (UUID 19B10002-E8F2-537E-4F6C-D104768A1214) to send audio codec type (read)
+// TODO: The current audio service UUID seems to come from old Intel sample code,
+// we should change it to UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
+static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static struct bt_gatt_attr audio_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+    // BT_GATT_CHARACTERISTIC(&button_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, button_data_read_characteristic, NULL, NULL),
+    // BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+};
+
+static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
+
+// Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
+// exposes following characteristics:
+// - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
+static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+
+static struct bt_gatt_attr dfu_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
+    BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
+    BT_GATT_CCC(dfu_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+};
+
+static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
+
+
+
+//button
+//
+//
+
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -158,8 +162,20 @@ void check_button_level(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
 typedef enum {
-    IDLE, ONE_PRESS,TWO_PRESS,GRACE
+    IDLE, 
+    ONE_PRESS,
+    TWO_PRESS,
+    GRACE
 } FSM_STATE_T;
+
+
+#define DEFAULT_STATE 0
+#define SINGLE_TAP 1
+#define DOUBLE_TAP 2
+#define LONG_TAP 3
+#define BUTTON_PRESS 4
+#define BUTTON_RELEASE 5
+
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
@@ -176,35 +192,37 @@ static void reset_count() {
     inc_count_1 = 0;
 }
 static void notify_press() {
-    final_button_state[0] = 4; //button press
-    printk("pressed\n");
+    final_button_state[0] = BUTTON_PRESS;
+    LOG_INF("pressed");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
 }
 
 static void notify_unpress() {
-      final_button_state[0] = 5; //button press
-    printk("unpressed\n");
+    final_button_state[0] = BUTTON_RELEASE; 
+    LOG_INF("unpressed");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
 static void notify_tap() {
-      final_button_state[0] = 1; //button press
-    printk("tap\n");
+      final_button_state[0] = SINGLE_TAP;
+    LOG_INF("tap\n");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
 static void notify_double_tap() {
-      final_button_state[0] = 2; //button press
-    printk("double tap\n");
+      final_button_state[0] = DOUBLE_TAP; //button press
+    LOG_INF("double tap\n");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
 static void notify_long_tap() {
-    final_button_state[0] = 3; //button press
-    printk("long tap\n");
+    final_button_state[0] = LONG_TAP; //button press
+    LOG_INF("long tap\n");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
+#define LONG_PRESS_INTERVAL 50
+#define SINGLE_PRESS_INTERVAL 2
 void check_button_level(struct k_work *work_item) {
      //insert the current button state here
     int state_ = was_pressed ? 1 : 0;
@@ -231,7 +249,7 @@ void check_button_level(struct k_work *work_item) {
             notify_unpress();
             }
             inc_count_0++; //button is unpressed
-            if (inc_count_0 > 2) {
+            if (inc_count_0 > SINGLE_PRESS_INTERVAL) {
                 //If button is not pressed for a little while....... 
                 //transition to Two_press. button could be a single or double tap
                 current_button_state = TWO_PRESS;
@@ -241,7 +259,7 @@ void check_button_level(struct k_work *work_item) {
         if (state_ == 1) {
             inc_count_1++; //button is pressed
 
-            if (inc_count_1 > 50) {
+            if (inc_count_1 > LONG_PRESS_INTERVAL) {
                 //If button is pressed for a long time.......
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
