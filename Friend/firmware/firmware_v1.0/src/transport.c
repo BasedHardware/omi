@@ -84,8 +84,8 @@ typedef struct sensors{
 static struct sensors mega_sensor;
 static struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
-static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000000,0x0000,0x1000,0x7450,0xBE2E44B06B00));
-static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000001,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403790,0x0000,0x1000,0x7450,0xBF445E5829A2));
+static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403791,0x0000,0x1000,0x7450,0xBF445E5829A2));
 
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
