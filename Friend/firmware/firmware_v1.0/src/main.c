@@ -9,6 +9,7 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
+#include "deep_sleep.h"
 
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
@@ -130,7 +131,7 @@ int main(void)
     // Run the boot LED sequence
     boot_led_sequence();
 
-    deepsleep_button_init();
+    configure_button_for_wake_up();
 
 
     // // Indicate storage initialization
