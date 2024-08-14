@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
 	<key>aps-environment</key>
-	<string>Devdevelopment</string>
-	<key>com.apple.developer.applesignin</key>
+	<string>development</string>
+	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>Default</string>
+		<string>group.com.friend-app-with-wearable.ios12.onesignal</string>
 	</array>
 </dict>
 </plist>

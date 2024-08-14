@@ -1,14 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:friend_private/pages/backup/page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
@@ -21,20 +15,21 @@ class DeveloperSettingsPage extends StatefulWidget {
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController webhookOnMemoryCreated = TextEditingController();
-  final TextEditingController webhookOnTranscriptReceived = TextEditingController();
+  final TextEditingController deepgramAPIKeyController = TextEditingController();
+  final TextEditingController openAIKeyController = TextEditingController();
+  final TextEditingController webhookUrlController = TextEditingController();
+  final TextEditingController transcriptServerUrlController = TextEditingController();
 
   bool savingSettingsLoading = false;
 
-  bool loadingExportMemories = false;
-  bool loadingImportMemories = false;
-
   @override
   void initState() {
+    openAIKeyController.text = SharedPreferencesUtil().openAIApiKey;
+    deepgramAPIKeyController.text = SharedPreferencesUtil().deepgramApiKey;
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
-    webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
+    webhookUrlController.text = SharedPreferencesUtil().webhookUrl;
+    transcriptServerUrlController.text = SharedPreferencesUtil().transcriptServerUrl;
     super.initState();
   }
 
@@ -67,6 +62,27 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           child: ListView(
             children: [
               const SizedBox(height: 32),
+              _getText('Your own Developer Keys', bold: true),
+              const SizedBox(height: 16.0),
+              TextField(
+                controller: openAIKeyController,
+                obscureText: false,
+                autocorrect: false,
+                enabled: true,
+                enableSuggestions: false,
+                decoration: _getTextFieldDecoration('Open AI Key', hintText: 'sk-.......'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              TextField(
+                controller: deepgramAPIKeyController,
+                obscureText: false,
+                autocorrect: false,
+                enabled: true,
+                enableSuggestions: false,
+                decoration: _getTextFieldDecoration('Deepgram API Key', hintText: ''),
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 40),
               _getText('Store your audios in Google Cloud Storage', bold: true),
               const SizedBox(height: 16.0),
               TextField(
@@ -87,80 +103,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 decoration: _getTextFieldDecoration('GCP Bucket Name'),
                 style: const TextStyle(color: Colors.white),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 32),
               ListTile(
-                title: const Text('Import Memories'),
-                subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                contentPadding: EdgeInsets.zero,
-                trailing: loadingImportMemories
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.download),
-                onTap: () async {
-                  if (loadingImportMemories) return;
-                  setState(() => loadingImportMemories = true);
-                  // open file picker
-                  var file = await FilePicker.platform.pickFiles(
-                    type: FileType.custom,
-                    allowedExtensions: ['json'],
-                  );
-                  MixpanelManager().importMemories();
-                  if (file == null) {
-                    setState(() => loadingImportMemories = false);
-                    return;
-                  }
-                  var xFile = file.files.first.xFile;
-                  try {
-                    var content = (await xFile.readAsString());
-                    var decoded = jsonDecode(content);
-                    List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
-                    debugPrint('Memories: $memories');
-                    MemoryProvider().storeMemories(memories);
-                    _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                    MixpanelManager().importedMemories();
-                    SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
-                  } catch (e) {
-                    debugPrint(e.toString());
-                    _snackBar('Make sure the file is a valid JSON file.');
-                  }
-                  setState(() => loadingImportMemories = false);
+                contentPadding: const EdgeInsets.only(right: 8),
+                title: const Text('JSON Import/Export memories'),
+                trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const BackupsPage()));
                 },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Export Memories'),
-                subtitle: const Text('Export all your memories to a JSON file.'),
-                trailing: loadingExportMemories
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.upload),
-                onTap: loadingExportMemories
-                    ? null
-                    : () async {
-                        if (loadingExportMemories) return;
-                        setState(() => loadingExportMemories = true);
-                        File file = await MemoryProvider().exportMemoriesToFile();
-                        final result =
-                            await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
-                        if (result.status == ShareResultStatus.success) {
-                          debugPrint('Thank you for sharing the picture!');
-                        }
-                        MixpanelManager().exportMemories();
-                        // 54d2c392-57f1-46dc-b944-02740a651f7b
-                        setState(() => loadingExportMemories = false);
-                      },
               ),
               const SizedBox(height: 20),
               Container(
@@ -176,11 +126,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Plugin Integrations Testing',
+                  const Text('Advanced Mode',
                       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                   GestureDetector(
                       onTap: () {
-                        launchUrl(Uri.parse('https://docs.basedhardware.com/developer/plugins/Integrations/'));
+                        launchUrl(Uri.parse(
+                            'https://github.com/BasedHardware/Friend/blob/main/apps/AppWithWearable/lib/pages/settings/advanced_mode.md'));
                         MixpanelManager().advancedModeDocsOpened();
                       },
                       child: const Padding(
@@ -197,43 +148,27 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              const Text(
-                'On Memory Created:',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Triggered when FRIEND creates a new memory.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
+              _getText('Webhooks: Every time a new memory get\'s created, send the details to your own server.'),
               TextField(
-                controller: webhookOnMemoryCreated,
+                controller: webhookUrlController,
                 obscureText: false,
                 autocorrect: false,
                 enabled: true,
                 enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Endpoint URL'),
+                decoration: _getTextFieldDecoration('Webhook URL'),
                 style: const TextStyle(color: Colors.white),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Real-Time Transcript Processing:',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Triggered as the transcript is being received.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-              TextField(
-                controller: webhookOnTranscriptReceived,
-                obscureText: false,
-                autocorrect: false,
-                enabled: true,
-                enableSuggestions: false,
-                decoration: _getTextFieldDecoration('Endpoint URL'),
-                style: const TextStyle(color: Colors.white),
-              ),
+              // const SizedBox(height: 16),
+              // _getText('Transcript Server URL: Send your audio files to your own server.'),
+              // TextField(
+              //   controller: transcriptServerUrlController,
+              //   obscureText: false,
+              //   autocorrect: false,
+              //   enabled: true,
+              //   enableSuggestions: false,
+              //   decoration: _getTextFieldDecoration('Transcript Server URL'),
+              //   style: const TextStyle(color: Colors.white),
+              // ),
               const SizedBox(height: 64),
             ],
           ),
@@ -260,13 +195,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       ),
       suffixIcon: suffixIcon,
     );
-  }
-
-  _snackBar(String content, {int seconds = 1}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(content),
-      duration: Duration(seconds: seconds),
-    ));
   }
 
   _getText(String text, {bool canBeDisabled = false, bool underline = false, bool bold = false}) {
@@ -302,8 +230,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
-    prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
-    prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
+    prefs.openAIApiKey = openAIKeyController.text.trim();
+    prefs.deepgramApiKey = deepgramAPIKeyController.text.trim();
+    prefs.webhookUrl = webhookUrlController.text.trim();
+    prefs.transcriptServerUrl = transcriptServerUrlController.text.trim();
 
     MixpanelManager().settingsSaved();
     setState(() => savingSettingsLoading = false);

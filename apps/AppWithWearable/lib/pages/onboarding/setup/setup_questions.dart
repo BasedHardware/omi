@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 
 class SetupQuestionsPage extends StatefulWidget {
@@ -21,7 +21,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
+      canPop: false,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: ListView(

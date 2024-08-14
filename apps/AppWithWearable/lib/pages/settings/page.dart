@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/utils.dart';
+import 'package:friend_private/pages/backup/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
-import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
-import 'package:friend_private/pages/settings/webview.dart';
-import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -50,7 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-        canPop: true,
+        canPop: false,
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
@@ -73,56 +69,275 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 children: [
                   const SizedBox(height: 32.0),
-                  ...getRecordingSettings((String? newValue) {
-                    if (newValue == null) return;
-                    if (newValue == _selectedLanguage) return;
-                    if (newValue != 'en') {
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (c) => getDialog(
-                          context,
-                          () => Navigator.of(context).pop(),
-                          () => {},
-                          'Language Limitations',
-                          'Speech profiles are only available for English language. We are working on adding support for other languages.',
-                          singleButton: true,
-                        ),
-                      );
-                    }
-                    setState(() => _selectedLanguage = newValue);
-                    SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
-                    MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-                  }, _selectedLanguage),
-                  ...getPreferencesWidgets(
-                    onOptInAnalytics: () {
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'RECORDING SETTINGS',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                      child: Container(
+                    height: 60,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
+                    child: DropdownButton<String>(
+                      menuMaxHeight: 350,
+                      value: _selectedLanguage,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedLanguage = newValue!;
+                        });
+                        SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
+                        MixpanelManager().recordingLanguageChanged(_selectedLanguage);
+                      },
+                      dropdownColor: Colors.black,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      underline: Container(
+                        height: 0,
+                        color: Colors.white,
+                      ),
+                      isExpanded: true,
+                      itemHeight: 48,
+                      items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+                        return DropdownMenuItem<String>(
+                          value: availableLanguages[key],
+                          child: Text(
+                            '$key (${availableLanguages[key]})',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  )),
+                  const SizedBox(height: 32.0),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'NOTIFICATIONS',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
                       setState(() {
-                        optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-                      });
-                    },
-                    viewPrivacyDetails: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                      MixpanelManager().privacyDetailsPageOpened();
-                    },
-                    optInAnalytics: optInAnalytics,
-                    devModeEnabled: devModeEnabled,
-                    onDevModeClicked: () {
-                      setState(() {
-                        if (devModeEnabled) {
-                          devModeEnabled = false;
-                          SharedPreferencesUtil().devModeEnabled = false;
-                          MixpanelManager().developerModeDisabled();
+                        if (postMemoryNotificationIsChecked) {
+                          postMemoryNotificationIsChecked = false;
+                          SharedPreferencesUtil().postMemoryNotificationIsChecked = false;
                         } else {
-                          devModeEnabled = true;
-                          MixpanelManager().developerModeEnabled();
-                          SharedPreferencesUtil().devModeEnabled = true;
+                          postMemoryNotificationIsChecked = true;
+                          SharedPreferencesUtil().postMemoryNotificationIsChecked = true;
                         }
                       });
                     },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Post memory analysis',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: postMemoryNotificationIsChecked
+                                  ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent, // Fill color when checked
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: postMemoryNotificationIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (reconnectNotificationIsChecked) {
+                          reconnectNotificationIsChecked = false;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = false;
+                        } else {
+                          reconnectNotificationIsChecked = true;
+                          SharedPreferencesUtil().reconnectNotificationIsChecked = true;
+                        }
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Reminder to reconnect',
+                            style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: reconnectNotificationIsChecked
+                                  ? const Color.fromARGB(255, 150, 150, 150)
+                                  : Colors.transparent, // Fill color when checked
+                              border: Border.all(
+                                color: const Color.fromARGB(255, 150, 150, 150),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            width: 22,
+                            height: 22,
+                            child: reconnectNotificationIsChecked // Show the icon only when checked
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white, // Tick color
+                                    size: 18,
+                                  )
+                                : null, // No icon when unchecked
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'PREFERENCES',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          optInAnalytics = false;
+                          SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                child: const Text(
+                                  'Help improve Friend by sharing anonymized analytics data',
+                                  style: TextStyle(
+                                      color: Color.fromARGB(255, 150, 150, 150),
+                                      fontSize: 16,
+                                      decoration: TextDecoration.underline),
+                                ),
+                                onTap: () {
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                                  MixpanelManager().privacyDetailsPageOpened();
+                                },
+                              ),
+                            ),
+                            const SizedBox(
+                              width: 8,
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: optInAnalytics
+                                    ? const Color.fromARGB(255, 150, 150, 150)
+                                    : Colors.transparent, // Fill color when checked
+                                border: Border.all(
+                                  color: const Color.fromARGB(255, 150, 150, 150),
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              width: 22,
+                              height: 22,
+                              child: optInAnalytics // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (devModeEnabled) {
+                            devModeEnabled = false;
+                            SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
+                          } else {
+                            devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
+                            SharedPreferencesUtil().devModeEnabled = true;
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Developer Mode',
+                              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: devModeEnabled
+                                    ? const Color.fromARGB(255, 150, 150, 150)
+                                    : Colors.transparent, // Fill color when checked
+                                border: Border.all(
+                                  color: const Color.fromARGB(255, 150, 150, 150),
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              width: 22,
+                              height: 22,
+                              child: devModeEnabled // Show the icon only when checked
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white, // Tick color
+                                      size: 18,
+                                    )
+                                  : null, // No icon when unchecked
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
                     subtitle: const Text('team@basedhardware.com'),
@@ -143,7 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().joinDiscordClicked();
                     },
                   ),
-                  const SizedBox(height: 32.0),
+                  const SizedBox(height: 36.0),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -154,67 +369,147 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  getItemAddOn('Plugins', () {
-                    MixpanelManager().pluginsOpened();
-                    routeToPage(context, const PluginsPage());
-                  }, icon: Icons.integration_instructions),
-                  getItemAddOn('Speech Profile', () {
-                    routeToPage(context, const SpeakerIdPage());
-                  }, icon: Icons.multitrack_audio),
-                  getItemAddOn('Calendar Integration', () {
-                    routeToPage(context, const CalendarPage());
-                  }, icon: Icons.calendar_month),
-                  getItemAddOn('-Developer Mode', () async {
-                    MixpanelManager().devModePageOpened();
-                    await routeToPage(context, const DeveloperSettingsPage());
-                    setState(() {});
-                  }, icon: Icons.code, visibility: devModeEnabled),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ABOUT US',
-                      style: TextStyle(
-                        color: Colors.white,
+                  GestureDetector(
+                    onTap: () {
+                      MixpanelManager().pluginsOpened();
+                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromARGB(255, 29, 29, 29),
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Plugins',
+                                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: Color.fromARGB(255, 255, 255, 255),
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      textAlign: TextAlign.start,
                     ),
                   ),
-                  getItemAddOn('Privacy Policy', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/pages/privacy',
-                          title: 'Privacy Policy',
+                  Visibility(
+                    visible: false,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Speech Profile Set Up',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    );
-                  }, icon: Icons.privacy_tip_outlined, visibility: true),
-                  getItemAddOn('Our Website', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/',
-                          title: 'Based Hardware',
+                    ),
+                  ),
+                  Visibility(
+                    visible: true,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const BackupsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29), // Replace with your desired color
+                            borderRadius: BorderRadius.circular(10.0), // Adjust for desired rounded corners
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Backups',
+                                      style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Icon(Icons.backup, color: Colors.white, size: 16),
+                                  ],
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    );
-                  }, icon: Icons.language_outlined, visibility: true),
+                    ),
+                  ),
+                  Visibility(
+                    visible: devModeEnabled,
+                    child: GestureDetector(
+                      onTap: () {
+                        MixpanelManager().devModePageOpened();
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeveloperSettingsPage()));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 29, 29, 29),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Developer Mode',
+                                  style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: Color.fromARGB(255, 255, 255, 255),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
-                    child: GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(content: Text('UID copied to clipboard')));
-                      },
-                      child: Text(
-                        SharedPreferencesUtil().uid,
-                        style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                      ),
+                    child: Text(
+                      SharedPreferencesUtil().uid,
+                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
                     ),
                   ),
                   Padding(
@@ -227,7 +522,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
                 ],
               ),
             ),

@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class WelcomePage extends StatefulWidget {
   final VoidCallback goNext;
@@ -27,6 +29,10 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
+  }
+
+  void _launchUrl(String url) async {
+    if (!await launchUrl(Uri.parse(url))) throw 'Could not launch $url';
   }
 
   @override
@@ -126,7 +132,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
                 height: 45, // Fixed height for the button
                 alignment: Alignment.center,
                 child: Text(
-                  'Connect My Friend',
+                  'Connect Your Wearable',
                   style: TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: screenSize.width * 0.045,
@@ -142,14 +148,45 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
               MixpanelManager().useWithoutDeviceOnboardingWelcome();
             },
             child: const Text(
-              'Skip for now',
+              'Use Without Device',
               style: TextStyle(
                   color: Colors.white,
                   decoration: TextDecoration.underline,
                   fontSize: 16,
                   fontWeight: FontWeight.normal),
             )),
-        const SizedBox(height: 16)
+        SizedBox(height: 32),
+        RichText(
+          textAlign: TextAlign.center,
+          text: TextSpan(
+            style: TextStyle(
+              color: Colors.white, // Text color
+              fontSize: screenSize.width * 0.025, // Responsive font size
+            ),
+            children: [
+              const TextSpan(text: 'By tapping on "Connect", you agree to our\n'),
+              TextSpan(
+                text: 'Terms of service',
+                style: const TextStyle(
+                  decoration: TextDecoration.underline,
+                ),
+                recognizer: TapGestureRecognizer()..onTap = () => _launchUrl('https://basedhardware.com/terms'),
+              ),
+              const TextSpan(text: ' and '),
+              TextSpan(
+                text: 'Privacy Policy',
+                style: const TextStyle(
+                  decoration: TextDecoration.underline,
+                ),
+                //To be changed later with basedhardware.com/PrivacyPolicy
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () {
+                    _launchUrl('https://basedhardware.com/privacy-policy');
+                  },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

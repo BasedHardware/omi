@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/ble/find.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/utils/ble/scan.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'found_devices.dart';
@@ -23,7 +20,7 @@ class FindDevicesPage extends StatefulWidget {
 }
 
 class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProviderStateMixin {
-  List<BTDeviceStruct> deviceList = [];
+  List<BTDeviceStruct?> deviceList = [];
   late Timer _didNotMakeItTimer;
   late Timer _findDevicesTimer;
   bool enableInstructions = false;
@@ -44,47 +41,21 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
   }
 
   Future<void> _scanDevices() async {
-    // check if bluetooth is enabled on Android
-    if (Platform.isAndroid) {
-      if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
-        try {
-          await FlutterBluePlus.turnOn();
-        } catch (e) {
-          if (e is FlutterBluePlusException) {
-            if (e.code == 11) {
-              if (mounted) {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.of(context).pop();
-                    },
-                    () {},
-                    'Enable Bluetooth',
-                    'Friend needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
-                    singleButton: true,
-                  ),
-                );
-              }
-            }
-          }
-        }
-      }
-    }
-
+    // TODO: validate bluetooth turned on
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () => setState(() => enableInstructions = true));
     // Update foundDevicesMap with new devices and remove the ones not found anymore
-    Map<String, BTDeviceStruct> foundDevicesMap = {};
+    Map<String, BTDeviceStruct?> foundDevicesMap = {};
 
     _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-      List<BTDeviceStruct> foundDevices = await bleFindDevices();
+      List<BTDeviceStruct?> foundDevices = await scanDevices();
 
       // Update foundDevicesMap with new devices and remove the ones not found anymore
-      Map<String, BTDeviceStruct> updatedDevicesMap = {};
+      Map<String, BTDeviceStruct?> updatedDevicesMap = {};
       for (final device in foundDevices) {
-        // If it's a new device, add it to the map. If it already exists, this will just update the entry.
-        updatedDevicesMap[device.id] = device;
+        if (device != null) {
+          // If it's a new device, add it to the map. If it already exists, this will just update the entry.
+          updatedDevicesMap[device.id] = device;
+        }
       }
       // Remove devices that are no longer found
       foundDevicesMap.keys.where((id) => !updatedDevicesMap.containsKey(id)).toList().forEach(foundDevicesMap.remove);
@@ -93,7 +64,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
       foundDevicesMap.addAll(updatedDevicesMap);
 
       // Convert the values of the map back to a list
-      List<BTDeviceStruct> orderedDevices = foundDevicesMap.values.toList();
+      List<BTDeviceStruct?> orderedDevices = foundDevicesMap.values.toList();
 
       if (orderedDevices.isNotEmpty) {
         setState(() {
@@ -130,9 +101,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> with SingleTickerProv
               ),
             ),
           ),
-        if (widget.includeSkip && deviceList.isEmpty)
+        if (widget.includeSkip)
           ElevatedButton(
-            onPressed: () {
+            onPressed: (){
               widget.goNext();
               MixpanelManager().useWithoutDeviceOnboardingFindDevices();
             },

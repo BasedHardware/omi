@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -10,7 +10,7 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct> deviceList;
+  final List<BTDeviceStruct?> deviceList;
   final VoidCallback goNext;
 
   const FoundDevices({
@@ -28,12 +28,11 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
-  String deviceId = '';
   String? _connectingToDeviceId;
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
-      var battery = await retrieveBatteryLevel(btDevice.id);
+      var battery = await retrieveBatteryLevel(btDevice);
       setState(() {
         batteryPercentage = battery;
         _isConnected = true;
@@ -42,7 +41,8 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       });
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().deviceId = btDevice.id;
-      SharedPreferencesUtil().deviceName = btDevice.name;
+      MixpanelManager().onboardingCompleted();
+      debugPrint("Onboarding completed");
       widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
@@ -61,8 +61,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
       _connectingToDeviceId = device.id; // Mark this device as being connected to
     });
     await bleConnectDevice(device.id);
-    deviceId = device.id;
-    deviceName = device.name;
+    deviceName = device.id;
     setBatteryPercentage(device);
   }
 
@@ -95,7 +94,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
         if (!_isConnected) ..._devicesList(),
         if (_isConnected)
           Text(
-            '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
+            deviceName.split('-').last.substring(0, 6),
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w500,
@@ -124,7 +123,9 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
   }
 
   _devicesList() {
-    return (widget.deviceList.mapIndexed((index, device) {
+    return (widget.deviceList.mapIndexed((index, d) {
+      final device = widget.deviceList[index];
+      if (device == null) return Container();
       bool isConnecting = _connectingToDeviceId == device.id;
 
       return GestureDetector(
@@ -153,7 +154,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                         Align(
                           alignment: Alignment.center,
                           child: Text(
-                            '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                            device.id.split('-').last.substring(0, 6),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,

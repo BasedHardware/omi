@@ -1,264 +1,192 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/api_requests/api/other.dart';
+import 'package:friend_private/backend/api_requests/api/prompt.dart';
+import 'package:friend_private/backend/api_requests/cloud_storage.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/database/message_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/pages/capture/location_service.dart';
-import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/home/storage.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:friend_private/utils/backups.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/memories/integrations.dart';
-import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/websockets.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-import 'package:location/location.dart';
-import 'package:uuid/uuid.dart';
-
-import 'logic/phone_recorder_mixin.dart';
-import 'logic/websocket_mixin.dart';
+import 'package:friend_private/utils/memories.dart';
+import 'package:friend_private/utils/notifications.dart';
+import 'package:friend_private/utils/stt/wav_bytes.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:record/record.dart';
+import 'package:tuple/tuple.dart';
 
 class CapturePage extends StatefulWidget {
-  final Function addMemory;
-  final Function addMessage;
+  final Function refreshMemories;
+  final Function refreshMessages;
   final BTDeviceStruct? device;
 
   const CapturePage({
     super.key,
     required this.device,
-    required this.addMemory,
-    required this.addMessage,
+    required this.refreshMemories,
+    required this.refreshMessages,
   });
 
   @override
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
-  BTDeviceStruct? btDevice;
   bool _hasTranscripts = false;
+  final record = AudioRecorder();
+  RecordState _state = RecordState.stop;
   static const quietSecondsForMemoryCreation = 120;
 
   /// ----
+  BTDeviceStruct? btDevice;
   List<TranscriptSegment> segments = [];
 
-  StreamSubscription? _bleBytesStream;
+  StreamSubscription? audioBytesStream;
   WavBytesUtil? audioStorage;
 
+  Timer? _processPhoneMicAudioTimer;
   Timer? _memoryCreationTimer;
   bool memoryCreating = false;
 
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
 
-  InternetStatus? _internetStatus;
-
-  late StreamSubscription<InternetStatus> _internetListener;
-  bool isGlasses = false;
-  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
-
-  double? streamStartedAtSecond;
-  DateTime? firstStreamReceivedAt;
-  int? secondsMissedOnReconnect;
-
-  Geolocation? geolocation;
-
-  Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
-    BleAudioCodec codec = audioCodec ?? (btDevice?.id == null ? BleAudioCodec.pcm8 : await getAudioCodec(btDevice!.id));
-    sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
-    await initWebSocket(
-      codec: codec,
-      sampleRate: sampleRate,
-      onConnectionSuccess: () {
-        if (segments.isNotEmpty) {
-          // means that it was a reconnection, so we need to reset
-          streamStartedAtSecond = null;
-          secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
-        }
-        setState(() {});
-      },
-      onConnectionFailed: (err) => setState(() {}),
-      onConnectionClosed: (int? closeCode, String? closeReason) {
-        // connection was closed, either on resetState, or by backend, or by some other reason.
-        setState(() {});
-      },
-      onConnectionError: (err) {
-        // connection was okay, but then failed.
-        setState(() {});
-      },
-      onMessageReceived: (List<TranscriptSegment> newSegments) {
-        if (newSegments.isEmpty) return;
-        if (segments.isEmpty) {
-          debugPrint('newSegments: ${newSegments.last}');
-          // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
-          //  losing from the audio the first part of the recording. All other parts are fine.
-          FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
-          firstStreamReceivedAt = DateTime.now();
-        }
-        streamStartedAtSecond ??= newSegments[0].start;
-
-        TranscriptSegment.combineSegments(
-          segments,
-          newSegments,
-          toRemoveSeconds: streamStartedAtSecond ?? 0,
-          toAddSeconds: secondsMissedOnReconnect ?? 0,
-        );
-        triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
-        SharedPreferencesUtil().transcriptSegments = segments;
-        setHasTranscripts(true);
-        debugPrint('Memory creation timer restarted');
-        _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
-        currentTranscriptStartedAt ??= DateTime.now();
-        currentTranscriptFinishedAt = DateTime.now();
-        setState(() {});
-      },
-    );
+  _processCachedTranscript() async {
+    debugPrint('_processCachedTranscript');
+    var segments = SharedPreferencesUtil().transcriptSegments;
+    if (segments.isEmpty) return;
+    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(SharedPreferencesUtil().transcriptSegments);
+    processTranscriptContent(context, transcript, null, retrievedFromCache: true).then((m) {
+      if (m != null && !m.discarded) executeBackup();
+    });
+    SharedPreferencesUtil().transcriptSegments = [];
+    // TODO: include created at and finished at for this cached transcript
   }
 
-  Future<void> initiateFriendAudioStreaming() async {
+  Future<void> initiateBytesProcessing() async {
+    debugPrint('initiateBytesProcessing: $btDevice');
     if (btDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    if (codec != BleAudioCodec.pcm8) restartWebSocket();
-    audioStorage = WavBytesUtil(codec: codec);
-    /* start section modified */
-    await setStorageMode(btDevice!.id, 1);
-    storageMode = false;
-    /* end section modified */
-    _bleBytesStream = await getBleAudioBytesListener(
-      btDevice!.id,
-      onAudioBytesReceived: (List<int> value) {
-        if (value.isEmpty) return;
-        audioStorage!.storeFramePacket(value);
-        value.removeRange(0, 3);
-        if (wsConnectionState == WebsocketConnectionStatus.connected) {
-          websocketChannel?.sink.add(value);
+    // VadUtil vad = VadUtil();
+    // await vad.init();
+    // Variables to maintain state
+    BleAudioCodec codec = await getDeviceCodec(btDevice!.id);
+
+    WavBytesUtil wavBytesUtil2 = WavBytesUtil(codec: codec);
+    WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: codec);
+    StreamSubscription? stream =
+        await getBleAudioBytesListener(btDevice!.id, onAudioBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+
+      toProcessBytes2.storeFramePacket(value);
+      if (segments.isNotEmpty && wavBytesUtil2.hasFrames()) wavBytesUtil2.storeFramePacket(value);
+
+      // if (toProcessBytes2.frames.length % 100 == 0) debugPrint('Frames length: ${toProcessBytes2.frames.length}');
+
+      if (toProcessBytes2.frames.isNotEmpty && toProcessBytes2.frames.length % 3000 == 0) {
+        Tuple2<File, List<List<int>>> data = await toProcessBytes2.createWavFile(filename: 'temp.wav');
+        try {
+          var segmentsEmpty = segments.isEmpty;
+          await _processFileToTranscript(data.item1);
+          if (segmentsEmpty && segments.isNotEmpty) {
+            wavBytesUtil2.insertAudioBytes(data.item2);
+          }
+          // uploadFile(data.item1);
+        } catch (e, stacktrace) {
+          CrashReporting.reportHandledCrash(e, stacktrace,
+              level: NonFatalExceptionLevel.warning,
+              userAttributes: {'seconds': (data.item2.length ~/ 100).toString()});
+          debugPrint('Error: e.toString() ${e.toString()}');
+          toProcessBytes2.insertAudioBytes(data.item2);
         }
-      },
-    );
+      }
+    });
+
+    audioBytesStream = stream;
+    audioStorage = wavBytesUtil2;
   }
 
-  int elapsedSeconds = 0;
-
-  Future<void> startOpenGlass() async {
-    if (btDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
-    debugPrint('startOpenGlass isGlasses: $isGlasses');
-    if (!isGlasses) return;
-
-    await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
-    closeWebSocket();
+  _processFileToTranscript(File f) async {
+    List<TranscriptSegment> newSegments = await transcribeAudioFile2(f);
+    debugPrint('newSegments: $newSegments');
+    TranscriptSegment.combineSegments(segments, newSegments); // combines b into a
+    if (newSegments.isNotEmpty) {
+      SharedPreferencesUtil().transcriptSegments = segments;
+      setState(() {});
+      setHasTranscripts(true);
+      debugPrint('Memory creation timer restarted');
+      _memoryCreationTimer?.cancel();
+      _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+      currentTranscriptStartedAt ??= DateTime.now();
+      currentTranscriptFinishedAt = DateTime.now();
+    }
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
-    debugPrint('resetState: $restartBytesProcessing');
-    _bleBytesStream?.cancel();
+    audioBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
+    if (!restartBytesProcessing && segments.isNotEmpty) _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
-    if (restartBytesProcessing) {
-      startOpenGlass();
-      initiateFriendAudioStreaming();
-    }
-  }
-
-  void restartWebSocket() {
-    closeWebSocket();
-    initiateWebsocket();
-  }
-
-  void sendMessageToChat(ServerMessage message) {
-    widget.addMessage(message);
+    if (restartBytesProcessing) initiateBytesProcessing();
   }
 
   _createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
-    if (memoryCreating) return;
-    if (segments.isEmpty && photos.isEmpty) return;
-
-    // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
+    String transcript = TranscriptSegment.buildDiarizedTranscriptMessage(segments);
+    debugPrint('_createMemory transcript: \n$transcript');
     File? file;
-    if (audioStorage?.frames.isNotEmpty == true) {
-      try {
-        var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
-        uploadFile(file);
-      } catch (e) {
-        print("creating and uploading file error: $e");
-      } // in case was a local recording and not a BLE recording
-    }
-
-    ServerMemory? memory = await processTranscriptContent(
-      segments,
+    try {
+      // USE VAD HERE
+      // var secs = !forcedCreation ? quietSecondsForMemoryCreation - 5 : 0; FIXME
+      file = (await audioStorage!.createWavFile()).item1;
+      uploadFile(file);
+    } catch (e) {} // in case was a local recording and not a BLE recording
+    Memory? memory = await processTranscriptContent(
+      context,
+      transcript,
+      file?.path,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
-      geolocation: geolocation,
-      photos: photos,
-      sendMessageToChat: sendMessageToChat,
-      triggerIntegrations: true,
-      language: SharedPreferencesUtil().recordingsLanguage,
     );
     debugPrint(memory.toString());
-    if (memory == null && segments.isNotEmpty && photos.isNotEmpty) {
-      memory = ServerMemory(
-        id: const Uuid().v4(),
-        createdAt: DateTime.now(),
-        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
-        discarded: true,
-        transcriptSegments: segments,
-        geolocation: geolocation,
-        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
-        startedAt: currentTranscriptStartedAt,
-        finishedAt: currentTranscriptFinishedAt,
-        failed: true,
-        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
-      );
-      SharedPreferencesUtil().addFailedMemory(memory);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Memory creation failed. It\' stored locally and will be retried soon.',
-          style: TextStyle(color: Colors.white, fontSize: 14),
-        ),
-      ));
-      // TODO: store anyways something temporal and retry once connected again.
+    // TODO: backup when useful memory created, maybe less later, 2k memories occupy 3MB in the json payload
+    if (memory != null && !memory.discarded) executeBackup();
+    if (memory != null && !memory.discarded && SharedPreferencesUtil().postMemoryNotificationIsChecked) {
+      postMemoryCreationNotification(memory).then((r) {
+        // r = 'Hi there testing notifications stuff';
+        debugPrint('Notification response: $r');
+        if (r.isEmpty) return;
+        // TODO: notification UI should be different, maybe a different type of message + use a Enum for message type
+        var msg = Message(DateTime.now(), r, 'ai');
+        msg.memories.add(memory);
+        MessageProvider().saveMessage(msg);
+        widget.refreshMessages();
+        createNotification(
+          notificationId: 2,
+          title: 'New Memory Created! ${memory.structured.target!.getEmoji()}',
+          body: r,
+        );
+      });
     }
-
-    widget.addMemory(memory);
+    await widget.refreshMemories();
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
+    setState(() => memoryCreating = false);
     audioStorage?.clearAudioBytes();
     setHasTranscripts(false);
 
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
-    elapsedSeconds = 0;
-
-    streamStartedAtSecond = null;
-    firstStreamReceivedAt = null;
-    secondsMissedOnReconnect = null;
-    photos = [];
-    conversationId = const Uuid().v4();
-    setState(() => memoryCreating = false);
   }
 
   setHasTranscripts(bool hasTranscripts) {
@@ -266,184 +194,136 @@ class CapturePageState extends State<CapturePage>
     setState(() => _hasTranscripts = hasTranscripts);
   }
 
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    debugPrint('_processCachedTranscript');
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments,
-      retrievedFromCache: true,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
-  }
-
-  void _onReceiveTaskData(dynamic data) {
-    if (data is Map<String, dynamic>) {
-      if (data.containsKey('latitude') && data.containsKey('longitude')) {
-        geolocation = Geolocation(
-          latitude: data['latitude'],
-          longitude: data['longitude'],
-          accuracy: data['accuracy'],
-          altitude: data['altitude'],
-          time: DateTime.parse(data['time']),
-        );
-        debugPrint('Location data received from background: $geolocation');
-      } else {
-        geolocation = null;
-      }
-    }
-  }
-
   @override
   void initState() {
     btDevice = widget.device;
-    WavBytesUtil.clearTempWavFiles();
-    initiateWebsocket();
-    startOpenGlass();
-    initiateFriendAudioStreaming();
-    processCachedTranscript();
-
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
-    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      if (await LocationService().displayPermissionsDialog()) {
-        await showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () async {
-              await requestLocationPermission();
-              await LocationService().requestBackgroundPermission();
-              if (mounted) Navigator.of(context).pop();
-            },
-            'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
-            singleButton: false,
-          ),
-        );
-      }
+      debugPrint('SchedulerBinding.instance');
+      initiateBytesProcessing();
     });
-    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
-      switch (status) {
-        case InternetStatus.connected:
-          _internetStatus = InternetStatus.connected;
-          break;
-        case InternetStatus.disconnected:
-          _internetStatus = InternetStatus.disconnected;
-          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
-          _memoryCreationTimer?.cancel();
-          break;
-      }
-    });
+    _processCachedTranscript();
+    // processTranscriptContent(context, '''a''', null);
     super.initState();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     record.dispose();
-
-    _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    _internetListener.cancel();
-
-    closeWebSocket();
-
     super.dispose();
-  }
-
-  Future requestLocationPermission() async {
-    LocationService locationService = LocationService();
-    bool serviceEnabled = await locationService.enableService();
-    if (!serviceEnabled) {
-      debugPrint('Location service not enabled');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location services are disabled. Enable them for a better experience.',
-              style: TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        );
-      }
-    } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      if (permissionGranted == PermissionStatus.denied) {
-        debugPrint('Location permission not granted');
-      } else if (permissionGranted == PermissionStatus.deniedForever) {
-        debugPrint('Location permission denied forever');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'If you change your mind, you can enable location services in your device settings.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        }
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    // super.build(context);
     return Stack(
       children: [
         ListView(children: [
-          speechProfileWidget(context, setState, restartWebSocket),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device, wsConnectionState, _internetStatus),
-          getTranscriptWidget(memoryCreating, segments, photos, widget.device),
-          ...connectionStatusWidgets(context, segments, wsConnectionState, _internetStatus),
+          speechProfileWidget(context),
+          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device),
+          getTranscriptWidget(memoryCreating, segments, widget.device),
           const SizedBox(height: 16)
         ]),
-        getPhoneMicRecordingButton(_recordingToggled, recordingState)
+        getPhoneMicRecordingButton(_recordingToggled, _state)
       ],
     );
   }
 
   _recordingToggled() async {
-    if (recordingState == RecordingState.record) {
-      if (Platform.isAndroid) {
-        stopStreamRecordingOnAndroid();
-      } else {
-        await stopStreamRecording(wsConnectionState, websocketChannel);
-      }
-      setState(() => recordingState = RecordingState.stop);
-      _memoryCreationTimer?.cancel();
-      _createMemory();
-    } else if (recordingState == RecordingState.initialising) {
-      debugPrint('initialising, have to wait');
+    if (_state == RecordState.record) {
+      _stopRecording();
     } else {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () async {
-            Navigator.pop(context);
-            setState(() => recordingState = RecordingState.initialising);
-            closeWebSocket();
-            await initiateWebsocket(BleAudioCodec.pcm16, 16000);
-            if (Platform.isAndroid) {
-              await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
-            } else {
-              await startStreamRecording(wsConnectionState, websocketChannel);
-            }
-          },
-          'Limited Capabilities',
-          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-          okButtonText: 'Ok, I understand',
-        ),
-      );
+      _startRecording();
     }
+  }
+
+  _printFileSize(File file) async {
+    int bytes = await file.length();
+    var i = (log(bytes) / log(1024)).floor();
+    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    var size = '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+    debugPrint('File size: $size');
+  }
+
+  // final FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
+  // bool _mRecorderIsInited = false;
+  // StreamSubscription? _mRecordingDataSubscription;
+  // String? _mPath;
+
+  // Future<void> _openRecorder() async {
+  //   debugPrint('_openRecorder');
+  //   // var status = await Permission.microphone.request();
+  //   // if (status != PermissionStatus.granted) {
+  //   //   throw RecordingPermissionException('Microphone permission not granted');
+  //   // }
+  //   await _mRecorder.openRecorder();
+  //   debugPrint('Recorder opened');
+  //   final session = await AudioSession.instance;
+  //   await session.configure(AudioSessionConfiguration(
+  //     avAudioSessionCategory: AVAudioSessionCategory.record,
+  //     avAudioSessionCategoryOptions:
+  //         AVAudioSessionCategoryOptions.allowBluetooth | AVAudioSessionCategoryOptions.defaultToSpeaker,
+  //     avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+  //     avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+  //     avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+  //     androidAudioAttributes: const AndroidAudioAttributes(
+  //       contentType: AndroidAudioContentType.speech,
+  //       flags: AndroidAudioFlags.none,
+  //       usage: AndroidAudioUsage.voiceCommunication,
+  //     ),
+  //     androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+  //     androidWillPauseWhenDucked: true,
+  //   ));
+  //
+  //   setState(() {
+  //     _mRecorderIsInited = true;
+  //   });
+  // }
+
+  // Future<IOSink> createFile() async {
+  //   var tempDir = await getTemporaryDirectory();
+  //   _mPath = '${tempDir.path}/flutter_sound_example.pcm';
+  //   var outputFile = File(_mPath!);
+  //   if (outputFile.existsSync()) {
+  //     await outputFile.delete();
+  //   }
+  //   return outputFile.openWrite();
+  // }
+
+  // ----------------------  Here is the code to record to a Stream ------------
+
+  _stopRecording() async {
+    // setState(() => _state = RecordState.stop);
+    // await _mRecorder.stopRecorder();
+    // _processPhoneMicAudioTimer?.cancel();
+    // if (segments.isNotEmpty) _createMemory();
+  }
+
+  _startRecording() async {
+    // if (!(await record.hasPermission())) return;
+    // await _openRecorder();
+    //
+    // assert(_mRecorderIsInited);
+    // var path = await getApplicationDocumentsDirectory();
+    // var filePath = '${path.path}/recording.pcm';
+    // setState(() => _state = RecordState.record);
+    // await _start(filePath);
+    // _processPhoneMicAudioTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+    //   await _mRecorder.stopRecorder();
+    //   var f = File(filePath);
+    //   // f.writeAsBytesSync([]);
+    //   // var fCopy = File('${path.path}/recording_copy.pcm');
+    //   // await f.copy(fCopy.path);
+    //   _processFileToTranscript(f);
+    // });
+  }
+
+  _start(String filePath) async {
+    // await _mRecorder.startRecorder(
+    //   codec: Codec.pcm16,
+    //   toFile: filePath,
+    //   sampleRate: 16000,
+    //   numChannels: 1,
+    // );
   }
 }

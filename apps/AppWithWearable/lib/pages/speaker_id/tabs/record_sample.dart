@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
+import 'package:friend_private/backend/api_requests/api/server.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/schema/sample.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:friend_private/backend/storage/sample.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/stt/wav_bytes.dart';
 import 'package:tuple/tuple.dart';
 
 class RecordSampleTab extends StatefulWidget {
@@ -40,10 +40,6 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   late AnimationController _controller;
   late Animation<double> _animation;
 
-  bool uploadingSample = false;
-
-  changeLoadingState() => setState(() => uploadingSample = !uploadingSample);
-
   @override
   void initState() {
     _controller = AnimationController(
@@ -57,13 +53,16 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   Future<void> startRecording() async {
     audioBytesStream?.cancel();
     if (widget.btDevice == null) return;
-    audioStorage = WavBytesUtil(codec: await getAudioCodec(widget.btDevice!.id));
+    WavBytesUtil wavBytesUtil = WavBytesUtil();
 
-    audioBytesStream = await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? stream =
+        await getBleAudioBytesListener(widget.btDevice!.id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
-      audioStorage!.storeFramePacket(value);
+      wavBytesUtil.storeFramePacket(value);
     });
 
+    audioBytesStream = stream;
+    audioStorage = wavBytesUtil;
     setState(() {
       recording = true;
       speechRecorded = false;
@@ -71,12 +70,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
   }
 
   Future<void> confirmRecording() async {
-    // TODO: how to upload nonsense uploads?
-    // - people who say it too fast
-    // - people who spend a lot of time
-    // - people who don't say anything
     if (!(audioStorage?.hasFrames() ?? false)) return;
-    changeLoadingState();
     setState(() {
       recording = false;
       speechRecorded = true;
@@ -86,8 +80,7 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
     await Future.delayed(const Duration(seconds: 2)); // wait for bytes streaming to stream all
     audioBytesStream?.cancel();
     Tuple2<File, List<List<int>>> file = await audioStorage!.createWavFile(filename: '${widget.sample.id}.wav');
-    changeLoadingState();
-    await uploadSample(file.item1); // optimistic request
+    await uploadSample(file.item1, SharedPreferencesUtil().uid); // optimistic request
     // TODO: handle failures + url: null, retry sample
   }
 
@@ -171,20 +164,10 @@ class _RecordSampleTabState extends State<RecordSampleTab> with TickerProviderSt
                           onPressed: recording ? confirmRecording : startRecording,
                           icon: const Icon(Icons.mic, color: Colors.white, size: 48),
                         )
-                      : uploadingSample
-                          ? const Center(
-                              child: SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            )
-                          : IconButton(
-                              onPressed: widget.goNext,
-                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
-                            ),
+                      : IconButton(
+                          onPressed: widget.goNext,
+                          icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 48),
+                        ),
                 ),
               ],
             ),

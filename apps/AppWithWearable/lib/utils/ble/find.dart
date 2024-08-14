@@ -31,11 +31,10 @@ Future<List<BTDeviceStruct>> bleFindDevices() async {
     );
 
     // Start scanning if not already scanning
-    // Only look for devices that implement Friend main service
     if (!FlutterBluePlus.isScanningNow) {
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 5),
-        withServices: [Guid("19b10000-e8f2-537e-4f6c-d104768a1214")],
+        withServices: [Guid("19b10000-e8f2-537e-4f6c-d104768a1214")], // Add specific service UUIDs if needed
       );
     }
   } finally {

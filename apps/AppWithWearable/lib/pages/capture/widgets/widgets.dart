@@ -1,31 +1,19 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/storage/segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/device_widget.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
-import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-import 'package:lottie/lottie.dart';
-import 'package:tuple/tuple.dart';
+import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-getConnectionStateWidgets(
-  BuildContext context,
-  bool hasTranscripts,
-  BTDeviceStruct? device,
-  WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
-) {
+getConnectionStateWidgets(BuildContext context, bool hasTranscripts, BTDeviceStruct? device) {
   if (hasTranscripts) return [];
   if (device == null) {
     return [
@@ -38,91 +26,52 @@ getConnectionStateWidgets(
             ),
     ];
   }
-
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
-  bool isWebsocketError =
-      wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
-
   return [
     const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
-    GestureDetector(
-      onTap: isWifiDisconnected || isWebsocketError
-          ? () {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
-                  isWifiDisconnected
-                      ? 'Your device is offline. Transcription is paused until connection is restored.'
-                      : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
-                  okButtonText: 'Ok',
-                  singleButton: true,
-                ),
-              );
-            }
-          : null,
-      child: Center(
-          child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(width: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Text(
-                isWifiDisconnected
-                    ? 'No Internet'
-                    : isWebsocketError
-                        ? 'Server Issue'
-                        : 'Listening',
-                style: TextStyle(
-                    fontFamily: 'SF Pro Display',
-                    color: Colors.white,
-                    fontSize: isWifiDisconnected
-                        ? 29
-                        : isWebsocketError
-                            ? 29
-                            : 29,
-                    letterSpacing: 0.0,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
-                style: const TextStyle(
+    Center(
+        child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(width: 24),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            const Text(
+              'Listening',
+              style: TextStyle(
+                  fontFamily: 'SF Pro Display',
                   color: Colors.white,
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              )
-            ],
+                  fontSize: 29.0,
+                  letterSpacing: 0.0,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              'DEVICE-${device.id.split('-').last.substring(0, 6)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16.0,
+                fontWeight: FontWeight.w500,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            )
+          ],
+        ),
+        const SizedBox(width: 24),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: const BoxDecoration(
+            color: Color.fromARGB(255, 0, 255, 8),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(width: 24),
-          isWifiDisconnected
-              ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-              : isWebsocketError
-                  // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
-                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-                  // TODO: find a better animation for server
-                  : Container(
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(
-                        color: Color.fromARGB(255, 0, 255, 9),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-        ],
-      )),
-    ),
+        ),
+      ],
+    )),
     const SizedBox(height: 8),
     // const Row(
     //   crossAxisAlignment: CrossAxisAlignment.center,
@@ -175,7 +124,7 @@ _getNoFriendConnectedYet(BuildContext context) {
             onPressed: () async {
               Navigator.of(context).push(MaterialPageRoute(builder: (c) => const ConnectDevicePage()));
               MixpanelManager().connectFriendClicked();
-            },
+              },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shape: RoundedRectangleBorder(
@@ -204,19 +153,15 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
-  return !SharedPreferencesUtil().hasSpeakerProfile
-      ? Stack(
+speechProfileWidget(BuildContext context) {
+  return SharedPreferencesUtil().hasSpeakerProfile
+      ? const SizedBox(height: 16)
+      : Stack(
           children: [
             GestureDetector(
-              onTap: () async {
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(builder: (c) => const SpeakerIdPage()));
                 MixpanelManager().speechProfileCapturePageClicked();
-                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                await routeToPage(context, const SpeakerIdPage());
-                setState(() {});
-                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
-                  restartWebSocket();
-                }
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -255,89 +200,89 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function restart
               ),
             ),
           ],
-        )
-      : const SizedBox(height: 16);
+        );
 }
 
-getTranscriptWidget(
-  bool memoryCreating,
-  List<TranscriptSegment> segments,
-  List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
-) {
+getTranscriptWidget(bool memoryCreating, List<TranscriptSegment> segments, BTDeviceStruct? btDevice) {
   if (memoryCreating) {
     return const Padding(
-      padding: EdgeInsets.only(top: 80),
-      child: Center(child: CircularProgressIndicator(color: Colors.white)),
-    );
+        padding: EdgeInsets.only(top: 80), child: Center(child: CircularProgressIndicator(color: Colors.white)));
   }
 
-  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
-  return TranscriptWidget(segments: segments);
-}
-
-connectionStatusWidgets(
-  BuildContext context,
-  List<TranscriptSegment> segments,
-  WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
-) {
-  if (segments.isEmpty) return [];
-
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
-  bool isWebsocketError =
-      wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
-  if (!isWifiDisconnected && !isWebsocketError) return [];
-  return [
-    GestureDetector(
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.pop(context),
-            () => Navigator.pop(context),
-            isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
-            isWifiDisconnected
-                ? 'Your device is offline. Transcription is paused until connection is restored.'
-                : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
-            okButtonText: 'Ok',
-            singleButton: true,
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.start,
+  if (segments.isEmpty) {
+    return btDevice != null
+        ? const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 80),
+              Align(
+                alignment: Alignment.center,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Text(
+                    textAlign: TextAlign.center,
+                    'Your transcripts will start appearing\nhere after 30 seconds.',
+                    style: TextStyle(color: Colors.white, height: 1.5, decoration: TextDecoration.underline),
+                  ),
+                ),
+              )
+            ],
+          )
+        : const SizedBox.shrink();
+  }
+  // Capture messages
+  var needsUtf8 = SharedPreferencesUtil().recordingsLanguage != 'en';
+  return ListView.separated(
+    padding: EdgeInsets.zero,
+    shrinkWrap: true,
+    scrollDirection: Axis.vertical,
+    itemCount: segments.length + 2,
+    physics: const NeverScrollableScrollPhysics(),
+    separatorBuilder: (_, __) => const SizedBox(height: 16.0),
+    itemBuilder: (context, idx) {
+      if (idx == 0) return const SizedBox(height: 32);
+      if (idx == segments.length + 1) return const SizedBox(height: 64);
+      final data = segments[idx - 1];
+      return Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              isWifiDisconnected ? 'No Internet' : 'Server Issue',
-              style: TextStyle(
-                color: Colors.grey.shade300,
-                fontSize: 20,
-              ),
-              textAlign: TextAlign.center,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                    width: 26, height: 26),
+                const SizedBox(width: 12),
+                Text(
+                  data.isUser ? 'You' : 'Speaker ${data.speakerId}',
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                )
+              ],
             ),
-            const SizedBox(width: 16),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: isWifiDisconnected
-                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 48, width: 48)
-                  : Lottie.asset('assets/lottie_animations/no_internet.json', height: 48, width: 48),
-            )
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectionArea(
+                child: Text(
+                  needsUtf8 ? utf8.decode(data.text.toString().codeUnits) : data.text,
+                  style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                  textAlign: TextAlign.left,
+                ),
+              ),
+            ),
           ],
         ),
-      ),
-    )
-  ];
+      );
+    },
+  );
 }
 
-getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
+getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordState state) {
   if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
-    visible: true,
+    visible: false,
     child: Padding(
       padding: const EdgeInsets.only(bottom: 128),
       child: Align(
@@ -347,30 +292,19 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
             borderRadius: BorderRadius.circular(12),
             // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
           ),
-          onPressed: state == RecordingState.initialising ? null : recordingToggled,
+          onPressed: recordingToggled,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                state == RecordingState.initialising
-                    ? const SizedBox(
-                        height: 8,
-                        width: 8,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : (state == RecordingState.record
-                        ? const Icon(Icons.stop, color: Colors.red, size: 24)
-                        : const Icon(Icons.mic)),
+                state == RecordState.record
+                    ? const Icon(Icons.stop, color: Colors.red, size: 24)
+                    : const Icon(Icons.mic),
                 const SizedBox(width: 8),
                 Text(
-                  state == RecordingState.initialising
-                      ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                  state == RecordState.record ? 'Stop Recording' : 'Try With Phone Mic',
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),

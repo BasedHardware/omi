@@ -1,24 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/temp.dart';
 
 class MemoryListItem extends StatefulWidget {
   final int memoryIdx;
-  final ServerMemory memory;
-  final Function(ServerMemory, int) updateMemory;
-  final Function(ServerMemory, int) deleteMemory;
+  final Memory memory;
+  final Function loadMemories;
 
-  const MemoryListItem({
-    super.key,
-    required this.memory,
-    required this.updateMemory,
-    required this.memoryIdx,
-    required this.deleteMemory,
-  });
+  const MemoryListItem({super.key, required this.memory, required this.loadMemories, required this.memoryIdx});
 
   @override
   State<MemoryListItem> createState() => _MemoryListItemState();
@@ -27,18 +20,16 @@ class MemoryListItem extends StatefulWidget {
 class _MemoryListItemState extends State<MemoryListItem> {
   @override
   Widget build(BuildContext context) {
-    Structured structured = widget.memory.structured;
+    Structured structured = widget.memory.structured.target!;
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        var result = await Navigator.of(context).push(MaterialPageRoute(
-          builder: (c) => MemoryDetailPage(memory: widget.memory),
-        ));
-        if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
-        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == widget.memory.id) {
-          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!, widget.memoryIdx);
-          SharedPreferencesUtil().modifiedMemoryDetails = null;
-        }
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (c) => MemoryDetailPage(
+                  memory: widget.memory,
+                )));
+        widget.loadMemories();
+        // FocusScope.of(context).unfocus();
       },
       child: Container(
         margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
@@ -72,7 +63,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                     ),
               widget.memory.discarded
                   ? Text(
-                      widget.memory.getTranscript(maxCount: 100),
+                      utf8.decode(widget.memory.getTranscript(maxCount: 100).codeUnits),
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                     )
                   : const SizedBox(height: 8),
@@ -91,21 +82,23 @@ class _MemoryListItemState extends State<MemoryListItem> {
         children: [
           widget.memory.discarded
               ? const SizedBox.shrink()
-              : Text(widget.memory.structured.getEmoji(),
+              : Text(widget.memory.structured.target!.getEmoji(),
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-          widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
-              ? const SizedBox(width: 12)
+          widget.memory.structured.target!.category.isNotEmpty && !widget.memory.discarded
+              ? const SizedBox(
+                  width: 12,
+                )
               : const SizedBox.shrink(),
-          widget.memory.structured.category.isNotEmpty
+          widget.memory.structured.target!.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
-                    color: widget.memory.getTagColor(),
+                    color: Colors.grey.shade800,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
-                    widget.memory.getTag(),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.memory.getTagTextColor()),
+                    widget.memory.discarded ? 'Discarded' : widget.memory.structured.target!.category,
+                    style: Theme.of(context).textTheme.bodyMedium,
                     maxLines: 1,
                   ),
                 )

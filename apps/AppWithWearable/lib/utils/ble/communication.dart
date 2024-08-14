@@ -1,316 +1,153 @@
 import 'dart:async';
-import 'dart:io';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
-import 'package:friend_private/utils/ble/errors.dart';
+// Future<String?> bleReceiveData(BTDeviceStruct btDevice) async {
+//   final device = BluetoothDevice.fromId(btDevice.id);
+//   final services = await device.discoverServices();
+//   for (BluetoothService service in services) {
+//     for (BluetoothCharacteristic characteristic in service.characteristics) {
+//       final isRead = characteristic.properties.read;
+//       final isNotify = characteristic.properties.notify;
+//       if (isRead && isNotify) {
+//         final value = await characteristic.read();
+//         return String.fromCharCodes(value);
+//       }
+//     }
+//   }
+//   return null;
+// }
+//
+// Future bleSendData(BTDeviceStruct btDevice, String data) async {
+//   final device = BluetoothDevice.fromId(btDevice.id);
+//   final services = await device.discoverServices();
+//   for (BluetoothService service in services) {
+//     for (BluetoothCharacteristic characteristic in service.characteristics) {
+//       final isWrite = characteristic.properties.write;
+//       if (isWrite) {
+//         await characteristic.write(data.codeUnits);
+//       }
+//     }
+//   }
+// }
 
-import 'dart:typed_data';
-
-Future<int> retrieveBatteryLevel(String deviceId) async {
-  final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
-  if (batteryService == null) {
-    logServiceNotFoundError('Battery', deviceId);
-    return -1;
+Future<int> retrieveBatteryLevel(BTDeviceStruct btDevice) async {
+  final device = BluetoothDevice.fromId(btDevice.id);
+  final services = await device.discoverServices();
+  final batteryService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
+  if (batteryService != null) {
+    var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
+    var currValue = await canRead?.read();
+    if (currValue != null && currValue.isNotEmpty) {
+      debugPrint('Battery level: ${currValue[0]}');
+      return currValue[0];
+    }
   }
-
-  var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
-  if (batteryLevelCharacteristic == null) {
-    logCharacteristicNotFoundError('Battery level', deviceId);
-    return -1;
-  }
-
-  var currValue = await batteryLevelCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    return currValue[0];
-  }
-
   return -1;
 }
 
 Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
-  String deviceId, {
+  BTDeviceStruct btDevice, {
   void Function(int)? onBatteryLevelChange,
 }) async {
-  final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
-  if (batteryService == null) {
-    logServiceNotFoundError('Battery', deviceId);
-    return null;
-  }
-
-  var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
-  if (batteryLevelCharacteristic == null) {
-    logCharacteristicNotFoundError('Battery level', deviceId);
-    return null;
-  }
-
-  var currValue = await batteryLevelCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    debugPrint('Battery level: ${currValue[0]}');
-    onBatteryLevelChange!(currValue[0]);
-  }
-
-  try {
-    await batteryLevelCharacteristic.setNotifyValue(true);
-  } catch (e, stackTrace) {
-    logSubscribeError('Battery level', deviceId, e, stackTrace);
-    return null;
-  }
-
-  var listener = batteryLevelCharacteristic.lastValueStream.listen((value) {
-    // debugPrint('Battery level listener: $value');
-    if (value.isNotEmpty) {
-      onBatteryLevelChange!(value[0]);
+  final device = BluetoothDevice.fromId(btDevice.id);
+  final services = await device.discoverServices();
+  final batteryService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '0000180f-0000-1000-8000-00805f9b34fb');
+  if (batteryService != null) {
+    var canRead = batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.read);
+    var currValue = await canRead?.read();
+    if (currValue != null && currValue.isNotEmpty) {
+      debugPrint('Battery level: ${currValue[0]}');
+      onBatteryLevelChange!(currValue[0]);
     }
-  });
-
-  final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
-
-  return listener;
+    var canNotify =
+        batteryService.characteristics.firstWhereOrNull((characteristic) => characteristic.properties.notify);
+    if (canRead != null && canNotify != null) {
+      await canNotify.setNotifyValue(true);
+      return canNotify.lastValueStream.listen((value) {
+        // debugPrint('Battery level listener: $value');
+        if (value.isNotEmpty) {
+          onBatteryLevelChange!(value[0]);
+        }
+      });
+    }
+  }
+  return null;
 }
 
 Future<StreamSubscription?> getBleAudioBytesListener(
   String deviceId, {
   required void Function(List<int>) onAudioBytesReceived,
 }) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return null;
-  }
-
-  var audioDataStreamCharacteristic = getCharacteristicByUuid(friendService, audioDataStreamCharacteristicUuid);
-  if (audioDataStreamCharacteristic == null) {
-    logCharacteristicNotFoundError('Audio data stream', deviceId);
-    return null;
-  }
-
-  try {
-    await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
-  } catch (e, stackTrace) {
-    logSubscribeError('Audio data stream', deviceId, e, stackTrace);
-    return null;
-  }
-
-  debugPrint('Subscribed to audioBytes stream from Friend Device');
-  var listener = audioDataStreamCharacteristic.lastValueStream.listen((value) {
-    if (value.isNotEmpty) onAudioBytesReceived(value);
-  });
-
   final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
+  final services = await device.discoverServices();
+  final bytesService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
 
-  // This will cause a crash in OpenGlass devices
-  // due to a race with discoverServices() that triggers
-  // a bug in the device firmware.
-  if (Platform.isAndroid) await device.requestMtu(512);
-
-  return listener;
+  if (bytesService != null) {
+    var canNotify = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
+    var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+    if (canNotify != null && codecCharacteristic != null) {
+      await canNotify.setNotifyValue(true);
+      debugPrint('Subscribed to characteristic: ${canNotify.uuid.str128}');
+      var listener = canNotify.lastValueStream.listen((value) {
+        if (value.isNotEmpty) onAudioBytesReceived(value);
+      });
+      device.cancelWhenDisconnected(listener);
+      return listener;
+    }
+  }
+  debugPrint('Desired audio characteristic not found');
+  return null;
 }
 
 enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
 
-Future<BleAudioCodec> getAudioCodec(String deviceId) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return BleAudioCodec.pcm8;
-  }
-
-  var audioCodecCharacteristic = getCharacteristicByUuid(friendService, audioCodecCharacteristicUuid);
-  if (audioCodecCharacteristic == null) {
-    logCharacteristicNotFoundError('Audio codec', deviceId);
-    return BleAudioCodec.pcm8;
-  }
-
-  // Default codec is PCM8
-  var codecId = 1;
-  BleAudioCodec codec = BleAudioCodec.pcm8;
-
-  var codecValue = await audioCodecCharacteristic.read();
-  if (codecValue.isNotEmpty) {
-    codecId = codecValue[0];
-  }
-
-  switch (codecId) {
-    // case 0:
-    //   codec = BleAudioCodec.pcm16;
-    case 1:
-      codec = BleAudioCodec.pcm8;
-    // case 10:
-    //   codec = BleAudioCodec.mulaw16;
-    // case 11:
-    //   codec = BleAudioCodec.mulaw8;
-    case 20:
-      codec = BleAudioCodec.opus;
-    default:
-      logErrorMessage('Unknown codec id: $codecId', deviceId);
-  }
-
-  debugPrint('Codec is $codec');
-  return codec;
-}
-
-Future cameraStartPhotoController(String deviceId) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return;
-  }
-
-  var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
-  if (imageCaptureControlCharacteristic == null) {
-    logCharacteristicNotFoundError('Image capture control', deviceId);
-    return;
-  }
-
-  // Capture photo once every 10s
-  await imageCaptureControlCharacteristic.write([0x0A]);
-
-  print('cameraStartPhotoController');
-}
-
-Future cameraStopPhotoController(String deviceId) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return;
-  }
-
-  var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
-  if (imageCaptureControlCharacteristic == null) {
-    logCharacteristicNotFoundError('Image capture control', deviceId);
-    return;
-  }
-
-  await imageCaptureControlCharacteristic.write([0x00]);
-
-  print('cameraStopPhotoController');
-}
-
-Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return false;
-  }
-  var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
-  return imageCaptureControlCharacteristic != null;
-}
-
-Future<StreamSubscription?> getBleImageBytesListener(
-  String deviceId, {
-  required void Function(List<int>) onImageBytesReceived,
-}) async {
-  final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-  if (friendService == null) {
-    logServiceNotFoundError('Friend', deviceId);
-    return null;
-  }
-
-  var imageStreamCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
-  if (imageStreamCharacteristic == null) {
-    logCharacteristicNotFoundError('Image data stream', deviceId);
-    return null;
-  }
-
-  try {
-    await imageStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
-  } catch (e, stackTrace) {
-    logSubscribeError('Image data stream', deviceId, e, stackTrace);
-    return null;
-  }
-
-  debugPrint('Subscribed to imageBytes stream from Friend Device');
-  var listener = imageStreamCharacteristic.lastValueStream.listen((value) {
-    if (value.isNotEmpty) onImageBytesReceived(value);
-  });
-
+Future<BleAudioCodec> getDeviceCodec(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
+  final services = await device.discoverServices();
+  final bytesService = services
+      .firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == '19b10000-e8f2-537e-4f6c-d104768a1214');
 
-  // This will cause a crash in OpenGlass devices
-  // due to a race with discoverServices() that triggers
-  // a bug in the device firmware.
-  // if (Platform.isAndroid) await device.requestMtu(512);
-
-  return listener;
-}
-
-// Storage service & characteristics starts here
-
-Future<StreamSubscription<List<int>>?> getFilesInStorageListener(
-    String deviceId, {
-      void Function(int)? onFilesInStorageChange,
-    }) async {
-  final storageService = await getServiceByUuid(deviceId, storageServiceUuid);
-  if (storageService == null) {
-    logServiceNotFoundError('Storage files', deviceId);
-    return null;
-  }
-
-  var filesInStorageCharacteristic = getCharacteristicByUuid(storageService, filesInStorageNotifyCharacteristicUuid);
-  if (filesInStorageCharacteristic == null) {
-    logCharacteristicNotFoundError('Files in storage', deviceId);
-    return null;
-  }
-
-  var currValue = await filesInStorageCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    debugPrint('Files in storage: ${currValue[0]}');
-    onFilesInStorageChange!(currValue[0]);
-  }
-
-  try {
-    await filesInStorageCharacteristic.setNotifyValue(true);
-  } catch (e, stackTrace) {
-    logSubscribeError('files in storage', deviceId, e, stackTrace);
-    return null;
-  }
-
-  var listener = filesInStorageCharacteristic.lastValueStream.listen((value) {
-    if (value.isNotEmpty) {
-      onFilesInStorageChange!(value[0]);
+  if (bytesService != null) {
+    var canNotify = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214');
+    var codecCharacteristic = bytesService.characteristics.firstWhereOrNull(
+        (characteristic) => characteristic.uuid.str128.toLowerCase() == '19b10002-e8f2-537e-4f6c-d104768a1214');
+    debugPrint('codecCharacteristic: ${await codecCharacteristic?.read()}');
+    if (canNotify != null && codecCharacteristic != null) {
+      var codecId = (await codecCharacteristic.read()).single;
+      BleAudioCodec codec;
+      switch (codecId) {
+        // case 0:
+        //   codec = BleAudioCodec.pcm16;
+        case 1:
+          codec = BleAudioCodec.pcm8; // INITIAL CODEC FOR ALL DEVICES
+        // case 10:
+        //   codec = BleAudioCodec.mulaw16;
+        // case 11:
+        //   codec = BleAudioCodec.mulaw8;
+        case 20:
+          codec = BleAudioCodec.opus;
+        default:
+          CrashReporting.reportHandledCrash(Exception('Unknown codec $codecId'), StackTrace.current,
+              level: NonFatalExceptionLevel.error);
+          throw Exception('Non handled codec yet $codecId');
+      }
+      debugPrint('Codec is $codec');
+      return codec;
     }
-  });
-
-  final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
-
-  return listener;
-}
-
-Future<void> setStorageMode(String deviceId, int mode) async {
-  final storageService = await getServiceByUuid(deviceId, storageServiceUuid);
-  if (storageService == null) {
-    logServiceNotFoundError('Storage', deviceId);
-    return;
   }
-
-  var storageModeSelectorCharacteristic = getCharacteristicByUuid(storageService, storageModeSelectorCharacteristicUuid);
-  if (storageModeSelectorCharacteristic == null) {
-    logCharacteristicNotFoundError('Storage Mode Selector', deviceId);
-    return;
-  }
-
-  try {
-    final byteData = ByteData(4);
-    byteData.setInt32(0, mode, Endian.little);
-    final bytes = byteData.buffer.asUint8List();
-
-    if (bytes.length != 4) {
-      debugPrint('Error: Expected 4 bytes, but got ${bytes.length} bytes');
-      return;
-    }
-
-    await storageModeSelectorCharacteristic.write(bytes);
-    debugPrint('Storage mode set to $mode');
-    print("data device: ${deviceId}");
-  } catch (e, stackTrace) {
-    //logWriteError('Storage Mode Selector', deviceId, e, stackTrace);
-  }
+  debugPrint('Desired audio characteristic not found');
+  CrashReporting.reportHandledCrash(Exception('Desired audio characteristic not found'), StackTrace.current,
+      level: NonFatalExceptionLevel.error);
+  throw Exception('Desired audio characteristic not found');
 }

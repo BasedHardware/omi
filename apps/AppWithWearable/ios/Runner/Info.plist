@@ -6,7 +6,6 @@
 	<array>
 		<string>daily-summary</string>
 		<string>com.friend-app-with-wearable.ios12.daily-summary</string>
-		<string>dev.flutter.background.refresh</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -45,29 +44,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<true/>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>comgooglemaps</string>
-		<string>iosamap</string>
-	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Access contacts for event attendee editing.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Always and when in use!</string>
-	<key>NSLocationUsageDescription</key>
-	<string>Older devices need location.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Need location when in use</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -78,8 +60,6 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>audio</string>
-		<string>location</string>
 		<string>bluetooth-central</string>
 		<string>fetch</string>
 		<string>processing</string>

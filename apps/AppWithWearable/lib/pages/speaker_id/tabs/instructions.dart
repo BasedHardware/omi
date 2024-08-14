@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 
 class InstructionsTab extends StatefulWidget {
   final VoidCallback goNext;
-  final bool deviceFound;
 
-  const InstructionsTab({super.key, required this.goNext, required this.deviceFound});
+  const InstructionsTab({super.key, required this.goNext});
 
   @override
   State<InstructionsTab> createState() => _InstructionsTabState();
@@ -82,52 +82,32 @@ class _InstructionsTabState extends State<InstructionsTab> {
             ],
           ),
         ),
-        widget.deviceFound
-            ? Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      child: MaterialButton(
-                        onPressed: () {
-                          // if (SharedPreferencesUtil().recordingsLanguage != 'en') {
-                          //   showDialog(
-                          //     context: context,
-                          //     barrierDismissible: false,
-                          //     builder: (c) => getDialog(
-                          //       context,
-                          //       () {
-                          //         Navigator.of(context).pop();
-                          //       },
-                          //       widget.goNext,
-                          //       'Speech profiles not available',
-                          //       'Speech profiles are only available for English language. You can still set it up,'
-                          //           ' but it will not work with ${getLanguageName(SharedPreferencesUtil().recordingsLanguage)} language.',
-                          //       singleButton: false,
-                          //       okButtonText: 'Continue',
-                          //     ),
-                          //   );
-                          // }
-                          widget.goNext();
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: Colors.white, width: 1),
-                        ),
-                        color: Theme.of(context).colorScheme.primary,
-                        child: const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Text(
-                            'Start',
-                            style: TextStyle(color: Colors.white, fontSize: 20),
-                          ),
-                        ),
-                      ),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: MaterialButton(
+                  onPressed: () {
+                    widget.goNext();
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.white, width: 1),
+                  ),
+                  color: Theme.of(context).colorScheme.primary,
+                  child: const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text(
+                      'Start',
+                      style: TextStyle(color: Colors.white, fontSize: 20),
                     ),
-                  )
-                ],
-              )
-            : const SizedBox()
+                  ),
+                ),
+              ),
+            )
+          ],
+        )
       ],
     );
   }

@@ -1,80 +1,53 @@
-import 'dart:convert';
-
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/database/message.dart';
+import 'package:friend_private/backend/mixpanel.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/temp.dart';
 
-class AIMessage extends StatefulWidget {
-  final ServerMessage message;
+class AIMessage extends StatelessWidget {
+  final Message message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final Plugin? pluginSender;
-  final Function(ServerMemory) updateMemory;
+  final List<Memory> memories;
 
   const AIMessage({
     super.key,
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    this.pluginSender,
-    required this.updateMemory,
+    required this.memories,
   });
 
   @override
-  State<AIMessage> createState() => _AIMessageState();
-}
-
-class _AIMessageState extends State<AIMessage> {
-  late List<bool> memoryDetailLoading;
-
-  @override
-  void initState() {
-    memoryDetailLoading = List.filled(widget.message.memories.length, false);
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    var messageMemories =
-        widget.message.memories.length > 3 ? widget.message.memories.sublist(0, 3) : widget.message.memories;
     return Row(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        widget.pluginSender != null
-            ? CircleAvatar(
-                radius: 16,
-                backgroundImage: NetworkImage(widget.pluginSender!.getImageUrl()),
-              )
-            : Container(
-                decoration: const BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage("assets/images/background.png"),
-                    fit: BoxFit.cover,
-                  ),
-                  borderRadius: BorderRadius.all(Radius.circular(16.0)),
-                ),
-                height: 32,
-                width: 32,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Image.asset(
-                      "assets/images/herologo.png",
-                      height: 24,
-                      width: 24,
-                    ),
-                  ],
-                ),
+        Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage("assets/images/background.png"),
+              fit: BoxFit.cover,
+            ),
+            borderRadius: BorderRadius.all(Radius.circular(16.0)),
+          ),
+          height: 32,
+          width: 32,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Image.asset(
+                "assets/images/herologo.png",
+                height: 24,
+                width: 24,
               ),
+            ],
+          ),
+        ),
         const SizedBox(width: 16.0),
         Expanded(
           child: Column(
@@ -82,7 +55,7 @@ class _AIMessageState extends State<AIMessage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 6),
-              widget.message.type == MessageType.daySummary
+              message.typeEnum == MessageType.daySummary
                   ? Text(
                       '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
                       style: TextStyle(
@@ -93,50 +66,26 @@ class _AIMessageState extends State<AIMessage> {
                       ),
                     )
                   : const SizedBox(),
-              widget.message.type == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
+              message.typeEnum == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
                   child: AutoSizeText(
-                widget.message.text.isEmpty
-                    ? '...'
-                    // : message.text.replaceAll(r'\n', '\n').replaceAll('**', '').replaceAll('\\"', '\"'),
-                    : utf8.decode(widget.message.text.codeUnits),
+                message.text.isEmpty ? '...' : message.text.replaceAll(r'\n', '\n').replaceAll('**', ''),
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
-              if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
-              // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
-              // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
-              if (messageMemories.isNotEmpty) ...[
+              if (message.id != 1) _getCopyButton(context),
+              if (message.id == 1 && displayOptions) const SizedBox(height: 8),
+              if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
+              if (memories.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                for (var data in messageMemories.indexed) ...[
+                for (var memory in (memories.length > 3 ? memories.sublist(0, 3) : memories)) ...[
                   Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        if (memoryDetailLoading[data.$1]) return;
-                        setState(() => memoryDetailLoading[data.$1] = true);
-
-                        ServerMemory? m = await getMemoryById(data.$2.id);
-                        if (m == null) return;
-                        MixpanelManager().chatMessageMemoryClicked(m);
-                        setState(() => memoryDetailLoading[data.$1] = false);
+                        MixpanelManager().chatMessageMemoryClicked(memory);
                         await Navigator.of(context)
-                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
-                        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                          ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                          var copy = List<MessageMemory>.from(widget.message.memories);
-                          copy[data.$1] = MessageMemory(
-                              modifiedDetails.id,
-                              modifiedDetails.createdAt,
-                              MessageMemoryStructured(
-                                modifiedDetails.structured.title,
-                                modifiedDetails.structured.emoji,
-                              ));
-                          widget.message.memories.clear();
-                          widget.message.memories.addAll(copy);
-                          SharedPreferencesUtil().modifiedMemoryDetails = null;
-                          setState(() {});
-                        }
+                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: memory)));
+                        // TODO: maybe refresh memories here too
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
@@ -149,21 +98,14 @@ class _AIMessageState extends State<AIMessage> {
                           children: [
                             Expanded(
                               child: Text(
-                                '${utf8.decode(data.$2.structured.emoji.codeUnits)} ${data.$2.structured.title}',
+                                memory.structured.target!.title,
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 8),
-                            memoryDetailLoading[data.$1]
-                                ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ))
-                                : const Icon(Icons.arrow_right_alt)
+                            const Icon(Icons.arrow_right_alt)
                           ],
                         ),
                       ),
@@ -187,7 +129,7 @@ class _AIMessageState extends State<AIMessage> {
         hoverColor: Colors.transparent,
         highlightColor: Colors.transparent,
         onTap: () async {
-          await Clipboard.setData(ClipboardData(text: widget.message.text));
+          await Clipboard.setData(ClipboardData(text: message.text));
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -234,7 +176,7 @@ class _AIMessageState extends State<AIMessage> {
         child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
       ),
       onTap: () {
-        widget.sendMessage(optionText);
+        sendMessage(optionText);
       },
     );
   }
