@@ -97,9 +97,6 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 
 
 
-//button
-//
-//
 
 
 // Advertisement data
@@ -129,10 +126,12 @@ uint16_t current_package_index = 0;
 static uint32_t current_button_time = 0;
 static uint32_t previous_button_time = 0;
 
-static uint32_t pressed_time = 0;
 const int max_debounce_interval = 700;
 static bool was_pressed = false;
 
+//
+// button
+//
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
@@ -145,9 +144,6 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
             was_pressed = true;
         }
         else {
-            if(!was_pressed) {
-                pressed_time = k_cycle_get_32();  
-            }
             was_pressed = false;
         }
 	}
@@ -237,7 +233,6 @@ void check_button_level(struct k_work *work_item) {
         }
 
     }
-
 
     else if (current_button_state == ONE_PRESS) {
 
