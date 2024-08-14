@@ -74,7 +74,6 @@ async def _websocket_util(
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
-    frame_size = 160  # pcm8, opus might be different, same pcm16
 
     async def receive_audio(socket1, socket2):
         nonlocal websocket_active
@@ -82,38 +81,36 @@ async def _websocket_util(
         timer_start = time.time()
         speech_state = SpeechState.no_speech
         voice_found, not_voice = 0, 0
+        # path = 'scripts/vad/audio_bytes.txt'
+        # if os.path.exists(path):
+        #     os.remove(path)
+        # audio_file = open(path, "a")
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
 
-                # TODO: vad not working propperly.
-                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
-
                 if codec == 'pcm8':
-                    frames_count = 8
+                    frame_size, frames_count = 160, 16
                     if len(audio_buffer) < (frame_size * frames_count):
                         continue
 
                     latest_speech_state = get_speech_state(
-                        audio_buffer[:window_size_samples * 5], vad_iterator, window_size_samples
+                        audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
                     )
                     if latest_speech_state:
                         speech_state = latest_speech_state
 
-                    if speech_state == SpeechState.no_speech:
-                        # audio_buffer = audio_buffer[frame_size * 3:]
-                        # audio_buffer = bytearray()
-                        # print('No speech detected')
-                        not_voice += 1
-                        # continue
-                    else:
-                        voice_found += 1
-
-                    if (voice_found + not_voice) % 100 == 0:
+                    if (voice_found or not_voice) and (voice_found + not_voice) % 100 == 0:
                         print(uid, '\t', str(int((voice_found / (voice_found + not_voice)) * 100)) + '% \thas voice.')
 
-                    # never works
+                    if speech_state == SpeechState.no_speech:
+                        not_voice += 1
+                        # audio_buffer = bytearray()
+                        # continue
+                    else:
+                        # audio_file.write(audio_buffer.hex() + "\n")
+                        voice_found += 1
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
@@ -142,7 +139,7 @@ async def _websocket_util(
         try:
             while websocket_active:
                 await asyncio.sleep(30)
-                print('send_heartbeat')
+                # print('send_heartbeat')
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_json({"type": "ping"})
                 else:
