@@ -1,3 +1,4 @@
+#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -13,7 +14,7 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 
-#include <zephyr/logging/log.h>
+
 #include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
