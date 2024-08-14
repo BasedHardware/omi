@@ -61,6 +61,18 @@ Future<bool> userHasSpeakerProfile() async {
 //   }
 // }
 
+Future<bool> uploadProfileBytes(List<List<int>> bytes, int duration) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/upload',
+    headers: {},
+    body: jsonEncode({'bytes': bytes, 'duration': duration}),
+    method: 'POST',
+  );
+  debugPrint('uploadProfileBytes: ${response?.body}');
+  if (response == null) return false;
+  return true;
+}
+
 Future<bool> uploadProfile(File file) async {
   var request = http.MultipartRequest(
     'POST',

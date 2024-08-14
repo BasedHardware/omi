@@ -36,6 +36,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   bool uploadingProfile = false;
   double percentageCompleted = 0;
   bool profileCompleted = false;
+  int targetWordsCount = 45;
 
   _init() async {
     initiateWebsocket();
@@ -114,16 +115,18 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   }
 
   _handleCompletion() async {
-    if (uploadingProfile) return;
+    if (uploadingProfile || profileCompleted) return;
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
-    percentageCompleted = (wordsCount / 60).clamp(0, 1);
+    setState(() => percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1));
     if (percentageCompleted == 1) {
       setState(() => uploadingProfile = true);
       closeWebSocket();
+      _connectionStateListener?.cancel();
+      _bleBytesStream?.cancel();
 
-      var data = await audioStorage.createWavFile(filename: 'speech_profile.wav');
-      await uploadProfile(data.item1);
+      List<List<int>> raw = List.from(audioStorage.rawPackets);
+      await uploadProfileBytes(raw, segments.last.end.toInt());
       setState(() {
         uploadingProfile = false;
         profileCompleted = true;
@@ -135,7 +138,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     await initWebSocket(
       codec: BleAudioCodec.opus,
       sampleRate: 16000,
-      onConnectionSuccess: () => {setState(() {}), print('speaker_id onConnectionSuccess')},
+      includeSpeechProfile: false,
+      onConnectionSuccess: () => setState(() {}),
       onConnectionFailed: (err) => setState(() {}),
       onConnectionClosed: (int? closeCode, String? closeReason) {},
       onConnectionError: (err) => setState(() {}),

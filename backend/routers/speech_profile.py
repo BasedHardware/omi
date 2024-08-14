@@ -1,10 +1,11 @@
 import os
 
-from fastapi import APIRouter, UploadFile, Depends, HTTPException
-from pydub import AudioSegment
+from fastapi import APIRouter, UploadFile, Depends
 
+from models.other import UploadProfile
 from utils import auth
-from utils.storage import retrieve_all_samples, upload_sample_storage, upload_profile_audio, get_speech_profile
+from utils.redis_utils import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
+from utils.storage import retrieve_all_samples, upload_sample_storage
 
 router = APIRouter()
 
@@ -87,20 +88,11 @@ def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v3/speech-profile', tags=['v1'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': get_speech_profile(uid) is not None}
+    return {'has_profile': get_user_speech_profile(uid) is not []}
 
 
 @router.post('/v3/upload', tags=['v1'])
-def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
-    os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
-    aseg = AudioSegment.from_wav(file_path)
-    if aseg.frame_rate != 16000:
-        raise HTTPException(status_code=400, detail="Invalid codec, must opus 16khz.")
-
-    # TODO: vad api, get start,end segments, and trim to 1 minute?
-
-    return {"url": upload_profile_audio(file_path, uid)}
+def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user_uid)):
+    store_user_speech_profile(uid, data.bytes)
+    store_user_speech_profile_duration(uid, data.duration)
+    return {'status': 'ok'}

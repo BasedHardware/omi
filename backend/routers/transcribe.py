@@ -10,9 +10,9 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.storage import get_speech_profile
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, send_initial_file2
-from utils.stt.vad import vad_is_empty, VADIterator, model, get_speech_state, SpeechState
+from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
+from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file2
+from utils.stt.vad import vad_is_empty, VADIterator, get_speech_state, SpeechState
 
 router = APIRouter()
 
@@ -45,9 +45,9 @@ templates = Jinja2Templates(directory="templates")
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1
+        channels: int = 1, include_speech_profile: bool = True,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels)
+    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile)
     await websocket.accept()
     transcript_socket2 = None
     websocket_active = True
@@ -55,27 +55,27 @@ async def _websocket_util(
     try:
         # TODO: what about taking the file here in 16khz and encoding it to opus? would that work? instead of pcm16 issue?
 
-        # if language == 'en' and codec == 'opus':
-        #     single_file_path = get_speech_profile(uid)
-        #     if single_file_path:
-        #         aseg = AudioSegment.from_wav(single_file_path)
-        #         duration = aseg.duration_seconds + 10
-        #         print('get_speaker_audio_file:', single_file_path, duration, uid, codec, sample_rate)
-        # else:
-        single_file_path, duration = None, 0
+        if language == 'en' and codec == 'opus' and include_speech_profile:
+            speech_profile = get_user_speech_profile(uid)
+            duration = get_user_speech_profile_duration(uid)
+            print('speech_profile', len(speech_profile), duration)
+            if duration:
+                duration += 10
+        else:
+            speech_profile, duration = [], 0
 
         transcript_socket = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
-            await send_initial_file2(single_file_path, transcript_socket)
+            await send_initial_file2(speech_profile, transcript_socket)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
         await websocket.close()
         return
 
-    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
+    # vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
 
     async def receive_audio(socket1, socket2):
@@ -93,27 +93,27 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
 
-                if codec == 'pcm8':
-                    frame_size, frames_count = 160, 16
-                    if len(audio_buffer) < (frame_size * frames_count):
-                        continue
-
-                    latest_speech_state = get_speech_state(
-                        audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
-                    )
-                    if latest_speech_state:
-                        speech_state = latest_speech_state
-
-                    if (voice_found or not_voice) and (voice_found + not_voice) % 100 == 0:
-                        print(uid, '\t', str(int((voice_found / (voice_found + not_voice)) * 100)) + '% \thas voice.')
-
-                    if speech_state == SpeechState.no_speech:
-                        not_voice += 1
-                        # audio_buffer = bytearray()
-                        # continue
-                    else:
-                        # audio_file.write(audio_buffer.hex() + "\n")
-                        voice_found += 1
+                # if codec == 'pcm8':
+                #     frame_size, frames_count = 160, 16
+                #     if len(audio_buffer) < (frame_size * frames_count):
+                #         continue
+                #
+                #     latest_speech_state = get_speech_state(
+                #         audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
+                #     )
+                #     if latest_speech_state:
+                #         speech_state = latest_speech_state
+                #
+                #     if (voice_found or not_voice) and (voice_found + not_voice) % 100 == 0:
+                #         print(uid, '\t', str(int((voice_found / (voice_found + not_voice)) * 100)) + '% \thas voice.')
+                #
+                #     if speech_state == SpeechState.no_speech:
+                #         not_voice += 1
+                #         # audio_buffer = bytearray()
+                #         # continue
+                #     else:
+                #         # audio_file.write(audio_buffer.hex() + "\n")
+                #         voice_found += 1
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
@@ -172,6 +172,6 @@ async def _websocket_util(
 @router.websocket("/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1
+        channels: int = 1, include_speech_profile: bool = True
 ):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, channels)
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile)
