@@ -1,7 +1,7 @@
 # Triangle v2 with Memory
 
 ## Components
-- **[Seeed Studio XIAO nRF52840 Sense](https://www.seeedstudio.com/Seeed-XIAO-nRF52840-Sense-p-5331.html)**
+- **[Seeed Studio XIAO nRF52840 Sense](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html)**
 - **[Adafruit 5769 Audio BFF Add-On for QT Py](https://www.adafruit.com/product/5769)**
 - **[OWS-091630W50A-8 Speaker (8Ω, 1W, Top Port, 95dB)](https://www.digikey.com/en/products/detail/ole-wolff-electronics-inc/OWS-091630W50A-8/17636881)**
 - **[502030 250mAh LiPo Battery](https://www.amazon.com/EEMB-Rechargeable-Connector-Parrott-Polarity/dp/B0B7R8CS2C)**
