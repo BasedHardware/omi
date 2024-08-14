@@ -90,9 +90,6 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
 
-                # TODO: vad not working propperly.
-                # - Opus always says there's no speech (but collection doesn't matter much, as it triggers like 1 per 0.2 seconds)
-
                 if codec == 'pcm8':
                     frame_size, frames_count = 160, 16
                     if len(audio_buffer) < (frame_size * frames_count):

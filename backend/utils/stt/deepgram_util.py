@@ -100,7 +100,7 @@ def get_single_file(dir_path: str, target_sample_rate: int = 8000):
             continue
         path = f'{dir_path}{sample}'
         aseg = AudioSegment.from_file(path)
-        print(path, aseg.frame_rate)
+        # print(path, aseg.frame_rate)
         if aseg.frame_rate == target_sample_rate:
             files_to_join.append(aseg)
 
@@ -227,7 +227,6 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             endpointing=100,
             language=language,
             interim_results=False,
-            sample_rate=sample_rate,
             smart_format=True,
             profanity_filter=False,
             diarize=True,
@@ -235,6 +234,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             channels=channels,
             multichannel=channels > 1,
             model='nova-2-general',
+            sample_rate=sample_rate,
             encoding='linear16' if codec == 'pcm8' or codec == 'pcm16' else 'opus'
         )
         result = dg_connection.start(options)
