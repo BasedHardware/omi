@@ -202,19 +202,19 @@ Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   return imageCaptureControlCharacteristic != null;
 }
 
-Future<int> retrieveButtonLevel(String deviceId) async {
+Future<int> retrieveButtonState(String deviceId) async {
   final buttonService = await getServiceByUuid(deviceId, buttonDataStreamCharacteristicUuid);
   if (buttonService == null) {
     logServiceNotFoundError('Button no good', deviceId);
     return -1;
   }
-  var buttonLevelCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
-  if (buttonLevelCharacteristic == null) {
+  var buttonStateCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
+  if (buttonStateCharacteristic == null) {
     logCharacteristicNotFoundError('Button level', deviceId);
     return -1;
   }
 
-  var currValue = await buttonLevelCharacteristic.read();
+  var currValue = await buttonStateCharacteristic.read();
   if (currValue.isNotEmpty) {
     return currValue[0];
   }
@@ -222,9 +222,9 @@ Future<int> retrieveButtonLevel(String deviceId) async {
   return -1;
 }
 
-Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
+Future<StreamSubscription<List<int>>?> getBleButtonStateListener(
   String deviceId, {
-  void Function(int)? onButtonLevelChange,
+  void Function(int)? onButtonStateChange,
 }) async {
   final buttonService = await getServiceByUuid(deviceId,buttonDataStreamCharacteristicUuid);
   if (buttonService == null) {
@@ -232,31 +232,31 @@ Future<StreamSubscription<List<int>>?> getBleButtonLevelListener(
     return null;
   }
 
-  var buttonLevelCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
-  if (buttonLevelCharacteristic == null) {
+  var buttonStateCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
+  if (buttonStateCharacteristic == null) {
     logCharacteristicNotFoundError('Button level', deviceId);
     return null;
   }
 
-  var currValue = await buttonLevelCharacteristic.read();
+  var currValue = await buttonStateCharacteristic.read();
 
   if (currValue.isNotEmpty) {
     debugPrint('Button level: ${currValue[0]}');
-    onButtonLevelChange!(currValue[0]);
+    onButtonStateChange!(currValue[0]);
   }
 
   try {
-    await buttonLevelCharacteristic.setNotifyValue(true);
+    await buttonStateCharacteristic.setNotifyValue(true);
   } catch (e, stackTrace) {
     logSubscribeError('Button level', deviceId, e, stackTrace);
     return null;
   }
 
-  var listener = buttonLevelCharacteristic.lastValueStream.listen((value) {
+  var listener = buttonStateCharacteristic.lastValueStream.listen((value) {
     // debugPrint('Battery level listener: $value');
     if (value.isNotEmpty) {
       if (value.length > 1) {
-      onButtonLevelChange!(value[0]);
+      onButtonStateChange!(value[0]);
      // debugPrint('Button level at the end: ${value[0]}');
 
       if (value[0] == 1) {
