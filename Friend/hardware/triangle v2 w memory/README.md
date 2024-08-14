@@ -1,22 +1,20 @@
-> ** ⚠️ Disclaimer:** This device is currently a developer version that has not been fully tested. Some new functionality may not be fully covered by the firmware.
+> ⚠️ Disclaimer: This device is currently a developer version that has not been fully tested. Some new functionality may not be fully covered by the firmware.
 
-**Description:** Omi Triangle v2 is an upgraded version of Omi Triangle v1, featuring added memory, a speaker, and a configurable momentary button. The enclosure comes with two versions of the top cover:
+# Omi Triangle v2
 
-1. "High tolerance" version: Provides a tight fit for the lid. While more pleasant to use, it may be more challenging to print (because you have to maintain fairly precise clearances).
-2. "Low tolerance" version: Designed for gluing the lid in place.
-
-It is recommended to print both versions and choose the most appropriate one based on your printing capabilities.
+Omi Triangle v2 is an upgraded version of Omi Triangle v1, featuring added memory, a speaker, and a configurable momentary button.
 
 **Circuit Diagram:**
+
 ![Circuit diagram](pics/circuit.jpg)
 
 ---
 
-# Triangle v2 Assembly Guide
+# Assembly guide
 
 Estimated Time: 50 min
 
-# Table of Contents
+# Table of contents
 
 1. [Component List](#1-component-list)
 2. [Tools and Materials](#2-tools-and-materials)
@@ -35,7 +33,7 @@ Estimated Time: 50 min
 
 ---
 
-## 1. Component list.
+## 1. Component list
 
 - **[Seeed Studio XIAO nRF52840 Sense](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html)**
 - **[Adafruit 5769 Audio BFF Add-On for QT Py](https://www.adafruit.com/product/5769)**
@@ -45,6 +43,14 @@ Estimated Time: 50 min
 - **[28-30 AWG Wire, Solid Core](https://www.amazon.com/dp/B07G2SWB19)**
 - **Micro SD Card (any)**
 - **3d-printed enclosure**
+
+The enclosure comes with two versions of the top cover:
+
+1. "High tolerance" version: Provides a tight fit for the lid. While more pleasant to use, it may be more challenging to print (because you have to maintain fairly precise clearances).
+2. "Low tolerance" version: Designed for gluing the lid in place.
+
+It is recommended to print both versions and choose the most appropriate one based on your printing capabilities.
+
 
 ## 2. Tools and materials
 
