@@ -4,25 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:web_socket_channel/io.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
-
-String mapCodecToName(BleAudioCodec codec) {
-  switch (codec) {
-    case BleAudioCodec.opus:
-      return 'opus';
-    case BleAudioCodec.pcm16:
-      return 'pcm16';
-    case BleAudioCodec.pcm8:
-      return 'pcm8';
-    default:
-      return 'pcm8';
-  }
-}
 
 Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(List<TranscriptSegment>) onMessageReceived,
@@ -42,7 +29,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
     // headers: {'Authorization': await getAuthHeader()},
   );
 
-  await channel.ready.then((_) {
+  await channel.ready.then((v) {
     channel.stream.listen(
       (event) {
         if (event == 'ping') return;
@@ -59,9 +46,10 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
         CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
       },
       onDone: (() {
+        // debugPrint('Websocket connection onDone ${channel}'); // FIXME
         onWebsocketConnectionClosed(channel.closeCode, channel.closeReason);
       }),
-      cancelOnError: true,
+      cancelOnError: true, // TODO: is this correct?
     );
   }).onError((err, stackTrace) {
     // no closing reason or code
@@ -74,7 +62,9 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
     await channel.ready;
     debugPrint('Websocket Opened');
     onWebsocketConnectionSuccess();
-  } catch (err) {}
+  } catch (err) {
+    print(err);
+  }
   return channel;
 }
 

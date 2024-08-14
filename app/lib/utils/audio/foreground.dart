@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:location/location.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -12,7 +12,7 @@ void _startForegroundCallback() {
 class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onStart(DateTime timestamp) async {
-    print("Starting foreground task");
+    debugPrint("Starting foreground task");
   }
 
   Future locationInBackground() async {
@@ -26,15 +26,12 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
           'accuracy': locationData.accuracy,
           'time': locationData.timestamp.toIso8601String(),
         };
-        print('Location data: $loc');
         FlutterForegroundTask.sendDataToMain(loc);
       } else {
-        print('Location permission is not granted');
         Object loc = {'error': 'Always location permission is not granted'};
         FlutterForegroundTask.sendDataToMain(loc);
       }
     } else {
-      print('Location service is not enabled');
       Object loc = {'error': 'Location service is not enabled'};
       FlutterForegroundTask.sendDataToMain(loc);
     }
@@ -42,7 +39,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
   @override
   void onReceiveData(Object data) async {
-    print('onReceiveData: $data');
+    debugPrint('onReceiveData: $data');
     await locationInBackground();
   }
 
@@ -53,7 +50,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
   @override
   void onDestroy(DateTime timestamp) async {
-    print("Destroying foreground task");
+    debugPrint("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
 }
@@ -81,7 +78,7 @@ class ForegroundUtil {
 
   static Future<void> initializeForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) return;
-    print('initializeForegroundService');
+    debugPrint('initializeForegroundService');
     // await Location().requestPermission();
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
@@ -111,16 +108,22 @@ class ForegroundUtil {
   }
 
   static Future<ServiceRequestResult> startForegroundTask() async {
-    print('startForegroundTask');
+    debugPrint('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       return FlutterForegroundTask.restartService();
     } else {
-      print('starting service');
       return await FlutterForegroundTask.startService(
         notificationTitle: 'Your Friend Device is connected.',
         notificationText: 'Transcription service is running in the background.',
         callback: _startForegroundCallback,
       );
+    }
+  }
+
+  static Future<void> stopForegroundTask() async {
+    debugPrint('stopForegroundTask');
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.stopService();
     }
   }
 }

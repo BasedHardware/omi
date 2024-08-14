@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
+#include "deepsleep_button.h"
+#include "deep_sleep.h"
 #include "transport.h"
 #include "mic.h"
 #include "utils.h"
@@ -10,7 +12,10 @@
 
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
+#define LONG_PRESS_DURATION K_SECONDS(3)
+
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 static void codec_handler(uint8_t *data, size_t len)
 {
@@ -125,6 +130,9 @@ int main(void)
     // Run the boot LED sequence
     boot_led_sequence();
 
+    deepsleep_button_init();
+
+
     // // Indicate storage initialization
     // set_led_red(true);
     // LOG_INF("Initializing storage...");
@@ -204,6 +212,16 @@ int main(void)
 	while (1)
 	{
 		set_led_state();
+
+        //Deep sleep
+        if (is_button_pressed()) {
+            k_sleep(LONG_PRESS_DURATION);
+            if (is_button_pressed()) {
+                LOG_INF("Button long pressed, entering deep sleep...");
+                enter_deep_sleep();
+            }
+        }
+
 		k_msleep(500);
 	}
 
