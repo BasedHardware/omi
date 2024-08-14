@@ -10,8 +10,8 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, \
-    get_speaker_audio_file
+from utils.storage import get_speech_profile
+from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file, send_initial_file2
 from utils.stt.vad import vad_is_empty, VADIterator, model, get_speech_state, SpeechState
 
 router = APIRouter()
@@ -55,19 +55,20 @@ async def _websocket_util(
     try:
         # TODO: what about taking the file here in 16khz and encoding it to opus? would that work? instead of pcm16 issue?
 
-        if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
-            single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
-            print('get_speaker_audio_file:', single_file_path, duration, uid, codec, sample_rate)
-            if duration:
-                duration += 10
-        else:
-            single_file_path, duration = None, 0
+        # if language == 'en' and codec == 'opus':
+        #     single_file_path = get_speech_profile(uid)
+        #     if single_file_path:
+        #         aseg = AudioSegment.from_wav(single_file_path)
+        #         duration = aseg.duration_seconds + 10
+        #         print('get_speaker_audio_file:', single_file_path, duration, uid, codec, sample_rate)
+        # else:
+        single_file_path, duration = None, 0
 
         transcript_socket = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels,
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
-            await send_initial_file(single_file_path, transcript_socket)
+            await send_initial_file2(single_file_path, transcript_socket)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
