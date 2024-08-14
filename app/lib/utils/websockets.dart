@@ -29,7 +29,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
     // headers: {'Authorization': await getAuthHeader()},
   );
 
-  await channel.ready.then((_) {
+  await channel.ready.then((v) {
     channel.stream.listen(
       (event) {
         if (event == 'ping') return;
@@ -46,10 +46,10 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
         CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
       },
       onDone: (() {
-        // print('Websocket connection onDone');
+        // debugPrint('Websocket connection onDone ${channel}'); // FIXME
         onWebsocketConnectionClosed(channel.closeCode, channel.closeReason);
       }),
-      cancelOnError: true,
+      cancelOnError: true, // TODO: is this correct?
     );
   }).onError((err, stackTrace) {
     // no closing reason or code
