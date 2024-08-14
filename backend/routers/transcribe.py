@@ -53,6 +53,8 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     try:
+        # TODO: what about taking the file here in 16khz and encoding it to opus? would that work? instead of pcm16 issue?
+
         if language == 'en' and codec == 'pcm8':  # no pcm16 which is phone recording, no opus
             single_file_path, duration = get_speaker_audio_file(uid, target_sample_rate=sample_rate)
             print('get_speaker_audio_file:', single_file_path, duration, uid, codec, sample_rate)

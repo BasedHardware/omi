@@ -1,10 +1,9 @@
 import os
 
 from fastapi import APIRouter, UploadFile, Depends
-from pydub import AudioSegment
 
 from utils import auth
-from utils.storage import retrieve_all_samples, upload_sample_storage
+from utils.storage import retrieve_all_samples, upload_sample_storage, upload_profile_audio, get_speech_profile
 
 router = APIRouter()
 
@@ -16,13 +15,7 @@ def _endpoint1(file, uid):
     file_path = f"{path}/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-        aseg = AudioSegment.from_wav(file_path)
-        print(f'Uploading sample audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
         uploaded_url, count = upload_sample_storage(file_path, uid)
-        print('upload_sample ~ file uploaded')
-        # if count >= 5: # no soniox, let's do only deepgram for now.
-        #     threading.Thread(target=_create_profile, args=(uid,)).start()
-    # os.remove(file_path)
     return {"url": uploaded_url}
 
 
@@ -83,5 +76,24 @@ def my_samples(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v2/speech-profile', tags=['v1'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    print('has_speech_profile', uid, _has_speech_profile(uid))
     return {'has_profile': _has_speech_profile(uid)}
+
+
+# **********************
+# * Latest endpoints 2 *
+# **********************
+
+
+@router.get('/v3/speech-profile', tags=['v1'])
+def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return {'has_profile': get_speech_profile(uid) is not None}
+
+
+@router.post('/v3/upload', tags=['v1'])
+def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
+    os.makedirs(f'_temp/{uid}', exist_ok=True)
+    file_path = f"_temp/{uid}/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+
+    return {"url": upload_profile_audio(file_path, uid)}
