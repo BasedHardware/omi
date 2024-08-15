@@ -1,4 +1,5 @@
 import hashlib
+import asyncio
 import random
 import threading
 import uuid
@@ -20,16 +21,16 @@ from utils.plugins import trigger_external_integrations
 router = APIRouter()
 
 
-def _process_get_memory_structered(memory: Memory, language_code: str, force_process: bool) -> (Structured, bool):
+def _process_get_memory_structered(memory: Union[Memory, CreateMemory, WorkflowCreateMemory], language_code: str, force_process: bool) -> (Structured, bool):
     # From workflow
     if memory.source == MemorySource.workflow:
-        if create_memory.source == WorkflowMemorySource.audio:
+        if memory.text_source == WorkflowMemorySource.audio:
             structured = get_transcript_structure(
-                create_memory.text, create_memory.started_at, language_code, True)
+                memory.text, memory.started_at, language_code, True)
             return (structured, False)
 
-        if create_memory.source == WorkflowMemorySource.other:
-            structured = summarize_experience_text(create_memory.text)
+        if memory.text_source == WorkflowMemorySource.other:
+            structured = summarize_experience_text(memory.text)
             return (structured, False)
 
         # not workflow memory source support
@@ -53,29 +54,6 @@ def _process_get_memory_structered(memory: Memory, language_code: str, force_pro
 def process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory], force_process: bool = False, retries: int = 1
 ):
-    # new if
-    new_photos = []
-    if isinstance(memory, CreateMemory):
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            uid=uid,
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            deleted=False,
-        )
-        new_photos = memory.photos
-    elif isinstance(memory, WorkflowCreateMemory):
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            uid=uid,
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            deleted=False,
-        )
-        memory.external_data = create_memory.dict()
-    else:
-        print(f"Existing memory {memory.id}")
-
     # make structured
     structured: Structured
     try:
@@ -88,8 +66,33 @@ def process_memory(
             raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
         return process_memory(uid, language_code, memory, force_process, retries + 1)
 
-    memory.structured = structured
-    memory.discarded = structured.title == ''
+    discarded = structured.title == ''
+
+    # new if
+    new_photos = []
+    if isinstance(memory, CreateMemory):
+        memory = Memory(
+            id=str(uuid.uuid4()),
+            **memory.dict(),
+            created_at=datetime.utcnow(),
+            deleted=False,
+            structured=structured,
+            discarded=discarded,
+        )
+        new_photos = memory.photos
+    elif isinstance(memory, WorkflowCreateMemory):
+        create_memory = memory
+        memory = Memory(
+            id=str(uuid.uuid4()),
+            **memory.dict(),
+            created_at=datetime.utcnow(),
+            deleted=False,
+            structured=structured,
+            discarded=discarded,
+        )
+        memory.external_data = create_memory.dict()
+    else:
+        print(f"Existing memory {memory.id}")
 
     # store to db
     memories_db.upsert_memory(uid, memory.dict())
@@ -98,7 +101,7 @@ def process_memory(
         memories_db.store_memory_photos(uid, memory.id, new_photos)
 
     # afterward, should be async
-    _process_memory_afterward(memory)
+    asyncio.run(_process_memory_afterward(uid, memory))
 
     return memory
 
@@ -112,11 +115,10 @@ async def _process_get_memory_conversation_str(memory: Memory) -> str:
     return memory.get_transcript()
 
 
-async def _process_memory_afterward(memory: Memory):
+async def _process_memory_afterward(uid: str, memory: Memory):
     if memory.discarded:
         return
 
-    uid = memory.uid
     structured = memory.structured
     transcript = _process_get_memory_conversation_str(memory)
 
