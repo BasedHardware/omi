@@ -8,6 +8,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -164,7 +165,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.plugin.memoryPrompt ?? '',
+                      (widget.plugin.memoryPrompt ?? '').decodeSting,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
