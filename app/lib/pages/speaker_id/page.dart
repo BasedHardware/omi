@@ -17,6 +17,7 @@ import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SpeakerIdPage extends StatefulWidget {
   final bool onbording;
@@ -343,15 +344,15 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                               context: context,
                               builder: (c) => getDialog(
                                 context,
+                                () => Navigator.pop(context),
                                 () {
                                   Navigator.pop(context);
-                                  Navigator.pop(context);
+                                  launchUrl(Uri.parse(
+                                      'https://github.com/BasedHardware/Friend/releases/tag/v1.0.3-firmware'));
                                 },
-                                () {},
                                 'Firmware Update Required',
-                                'Please update your device firmware (on your device settings) to set-up your speech profile.',
-                                okButtonText: 'Try Again',
-                                singleButton: true,
+                                'Please update your device firmware to set-up your speech profile.',
+                                okButtonText: 'Do now',
                               ),
                               barrierDismissible: false,
                             );
