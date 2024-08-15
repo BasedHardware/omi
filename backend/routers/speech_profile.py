@@ -104,6 +104,8 @@ def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
+# TODO: app improvement, if speaker 0 starts speaking, which is not the user, after killing ws 2, it will say speaker 0 is the user
+
 @router.post('/v3/upload-audio', tags=['v3'])
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
