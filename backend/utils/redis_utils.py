@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import List
 
 import redis
 
@@ -68,9 +69,23 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     return eval(reviews)
 
 
-def user_has_speech_profile(uid: str) -> bool:
-    return r.exists(f'speech_profiles:{uid}') != 0
+def store_user_speech_profile(uid: str, data: List[List[int]]):
+    r.set(f'users:{uid}:speech_profile', str(data))
 
 
-def set_user_has_speech_profile(uid: str):
-    r.set(f'speech_profiles:{uid}', 1)
+def get_user_speech_profile(uid: str) -> List[List[int]]:
+    data = r.get(f'users:{uid}:speech_profile')
+    if not data:
+        return []
+    return eval(data)
+
+
+def store_user_speech_profile_duration(uid: str, duration: int):
+    r.set(f'users:{uid}:speech_profile_duration', duration)
+
+
+def get_user_speech_profile_duration(uid: str) -> int:
+    data = r.get(f'users:{uid}:speech_profile_duration')
+    if not data:
+        return 0
+    return int(data)
