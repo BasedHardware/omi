@@ -363,13 +363,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                         },
                         color: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Text(
-                          'Get Started',
-                          style: TextStyle(color: Colors.black),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        child: const Text('Get Started', style: TextStyle(color: Colors.black)),
                       )
                     : profileCompleted
                         ? Container(
