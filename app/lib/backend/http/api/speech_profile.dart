@@ -35,48 +35,23 @@ Future<bool> userHasSpeakerProfile() async {
 //   return SpeakerIdSample.fromJsonList(jsonDecode(response.body));
 // }
 
-// Future<bool> uploadSample(File file) async {
-//   debugPrint('uploadSample ${file.path} for uid: ${SharedPreferencesUtil().uid}');
-//   var request = http.MultipartRequest(
-//     'POST',
-//     Uri.parse('${Env.apiBaseUrl}v1/speech-profile/samples'),
-//   );
-//   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-//   request.headers.addAll({'Authorization': await getAuthHeader()});
-//
-//   try {
-//     var streamedResponse = await request.send();
-//     var response = await http.Response.fromStream(streamedResponse);
-//
-//     if (response.statusCode == 200) {
-//       debugPrint('uploadSample Response body: ${jsonDecode(response.body)}');
-//       return true;
-//     } else {
-//       debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
-//       throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
-//     }
-//   } catch (e) {
-//     debugPrint('An error occurred uploadSample: $e');
-//     throw Exception('An error occurred uploadSample: $e');
-//   }
-// }
-
 Future<bool> uploadProfileBytes(List<List<int>> bytes, int duration) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/upload',
+    url: '${Env.apiBaseUrl}v3/upload-bytes',
     headers: {},
     body: jsonEncode({'bytes': bytes, 'duration': duration}),
     method: 'POST',
   );
   debugPrint('uploadProfileBytes: ${response?.body}');
   if (response == null) return false;
+  if (response.statusCode != 200) return false;
   return true;
 }
 
 Future<bool> uploadProfile(File file) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v3/upload'),
+    Uri.parse('${Env.apiBaseUrl}v3/upload-audio'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});

@@ -43,6 +43,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   double percentageCompleted = 0;
   bool uploadingProfile = false;
   bool profileCompleted = false;
+  Timer? _forceCompletionTimer;
 
   _init() async {
     _device = await getConnectedDevice();
@@ -124,20 +125,70 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
     setState(() => percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1));
-    if (percentageCompleted == 1) {
-      setState(() => uploadingProfile = true);
-      closeWebSocket();
-      _connectionStateListener?.cancel();
-      _bleBytesStream?.cancel();
+    if (percentageCompleted == 1) finalize();
+  }
 
-      List<List<int>> raw = List.from(audioStorage.rawPackets);
-      await uploadProfileBytes(raw, segments.last.end.toInt());
-      SharedPreferencesUtil().hasSpeakerProfile = true;
-      setState(() {
-        uploadingProfile = false;
-        profileCompleted = true;
-      });
+  finalize() async {
+    if (uploadingProfile || profileCompleted) return;
+
+    int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
+    if (duration < 5 || duration > 120) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+          () {},
+          // TODO: improve this
+          'Invalid recording detected',
+          'Please make sure you speak for at least 5 seconds and not more than 90.',
+          okButtonText: 'Ok',
+          singleButton: true,
+        ),
+        barrierDismissible: false,
+      );
+      return;
     }
+
+    String text = segments.map((e) => e.text).join(' ').trim();
+    if (text.split(' ').length < (targetWordsCount / 2)) { // 25 words
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+          () {},
+          'Invalid recording detected',
+          'There is not enough speech detected. Please speak more and try again.',
+          okButtonText: 'Ok',
+          singleButton: true,
+        ),
+        barrierDismissible: false,
+      );
+      return;
+    }
+    setState(() => uploadingProfile = true);
+    closeWebSocket();
+    _forceCompletionTimer?.cancel();
+    _connectionStateListener?.cancel();
+    _bleBytesStream?.cancel();
+
+    List<List<int>> raw = List.from(audioStorage.rawPackets);
+    var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+    await uploadProfile(data.item1);
+    await uploadProfileBytes(raw, duration);
+
+    SharedPreferencesUtil().hasSpeakerProfile = true;
+    setState(() {
+      uploadingProfile = false;
+      profileCompleted = true;
+    });
   }
 
   Future<void> initiateWebsocket() async {
@@ -182,7 +233,6 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
         }
       },
     );
-    print('_bleBytesStream: $_bleBytesStream');
   }
 
   @override
@@ -195,6 +245,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   void dispose() {
     _connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
+    _forceCompletionTimer?.cancel();
     super.dispose();
   }
 
@@ -360,6 +411,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                           }
 
                           initiateWebsocket();
+                          // 1.5 minutes seems reasonable
+                          _forceCompletionTimer = Timer(const Duration(seconds: 30), finalize);
                           setState(() => startedRecording = true);
                         },
                         color: Colors.white,
