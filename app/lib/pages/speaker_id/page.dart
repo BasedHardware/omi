@@ -407,8 +407,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                 () => Navigator.pop(context),
                                 () {
                                   Navigator.pop(context);
-                                  launchUrl(Uri.parse(
-                                      'https://github.com/BasedHardware/Friend/releases/tag/v1.0.3-firmware'));
+                                  launchUrl(
+                                      Uri.parse('https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
                                 },
                                 'Firmware Update Required',
                                 'Please update your device firmware to set-up your speech profile.',
