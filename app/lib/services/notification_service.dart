@@ -36,7 +36,7 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    unawaited(_register());
+    await _register();
     listenForMessages();
   }
 
