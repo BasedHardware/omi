@@ -1,60 +1,50 @@
 import os
 from typing import Annotated
-import uuid
 from datetime import datetime, timedelta
-
 from fastapi import APIRouter, Header
 from fastapi import Request, HTTPException
+import models.memory as memory_models
+import models.integrations as integration_models
 
-from database.memories import upsert_memory
-from models.integrations import WorkflowCreateMemory, WorkflowMemorySource
-from models.memory import Memory
-from models.memory import MemorySource
-from utils.llm import get_transcript_structure, summarize_experience_text
 from utils.location import get_google_maps_location
+from routers.memories import process_memory, trigger_external_integrations
 
 router = APIRouter()
 
 
-@router.post('/v1/integrations/workflow/memories', response_model=Memory)
-def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],  create_memory: WorkflowCreateMemory):
+@router.post('/v1/integrations/workflow/memories', response_model=memory_models.Memory)
+def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], create_memory: integration_models.WorkflowCreateMemory):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    create_memory.source = memory_models.MemorySource.workflow
 
     # Time
     started_at = create_memory.started_at if create_memory.started_at is not None else datetime.utcnow()
     finished_at = create_memory.finished_at if create_memory.finished_at is not None else started_at + \
         timedelta(seconds=300)  # 5 minutes
-
-    # Summarize
-    if create_memory.source == WorkflowMemorySource.audio:
-        structured = get_transcript_structure(
-            create_memory.text, started_at, create_memory.language, True)
-    elif create_memory.source == WorkflowMemorySource.other:
-        structured = summarize_experience_text(create_memory.text)
-    else:
-        raise HTTPException(status_code=400, detail='Invalid memory source')
+    create_memory.started_at = started_at
+    create_memory.finished_at = finished_at
 
     # Geo
     geolocation = create_memory.geolocation
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(
             geolocation.latitude, geolocation.longitude)
+    create_memory.geolocation = geolocation
 
-    memory = Memory(
-        id=str(uuid.uuid4()),
-        uid=uid,
-        structured=structured,
-        started_at=started_at,
-        finished_at=finished_at,
-        created_at=datetime.utcnow(),
-        discarded=False,
-        deleted=False,
-        source=MemorySource.workflow,
-        geolocation=geolocation,
-    )
+    # Language
+    language_code = create_memory.language
+    if not language_code:  # not breaking change
+        language_code = create_memory.language
+    else:
+        create_memory.language = language_code
 
-    output = memory.dict()
-    output['external_data'] = create_memory.dict()
-    upsert_memory(uid, output)
-    return output
+    # Process
+    memory = process_memory(uid, language_code, create_memory)
+
+    # Always trigger integration
+    trigger_external_integrations(uid, memory)
+
+    # Empty response
+    return {}
