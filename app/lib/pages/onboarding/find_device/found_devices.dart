@@ -30,6 +30,9 @@ class _FoundDevicesState extends State<FoundDevices> {
   String deviceId = '';
   String? _connectingToDeviceId;
 
+  // TODO: improve this and find_device page.
+  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
+
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
       var battery = await retrieveBatteryLevel(btDevice.id);
