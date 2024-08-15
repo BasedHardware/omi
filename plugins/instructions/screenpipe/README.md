@@ -1,6 +1,17 @@
-# Friend Integration Guide
+# Screenpipe Plugin for Friend
 
-Get started with screenpipe:
+## What is Screenpipe?
+
+Screenpipe is an OSS library for building personalized AI. It captures screen and audio data 24/7, so you can search, analyze, and trigger events based of this data.
+
+## What does this plugin do?
+
+This plugin integrates screenpipe with Friend, allowing you to:
+
+1. Stream your desktop memories captured by Screenpipe to your Friend device.
+2. Stream memories from your Friend device back to Screenpipe.
+
+## Get started:
 
 1. **Get Your Friend's User ID**
    - Go to Settings
