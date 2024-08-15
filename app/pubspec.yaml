@@ -2,7 +2,7 @@ name: friend_private
 description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.0.23+76
+version: 1.0.24+79
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -66,7 +66,7 @@ dependencies:
   record: ^5.1.2
   onesignal_flutter: ^5.1.2
   flutter_background_service: ^5.0.7
-  opus_flutter: ^3.0.2
+  opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1

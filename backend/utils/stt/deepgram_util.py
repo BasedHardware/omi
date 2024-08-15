@@ -2,18 +2,15 @@ import asyncio
 import os
 import threading
 import time
-from typing import Tuple, Optional
+from typing import List
 
 import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
-from pydub import AudioSegment
 from starlette.websockets import WebSocket
 
 import database.notifications as notification_db
 from utils.plugins import trigger_realtime_integrations
-from utils.storage import retrieve_all_samples
-from utils.stt.vad import vad_is_empty
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
@@ -65,95 +62,32 @@ def transcribe_file_deepgram(file_path: str, language: str = 'en'):
     return segments
 
 
-async def send_initial_file(file_path, transcript_socket):
-    with open(file_path, "rb") as file:
-        data = file.read()
-    # increase chunk size
-    # 2.5 seconds per second.
-    #
+# async def send_initial_file(file_path, transcript_socket):
+#     with open(file_path, "rb") as file:
+#         data = file.read()
+#     start = time.time()
+#     chunk_size = 4096  # Adjust as needed
+#     for i in range(0, len(data), chunk_size):
+#         chunk = data[i:i + chunk_size]
+#         transcript_socket.send(chunk)
+#         await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
+#     print('send_initial_file', time.time() - start)
+
+
+async def send_initial_file2(data: List[List[int]], transcript_socket):
+    print('send_initial_file2')
     start = time.time()
-    chunk_size = 4096  # Adjust as needed
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i + chunk_size]
-        transcript_socket.send(chunk)
-        await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
+    # Reading and sending in chunks
+    for i in range(0, len(data)):
+        chunk = data[i]
+        # print('Uploading', chunk)
+        transcript_socket.send(bytes(chunk))
+        await asyncio.sleep(0.00005)  # if it takes too long to transcribe
+
     print('send_initial_file', time.time() - start)
-    # os.remove(file_path)
-
-
-# def remove_downloaded_samples(uid):
-#     path = f'_samples/{uid}/'
-#     for file in os.listdir(path):
-#         # remove except joined_output.wav
-#         if file != 'joined_output.wav':
-#             os.remove(f"{path}/{file}")
-
-
-def get_single_file(dir_path: str, target_sample_rate: int = 8000):
-    output_path = f'{dir_path}joined_output.wav'
-
-    files_to_join = []
-    for sample in os.listdir(dir_path):
-        if '.wav' not in sample:
-            continue
-        if 'joined_output.wav' in sample:
-            continue
-        path = f'{dir_path}{sample}'
-        aseg = AudioSegment.from_file(path)
-        print(path, aseg.frame_rate)
-        if aseg.frame_rate == target_sample_rate:
-            files_to_join.append(aseg)
-
-    if not files_to_join:
-        return None
-    output = files_to_join[0]
-    for audio in files_to_join[1:]:
-        output += audio
-
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    output.export(output_path, format='wav')
-    return output_path
 
 
 # Add this new function to handle initial file sending
-def get_speaker_audio_file(uid: str, target_sample_rate: int = 8000) -> Tuple[Optional[str], int]:
-    path = retrieve_all_samples(uid)
-    files_at_path = len(os.listdir(path))
-    print('get_speaker_audio_file', uid, path, 'Files:', files_at_path)
-    if files_at_path < 5:  # means user did less than 5 samples unfortunately, so not completed
-        return None, 0
-    single_file_path = f'{path}joined_output.wav'
-    if os.path.exists(single_file_path):
-        aseg = AudioSegment.from_wav(single_file_path)
-        if aseg.frame_rate == target_sample_rate:  # sample sample rate
-            print('get_speaker_audio_file Cached Duration:', aseg.duration_seconds)
-            if aseg.duration_seconds > 30:
-                aseg = aseg[:30 * 1000]
-                aseg.export(single_file_path, format="wav")
-            return single_file_path, aseg.duration_seconds
-
-    single_file_path = get_single_file(path, target_sample_rate)
-    if not single_file_path:
-        return None, 0  # no files for this codec
-
-    aseg = AudioSegment.from_wav(single_file_path)
-    print('get_speaker_audio_file Initial Duration:', aseg.duration_seconds, 'Sample rate:', aseg.frame_rate / 1000)
-    output = AudioSegment.empty()
-    segments = vad_is_empty(single_file_path, return_segments=True)
-    for segment in segments:
-        start = segment['start'] * 1000
-        end = segment['end'] * 1000
-        output += aseg[start:end]
-
-    seconds = 30
-    if output.duration_seconds < seconds:
-        print('get_speaker_audio_file Output Duration:', output.duration_seconds)
-        return single_file_path, output.duration_seconds  # < 30
-
-    output = output[:seconds * 1000]
-    output.export(single_file_path, format="wav")
-    return single_file_path, seconds
 
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
@@ -227,7 +161,6 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             endpointing=100,
             language=language,
             interim_results=False,
-            sample_rate=sample_rate,
             smart_format=True,
             profanity_filter=False,
             diarize=True,
@@ -235,6 +168,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             channels=channels,
             multichannel=channels > 1,
             model='nova-2-general',
+            sample_rate=sample_rate,
             encoding='linear16' if codec == 'pcm8' or codec == 'pcm16' else 'opus'
         )
         result = dg_connection.start(options)

@@ -38,6 +38,7 @@ def get_notion_crm_api_key(uid: str) -> str:
     return val.decode('utf-8') if val else None
 
 
+# noinspection PyUnresolvedReferences
 def get_notion_database_id(uid: str) -> str:
     val = r.get(f'notion_database_id:{uid}')
     return val.decode('utf-8') if val else None
@@ -56,8 +57,11 @@ def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[d
         segments = eval(segments)
 
     segments.extend(new_segments)
-    # order the segments by start time, in case they are not ordered, and save them
+
     segments = sorted(segments, key=lambda x: x['start'])
+    if len(segments) > 20:
+        segments = segments[-20:]
+
     r.set(key, str(segments))
     return segments
 

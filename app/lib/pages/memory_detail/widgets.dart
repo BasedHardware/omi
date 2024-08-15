@@ -11,6 +11,7 @@ import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -270,10 +271,22 @@ List<Widget> getPluginsWidgets(
               plugin != null
                   ? ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.white,
-                        maxRadius: 16,
-                        backgroundImage: NetworkImage(plugin.getImageUrl()),
+                      leading: CachedNetworkImage(
+                        imageUrl: plugin.getImageUrl(),
+                        imageBuilder: (context, imageProvider) {
+                          return CircleAvatar(
+                            backgroundColor: Colors.white,
+                            maxRadius: 16,
+                            backgroundImage: imageProvider,
+                          );
+                        },
+                        errorWidget: (context, url, error) {
+                          return const CircleAvatar(
+                            backgroundColor: Colors.white,
+                            maxRadius: 16,
+                            child: Icon(Icons.error_outline_rounded),
+                          );
+                        },
                       ),
                       title: Text(
                         plugin.name,
@@ -358,6 +371,22 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
                           image: DecorationImage(
                             image: imageProvider,
                             fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       );
@@ -459,11 +488,26 @@ showOptionsBottomSheet(
                               : const Icon(Icons.refresh, color: Colors.deepPurple),
                           onTap: loadingReprocessMemory
                               ? null
-                              : () => reprocessMemory(context, setModalState, memory, () {
-                                    setModalState(() {
-                                      loadingReprocessMemory = !loadingReprocessMemory;
+                              : () {
+                                  if (ConnectivityController().isConnected.value) {
+                                    reprocessMemory(context, setModalState, memory, () {
+                                      setModalState(() {
+                                        loadingReprocessMemory = !loadingReprocessMemory;
+                                      });
                                     });
-                                  }),
+                                  } else {
+                                    showDialog(
+                                        builder: (c) => getDialog(
+                                            context,
+                                            () => Navigator.pop(context),
+                                            () => Navigator.pop(context),
+                                            'Unable to Re-summarize Memory',
+                                            'Please check your internet connection and try again.',
+                                            singleButton: true,
+                                            okButtonText: 'OK'),
+                                        context: context);
+                                  }
+                                },
                         ),
                         ListTile(
                           title: const Text('Delete'),
@@ -474,24 +518,37 @@ showOptionsBottomSheet(
                           onTap: loadingReprocessMemory
                               ? null
                               : () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (dialogContext) {
-                                      return Dialog(
-                                        elevation: 0,
-                                        insetPadding: EdgeInsets.zero,
-                                        backgroundColor: Colors.transparent,
-                                        alignment:
-                                            const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                        child: ConfirmDeletionWidget(
-                                            memory: memory,
-                                            onDelete: () {
-                                              Navigator.pop(context, true);
-                                              Navigator.pop(context, {'deleted': true});
-                                            }),
-                                      );
-                                    },
-                                  );
+                                  if (ConnectivityController().isConnected.value) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (dialogContext) {
+                                        return Dialog(
+                                          elevation: 0,
+                                          insetPadding: EdgeInsets.zero,
+                                          backgroundColor: Colors.transparent,
+                                          alignment:
+                                              const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
+                                          child: ConfirmDeletionWidget(
+                                              memory: memory,
+                                              onDelete: () {
+                                                Navigator.pop(context, true);
+                                                Navigator.pop(context, {'deleted': true});
+                                              }),
+                                        );
+                                      },
+                                    );
+                                  } else {
+                                    showDialog(
+                                        builder: (c) => getDialog(
+                                            context,
+                                            () => Navigator.pop(context),
+                                            () => Navigator.pop(context),
+                                            'Unable to Delete Memory',
+                                            'Please check your internet connection and try again.',
+                                            singleButton: true,
+                                            okButtonText: 'OK'),
+                                        context: context);
+                                  }
                                 },
                         ),
                         SharedPreferencesUtil().devModeEnabled

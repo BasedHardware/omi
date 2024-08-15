@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 
@@ -56,9 +58,19 @@ class _AIMessageState extends State<AIMessage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         widget.pluginSender != null
-            ? CircleAvatar(
-                radius: 16,
-                backgroundImage: NetworkImage(widget.pluginSender!.getImageUrl()),
+            ? CachedNetworkImage(
+                imageUrl: widget.pluginSender!.getImageUrl(),
+                imageBuilder: (context, imageProvider) => Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    image: DecorationImage(
+                      image: imageProvider,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                placeholder: (context, url) => const CircularProgressIndicator(),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
               )
             : Container(
                 decoration: const BoxDecoration(
@@ -116,30 +128,39 @@ class _AIMessageState extends State<AIMessage> {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        if (memoryDetailLoading[data.$1]) return;
-                        setState(() => memoryDetailLoading[data.$1] = true);
+                        if (ConnectivityController().isConnected.value) {
+                          if (memoryDetailLoading[data.$1]) return;
+                          setState(() => memoryDetailLoading[data.$1] = true);
 
-                        ServerMemory? m = await getMemoryById(data.$2.id);
-                        if (m == null) return;
-                        MixpanelManager().chatMessageMemoryClicked(m);
-                        setState(() => memoryDetailLoading[data.$1] = false);
-                        await Navigator.of(context)
-                            .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
-                        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                          ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                          var copy = List<MessageMemory>.from(widget.message.memories);
-                          copy[data.$1] = MessageMemory(
-                              modifiedDetails.id,
-                              modifiedDetails.createdAt,
-                              MessageMemoryStructured(
-                                modifiedDetails.structured.title,
-                                modifiedDetails.structured.emoji,
-                              ));
-                          widget.message.memories.clear();
-                          widget.message.memories.addAll(copy);
-                          SharedPreferencesUtil().modifiedMemoryDetails = null;
-                          setState(() {});
+                          ServerMemory? m = await getMemoryById(data.$2.id);
+                          if (m == null) return;
+                          MixpanelManager().chatMessageMemoryClicked(m);
+                          setState(() => memoryDetailLoading[data.$1] = false);
+                          await Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
+                          if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
+                            ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
+                            widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
+                            var copy = List<MessageMemory>.from(widget.message.memories);
+                            copy[data.$1] = MessageMemory(
+                                modifiedDetails.id,
+                                modifiedDetails.createdAt,
+                                MessageMemoryStructured(
+                                  modifiedDetails.structured.title,
+                                  modifiedDetails.structured.emoji,
+                                ));
+                            widget.message.memories.clear();
+                            widget.message.memories.addAll(copy);
+                            SharedPreferencesUtil().modifiedMemoryDetails = null;
+                            setState(() {});
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please check your internet connection and try again'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
                         }
                       },
                       child: Container(
