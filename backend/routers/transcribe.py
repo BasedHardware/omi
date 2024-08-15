@@ -1,15 +1,37 @@
 import asyncio
+import os
 import time
+import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
+from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import process_audio_dg, send_initial_file2
-from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState
+from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
+from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty
 
 router = APIRouter()
+
+
+# @router.post("/v1/transcribe", tags=['v1'])
+# will be used again in Friend V2
+def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
+    upload_id = str(uuid.uuid4())
+    file_path = f"_temp/{upload_id}_{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+
+    aseg = AudioSegment.from_wav(file_path)
+    print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
+
+    if vad_is_empty(file_path):  # TODO: get vad segments
+        os.remove(file_path)
+        return []
+    transcript = transcribe_file_deepgram(file_path, language=language)
+    os.remove(file_path)
+    return transcript
 
 
 # templates = Jinja2Templates(directory="templates")
@@ -29,8 +51,6 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     try:
-        # TODO: what about taking the file here in 16khz and encoding it to opus? would that work? instead of pcm16 issue?
-
         if language == 'en' and codec == 'opus' and include_speech_profile:
             speech_profile = get_user_speech_profile(uid)
             duration = get_user_speech_profile_duration(uid)
