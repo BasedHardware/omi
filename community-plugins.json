@@ -621,8 +621,8 @@
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
-      "webhook_url": "https://<host>/zapier/memories",
-      "setup_completed_url": "https://<host>/setup/zapier",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/zapier/memories",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/zapier",
       "setup_instructions_file_path": "/plugins/instructions/zapier/README.md"
     },
     "deleted": false
