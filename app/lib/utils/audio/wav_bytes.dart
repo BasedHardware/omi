@@ -14,6 +14,7 @@ import 'package:tuple/tuple.dart';
 class WavBytesUtil {
   BleAudioCodec codec;
   List<List<int>> frames = [];
+  List<List<int>> rawPackets = [];
   final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
 
   WavBytesUtil({this.codec = BleAudioCodec.pcm8});
@@ -25,6 +26,7 @@ class WavBytesUtil {
   int lost = 0;
 
   void storeFramePacket(value) {
+    rawPackets.add(value);
     int index = value[0] + (value[1] << 8);
     int internal = value[2];
     List<int> content = value.sublist(3);
@@ -75,7 +77,7 @@ class WavBytesUtil {
 
   void insertAudioBytes(List<List<int>> bytes) => frames.insertAll(0, bytes);
 
-  void clearAudioBytes() => frames.clear();
+  void clearAudioBytes() => {frames.clear(), rawPackets.clear()};
 
   bool hasFrames() => frames.isNotEmpty;
 

@@ -125,6 +125,7 @@ class CapturePageState extends State<CapturePage>
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
+      includeSpeechProfile: true,
       onConnectionSuccess: () {
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
