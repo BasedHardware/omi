@@ -30,6 +30,7 @@ class SpeakerIdPage extends StatefulWidget {
 
 class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin, WebSocketMixin {
   final targetWordsCount = 45;
+  final maxDuration = 90;
 
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   BTDeviceStruct? _device;
@@ -154,7 +155,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     }
 
     String text = segments.map((e) => e.text).join(' ').trim();
-    if (text.split(' ').length < (targetWordsCount / 2)) { // 25 words
+    if (text.split(' ').length < (targetWordsCount / 2)) {
+      // 25 words
       showDialog(
         context: context,
         builder: (c) => getDialog(
@@ -310,18 +312,25 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
         ),
         body: Stack(
           children: [
-            !startedRecording
-                ? const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false)
-                : const Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(16, 32, 16, 0),
-                      child: Text(
-                        'Tell your Friend about you.',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
+            Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  children: [
+                    const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
+                    !startedRecording
+                        ? const SizedBox(height: 0)
+                        : Text(
+                            'Tell your Friend\nabout yourself',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
+                            textAlign: TextAlign.center,
+                          ),
+                  ],
+                ),
+              ),
+            ),
             Align(
               alignment: Alignment.center,
               child: Padding(
@@ -412,7 +421,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
                           initiateWebsocket();
                           // 1.5 minutes seems reasonable
-                          _forceCompletionTimer = Timer(const Duration(seconds: 30), finalize);
+                          _forceCompletionTimer = Timer(Duration(seconds: maxDuration), finalize);
                           setState(() => startedRecording = true);
                         },
                         color: Colors.white,
