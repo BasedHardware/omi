@@ -1,42 +1,18 @@
 import asyncio
-import os
 import time
-import uuid
 
 from fastapi import APIRouter
-from fastapi import UploadFile
-from fastapi.templating import Jinja2Templates
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
-from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import transcribe_file_deepgram, process_audio_dg, send_initial_file2
-from utils.stt.vad import vad_is_empty, VADIterator, model, get_speech_state, SpeechState
+from utils.stt.deepgram_util import process_audio_dg, send_initial_file2
+from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState
 
 router = APIRouter()
 
 
-@router.post("/v1/transcribe", tags=['v1'])
-def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
-    upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
-    aseg = AudioSegment.from_wav(file_path)
-    print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
-
-    if vad_is_empty(file_path):
-        os.remove(file_path)
-        return []
-    transcript = transcribe_file_deepgram(file_path, language=language)
-    os.remove(file_path)
-    return transcript  # result
-
-
-templates = Jinja2Templates(directory="templates")
-
+# templates = Jinja2Templates(directory="templates")
 
 # @router.get("/", response_class=HTMLResponse) // FIXME
 # def get(request: Request):
