@@ -295,6 +295,10 @@ class SharedPreferencesUtil {
 
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
 
+  set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
+
+  bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
+
   set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
 
   bool get calendarEnabled => getBool('calendarEnabled') ?? false;
