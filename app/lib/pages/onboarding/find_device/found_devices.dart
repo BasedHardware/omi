@@ -22,13 +22,16 @@ class FoundDevices extends StatefulWidget {
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+class _FoundDevicesState extends State<FoundDevices> {
   bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
   String deviceId = '';
   String? _connectingToDeviceId;
+
+  // TODO: improve this and find_device page.
+  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
@@ -62,6 +65,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
     await bleConnectDevice(device.id);
     deviceId = device.id;
     deviceName = device.name;
+    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
   }
 
