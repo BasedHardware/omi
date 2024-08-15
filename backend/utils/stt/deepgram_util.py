@@ -62,16 +62,16 @@ def transcribe_file_deepgram(file_path: str, language: str = 'en'):
     return segments
 
 
-async def send_initial_file(file_path, transcript_socket):
-    with open(file_path, "rb") as file:
-        data = file.read()
-    start = time.time()
-    chunk_size = 4096  # Adjust as needed
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i + chunk_size]
-        transcript_socket.send(chunk)
-        await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
-    print('send_initial_file', time.time() - start)
+# async def send_initial_file(file_path, transcript_socket):
+#     with open(file_path, "rb") as file:
+#         data = file.read()
+#     start = time.time()
+#     chunk_size = 4096  # Adjust as needed
+#     for i in range(0, len(data), chunk_size):
+#         chunk = data[i:i + chunk_size]
+#         transcript_socket.send(chunk)
+#         await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
+#     print('send_initial_file', time.time() - start)
 
 
 async def send_initial_file2(data: List[List[int]], transcript_socket):
@@ -82,7 +82,7 @@ async def send_initial_file2(data: List[List[int]], transcript_socket):
         chunk = data[i]
         # print('Uploading', chunk)
         transcript_socket.send(bytes(chunk))
-        await asyncio.sleep(0.0001)
+        await asyncio.sleep(0.00005)  # if it takes too long to transcribe
 
     print('send_initial_file', time.time() - start)
 
