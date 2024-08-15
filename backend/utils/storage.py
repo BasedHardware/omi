@@ -23,17 +23,17 @@ def upload_profile_audio(file_path: str, uid: str):
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def get_speech_profile(uid: str):
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/speech_profile.wav'
-    blob = bucket.blob(path)
-    if not blob.exists():
-        return None
-
-    os.makedirs('_speech_profiles/', exist_ok=True)
-    profile_path = f'_speech_profiles/{uid}.wav'
-    blob.download_to_filename(profile_path)
-    return profile_path
+# def get_speech_profile(uid: str):
+#     bucket = storage_client.bucket(speech_profiles_bucket)
+#     path = f'{uid}/speech_profile.wav'
+#     blob = bucket.blob(path)
+#     if not blob.exists():
+#         return None
+#
+#     os.makedirs('_speech_profiles/', exist_ok=True)
+#     profile_path = f'_speech_profiles/{uid}.wav'
+#     blob.download_to_filename(profile_path)
+#     return profile_path
 
 
 # ***********

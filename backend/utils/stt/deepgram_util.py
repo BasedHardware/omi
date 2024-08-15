@@ -1,10 +1,9 @@
 import asyncio
 import os
-import subprocess
 import threading
 import time
+from typing import List
 
-import pyogg
 import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
@@ -63,30 +62,27 @@ def transcribe_file_deepgram(file_path: str, language: str = 'en'):
     return segments
 
 
-async def send_initial_file(file_path, transcript_socket):
-    with open(file_path, "rb") as file:
-        data = file.read()
-    start = time.time()
-    chunk_size = 4096  # Adjust as needed
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i + chunk_size]
-        transcript_socket.send(chunk)
-        await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
-    print('send_initial_file', time.time() - start)
+# async def send_initial_file(file_path, transcript_socket):
+#     with open(file_path, "rb") as file:
+#         data = file.read()
+#     start = time.time()
+#     chunk_size = 4096  # Adjust as needed
+#     for i in range(0, len(data), chunk_size):
+#         chunk = data[i:i + chunk_size]
+#         transcript_socket.send(chunk)
+#         await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
+#     print('send_initial_file', time.time() - start)
 
 
-async def send_initial_file2(file_path, transcript_socket):
-    subprocess.run(['ffmpeg', '-i', file_path, '-c:a', 'libopus', file_path.replace('.wav', '.opus')], check=True)
-    opus_file = pyogg.OpusFile(file_path.replace('.wav', '.opus'))
-    chunk_size = 4096  # Adjust as needed
+async def send_initial_file2(data: List[List[int]], transcript_socket):
+    print('send_initial_file2')
     start = time.time()
-    print('send_initial_file', len(opus_file.buffer))
     # Reading and sending in chunks
-    for i in range(0, len(opus_file.buffer), chunk_size):
-        opus_chunk = opus_file.buffer[i:i + chunk_size]
-        print(opus_chunk)
-        transcript_socket.send(opus_chunk)
-        await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
+    for i in range(0, len(data)):
+        chunk = data[i]
+        # print('Uploading', chunk)
+        transcript_socket.send(bytes(chunk))
+        await asyncio.sleep(0.00005)  # if it takes too long to transcribe
 
     print('send_initial_file', time.time() - start)
 
@@ -105,11 +101,11 @@ async def process_audio_dg(
     loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
-        print(f"Received message from Deepgram")  # Log when message is received
+        # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
-        print(sentence)
+        # print(sentence)
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False

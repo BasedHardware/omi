@@ -28,7 +28,7 @@ app.include_router(notifications.router)
 app.include_router(firmware.router)
 
 modal_app = App(
-    name='api',
+    name='backend',
     secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
 )
 image = (
@@ -44,12 +44,13 @@ image = (
     memory=(1024, 2048),
     cpu=4,
     allow_concurrent_inputs=5,
-    # timeout=24 * 60 * 60,  # avoid timeout with websocket
+    # timeout=24 * 60 * 60,  # avoid timeout with websocket, but then containers do not die
+    # can decrease memory and cpu size?
     timeout=60 * 10,
 )
 @asgi_app()
-def fastapi_app():
-    print('fastapi_app')
+def api():
+    print('api')
     return app
 
 

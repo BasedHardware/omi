@@ -19,10 +19,11 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(dynamic) onWebsocketConnectionError,
   int sampleRate,
   String codec,
+  bool includeSpeechProfile,
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}';
+  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile';
 
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
@@ -76,6 +77,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
   required void Function(List<TranscriptSegment>) onMessageReceived,
   required BleAudioCodec codec,
   required int sampleRate,
+  required bool includeSpeechProfile,
 }) async {
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
@@ -86,6 +88,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
       onWebsocketConnectionError,
       sampleRate,
       mapCodecToName(codec),
+      includeSpeechProfile,
     );
 
     return channel;
