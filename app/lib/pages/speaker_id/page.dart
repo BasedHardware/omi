@@ -170,7 +170,6 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   }
 
   Future<void> initiateFriendAudioStreaming(BTDeviceStruct btDevice) async {
-    // if (await getAudioCodec(btDevice.id) != BleAudioCodec.opus) return;
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice.id,
       onAudioBytesReceived: (List<int> value) {
@@ -215,12 +214,12 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   Widget build(BuildContext context) {
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
-    String message = 'Keep speaking until we tell you we have enough recording of your voice to continue.';
-    if (wordsCount > 5) {
+    String message = 'Keep speaking until you you get 100%.';
+    if (wordsCount > 10) {
       message = 'Keep going, you are doing great';
     } else if (wordsCount > 25) {
       message = 'Great job, you are almost there';
-    } else if (wordsCount > 50) {
+    } else if (wordsCount > 40) {
       message = 'So close, just a little more';
     }
 
@@ -337,7 +336,28 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 48),
                 child: !startedRecording
                     ? MaterialButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          BleAudioCodec codec = await getAudioCodec(_device!.id);
+                          if (codec != BleAudioCodec.opus) {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () {
+                                  Navigator.pop(context);
+                                  Navigator.pop(context);
+                                },
+                                () {},
+                                'Firmware Update Required',
+                                'Please update your device firmware (on your device settings) to set-up your speech profile.',
+                                okButtonText: 'Try Again',
+                                singleButton: true,
+                              ),
+                              barrierDismissible: false,
+                            );
+                            return;
+                          }
+
                           initiateWebsocket();
                           setState(() => startedRecording = true);
                         },
