@@ -214,15 +214,6 @@ int main(void)
 	{
 		set_led_state();
 
-        //Deep sleep
-        if (is_button_pressed()) {
-            k_sleep(LONG_PRESS_DURATION);
-            if (is_button_pressed()) {
-                LOG_INF("Button long pressed, entering deep sleep...");
-                enter_deep_sleep();
-            }
-        }
-
 		k_msleep(500);
 	}
 
