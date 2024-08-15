@@ -330,7 +330,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             if (previousConnection != isConnected) {
               previousConnection = isConnected;
               if (!isConnected) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+                Future.delayed(Duration.zero, () {
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('No internet connection. Please check your connection.'),
@@ -338,7 +338,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
@@ -347,7 +347,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   );
                 });
               } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                Future.delayed(Duration.zero, () {
+                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('Internet connection is restored.'),
@@ -355,21 +356,22 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
                       ],
+                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                      }),
                     ),
                   );
-                  Future.delayed(const Duration(seconds: 2), () {
-                    ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  });
+
                   if (memories.isEmpty) {
-                    await _initiateMemories();
+                    _initiateMemories();
                   }
                   if (messages.isEmpty) {
-                    await _refreshMessages();
+                    _refreshMessages();
                   }
                 });
               }
