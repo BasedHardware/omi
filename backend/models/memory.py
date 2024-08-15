@@ -157,6 +157,22 @@ class CreateMemory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
 
 
+class WorkflowMemorySource(str, Enum):
+    audio = 'audio_transcript'
+    other = 'other_text'
+
+
+class WorkflowCreateMemory(BaseModel):
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    text: str
+    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    geolocation: Optional[Geolocation] = None
+
+    source: MemorySource = MemorySource.workflow
+    language: Optional[str] = None
+
+
 class CreateMemoryResponse(BaseModel):
     memory: Memory
     messages: List[Message] = []

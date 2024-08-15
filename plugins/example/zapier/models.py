@@ -20,7 +20,7 @@ class ZapierCreateMemory(BaseModel):
 
 class ZapierActionCreateMemory(BaseModel):
     text: str
-    source: WorkflowMemorySource
+    source: WorkflowMemorySource # text_source
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     language: Optional[str] = None

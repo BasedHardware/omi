@@ -160,7 +160,7 @@ def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
 
     memory = WorkflowCreateMemory(
         text=create_memory.text,
-        source=create_memory.source,
+        text_source=create_memory.source,
         started_at=create_memory.started_at,
         finished_at=create_memory.finished_at,
         language=create_memory.language,
