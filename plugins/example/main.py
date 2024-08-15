@@ -14,7 +14,7 @@ app = FastAPI()
 app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
 
 modal_app = App(
-    name='plugins_examples',
+    name='plugins',
     secrets=[Secret.from_dotenv('.env')],
     mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
 )
@@ -32,7 +32,7 @@ modal_app = App(
     allow_concurrent_inputs=10,
 )
 @asgi_app()
-def plugins_app():
+def api():
     return app
 
 
