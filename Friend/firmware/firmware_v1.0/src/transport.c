@@ -18,8 +18,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 
-
-
 //
 // Internal
 //
@@ -44,8 +42,8 @@ static struct gpio_callback button_cb_data;
 struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
 struct gpio_dt_spec d5_pin_input = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
 
-static struct bt_uuid_128 button_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000003,0x0000,0x1000,0x7450,0xBE2E44B06B00));
-static struct bt_uuid_128 button_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00000004,0x0000,0x1000,0x7450,0xBE2E44B06B00));
+static struct bt_uuid_128 button_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7924,0x0000,0x1000,0x7450,0x346EAC492E92));
+static struct bt_uuid_128 button_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7925 ,0x0000,0x1000,0x7450,0x346EAC492E92));
 
 static struct bt_gatt_attr button_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&button_uuid),
@@ -56,7 +54,7 @@ static struct bt_gatt_attr button_service_attr[] = {
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-    printk("Handler\n");
+    LOG_INF("Handler\n");
 
 }
 
@@ -99,9 +97,6 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 
 
 
-//button
-//
-//
 
 
 // Advertisement data
@@ -131,10 +126,12 @@ uint16_t current_package_index = 0;
 static uint32_t current_button_time = 0;
 static uint32_t previous_button_time = 0;
 
-static uint32_t pressed_time = 0;
 const int max_debounce_interval = 700;
 static bool was_pressed = false;
 
+//
+// button
+//
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
@@ -147,9 +144,6 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
             was_pressed = true;
         }
         else {
-            if(!was_pressed) {
-                pressed_time = k_cycle_get_32();  
-            }
             was_pressed = false;
         }
 	}
@@ -240,7 +234,6 @@ void check_button_level(struct k_work *work_item) {
 
     }
 
-
     else if (current_button_state == ONE_PRESS) {
 
         if (state_ == 0) {
@@ -330,8 +323,8 @@ void check_button_level(struct k_work *work_item) {
 
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-     printk("button_data_read_characteristic\n");
-     printk("was_pressed: %d\n", was_pressed);
+     LOG_INF("button_data_read_characteristic\n");
+     LOG_INF("was_pressed: %d\n", was_pressed);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &was_pressed, sizeof(was_pressed));
 
 }
@@ -452,7 +445,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         return;
     }
 
-    printk("bluetooth activated\n");
+    LOG_INF("bluetooth activated\n");
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
@@ -706,42 +699,42 @@ int transport_start()
     LOG_INF("Transport bluetooth initialized");
 
     	if (gpio_is_ready_dt(&d4_pin)) {
-		printk("D4 Pin ready\n");
+		LOG_INF("D4 Pin ready\n");
 	}
     	else {
-		printk("Error setting up D4 Pin\n");
+		LOG_INF("Error setting up D4 Pin\n");
 	}
 
 	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) {
-		printk("Error setting up D4 Pin Voltage\n");
+		LOG_INF("Error setting up D4 Pin Voltage\n");
 	}
 	else {
-		printk("D4 ready to transmit voltage\n");
+		LOG_INF("D4 ready to transmit voltage\n");
 	}
 	if (gpio_is_ready_dt(&d5_pin_input)) {
-		printk("D5 Pin ready\n");
+		LOG_INF("D5 Pin ready\n");
 	}
 	else {
-		printk("D5 Pin not ready\n");
+		LOG_INF("D5 Pin not ready\n");
 	}
 
 	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
 	if (err2 != 0) {
-		printk("Error setting up D5 Pin\n");
+		LOG_INF("Error setting up D5 Pin\n");
 		return 0;
 	}
 	else {
-		printk("D5 ready\n");
+		LOG_INF("D5 ready\n");
 	}
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) {
-		printk("D5 unable to detect button presses\n");
+		LOG_INF("D5 unable to detect button presses\n");
 		return 0;
 	}
 	else {
-		printk("D5 ready to detect button presses\n");
+		LOG_INF("D5 ready to detect button presses\n");
 	}
 
 
