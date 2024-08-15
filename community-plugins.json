@@ -612,10 +612,10 @@
    "author":"Findirfin",
    "description":"Takes notes optimised for classses and lectures",
    "image":"/plugins/logos/class-notes.jpg",
-   "memories":false,
-   "chat":true,
+   "memories":true,
+   "chat":false,
    "capabilities":[
-      "chat"
+      "memories"
    ],
    "memory_prompt":"You will be given a transcript of a class or lecture. Your job is to accurately identify and extract these four key points of information. 1: An outline of the main points and subpoints of the lecture. 2: A list of Important facts and concepts that need to be remembered 3: A list of homework and other assigned tasks to be completed or worked on later 4: Any other important items mentioned that do not fit into the above categories. Do not output anything for them. Label these sections, 'Class Outline', 'Important Facts and Concepts', 'Homework', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading.",
    "deleted":false
