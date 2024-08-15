@@ -32,7 +32,7 @@ os.makedirs('_temp', exist_ok=True)
     secrets=[Secret.from_name('huggingface-token')],
 )
 @web_endpoint(method='POST')
-def vad_endpoint(file: UploadFile):
+def endpoint(file: UploadFile):
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     with open(file_path, 'wb') as f:
