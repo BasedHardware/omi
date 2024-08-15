@@ -48,29 +48,9 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
   _init() async {
     _device = await getConnectedDevice();
-    // TODO: improve the UX of this.
     _device ??= await scanAndConnectDevice(timeout: true);
     if (_device != null) initiateFriendAudioStreaming(_device!);
     _initiateConnectionListener();
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      if (_device == null) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (c) => getDialog(
-            context,
-            () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            () => {},
-            'Device Disconnected',
-            'Please make sure your device is turned on and nearby, and try again.',
-            singleButton: true,
-          ),
-        );
-      }
-    });
     setState(() {});
   }
 
@@ -398,8 +378,28 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                 child: !startedRecording
                     ? MaterialButton(
                         onPressed: () async {
-                          // TODO: if device not connected, here should trigger a dialog to connect it
-                          BleAudioCodec codec = await getAudioCodec(_device!.id);
+                          BleAudioCodec codec;
+                          try {
+                            codec = await getAudioCodec(_device!.id);
+                          } catch (e) {
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (c) => getDialog(
+                                context,
+                                () {
+                                  Navigator.of(context).pop();
+                                  Navigator.of(context).pop();
+                                },
+                                () => {},
+                                'Device Disconnected',
+                                'Please make sure your device is turned on and nearby, and try again.',
+                                singleButton: true,
+                              ),
+                            );
+                            return;
+                          }
+
                           if (codec != BleAudioCodec.opus) {
                             showDialog(
                               context: context,
