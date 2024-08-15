@@ -87,12 +87,12 @@ def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # **********************
 
 
-@router.get('/v3/speech-profile', tags=['v1'])
+@router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': get_user_speech_profile(uid) is not []}
+    return {'has_profile': len(get_user_speech_profile(uid)) > 0}
 
 
-@router.post('/v3/upload-bytes', tags=['v1'])
+@router.post('/v3/upload-bytes', tags=['v3'])
 def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user_uid)):
     if data.duration < 10:
         raise HTTPException(status_code=400, detail="Audio duration is too short")
@@ -104,7 +104,7 @@ def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.post('/v3/upload-audio', tags=['v1'])
+@router.post('/v3/upload-audio', tags=['v3'])
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"
