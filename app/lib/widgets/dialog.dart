@@ -24,7 +24,7 @@ getDialog(
             onPressed: () => onCancel(),
             child: const Text('Cancel', style: TextStyle(color: Colors.white)),
           ),
-          TextButton(onPressed: () => onConfirm(), child: const Text('Confirm', style: TextStyle(color: Colors.white))),
+          TextButton(onPressed: () => onConfirm(), child: Text(okButtonText, style: TextStyle(color: Colors.white))),
         ];
   if (Platform.isIOS) {
     return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
