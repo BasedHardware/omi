@@ -12,12 +12,10 @@ from routers.memories import process_memory, trigger_external_integrations
 router = APIRouter()
 
 
-@router.post('/v1/integrations/workflow/memories', response_model=memory_models.Memory)
-def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], create_memory: integration_models.WorkflowCreateMemory):
+@router.post('/v1/integrations/workflow/memories', response_model=integration_models.EmptyResponse)
+def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], create_memory: memory_models.WorkflowCreateMemory):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
-
-    create_memory.source = memory_models.MemorySource.workflow
 
     # Time
     started_at = create_memory.started_at if create_memory.started_at is not None else datetime.utcnow()
