@@ -21,12 +21,12 @@ from utils.plugins import trigger_external_integrations
 router = APIRouter()
 
 
-def _process_get_memory_structed(memory: Memory, language_code, force_process) -> (Structured, bool):
+def _process_get_memory_structered(memory: Memory, language_code: str, force_process: bool) -> (Structured, bool):
     # From workflow
     if memory.source == MemorySource.workflow:
         if create_memory.source == WorkflowMemorySource.audio:
             structured = get_transcript_structure(
-                create_memory.text, create_memory.started_at, create_memory.language, True)
+                create_memory.text, create_memory.started_at, language_code, True)
             return (structured, False)
 
         if create_memory.source == WorkflowMemorySource.other:
@@ -63,7 +63,6 @@ def process_memory(
             **memory.dict(),
             created_at=datetime.utcnow(),
             deleted=False,
-            xyz=True
         )
         new_photos = memory.photos
     elif isinstance(memory, WorkflowCreateMemory):
@@ -81,7 +80,7 @@ def process_memory(
     # make structured
     structured: Structured
     try:
-        (structured, should_clean_photos) = _process_get_memory_structed(memory, language_code, force_process)
+        (structured, should_clean_photos) = _process_get_memory_structered(memory, language_code, force_process)
         if should_clean_photos:
             memory.photos = []
     except Exception as e:
