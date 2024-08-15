@@ -268,7 +268,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   Widget build(BuildContext context) {
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
-    String message = 'Keep speaking until you you get 100%.';
+    String message = 'Keep speaking until you get 100%.';
     if (wordsCount > 10) {
       message = 'Keep going, you are doing great';
     } else if (wordsCount > 25) {
@@ -398,6 +398,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                 child: !startedRecording
                     ? MaterialButton(
                         onPressed: () async {
+                          // TODO: if device not connected, here should trigger a dialog to connect it
                           BleAudioCodec codec = await getAudioCodec(_device!.id);
                           if (codec != BleAudioCodec.opus) {
                             showDialog(
