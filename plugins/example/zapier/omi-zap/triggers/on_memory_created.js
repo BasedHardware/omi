@@ -14,7 +14,7 @@ module.exports = {
       },
       method: 'DELETE',
       removeMissingValuesFrom: { body: false, params: false },
-      url: 'https://omi-plug-zpqkexos-zapier.thinhcto.com/zapier/trigger/subscribe',
+      url: 'https://based-hardware--plugins-api.modal.run/zapier/trigger/subscribe',
     },
     performSubscribe: {
       body: { target_url: '{{bundle.targetUrl}}' },
@@ -25,7 +25,7 @@ module.exports = {
       method: 'POST',
       params: { uid: '{{bundle.authData.uid}}' },
       removeMissingValuesFrom: { body: false, params: false },
-      url: 'https://omi-plug-zpqkexos-zapier.thinhcto.com/zapier/trigger/subscribe',
+      url: 'https://based-hardware--plugins-api.modal.run/zapier/trigger/subscribe',
     },
     sample: {
       icon: { type: 'emoji', emoji: '🥳' },
