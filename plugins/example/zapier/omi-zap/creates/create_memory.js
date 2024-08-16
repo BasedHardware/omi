@@ -115,7 +115,7 @@ module.exports = {
       body: body,
       method: 'POST',
       removeMissingValuesFrom: { body: true, params: true },
-      url: 'https://omi-plug-zpqkexos-zapier.thinhcto.com/zapier/action/memories',
+      url: 'https://based-hardware--plugins-api.modal.run/zapier/action/memories',
     },
   },
 };
