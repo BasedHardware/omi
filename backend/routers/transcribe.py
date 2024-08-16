@@ -12,7 +12,7 @@ from collections import deque
 import opuslib
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram, convert_pcm8_to_pcm16
+from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram, convert_audio_bytes_to_resampled_bytes
 from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty, is_speech_present
 
 router = APIRouter()
@@ -54,7 +54,7 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     is_speech_active = False
-    speech_timeout = 0.7  # Configurable even better if we can decade from user needs/behaviour
+    speech_timeout = 0.7
     last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -77,7 +77,7 @@ async def _websocket_util(
         await websocket.close()
         return
 
-    threshold = 0.6 # Currently most fitting threshold
+    threshold = 0.7
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
     if codec == 'opus':
@@ -89,15 +89,9 @@ async def _websocket_util(
         databuffer = bytearray(b"")
         
         REALTIME_RESOLUTION = 0.01
-        if codec == 'pcm8':
-            sample_width = 1
-        else:
-            sample_width = 2
-        if sample_width:
-            byte_rate = sample_width * sample_rate * channels
-            chunk_size = int(byte_rate * REALTIME_RESOLUTION)
-        else:
-            chunk_size = 4096 # Arbitrary value
+        sample_width = 2  # pcm here is 16 bit
+        byte_rate = sample_width * sample_rate * channels
+        chunk_size = int(byte_rate * REALTIME_RESOLUTION)
             
         timer_start = time.time()
         speech_state = SpeechState.no_speech
@@ -111,25 +105,19 @@ async def _websocket_util(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 if codec == 'opus':
-                    data = decoder.decode(data, frame_size=320) # 160 if want lower latency
-                    # audio = AudioSegment(data=data, sample_width=sample_width, frame_rate=sample_rate, channels=channels, format='opus')
-                    # samples = torch.tensor(audio.get_array_of_samples()).float() / 32768.0
+                    decoded_opus = decoder.decode(data, frame_size=320)
+                    samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
+                elif codec in ['pcm8', 'pcm16']:  # Both are now 16-bit
                     samples = torch.frombuffer(data, dtype=torch.int16).float() / 32768.0
-                elif codec in ['pcm8', 'pcm16']:
-                    dtype = torch.int8 if codec == 'pcm8' else torch.int16
-                    writeable_data = bytearray(data)
-                    samples = torch.frombuffer(writeable_data, dtype=dtype).float()
-                    samples = samples / (128.0 if codec == 'pcm8' else 32768.0)
                 else:
                     raise ValueError(f"Unsupported codec: {codec}")
                 
                 audio_buffer.extend(samples)
-                # print(len(audio_buffer), window_size_samples * 2) # * 2 because 16bit
-                # len(data) = 160, 8khz 16bit -> 2 bytes per sample, 80 samples, needs 256 samples, which is 256*2 bytes
-                if len(audio_buffer) >= window_size_samples * 2:
+                if len(audio_buffer) >= window_size_samples:
                     tensor_audio = torch.tensor(list(audio_buffer))
-                    if is_speech_present(tensor_audio[len(tensor_audio) - window_size_samples * 2 :], vad_iterator, window_size_samples):
-                        # print('+Detected speech')
+                    if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
+                        if not is_speech_active:
+                            print('+Detected speech')
                         is_speech_active = True
                         last_speech_time = time.time()
                     elif is_speech_active:
@@ -137,15 +125,13 @@ async def _websocket_util(
                             is_speech_active = False
                             # Clear only happens after the speech timeout
                             audio_buffer.clear()
-                            # print('-NO Detected speech')
+                            print('-NO Detected speech')
                             continue
                     else:
                         continue
             
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
-                    if codec == 'pcm8': # DG does not support pcm8 directly
-                        data = convert_pcm8_to_pcm16(data)
                     databuffer.extend(data)
                     if len(databuffer) >= chunk_size:
                         socket1.send(databuffer[:len(databuffer) - len(databuffer) % chunk_size])
