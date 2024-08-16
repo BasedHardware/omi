@@ -16,8 +16,8 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Calendar> calendars = [];
   bool calendarEnabled = false;
 
-  _getCalendars() {
-    CalendarUtil().getCalendars().then((value) {
+  _getCalendars() async {
+    await CalendarUtil().getCalendars().then((value) {
       setState(() => calendars = value);
     });
   }
@@ -170,17 +170,33 @@ class _CalendarPageState extends State<CalendarPage> {
   _onSwitchChanged(s) async {
     // TODO: what if user didn't enable permissions?
     if (s) {
-      _getCalendars();
-      SharedPreferencesUtil().calendarEnabled = s;
+      await _getCalendars();
+      bool hasAccess = await CalendarUtil().hasCalendarAccess();
+      if (calendars.isEmpty && !hasAccess && SharedPreferencesUtil().calendarPermissionAlreadyRequested) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Calendar access was not granted previously. Please enable it in your settings.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+      setState(() {
+        calendarEnabled = hasAccess;
+      });
+
       MixpanelManager().calendarEnabled();
     } else {
-      SharedPreferencesUtil().calendarEnabled = s;
       SharedPreferencesUtil().calendarId = '';
       SharedPreferencesUtil().calendarType = 'auto';
       MixpanelManager().calendarDisabled();
+      setState(() {
+        calendarEnabled = s;
+      });
     }
-    setState(() {
-      calendarEnabled = s;
-    });
+    SharedPreferencesUtil().calendarPermissionAlreadyRequested = await CalendarUtil().calendarPermissionAsked();
+    SharedPreferencesUtil().calendarEnabled = await CalendarUtil().hasCalendarAccess() && s;
   }
 }
