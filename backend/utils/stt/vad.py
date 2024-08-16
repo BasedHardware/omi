@@ -19,11 +19,6 @@ model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_v
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
-class SpeechState(str, Enum):
-    has_speech = 'has_speech'
-    no_speech = 'no_speech'
-
-
 def get_speech_state(data, vad_iterator, window_size_samples=256):
     has_start, has_end = False, False
     for i in range(0, len(data), window_size_samples):
