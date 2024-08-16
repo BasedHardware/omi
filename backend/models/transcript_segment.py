@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel
 
@@ -38,3 +38,7 @@ class TranscriptSegment(BaseModel):
                 if segments[i].start > segments[j].end or segments[i].end > segments[j].start:
                     return False
         return True
+
+
+class ImprovedTranscript(BaseModel):
+    result: List[TranscriptSegment]
