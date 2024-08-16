@@ -198,7 +198,7 @@ class CapturePageState extends State<CapturePage>
       return;
     }
     audioStorage = WavBytesUtil(codec: codec);
-    _bleBytesStream = await btDevice!.getBleAudioBytesListener(
+    _bleBytesStream = await btDevice!.getAudioBytesListener(
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
@@ -217,7 +217,7 @@ class CapturePageState extends State<CapturePage>
 
   Future<void> startOpenGlass() async {
     if (btDevice == null) return;
-    isGlasses = await btDevice!.hasPhotoStreamingCharacteristic();
+    isGlasses = await btDevice!.canPhotoStream();
     if (!isGlasses) return;
     await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();

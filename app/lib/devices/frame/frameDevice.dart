@@ -82,7 +82,7 @@ class FrameDevice extends BtleDevice {
   }
 
   @override
-  Future<StreamSubscription?> getBleAudioBytesListener(
+  Future<StreamSubscription?> getAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
@@ -116,7 +116,7 @@ class FrameDevice extends BtleDevice {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
+  Future<StreamSubscription<List<int>>?> getBatteryLevelListener(
       {void Function(int)? onBatteryLevelChange}) async {
     if (_frame == null) {
       await init();
@@ -159,14 +159,14 @@ class FrameDevice extends BtleDevice {
   }
 
   @override
-  Future<StreamSubscription?> getBleImageBytesListener(
+  Future<StreamSubscription?> getImageBytesListener(
       {required void Function(List<int> p1) onImageBytesReceived}) {
     // TODO: implement getBleImageBytesListener
     throw UnimplementedError();
   }
 
   @override
-  Future<bool> hasPhotoStreamingCharacteristic() {
+  Future<bool> canPhotoStream() {
     return Future.value(false);
   }
 

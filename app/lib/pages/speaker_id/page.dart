@@ -204,7 +204,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   }
 
   Future<void> initiateFriendAudioStreaming(Device btDevice) async {
-    _bleBytesStream = await btDevice.getBleAudioBytesListener(
+    _bleBytesStream = await btDevice.getAudioBytesListener(
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage.storeFramePacket(value);

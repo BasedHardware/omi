@@ -18,7 +18,7 @@ mixin OpenGlassMixin {
     Function(List<Tuple2<String, String>>) onPhotosUpdated,
     Function(bool) setHasTranscripts,
   ) async {
-    _bleBytesStream = await device.getBleImageBytesListener(
+    _bleBytesStream = await device.getImageBytesListener(
       onImageBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
         Uint8List data = Uint8List.fromList(value);
@@ -40,7 +40,7 @@ mixin OpenGlassMixin {
   }
 
   Future<bool> isGlassesDevice(Device device) async {
-    return await device.hasPhotoStreamingCharacteristic();
+    return await device.canPhotoStream();
   }
 
   void disposeOpenGlass() {

@@ -298,7 +298,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await _device!.getBleBatteryLevelListener(
+    _bleBatteryLevelListener = await _device!.getBatteryLevelListener(
       onBatteryLevelChange: (int value) {
         setState(() {
           batteryLevel = value;

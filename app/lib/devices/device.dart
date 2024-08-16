@@ -61,11 +61,11 @@ abstract class Device {
 
   Future<int> retrieveBatteryLevel();
 
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({
+  Future<StreamSubscription<List<int>>?> getBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
   });
 
-  Future<StreamSubscription?> getBleAudioBytesListener({
+  Future<StreamSubscription?> getAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   });
 
@@ -75,9 +75,9 @@ abstract class Device {
 
   Future cameraStopPhotoController();
 
-  Future<bool> hasPhotoStreamingCharacteristic();
+  Future<bool> canPhotoStream();
 
-  Future<StreamSubscription?> getBleImageBytesListener({
+  Future<StreamSubscription?> getImageBytesListener({
     required void Function(List<int>) onImageBytesReceived,
   });
 }

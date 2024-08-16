@@ -210,7 +210,7 @@ class FriendDevice extends BtleDevice {
   }
 
   @override
-  Future<StreamSubscription?> getBleAudioBytesListener(
+  Future<StreamSubscription?> getAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
     audioDataStreamCharacteristic = await ensureCharacteristicFilled(
         audioDataStreamCharacteristic, audioDataStreamCharacteristicUuid);
@@ -243,7 +243,7 @@ class FriendDevice extends BtleDevice {
 
 
   @override
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
+  Future<StreamSubscription<List<int>>?> getBatteryLevelListener(
       {void Function(int)? onBatteryLevelChange}) async {
     batteryLevelCharacteristic = await ensureCharacteristicFilled(
         batteryLevelCharacteristic, batteryLevelCharacteristicUuid);
@@ -271,7 +271,7 @@ class FriendDevice extends BtleDevice {
   }
 
   @override
-  Future<StreamSubscription?> getBleImageBytesListener(
+  Future<StreamSubscription?> getImageBytesListener(
       {required void Function(List<int>) onImageBytesReceived}) async {
     imageDataStreamCharacteristic = await ensureCharacteristicFilled(
         imageDataStreamCharacteristic, imageDataStreamCharacteristicUuid);
@@ -301,7 +301,7 @@ class FriendDevice extends BtleDevice {
   }
 
   @override
-  Future<bool> hasPhotoStreamingCharacteristic() async {
+  Future<bool> canPhotoStream() async {
     imageDataStreamCharacteristic = await ensureCharacteristicFilled(
         imageDataStreamCharacteristic, imageDataStreamCharacteristicUuid);
 
