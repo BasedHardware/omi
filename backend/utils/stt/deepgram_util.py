@@ -178,11 +178,3 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         return dg_connection
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
-
-def convert_pcm8_to_pcm16(data):
-    """
-    Convert 8-bit PCM to 16-bit PCM. Because Deepgram only supports 16-bit PCM.
-    """
-    audio_as_np_int8 = np.frombuffer(data, dtype=np.uint8)
-    audio_as_np_int16 = (audio_as_np_int8.astype(np.int16) - 128) * 256
-    return audio_as_np_int16.tobytes()
