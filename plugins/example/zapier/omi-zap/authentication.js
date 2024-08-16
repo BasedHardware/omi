@@ -3,7 +3,7 @@ module.exports = {
   test: {
     headers: { 'X-UID': '{{bundle.authData.uid}}' },
     removeMissingValuesFrom: { body: false, params: false },
-    url: ' https://omi-plug-zpqkexos-zapier.thinhcto.com/zapier/me',
+    url: 'https://based-hardware--plugins-api.modal.run/zapier/me',
   },
   fields: [
     {
