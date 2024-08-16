@@ -8,26 +8,25 @@ import database.memories as memories_db
 from database.vector import upsert_vector
 from models.memory import *
 from models.plugin import Plugin
-from utils.llm import summarize_open_glass, discard_memory, get_transcript_structure, generate_embedding, \
+from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result
 from utils.plugins import get_plugins_data
-from utils.stt.fal import fal_whisperx
 
 
 def _get_structured(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
 ) -> Structured:
     transcript = memory.get_transcript()
-    has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
+    # has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
 
     try:
         if memory.photos:
             structured: Structured = summarize_open_glass(memory.photos)
         else:
-            if has_audio and not discard_memory(transcript):
-                # TODO: test a 1h or 2h recording ~ should this be async ~~ also, how long does it take on frontend to upload that size?
-                segments = fal_whisperx(memory.audio_base64_url)
-                memory.transcript_segments = segments
+            # if has_audio and not discard_memory(transcript):
+            #     # TODO: test a 1h or 2h recording ~ should this be async ~~ also, how long does it take on frontend to upload that size?
+            #     segments = fal_whisperx(memory.audio_base64_url)
+            #     memory.transcript_segments = segments
 
             structured: Structured = get_transcript_structure(
                 transcript, memory.started_at, language_code, force_process
@@ -62,30 +61,32 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
+def _trigger_plugins(uid: str, transcript: str, memory: Memory):
+    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
+    threads = []
+
+    def execute_plugin(plugin):
+        if result := get_plugin_result(transcript, plugin).strip():
+            memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+
+    for plugin in filtered_plugins:
+        threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+
+
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
-    transcript = memory.get_transcript()
     structured: Structured = _get_structured(uid, language_code, memory, force_process)
+    transcript = memory.get_transcript()
     memory = _get_memory_obj(uid, structured, memory, transcript)
 
     discarded = structured.title == ''
     if not discarded:
-        structured_str = str(structured)
-        vector = generate_embedding(structured_str)
+        vector = generate_embedding(str(structured))
         upsert_vector(uid, memory, vector)
-
-        plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-        filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
-        threads = []
-
-        def execute_plugin(plugin):
-            if result := get_plugin_result(transcript, plugin).strip():
-                memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
-
-        for plugin in filtered_plugins:
-            threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
-
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        _trigger_plugins(uid, transcript, memory)
 
     memories_db.upsert_memory(uid, memory.dict())
     print('Memory processed', memory.id)

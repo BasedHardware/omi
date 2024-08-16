@@ -10,15 +10,12 @@ from database.vector import delete_vector, upsert_vectors
 from models.memory import *
 from models.transcript_segment import TranscriptSegment
 from utils import auth
-from utils.create_memory import process_memory
+from utils.process_memory import process_memory
 from utils.llm import generate_embedding
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
-
-
-# TODO: Refactor
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -33,7 +30,7 @@ def create_memory(
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = create_memory.language
     else:
         create_memory.language = language_code
@@ -54,7 +51,7 @@ def reprocess_memory(
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = memory.language or 'en'
 
     return process_memory(uid, language_code, memory, force_process=True)
