@@ -83,7 +83,7 @@ def _process_memory(
     return memory
 
 
-@router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
+@router.post("/v1/memories", response_model=List[TranscriptSegment], tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
@@ -99,6 +99,8 @@ def create_memory(
         language_code = create_memory.language
     else:
         create_memory.language = language_code
+
+    # return improve_transcript_prompt(create_memory.transcript_segments)
 
     memory = _process_memory(uid, language_code, create_memory)
     if not trigger_integrations:

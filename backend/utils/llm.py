@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 from typing import List, Tuple, Optional
@@ -20,6 +21,7 @@ from pydantic import BaseModel, Field
 from models.chat import Message, MessageSender
 from models.memory import Structured, MemoryPhoto
 from models.plugin import Plugin
+from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
 llm = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -32,6 +34,28 @@ llm_with_parser = llm.with_structured_output(Structured)
 
 
 # TODO: include caching layer, redis
+
+def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
+    segments_str = []
+    for segment in segments:
+        data = segment.dict()
+        del data['speaker_id']
+        segments_str.append(data)
+
+    prompt = f'''You are a helpful assistant for correcting transcriptions of conversations.
+    You will be given a list of conversation segments, each segment contains the speaker id, the text, start (seconds)\
+    , end (seconds), and is_user which is a special speaker type.
+    
+    The transcription and speaker diarization is very poor and contains many errors, \
+    your task is to improve the transcript by improving the separation of speakers, and \
+    to correct the errors in the transcription and provide a more accurate and coherent version of the conversation.
+    
+    Transcript:
+    {json.dumps(segments_str, indent=2)}
+    '''
+    with_parser = llm.with_structured_output(ImprovedTranscript)
+    response: ImprovedTranscript = with_parser.invoke(prompt)
+    return response.result
 
 
 def get_transcript_structure(transcript: str, started_at: datetime, language_code: str,
