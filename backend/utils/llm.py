@@ -86,6 +86,7 @@ def discard_memory(transcript: str) -> bool:
     
     {format_instructions}'''.replace('    ', '').strip()
     ])
+    print(prompt)
     chain = prompt | llm | parser
     try:
         response = chain.invoke({
