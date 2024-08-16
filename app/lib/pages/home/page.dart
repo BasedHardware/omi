@@ -74,15 +74,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
     if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
     return await processTranscriptContent(
-      memory.transcriptSegments,
-      retrievedFromCache: true,
+      segments: memory.transcriptSegments,
       sendMessageToChat: null,
       startedAt: memory.startedAt,
       finishedAt: memory.finishedAt,
       geolocation: memory.geolocation,
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
-      language: memory.language,
+      language: memory.language ?? 'en',
     );
   }
 

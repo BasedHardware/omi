@@ -262,7 +262,7 @@ class CapturePageState extends State<CapturePage>
     }
 
     ServerMemory? memory = await processTranscriptContent(
-      segments,
+      segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocation,
@@ -270,6 +270,7 @@ class CapturePageState extends State<CapturePage>
       sendMessageToChat: sendMessageToChat,
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
+      audioFile: file,
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
@@ -326,8 +327,7 @@ class CapturePageState extends State<CapturePage>
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
-      segments,
-      retrievedFromCache: true,
+      segments: segments,
       sendMessageToChat: null,
       triggerIntegrations: false,
       language: SharedPreferencesUtil().recordingsLanguage,
