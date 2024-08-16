@@ -43,7 +43,9 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
             'language': 'en',
             'chunk_level': 'segment',
             "num_speakers": None,
-            'version': '3'
+            'version': '3',
+            'batch_size': 64,
+            # 'prompt': 'Low quality audio recording',
         },
     )
 
@@ -53,12 +55,21 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
         chunk['start'] = chunk['timestamp'][0]
         chunk['end'] = chunk['timestamp'][1]
         chunk['text'] = chunk['text'].strip()
+        chunk['is_user'] = False
         del chunk['timestamp']
-        print(chunk)
-    # TODO: combine segments here
-    # TODO: trim starting space?
-    # TODO: test other languages
 
-    # TODO: include pipeline post processing, so that is_user get's matched with the correct speaker
-    # TODO: eventually do
-    return chunks
+    cleaned = []
+    # join segments with same speaker, and less than 30 seconds apart
+    for chunk in chunks:
+        if cleaned and chunk['speaker'] == cleaned[-1]['speaker'] and chunk['start'] - cleaned[-1]['end'] < 30:
+            cleaned[-1]['end'] = chunk['end']
+            cleaned[-1]['text'] += ' ' + chunk['text']
+        else:
+            cleaned.append(chunk)
+
+    # TODO: Include pipeline post processing, so that is_user get's matched with the correct speaker
+    # TODO: Do punctuation correction with LLM
+
+    # TODO: test other languages
+    # TODO: eventually do speaker embedding matching
+    return cleaned

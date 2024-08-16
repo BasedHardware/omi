@@ -72,7 +72,10 @@ Transcript segments:
     return response.result
 
 
-def determine_memory_discard(transcript: str) -> bool:
+def discard_memory(transcript: str) -> bool:
+    if len(transcript.split(' ')) > 100:
+        return False
+
     parser = BooleanOutputParser()
     prompt = ChatPromptTemplate.from_messages([
         '''
@@ -84,11 +87,15 @@ def determine_memory_discard(transcript: str) -> bool:
     {format_instructions}'''.replace('    ', '').strip()
     ])
     chain = prompt | llm | parser
-    response = chain.invoke({
-        'transcript': transcript.strip(),
-        'format_instructions': parser.get_format_instructions(),
-    })
-    return response
+    try:
+        response = chain.invoke({
+            'transcript': transcript.strip(),
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return False
 
 
 def get_transcript_structure(

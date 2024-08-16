@@ -2,91 +2,23 @@ import hashlib
 import random
 import threading
 import uuid
-from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from database.vector import upsert_vector, delete_vector, upsert_vectors
+from database.vector import delete_vector, upsert_vectors
 from models.memory import *
-from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
-from routers.plugins import get_plugins_data
 from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
+from utils.create_memory import process_memory
+from utils.llm import generate_embedding
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
-from utils.stt.fal import fal_whisperx
 
 router = APIRouter()
 
 
-def _process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
-):
-    transcript = memory.get_transcript()
-    has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
-
-    photos = []
-    try:
-        if memory.photos:
-            structured: Structured = summarize_open_glass(memory.photos)
-            photos = memory.photos
-            memory.photos = []  # Clear photos to avoid saving them in the memory
-        else:
-            if has_audio:
-                print(memory.audio_base64_url)
-                segments = fal_whisperx(memory.audio_base64_url)
-
-            structured: Structured = get_transcript_structure(
-                transcript, memory.started_at, language_code, force_process
-            )
-    except Exception as e:
-        print(e)
-        if retries == 2:
-            raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
-        return _process_memory(uid, language_code, memory, force_process, retries + 1)
-
-    discarded = structured.title == ''
-
-    if isinstance(memory, CreateMemory):
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            uid=uid,
-            structured=structured,
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            transcript=transcript,
-            discarded=discarded,
-            deleted=False,
-        )
-        if photos:
-            memories_db.store_memory_photos(uid, memory.id, photos)
-    else:
-        memory.structured = structured
-        memory.discarded = discarded
-
-    if not discarded:
-        structured_str = str(structured)
-        vector = generate_embedding(structured_str)
-        upsert_vector(uid, memory, vector)
-
-        plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-        filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
-        threads = []
-
-        def execute_plugin(plugin):
-            if result := get_plugin_result(transcript, plugin).strip():
-                memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
-
-        for plugin in filtered_plugins:
-            threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
-
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-
-    memories_db.upsert_memory(uid, memory.dict())
-    return memory
+# TODO: Refactor
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -106,7 +38,7 @@ def create_memory(
     else:
         create_memory.language = language_code
 
-    memory = _process_memory(uid, language_code, create_memory)
+    memory = process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
@@ -125,7 +57,7 @@ def reprocess_memory(
     if not language_code:  # not breaking change
         language_code = memory.language or 'en'
 
-    return _process_memory(uid, language_code, memory, force_process=True)
+    return process_memory(uid, language_code, memory, force_process=True)
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
