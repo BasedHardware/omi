@@ -12,7 +12,7 @@ from collections import deque
 import opuslib
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram, convert_audio_bytes_to_resampled_bytes
+from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
 from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty, is_speech_present
 
 router = APIRouter()
@@ -54,7 +54,7 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     is_speech_active = False
-    speech_timeout = 0.7
+    speech_timeout = 0.7 # Good for now but better dynamically adjust it by user behaviour
     last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -77,7 +77,7 @@ async def _websocket_util(
         await websocket.close()
         return
 
-    threshold = 0.7
+    threshold = 0.6
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
     if codec == 'opus':
