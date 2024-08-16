@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TranscriptSegment(BaseModel):
@@ -40,5 +40,11 @@ class TranscriptSegment(BaseModel):
         return True
 
 
+class ImprovedTranscriptSegment(BaseModel):
+    speaker_id: int = Field(..., description='The correctly assigned speaker id')
+    text: str = Field(..., description='The corrected text of the segment')
+    # seconds: List[float] = Field(..., description='The start and end time of the segment')
+
+
 class ImprovedTranscript(BaseModel):
-    result: List[TranscriptSegment]
+    result: List[ImprovedTranscriptSegment]

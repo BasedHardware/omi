@@ -35,24 +35,37 @@ llm_with_parser = llm.with_structured_output(Structured)
 
 # TODO: include caching layer, redis
 
-def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
-    segments_str = []
-    for segment in segments:
-        data = segment.dict()
-        del data['speaker_id']
-        segments_str.append(data)
 
-    prompt = f'''You are a helpful assistant for correcting transcriptions of conversations.
-    You will be given a list of conversation segments, each segment contains the speaker id, the text, start (seconds)\
-    , end (seconds), and is_user which is a special speaker type.
-    
-    The transcription and speaker diarization is very poor and contains many errors, \
-    your task is to improve the transcript by improving the separation of speakers, and \
-    to correct the errors in the transcription and provide a more accurate and coherent version of the conversation.
-    
-    Transcript:
-    {json.dumps(segments_str, indent=2)}
-    '''
+def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
+    cleaned = []
+    has_user = any([item.is_user for item in segments])
+    for item in segments:
+        speaker_id = item.speaker_id
+        if has_user:
+            speaker_id = item.speaker_id + 1 if not item.is_user else 0
+        cleaned.append({'speaker_id': speaker_id, 'text': item.text})
+
+    prompt = f'''
+You are a helpful assistant for correcting transcriptions of recordings. You will be given a list of voice segments, each segment contains the fields (speaker id, text, and seconds [start, end])
+
+The transcription has a Word Error Rate of about 15% in english, in other languages could be up to 25%, and it is specially bad at speaker diarization.
+
+Your task is to improve the transcript by taking the following steps:
+
+1. Make the conversation coherent, if someone reads it, it should be clear what the conversation is about, remember the estimate percentage of WER, this could include missing words, incorrectly transcribed words, missing connectors, punctuation signs, etc.
+
+2. The speakers ids are most likely inaccurate, make sure to assign the correct speaker id to each segment, by understanding the whole conversation. For example, 
+- The transcript could have 4 different speakers, but by analyzing the overall context, one can discover that it was only 2, and the speaker identification, took incorrectly multiple people.
+- The transcript could have 1 single speaker, or 2, but in reality was 3.
+- The speaker id might be assigned incorrectly, a conversation could have speaker 0 said "Hi, how are you", and then also speaker 0 said "I'm doing great, thanks for asking" which of course would be incorrect.
+
+Considerations:
+- Return a list of segments same size as the input.
+- Do not change the order of the segments.
+
+Transcript segments:
+{json.dumps(cleaned, indent=2)}'''
+
     with_parser = llm.with_structured_output(ImprovedTranscript)
     response: ImprovedTranscript = with_parser.invoke(prompt)
     return response.result
