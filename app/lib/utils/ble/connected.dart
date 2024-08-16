@@ -3,17 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
+import 'package:friend_private/devices/deviceType.dart';
 
-Future<BTDeviceStruct?> getConnectedDevice() async {
+Future<Device?> getConnectedDevice() async {
   var deviceId = SharedPreferencesUtil().deviceId;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      return BTDeviceStruct(
-        id: device.remoteId.str,
-        name: device.platformName,
-        rssi: await device.readRssi(),
-      );
+      return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());
     }
   }
   debugPrint('getConnectedDevice: device not found');
@@ -23,7 +20,7 @@ Future<BTDeviceStruct?> getConnectedDevice() async {
 StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener({
   required String deviceId,
   required Function onDisconnected,
-  required Function(BTDeviceStruct) onConnected,
+  required Function(Device) onConnected,
 }) {
   return FlutterBluePlus.events.onConnectionStateChanged.listen((event) async {
     debugPrint('onConnectionStateChanged: ${event.device.remoteId.str} ${event.connectionState}');
@@ -32,12 +29,7 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener({
         onDisconnected();
       } else if (event.connectionState == BluetoothConnectionState.connected) {
         print('Connected to ${event.device.platformName}');
-        onConnected(BTDeviceStruct(
-          id: event.device.remoteId.str,
-          name: event.device.platformName,
-          rssi: await event.device.readRssi(),
-          // TODO: add firmware version
-        ));
+        onConnected(AnyDeviceType().createDeviceFromScan(event.device.platformName, event.device.remoteId.str, await event.device.readRssi()));
       }
     }
   });

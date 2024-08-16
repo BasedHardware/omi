@@ -2,20 +2,17 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
-import 'device.dart';
 import 'support.dart';
 
 class DeviceSettings extends StatelessWidget {
-  final DeviceInfo? deviceInfo;
-  final BTDeviceStruct? device;
+  final Device? device;
   final bool isDeviceConnected;
-  const DeviceSettings({super.key, this.deviceInfo, this.device, this.isDeviceConnected = false});
+  const DeviceSettings({super.key, this.device, this.isDeviceConnected = false});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +29,7 @@ class DeviceSettings extends StatelessWidget {
             Stack(
               children: [
                 Column(
-                  children: deviceSettingsWidgets(deviceInfo, device, context),
+                  children: deviceSettingsWidgets(device, context),
                 ),
                 if (!isDeviceConnected)
                   ClipRRect(
@@ -105,13 +102,14 @@ class DeviceSettings extends StatelessWidget {
                 ),
                 child: TextButton(
                   onPressed: () {
-                    if (device != null) bleDisconnectDevice(device!);
+                    if (device != null) device?.disconnectDevice();
                     SharedPreferencesUtil().deviceId = '';
                     SharedPreferencesUtil().deviceName = '';
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Your Friend is ${device == null ? "unpaired" : "disconnected"}  😔'),
+                      content: Text(
+                          'Your ${device?.name} is ${device == null ? "unpaired" : "disconnected"}  😔'),
                     ));
                     MixpanelManager().disconnectFriendClicked();
                   },
@@ -127,7 +125,7 @@ class DeviceSettings extends StatelessWidget {
   }
 }
 
-List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(Device? device, BuildContext context) {
   return [
     ListTile(
       title: const Text('Device Name'),
@@ -143,7 +141,6 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
           context,
           MaterialPageRoute(
             builder: (context) => FirmwareUpdate(
-              deviceInfo: deviceInfo!,
               device: device,
             ),
           ),
@@ -151,21 +148,21 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
       },
       child: ListTile(
         title: const Text('Firmware Update'),
-        subtitle: Text(deviceInfo?.firmwareRevision ?? '1.0.2'),
+        subtitle: Text(device?.firmwareRevision ?? '1.0.2'),
         trailing: const Icon(Icons.arrow_forward_ios),
       ),
     ),
     ListTile(
       title: const Text('Hardware Revision'),
-      subtitle: Text(deviceInfo?.hardwareRevision ?? 'XIAO'),
+      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(deviceInfo?.modelNumber ?? 'Friend'),
+      subtitle: Text(device?.modelNumber ?? 'Friend'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),
-      subtitle: Text(deviceInfo?.manufacturerName ?? 'Based Hardware'),
+      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
     ),
   ];
 }

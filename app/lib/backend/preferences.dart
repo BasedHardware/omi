@@ -35,9 +35,9 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName') ?? '';
 
-  set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
+  set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', value.value);
 
-  BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
+  BleAudioCodec get deviceCodec => BleAudioCodec.fromString(getString('deviceCodec') ?? '');
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 

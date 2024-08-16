@@ -6,10 +6,10 @@ import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -33,7 +33,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   final maxDuration = 90;
 
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
-  BTDeviceStruct? _device;
+  Device? _device;
 
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
@@ -223,9 +223,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     );
   }
 
-  Future<void> initiateFriendAudioStreaming(BTDeviceStruct btDevice) async {
-    _bleBytesStream = await getBleAudioBytesListener(
-      btDevice.id,
+  Future<void> initiateFriendAudioStreaming(Device btDevice) async {
+    _bleBytesStream = await btDevice.getBleAudioBytesListener(
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage.storeFramePacket(value);
@@ -399,7 +398,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                     ? MaterialButton(
                         onPressed: () async {
                           // TODO: if device not connected, here should trigger a dialog to connect it
-                          BleAudioCodec codec = await getAudioCodec(_device!.id);
+                          BleAudioCodec codec = await _device!.getAudioCodec();
                           if (codec != BleAudioCodec.opus) {
                             showDialog(
                               context: context,

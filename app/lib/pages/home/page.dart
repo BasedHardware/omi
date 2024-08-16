@@ -12,10 +12,10 @@ import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -28,7 +28,6 @@ import 'package:friend_private/scripts.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
@@ -64,7 +63,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
   int batteryLevel = -1;
-  BTDeviceStruct? _device;
+  Device? _device;
 
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
@@ -282,7 +281,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
   }
 
-  _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
+  _onConnected(Device? connectedDevice, {bool initiateConnectionListener = true}) {
     debugPrint('_onConnected: $connectedDevice');
     if (connectedDevice == null) return;
     _disconnectNotificationTimer?.cancel();
@@ -299,8 +298,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(
-      _device!.id,
+    _bleBatteryLevelListener = await _device!.getBleBatteryLevelListener(
       onBatteryLevelChange: (int value) {
         setState(() {
           batteryLevel = value;

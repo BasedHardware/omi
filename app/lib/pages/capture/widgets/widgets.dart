@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -22,7 +22,7 @@ import 'package:url_launcher/url_launcher.dart';
 getConnectionStateWidgets(
   BuildContext context,
   bool hasTranscripts,
-  BTDeviceStruct? device,
+  Device? device,
   WebsocketConnectionStatus wsConnectionState,
   InternetStatus? internetStatus,
 ) {
@@ -94,7 +94,7 @@ getConnectionStateWidgets(
                 textAlign: TextAlign.center,
               ),
               Text(
-                '${device.name} (${device.getShortId()})',
+                '${device.name} (${device.shortId})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16.0,
@@ -263,7 +263,7 @@ getTranscriptWidget(
   bool memoryCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
+  Device? btDevice,
 ) {
   if (memoryCreating) {
     return const Padding(

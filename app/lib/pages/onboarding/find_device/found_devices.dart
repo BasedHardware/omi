@@ -3,13 +3,11 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct> deviceList;
+  final List<Device> deviceList;
   final VoidCallback goNext;
 
   const FoundDevices({
@@ -33,9 +31,9 @@ class _FoundDevicesState extends State<FoundDevices> {
   // TODO: improve this and find_device page.
   // TODO: include speech profile, once it's well tested, in a few days, rn current version works
 
-  Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
+  Future<void> setBatteryPercentage(Device device) async {
     try {
-      var battery = await retrieveBatteryLevel(btDevice.id);
+      var battery = await device.retrieveBatteryLevel();
       setState(() {
         batteryPercentage = battery;
         _isConnected = true;
@@ -43,8 +41,8 @@ class _FoundDevicesState extends State<FoundDevices> {
         _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().deviceId = btDevice.id;
-      SharedPreferencesUtil().deviceName = btDevice.name;
+      SharedPreferencesUtil().deviceId = device.id;
+      SharedPreferencesUtil().deviceName = device.name;
       widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
@@ -56,16 +54,16 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   // Method to handle taps on devices
-  Future<void> handleTap(BTDeviceStruct device) async {
+  Future<void> handleTap(Device device) async {
     if (_isClicked) return; // if any item is clicked, don't do anything
     setState(() {
       _isClicked = true; // Prevent further clicks
       _connectingToDeviceId = device.id; // Mark this device as being connected to
     });
-    await bleConnectDevice(device.id);
+    await device.connectDevice();
     deviceId = device.id;
     deviceName = device.name;
-    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
+    device.getAudioCodec().then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
   }
 
@@ -98,7 +96,7 @@ class _FoundDevicesState extends State<FoundDevices> {
         if (!_isConnected) ..._devicesList(),
         if (_isConnected)
           Text(
-            '$deviceName (${BTDeviceStruct.shortId(deviceId)})',
+            '$deviceName (${Device.getShortId(deviceId)})',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w500,
@@ -156,7 +154,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                         Align(
                           alignment: Alignment.center,
                           child: Text(
-                            '${device.name} (${device.getShortId()})',
+                            '${device.name} (${device.shortId})',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,

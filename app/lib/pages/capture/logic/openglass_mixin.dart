@@ -4,9 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/openai.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:tuple/tuple.dart';
 
 mixin OpenGlassMixin {
@@ -15,12 +14,11 @@ mixin OpenGlassMixin {
   StreamSubscription? _bleBytesStream;
 
   Future<void> openGlassProcessing(
-    BTDeviceStruct device,
+    Device device,
     Function(List<Tuple2<String, String>>) onPhotosUpdated,
     Function(bool) setHasTranscripts,
   ) async {
-    _bleBytesStream = await getBleImageBytesListener(
-      device.id,
+    _bleBytesStream = await device.getBleImageBytesListener(
       onImageBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
         Uint8List data = Uint8List.fromList(value);
@@ -37,12 +35,12 @@ mixin OpenGlassMixin {
         }
       },
     );
-    await cameraStopPhotoController(device.id);
-    await cameraStartPhotoController(device.id);
+    await device.cameraStopPhotoController();
+    await device.cameraStartPhotoController();
   }
 
-  Future<bool> isGlassesDevice(String deviceId) async {
-    return await hasPhotoStreamingCharacteristic(deviceId);
+  Future<bool> isGlassesDevice(Device device) async {
+    return await device.hasPhotoStreamingCharacteristic();
   }
 
   void disposeOpenGlass() {

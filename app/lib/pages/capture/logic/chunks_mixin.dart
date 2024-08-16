@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/transcribe.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:tuple/tuple.dart';
@@ -80,7 +80,7 @@ import 'package:tuple/tuple.dart';
 
 mixin AudioChunksMixin {
   Future<StreamSubscription?> initiateChunksProcessing(
-    String deviceId,
+    Device device,
     BleAudioCodec deviceCodec,
     WavBytesUtil? audioStorage,
     Function(List<TranscriptSegment>, List<List<int>>) onNewSegments,
@@ -93,8 +93,7 @@ mixin AudioChunksMixin {
     // }
 
     WavBytesUtil toProcessBytes2 = WavBytesUtil(codec: deviceCodec);
-    return await getBleAudioBytesListener(
-      deviceId,
+    return await device.getBleAudioBytesListener(
       onAudioBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
 

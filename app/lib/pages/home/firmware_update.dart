@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/home/device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FirmwareUpdate extends StatefulWidget {
-  final DeviceInfo deviceInfo;
-  final BTDeviceStruct? device;
-  const FirmwareUpdate({super.key, required this.deviceInfo, this.device});
+  final Device? device;
+  const FirmwareUpdate({super.key, required this.device});
 
   @override
   State<FirmwareUpdate> createState() => _FirmwareUpdateState();
@@ -28,7 +26,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       });
       await getLatestVersion(deviceName: widget.device!.name);
       var (a, b) = await shouldUpdateFirmware(
-          currentFirmware: widget.deviceInfo.firmwareRevision, deviceName: widget.device!.name);
+          currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
       setState(() {
         shouldUpdate = b;
         updateMessage = a;
@@ -127,7 +125,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('Current Firmware: ${widget.deviceInfo.firmwareRevision}'),
+                                Text(
+                                    'Current Firmware: ${widget.device!.firmwareRevision ?? 'Unknown'}'),
                                 Text('Latest Firmware: ${latestFirmwareDetails['version']}'),
                                 const SizedBox(height: 10),
                                 Text(

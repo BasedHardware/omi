@@ -87,7 +87,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
       onWebsocketConnectionClosed,
       onWebsocketConnectionError,
       sampleRate,
-      mapCodecToName(codec),
+      codec.value,
       includeSpeechProfile,
     );
 

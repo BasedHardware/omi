@@ -7,11 +7,10 @@
 // import 'package:friend_private/backend/schema/bt_device.dart';
 // import 'package:friend_private/backend/schema/sample.dart';
 // import 'package:friend_private/utils/audio/wav_bytes.dart';
-// import 'package:friend_private/utils/ble/communication.dart';
 // import 'package:tuple/tuple.dart';
 //
 // class RecordSampleTab extends StatefulWidget {
-//   final BTDeviceStruct? btDevice;
+//   final Device? btDevice;
 //   final SpeakerIdSample sample;
 //   final int sampleIdx;
 //   final int totalSamples;

@@ -1,28 +1,20 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/utils/ble/find.dart';
+import 'package:friend_private/devices/device.dart';
+import 'package:friend_private/devices/deviceType.dart';
 
-Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
-  print('scanAndConnectDevice');
+Future<Device?> scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
   var deviceId = SharedPreferencesUtil().deviceId;
-  print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      return BTDeviceStruct(
-        id: device.remoteId.str,
-        name: device.platformName,
-        rssi: await device.readRssi(),
-      );
+      return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());
     }
   }
   int timeoutCounter = 0;
   while (true) {
     if (timeout && timeoutCounter >= 10) return null;
-    List<BTDeviceStruct> foundDevices = await bleFindDevices();
-    for (BTDeviceStruct device in foundDevices) {
+    List<Device> foundDevices = await AnyDeviceType().findDevices();
+    for (Device device in foundDevices) {
       // Remember the first connected device.
       // Technically, there should be only one
       if (deviceId == '') {
@@ -33,7 +25,7 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
 
       if (device.id == deviceId) {
         try {
-          await bleConnectDevice(device.id, autoConnect: autoConnect);
+          await device.connectDevice(autoConnect: autoConnect);
           return device;
         } catch (e) {
           print(e);

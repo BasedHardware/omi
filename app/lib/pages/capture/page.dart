@@ -18,7 +18,7 @@ import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
@@ -35,7 +35,7 @@ import 'logic/websocket_mixin.dart';
 class CapturePage extends StatefulWidget {
   final Function addMemory;
   final Function addMessage;
-  final BTDeviceStruct? device;
+  final Device? device;
 
   const CapturePage({
     super.key,
@@ -53,7 +53,7 @@ class CapturePageState extends State<CapturePage>
   @override
   bool get wantKeepAlive => true;
 
-  BTDeviceStruct? btDevice;
+  Device? btDevice;
   bool _hasTranscripts = false;
   static const quietSecondsForMemoryCreation = 120;
 
@@ -176,7 +176,10 @@ class CapturePageState extends State<CapturePage>
 
   Future<void> initiateFriendAudioStreaming() async {
     if (btDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+    if (!btDevice!.isConnected) {
+      await btDevice!.connectDevice();
+    }
+    BleAudioCodec codec = await btDevice!.getAudioCodec();
     if (SharedPreferencesUtil().deviceCodec != codec) {
       SharedPreferencesUtil().deviceCodec = codec;
       showDialog(
@@ -195,17 +198,16 @@ class CapturePageState extends State<CapturePage>
       return;
     }
     audioStorage = WavBytesUtil(codec: codec);
-    _bleBytesStream = await getBleAudioBytesListener(
-      btDevice!.id,
+    _bleBytesStream = await btDevice!.getBleAudioBytesListener(
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
         // print(value);
-        value.removeRange(0, 3);
+        final trimmedValue = value.sublist(3);
         // TODO: if this is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (wsConnectionState == WebsocketConnectionStatus.connected) {
-          websocketChannel?.sink.add(value);
+          websocketChannel?.sink.add(trimmedValue);
         }
       },
     );
@@ -215,13 +217,13 @@ class CapturePageState extends State<CapturePage>
 
   Future<void> startOpenGlass() async {
     if (btDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
+    isGlasses = await btDevice!.hasPhotoStreamingCharacteristic();
     if (!isGlasses) return;
     await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();
   }
 
-  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+  void resetState({bool restartBytesProcessing = true, Device? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();

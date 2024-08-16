@@ -3,7 +3,7 @@
 // import 'package:friend_private/backend/schema/bt_device.dart';
 // import 'package:friend_private/utils/ble/connect.dart';
 
-// Future<void> startDfu(BTDeviceStruct btDevice, String firmwareFile,
+// Future<void> startDfu(Device btDevice, String firmwareFile,
 //     {bool fileInAssets = false}) async {
 //   bleDisconnectDevice(btDevice);
 //   await Future.delayed(const Duration(seconds: 2));

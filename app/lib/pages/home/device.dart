@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
@@ -11,7 +9,7 @@ import 'device_settings.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
-  final BTDeviceStruct? device;
+  final Device? device;
   final int batteryLevel;
 
   const ConnectedDevice({super.key, required this.device, required this.batteryLevel});
@@ -27,9 +25,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
-    return FutureBuilder<DeviceInfo>(
-      future: DeviceInfo.getDeviceInfo(widget.device),
-      builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
+    return FutureBuilder<Device>(
+      future: widget.device?.connectDevice(),
+      builder: (BuildContext context, AsyncSnapshot<Device> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
@@ -42,7 +40,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     MaterialPageRoute(
                       builder: (context) => DeviceSettings(
                         device: widget.device,
-                        deviceInfo: snapshot.data,
                         isDeviceConnected: deviceConnected,
                       ),
                     ),
@@ -61,7 +58,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${widget.device?.getShortId() ?? ''})',
+                    '$deviceName (${widget.device?.shortId ?? ''})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -151,7 +148,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 child: TextButton(
                   onPressed: () async {
                     if (widget.device != null) {
-                      await bleDisconnectDevice(widget.device!);
+                      await widget.device?.disconnectDevice();
                     }
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().deviceId = '';
