@@ -16,6 +16,7 @@ from utils import auth
 from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
+from utils.stt.fal import fal_whisperx
 
 router = APIRouter()
 
@@ -24,6 +25,7 @@ def _process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
 ):
     transcript = memory.get_transcript()
+    has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
 
     photos = []
     try:
@@ -32,6 +34,10 @@ def _process_memory(
             photos = memory.photos
             memory.photos = []  # Clear photos to avoid saving them in the memory
         else:
+            if has_audio:
+                print(memory.audio_base64_url)
+                segments = fal_whisperx(memory.audio_base64_url)
+
             structured: Structured = get_transcript_structure(
                 transcript, memory.started_at, language_code, force_process
             )
