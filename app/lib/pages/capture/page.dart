@@ -19,6 +19,7 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -28,6 +29,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:location/location.dart';
 import 'package:uuid/uuid.dart';
 
+import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
@@ -47,8 +49,7 @@ class CapturePage extends StatefulWidget {
 }
 
 class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, WebSocketMixin, OpenGlassMixin {
-  // PhoneRecorderMixin
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -401,7 +402,7 @@ class CapturePageState extends State<CapturePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // record.dispose();
+    record.dispose();
 
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
@@ -459,45 +460,45 @@ class CapturePageState extends State<CapturePage>
           ...connectionStatusWidgets(context, segments, wsConnectionState, _internetStatus),
           const SizedBox(height: 16)
         ]),
-        // getPhoneMicRecordingButton(_recordingToggled, recordingState)
+        getPhoneMicRecordingButton(_recordingToggled, recordingState)
       ],
     );
   }
 
-// _recordingToggled() async {
-//   if (recordingState == RecordingState.record) {
-//     if (Platform.isAndroid) {
-//       stopStreamRecordingOnAndroid();
-//     } else {
-//       await stopStreamRecording(wsConnectionState, websocketChannel);
-//     }
-//     setState(() => recordingState = RecordingState.stop);
-//     _memoryCreationTimer?.cancel();
-//     _createMemory();
-//   } else if (recordingState == RecordingState.initialising) {
-//     debugPrint('initialising, have to wait');
-//   } else {
-//     showDialog(
-//       context: context,
-//       builder: (c) => getDialog(
-//         context,
-//         () => Navigator.pop(context),
-//         () async {
-//           Navigator.pop(context);
-//           setState(() => recordingState = RecordingState.initialising);
-//           closeWebSocket();
-//           await initiateWebsocket(BleAudioCodec.pcm16, 16000);
-//           if (Platform.isAndroid) {
-//             await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
-//           } else {
-//             await startStreamRecording(wsConnectionState, websocketChannel);
-//           }
-//         },
-//         'Limited Capabilities',
-//         'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-//         okButtonText: 'Ok, I understand',
-//       ),
-//     );
-//   }
-// }
+  _recordingToggled() async {
+    if (recordingState == RecordingState.record) {
+      if (Platform.isAndroid) {
+        stopStreamRecordingOnAndroid();
+      } else {
+        await stopStreamRecording(wsConnectionState, websocketChannel);
+      }
+      setState(() => recordingState = RecordingState.stop);
+      _memoryCreationTimer?.cancel();
+      _createMemory();
+    } else if (recordingState == RecordingState.initialising) {
+      debugPrint('initialising, have to wait');
+    } else {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () async {
+            Navigator.pop(context);
+            setState(() => recordingState = RecordingState.initialising);
+            closeWebSocket();
+            await initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            if (Platform.isAndroid) {
+              await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+            } else {
+              await startStreamRecording(wsConnectionState, websocketChannel);
+            }
+          },
+          'Limited Capabilities',
+          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
+          okButtonText: 'Ok, I understand',
+        ),
+      );
+    }
+  }
 }
