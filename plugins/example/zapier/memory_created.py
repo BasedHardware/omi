@@ -201,8 +201,8 @@ def create_zapier_memory(uid: str, memory: Memory):
             speakers=len(
                 set(map(lambda x: x.speaker, memory.transcript_segments))),
             category=memory.structured.category,
-            duration=(memory.finished_at -
-                      memory.started_at).total_seconds() if memory.finished_at is not None else 0,
+            duration=int((memory.finished_at -
+                      memory.started_at).total_seconds() if memory.finished_at is not None else 0),
             overview=memory.structured.overview,
         )
         ok = get_zapier().send_hook_memory_created(target_url, data)
