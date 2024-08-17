@@ -6,7 +6,7 @@ nav_order: 1
 
 # Getting Started
 
-Follow these steps to get started with your Friend. Don't want to bother with code? Use our official version on Apple/Google store
+Follow these steps to get started with your Friend. Don't want to bother with code? Use our official version on [Apple](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)/[Google](https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US) store
 
 ### Install the app
 
