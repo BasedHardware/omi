@@ -107,7 +107,7 @@ def process_memory(
     return memory
 
 
-async def _process_get_memory_conversation_str(memory: Memory) -> str:
+def _process_get_memory_conversation_str(memory: Memory) -> str:
     # Workflow
     if memory.source == MemorySource.workflow:
         return memory.external_data["text"]
