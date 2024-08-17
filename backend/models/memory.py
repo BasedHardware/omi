@@ -163,8 +163,8 @@ class WorkflowMemorySource(str, Enum):
 
 
 class WorkflowCreateMemory(BaseModel):
-    started_at: Optional[datetime]
-    finished_at: Optional[datetime]
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
     text: str
     text_source: WorkflowMemorySource = WorkflowMemorySource.audio
     geolocation: Optional[Geolocation] = None
