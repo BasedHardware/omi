@@ -88,6 +88,8 @@ async def postprocess_memory(
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
+    # TODO: try https://dev.hume.ai/reference/expression-measurement-api/batch/start-inference-job-from-local-file
+
     try:
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
