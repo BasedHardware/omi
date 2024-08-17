@@ -5,7 +5,7 @@ nav_order: 2
 ---
 
 
-# Setup
+# Backend Setup
 1. Install the google-cloud-sdk `brew install google-cloud-sdk` or if you use nix envdir, it should be installed for you
 
 2. You will need to have your own Google Cloud Project (please refer to the App Docs on how to setup Firebase). If you did setup Firebase for the App, then you'll already have a Project in Google Cloud.
