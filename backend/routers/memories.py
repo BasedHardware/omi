@@ -1,3 +1,4 @@
+import os
 import hashlib
 import asyncio
 import random
@@ -5,144 +6,31 @@ import threading
 import uuid
 from typing import Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import database.memories as memories_db
-from database.vector import delete_vector, upsert_vectors, upsert_vector
+from database.vector import delete_vector
 from models.memory import *
 from models.integrations import *
 from models.plugin import Plugin
 from utils.plugins import get_plugins_data
 from models.transcript_segment import TranscriptSegment
 from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass, summarize_experience_text
+from utils.llm import transcript_user_speech_fix, num_tokens_from_string
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
+from utils.process_memory import process_memory
+from utils.storage import upload_postprocessing_audio, delete_postprocessing_audio
+from utils.stt.fal import fal_whisperx
 
 router = APIRouter()
 
 
-def _process_get_memory_structered(memory: Union[Memory, CreateMemory, WorkflowCreateMemory], language_code: str, force_process: bool) -> (Structured, bool):
-    # From workflow
-    if memory.source == MemorySource.workflow:
-        if memory.text_source == WorkflowMemorySource.audio:
-            structured = get_transcript_structure(
-                memory.text, memory.started_at, language_code, True)
-            return (structured, False)
-
-        if memory.text_source == WorkflowMemorySource.other:
-            structured = summarize_experience_text(memory.text)
-            return (structured, False)
-
-        # not workflow memory source support
-        raise HTTPException(status_code=400, detail='Invalid workflow memory source')
-
-    # Default source
-    should_clean_photos = False
-    transcript = memory.get_transcript()
-    if memory.photos:
-        structured: Structured = summarize_open_glass(memory.photos)
-        should_clean_photos = True  # Clear photos to avoid saving them in the memory
-        return (structured, should_clean_photos)
-
-    structured: Structured = get_transcript_structure(
-        transcript, memory.started_at, language_code, force_process
-    )
-
-    return (structured, should_clean_photos)
-
-
-def process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory], force_process: bool = False, retries: int = 1
-):
-    # make structured
-    structured: Structured
-    try:
-        (structured, should_clean_photos) = _process_get_memory_structered(memory, language_code, force_process)
-        if should_clean_photos:
-            memory.photos = []
-    except Exception as e:
-        print(e)
-        if retries == 2:
-            raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
-        return process_memory(uid, language_code, memory, force_process, retries + 1)
-
-    discarded = structured.title == ''
-
-    # new if
-    new_photos = []
-    if isinstance(memory, CreateMemory):
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            deleted=False,
-            structured=structured,
-            discarded=discarded,
-        )
-        new_photos = memory.photos
-    elif isinstance(memory, WorkflowCreateMemory):
-        create_memory = memory
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            deleted=False,
-            structured=structured,
-            discarded=discarded,
-        )
-        memory.external_data = create_memory.dict()
-    else:
-        print(f"Existing memory {memory.id}")
-
-    # store to db
-    memories_db.upsert_memory(uid, memory.dict())
-    # photos
-    if new_photos:
-        memories_db.store_memory_photos(uid, memory.id, new_photos)
-
-    # afterward, should be async
-    asyncio.run(_process_memory_afterward(uid, memory))
-
+def _get_memory_by_id(uid: str, memory_id: str):
+    memory = memories_db.get_memory(uid, memory_id)
+    if memory is None or memory.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Memory not found")
     return memory
-
-
-def _process_get_memory_conversation_str(memory: Memory) -> str:
-    # Workflow
-    if memory.source == MemorySource.workflow:
-        return memory.external_data["text"]
-
-    # Default
-    return memory.get_transcript()
-
-
-async def _process_memory_afterward(uid: str, memory: Memory):
-    if memory.discarded:
-        return
-
-    structured = memory.structured
-    transcript = _process_get_memory_conversation_str(memory)
-
-    # forward to plugin
-    structured_str = str(structured)
-    vector = generate_embedding(structured_str)
-    upsert_vector(uid, memory, vector)
-
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled and plugin.trigger_workflow_memories]
-    threads = []
-
-    def execute_plugin(plugin):
-        if result := get_plugin_result(transcript, plugin).strip():
-            memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
-
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
-
-    return
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -150,6 +38,16 @@ def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Create Memory endpoint.
+    :param create_memory: data to create memory
+    :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
+    :param language_code: language.
+    :param uid: user id.
+    :return: The new memory created + any messages triggered by on_memory_created integrations.
+
+    TODO: Should receive raw segments by deepgram, instead of the beautified ones? and get beautified on read?
+    """
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
@@ -170,10 +68,96 @@ def create_memory(
     return CreateMemoryResponse(memory=memory, messages=messages)
 
 
+@router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
+async def postprocess_memory(
+        memory_id: str, file: Optional[UploadFile], uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    The objective of this endpoint, is to get the best possible transcript from the audio file.
+    Instead of storing the initial deepgram result, doing a full post-processing with whisper-x.
+    This increases the quality of transcript by at least 20%.
+    Which also includes a better summarization.
+    Which helps us create better vectors for the memory.
+    And improves the overall experience of the user.
+
+    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
+    https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
+
+    TODO: USE soniox here? with speech profile and stuff?
+    """
+    memory_data = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory_data)
+    if memory.discarded:
+        raise HTTPException(status_code=400, detail="Memory is discarded")
+
+    # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
+    file_path = f"_temp/{memory_id}_{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+
+    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
+
+    # TODO: try https://dev.hume.ai/reference/expression-measurement-api/batch/start-inference-job-from-local-file
+
+    try:
+        # Upload to GCP + remove file locally and cloud storage
+        url = upload_postprocessing_audio(file_path)
+        os.remove(file_path)
+        segments = fal_whisperx(url)  # TODO: should consider storing non beautified segments, and beautify on read?
+        delete_postprocessing_audio(file_path)
+
+        # Fix user speaker_id matching
+        if any(segment.is_user for segment in memory.transcript_segments):
+            prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
+            transcript_tokens = num_tokens_from_string(
+                TranscriptSegment.segments_as_string(memory.transcript_segments, False))
+            # should limit a few segments, like first and last 100?
+            if transcript_tokens < 40000:  # 40k tokens, costs about 10 usd per request
+                new = TranscriptSegment.segments_as_string(segments, False)
+                speaker_id: int = transcript_user_speech_fix(prev, new)
+            else:  # simple way (this in theory should work for all) ~ Not super accurate most likely
+                speaker_id: int = [segment.speaker_id for segment in memory.transcript_segments if segment.is_user][0]
+
+            for segment in segments:
+                if segment.speaker_id == speaker_id:
+                    segment.is_user = True
+
+        # Store previous and new segments in DB as collection.
+        memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
+        memory.transcript_segments = segments
+        memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
+        memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
+
+        # Reprocess memory with improved transcription
+        result = process_memory(uid, memory.language, memory, force_process=True)
+    except Exception as e:
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
+    return result
+
+
+# 843364d7-6a60-4f30-8684-0e74d0398c5c
+# caLCFj7IisV85UX9XrrV1aVf3pk1
+
+# util(
+#     'caLCFj7IisV85UX9XrrV1aVf3pk1',
+#     '843364d7-6a60-4f30-8684-0e74d0398c5c',
+#     '_temp/843364d7-6a60-4f30-8684-0e74d0398c5c_recording-20240817_145819.wav'
+# )
+
+# url = upload_postprocessing_audio('_temp/5a414d64-7c75-4df2-983e-18cee665a67d_recording-20240817_153755.wav')
+# segments = fal_whisperx(url)
+
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
 def reprocess_memory(
         memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Whenever a user wants to reprocess a memory, or wants to force process a discarded one
+    :return: The updated memory after reprocessing.
+    """
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -188,13 +172,6 @@ def reprocess_memory(
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset)
     return memories_db.get_memories(uid, limit, offset, include_discarded=True)
-
-
-def _get_memory_by_id(uid: str, memory_id: str):
-    memory = memories_db.get_memory(uid, memory_id)
-    if memory is None or memory.get('deleted', False):
-        raise HTTPException(status_code=404, detail="Memory not found")
-    return memory
 
 
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
@@ -213,151 +190,3 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
-
-
-# ************************************************
-# ************ Migrate Local Memories ************
-# ************************************************
-
-
-def _get_structured(memory: dict):
-    category = memory['structured']['category']
-    if category not in CategoryEnum.__members__:
-        category = 'other'
-    emoji = memory['structured'].get('emoji')
-    try:
-        emoji = emoji.encode('latin1').decode('utf-8')
-    except:
-        emoji = random.choice(['🧠', '🎉'])
-
-    return Structured(
-        title=memory['structured']['title'],
-        overview=memory['structured']['overview'],
-        emoji=emoji,
-        category=CategoryEnum[category],
-        action_items=[
-            ActionItem(description=description, completed=False) for description in
-            memory['structured']['actionItems']
-        ],
-        events=[
-            Event(
-                title=event['title'],
-                description=event['description'],
-                start=datetime.fromisoformat(event['startsAt']),
-                duration=event['duration'],
-                created=False,
-            ) for event in memory['structured']['events']
-        ],
-    )
-
-
-def _get_geolocation(memory: dict):
-    geolocation = memory.get('geoLocation', {})
-    if geolocation and geolocation.get('googlePlaceId'):
-        geolocation_obj = Geolocation(
-            google_place_id=geolocation['googlePlaceId'],
-            latitude=geolocation['latitude'],
-            longitude=geolocation['longitude'],
-            address=geolocation['address'],
-            location_type=geolocation['locationType'],
-        )
-    else:
-        geolocation_obj = None
-    return geolocation_obj
-
-
-def generate_uuid4_from_seed(seed):
-    # Use SHA-256 to hash the seed
-    hash_object = hashlib.sha256(seed.encode('utf-8'))
-    hash_digest = hash_object.hexdigest()
-    return uuid.UUID(hash_digest[:32])
-
-
-def upload_memory_vectors(uid: str, memories: List[Memory]):
-    if not memories:
-        return
-    vectors = [generate_embedding(str(memory.structured)) for memory in memories]
-    upsert_vectors(uid, vectors, memories)
-
-
-@router.post('/v1/migration/memories', tags=['v1'])
-def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_current_user_uid)):
-    if not memories:
-        return {'status': 'ok'}
-    memories_vectors = []
-    db_batch = memories_db.get_memories_batch_operation()
-    for i, memory in enumerate(memories):
-        if memory.get('photos'):
-            continue  # Ignore openGlass memories for now
-
-        structured_obj = _get_structured(memory)
-        # print(structured_obj)
-        if not memory['transcriptSegments'] and memory['transcript']:
-            memory['transcriptSegments'] = [{'text': memory['transcript']}]
-
-        memory_obj = Memory(
-            id=str(generate_uuid4_from_seed(f'{uid}-{memory["createdAt"]}')),
-            uid=uid,
-            structured=structured_obj,
-            created_at=datetime.fromisoformat(memory['createdAt']),
-            started_at=datetime.fromisoformat(memory['startedAt']) if memory['startedAt'] else None,
-            finished_at=datetime.fromisoformat(memory['finishedAt']) if memory['finishedAt'] else None,
-            discarded=memory['discarded'],
-            transcript_segments=[
-                TranscriptSegment(
-                    text=segment['text'],
-                    start=segment.get('start', 0),
-                    end=segment.get('end', 0),
-                    speaker=segment.get('speaker', 'SPEAKER_00'),
-                    is_user=segment.get('is_user', False),
-                ) for segment in memory['transcriptSegments'] if segment.get('text', '')
-            ],
-            plugins_results=[
-                PluginResult(plugin_id=result.get('pluginId'), content=result['content'])
-                for result in memory['pluginsResponse']
-            ],
-            # photos=[
-            #     MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
-            # ],
-            geolocation=_get_geolocation(memory),
-            deleted=False,
-        )
-        memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
-
-        if not memory_obj.discarded:
-            memories_vectors.append(memory_obj)
-
-        if i % 10 == 0:
-            threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
-            memories_vectors = []
-
-        if i % 20 == 0:
-            db_batch.commit()
-            db_batch = memories_db.get_memories_batch_operation()
-
-    db_batch.commit()
-    threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
-    return {}
-
-# Future<String> dailySummaryNotifications(List<Memory> memories) async {
-#   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
-#   if (memories.isEmpty) return msg;
-#   if (memories.where((m) => !m.discarded).length <= 1) return msg;
-#   var str = SharedPreferencesUtil().givenName.isEmpty ? 'the user' : SharedPreferencesUtil().givenName;
-#   var prompt = '''
-#   The following are a list of $str\'s memories from today, with the transcripts with its respective structuring, that $str had during his day.
-#   $str wants to get a summary of the key action items he has to take based on his today's memories.
-#
-#   Remember $str is busy so this has to be very efficient and concise.
-#   Respond in at most 50 words.
-#
-#   Output your response in plain text, without markdown.
-#   ```
-#   ${Memory.memoriesToString(memories, includeTranscript: true)}
-#   ```
-#   ''';
-#   debugPrint(prompt);
-#   var result = await executeGptPrompt(prompt);
-#   debugPrint('dailySummaryNotifications result: $result');
-#   return result.replaceAll('```', '').trim();
-# }
