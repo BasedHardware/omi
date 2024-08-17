@@ -1,3 +1,4 @@
+import random
 import threading
 import uuid
 from typing import Union
@@ -9,37 +10,43 @@ from database.vector import upsert_vector
 from models.memory import *
 from models.plugin import Plugin
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result
+    get_plugin_result, should_discard_memory
 from utils.plugins import get_plugins_data
+from utils.stt.fal import fal_whisperx
 
 
 def _get_structured(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
 ) -> Structured:
-    transcript = memory.get_transcript()
-    # has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
-
     try:
+        # from OpenGlass
         if memory.photos:
-            structured: Structured = summarize_open_glass(memory.photos)
-        else:
-            # if has_audio and not discard_memory(transcript):
-            #     # TODO: test a 1h or 2h recording ~ should this be async ~~ also, how long does it take on frontend to upload that size?
-            #     segments = fal_whisperx(memory.audio_base64_url)
-            #     memory.transcript_segments = segments
+            return summarize_open_glass(memory.photos), False
 
-            structured: Structured = get_transcript_structure(
-                transcript, memory.started_at, language_code, force_process
-            )
+        # from Friend
+        if force_process:
+            # reprocess endpoint
+            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
+
+        discarded = should_discard_memory(memory.get_transcript(False))
+        if discarded:
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+
+        has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
+        # TODO: test a 1h or 2h recording ~ should this be async ~~ also, how long does it take on frontend to upload that size?
+        if has_audio:
+            segments = fal_whisperx(memory.audio_base64_url)
+            memory.transcript_segments = segments
+
+        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
     except Exception as e:
         print(e)
         if retries == 2:
             raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
         return _get_structured(uid, language_code, memory, force_process, retries + 1)
-    return structured
 
 
-def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory], transcript: str):
+def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory]):
     discarded = structured.title == ''
     if isinstance(memory, CreateMemory):
         memory = Memory(
@@ -48,7 +55,6 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
             structured=structured,
             **memory.dict(),
             created_at=datetime.utcnow(),
-            transcript=transcript,
             discarded=discarded,
             deleted=False,
         )
@@ -78,16 +84,14 @@ def _trigger_plugins(uid: str, transcript: str, memory: Memory):
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
-    structured: Structured = _get_structured(uid, language_code, memory, force_process)
-    transcript = memory.get_transcript()
-    memory = _get_memory_obj(uid, structured, memory, transcript)
+    structured, discarded = _get_structured(uid, language_code, memory, force_process)
+    memory = _get_memory_obj(uid, structured, memory)
 
-    discarded = structured.title == ''
     if not discarded:
         vector = generate_embedding(str(structured))
         upsert_vector(uid, memory, vector)
-        _trigger_plugins(uid, transcript, memory)
+        _trigger_plugins(uid, memory.get_transcript(False), memory)
 
     memories_db.upsert_memory(uid, memory.dict())
-    print('Memory processed', memory.id)
+    print('process_memory memory.id=', memory.id)
     return memory
