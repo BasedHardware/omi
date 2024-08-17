@@ -7,7 +7,6 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.history_aware_retriever import create_history_aware_retriever
 from langchain.chains.retrieval import create_retrieval_chain
-from langchain.output_parsers import BooleanOutputParser
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -72,42 +71,43 @@ Transcript segments:
     return response.result
 
 
-def discard_memory(transcript: str) -> bool:
+class DiscardMemory(BaseModel):
+    discard: bool = Field(description="If the memory should be discarded or not")
+
+
+def should_discard_memory(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = BooleanOutputParser()
+    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
     prompt = ChatPromptTemplate.from_messages([
         '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is not worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output True.
+    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
     
     Transcript: ```{transcript}```
     
     {format_instructions}'''.replace('    ', '').strip()
     ])
-    print(prompt)
     chain = prompt | llm | parser
     try:
-        response = chain.invoke({
+        response: DiscardMemory = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
-        return response
+        return response.discard
+
     except Exception as e:
         print(f'Error determining memory discard: {e}')
         return False
 
 
 def get_transcript_structure(
-        transcript: str, started_at: datetime, language_code: str, force_process: bool
+        transcript: str, started_at: datetime, language_code: str  # , force_process: bool
 ) -> Structured:
-    if len(transcript.split(' ')) > 100:
-        force_process = True
-
-    force_process_str = ''
-    if not force_process:
-        force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
+    # force_process_str = ''
+    # if not force_process:
+    #     force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
 
     prompt = ChatPromptTemplate.from_messages([(
         'system',
@@ -126,16 +126,13 @@ def get_transcript_structure(
 
         {format_instructions}'''.replace('    ', '').strip()
     )])
-    # if use_cheaper_model:
-    #     chain = prompt | groq_llm | parser
-    # else:
     chain = prompt | llm | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
-        'force_process_str': force_process_str,
+        'force_process_str': '',
         'started_at': started_at.isoformat(),
     })
     return response
@@ -169,6 +166,26 @@ def summarize_screen_pipe(description: str) -> Structured:
     return llm_with_parser.invoke(prompt)
 
 
+class Output(BaseModel):
+    speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    prompt = f'''
+    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
+    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    
+    Previous Transcript:
+    {prev_transcript}
+    
+    Improved Transcript:
+    {new_transcript}
+    '''
+    with_parser = llm.with_structured_output(Output)
+    response: Output = with_parser.invoke(prompt)
+    return response.speaker_id
+
+  
 def summarize_experience_text(text: str) -> Structured:
     prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
 
@@ -181,6 +198,7 @@ def summarize_experience_text(text: str) -> Structured:
     # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)
 
+  
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     prompt = f'''
@@ -430,3 +448,14 @@ def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
         '''
     prompt = prompt.replace('    ', '').strip()
     return llm.invoke(prompt).content
+
+
+import tiktoken
+
+encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    num_tokens = len(encoding.encode(string))
+    return num_tokens

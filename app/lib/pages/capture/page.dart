@@ -8,6 +8,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -35,6 +36,7 @@ import 'logic/websocket_mixin.dart';
 class CapturePage extends StatefulWidget {
   final Function addMemory;
   final Function addMessage;
+  final Function(ServerMemory) updateMemory;
   final BTDeviceStruct? device;
 
   const CapturePage({
@@ -42,6 +44,7 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.addMemory,
     required this.addMessage,
+    required this.updateMemory,
   });
 
   @override
@@ -299,6 +302,12 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
+    //
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
+      memoryPostProcessing(file, memory.id).then((postProcessed) {
+        widget.updateMemory(postProcessed);
+      });
+    }
 
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
