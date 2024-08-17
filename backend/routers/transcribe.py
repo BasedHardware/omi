@@ -13,7 +13,7 @@ import opuslib
 
 from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
-from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty, is_speech_present
+from utils.stt.vad import VADIterator, model, vad_is_empty, is_speech_present
 
 router = APIRouter()
 
@@ -54,7 +54,7 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     is_speech_active = False
-    speech_timeout = 0.7 # Good for now but better dynamically adjust it by user behaviour
+    speech_timeout = 0.7 # Good for now but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
     last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -89,26 +89,20 @@ async def _websocket_util(
         databuffer = bytearray(b"")
         
         REALTIME_RESOLUTION = 0.01
-        sample_width = 2  # pcm here is 16 bit
+        sample_width = 2  # pcm8/16 here is 16 bit
         byte_rate = sample_width * sample_rate * channels
         chunk_size = int(byte_rate * REALTIME_RESOLUTION)
             
         timer_start = time.time()
-        speech_state = SpeechState.no_speech
-        voice_found, not_voice = 0, 0
-        # path = 'scripts/vad/audio_bytes.txt'
-        # if os.path.exists(path):
-        #     os.remove(path)
-        # audio_file = open(path, "a")
         try:
-            sample_width = 1 if codec == "pcm8" else 2
             while websocket_active:
                 data = await websocket.receive_bytes()
                 if codec == 'opus':
                     decoded_opus = decoder.decode(data, frame_size=320)
                     samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
-                elif codec in ['pcm8', 'pcm16']:  # Both are now 16-bit
-                    samples = torch.frombuffer(data, dtype=torch.int16).float() / 32768.0
+                elif codec in ['pcm8', 'pcm16']:  # Both are 16 bit
+                    writable_data = bytearray(data)
+                    samples = torch.frombuffer(writable_data, dtype=torch.int16).float() / 32768.0
                 else:
                     raise ValueError(f"Unsupported codec: {codec}")
                 
@@ -143,8 +137,6 @@ async def _websocket_util(
                         socket2 = None
                 else:
                     socket2.send(audio_buffer)
-
-                audio_buffer = bytearray()
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
