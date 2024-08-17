@@ -7,6 +7,7 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
+#include "nfc.h"
 
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
@@ -157,6 +158,13 @@ int main(void)
         return err;
     }
     set_led_green(false);
+
+	// Initialize NFC
+	LOG_INF("Initializing NFC...");
+	if (nfc_init() != 0) {
+        LOG_ERR("Failed to initialize NFC");
+    }
+	LOG_INF("NFC initialized successfully");
 
     // Indicate codec initialization
     set_led_blue(true);
