@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi_utilities import repeat_at
 
 from modal import Image, App, asgi_app, Secret
-from routers import chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, notifications
+from routers import chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, notifications, workflow
 from utils.crons.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -24,7 +24,10 @@ app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 app.include_router(screenpipe.router)
+app.include_router(workflow.router)
 app.include_router(notifications.router)
+app.include_router(workflow.router)
+
 app.include_router(firmware.router)
 
 modal_app = App(
