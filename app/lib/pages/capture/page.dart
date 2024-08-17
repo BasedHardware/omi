@@ -8,6 +8,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -299,6 +300,8 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
+    // memory.discarded == false
+    if (memory != null && !memory.failed && file != null) memoryPostProcessing(file, memory.id);
 
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
