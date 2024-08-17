@@ -3,17 +3,18 @@ import asyncio
 import random
 import threading
 import uuid
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from database.vector import delete_vector, upsert_vectors
+from database.vector import delete_vector, upsert_vectors, upsert_vector
 from models.memory import *
 from models.integrations import *
 from models.plugin import Plugin
+from utils.plugins import get_plugins_data
 from models.transcript_segment import TranscriptSegment
 from utils import auth
-from utils.process_memory import process_memory
 from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass, summarize_experience_text
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
