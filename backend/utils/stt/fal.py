@@ -67,9 +67,19 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
         else:
             cleaned.append(chunk)
 
+    segments = []
+    for segment in cleaned:
+        segments.append(TranscriptSegment(
+            text=segment['text'],
+            speaker=segment['speaker'],
+            is_user=segment['is_user'],
+            start=segment['start'],
+            end=segment['end'],
+        ))
+
     # TODO: Include pipeline post processing, so that is_user get's matched with the correct speaker
     # TODO: Do punctuation correction with LLM
 
     # TODO: test other languages
     # TODO: eventually do speaker embedding matching
-    return cleaned
+    return segments
