@@ -100,6 +100,7 @@ class MemorySource(str, Enum):
     friend = 'friend'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
+    workflow = 'workflow'
 
 
 class PostProcessingStatus(str, Enum):
@@ -170,6 +171,22 @@ class CreateMemory(BaseModel):
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
+
+class WorkflowMemorySource(str, Enum):
+    audio = 'audio_transcript'
+    other = 'other_text'
+
+
+class WorkflowCreateMemory(BaseModel):
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    text: str
+    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    geolocation: Optional[Geolocation] = None
+
+    source: MemorySource = MemorySource.workflow
+    language: Optional[str] = None
 
 
 class CreateMemoryResponse(BaseModel):
