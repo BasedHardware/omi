@@ -9,12 +9,13 @@ from advanced import realtime as advanced_realtime_router
 from basic import memory_created as basic_memory_created_router
 from basic import realtime as basic_realtime_router
 from oauth import memory_created as oauth_memory_created_router
+from zapier import memory_created as zapier_memory_created_router
 
 app = FastAPI()
 app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
 
 modal_app = App(
-    name='plugins_examples',
+    name='plugins',
     secrets=[Secret.from_dotenv('.env')],
     mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
 )
@@ -32,7 +33,7 @@ modal_app = App(
     allow_concurrent_inputs=10,
 )
 @asgi_app()
-def plugins_app():
+def api():
     return app
 
 
@@ -40,6 +41,8 @@ app.include_router(basic_memory_created_router.router)
 app.include_router(basic_realtime_router.router)
 
 app.include_router(oauth_memory_created_router.router)
+
+app.include_router(zapier_memory_created_router.router)
 
 app.include_router(advanced_realtime_router.router)
 # app.include_router(advanced_openglass_router.router)

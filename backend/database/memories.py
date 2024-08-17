@@ -9,6 +9,11 @@ from ._client import db
 
 
 def upsert_memory(uid: str, memory_data: dict):
+    if 'audio_base64_url' in memory_data:
+        del memory_data['audio_base64_url']
+    if 'photos' in memory_data:
+        del memory_data['photos']
+
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     memory_ref.set(memory_data)

@@ -1,96 +1,63 @@
-.. zephyr:code-sample:: blinky
-   :name: Blinky
-   :relevant-api: gpio_interface
+# Friend Hardware Firmware
 
-   Blink an LED forever using the GPIO API.
+This repository contains the firmware for the Friend AI wearable device.
 
-Overview
-********
+## Overview
 
-The Blinky sample blinks an LED forever using the :ref:`GPIO API <gpio_api>`.
+The Friend firmware is built on the Zephyr RTOS and provides functionality for audio capture, processing, and battery. It includes Bluetooth connectivity for streaming audio data. Given the complex nature of this firmware its not buildable in Arduino IDE and requires a more advanced toolchain.
 
-The source code shows how to:
+## Directory Structure
 
-#. Get a pin specification from the :ref:`devicetree <dt-guide>` as a
-   :c:struct:`gpio_dt_spec`
-#. Configure the GPIO pin as an output
-#. Toggle the pin forever
+- `src/`: Contains the source code files
+- `include/`: Header files
+- `boards/`: Board-specific configurations (not used)
+- `overlays/`: Device-specific overlay files
+- `CMakeLists.txt`: CMake build configuration
+- `prj.conf`: Project configuration file
 
-See :zephyr:code-sample:`pwm-blinky` for a similar sample that uses the PWM API instead.
+## Prerequisites
 
-.. _blinky-sample-requirements:
+- (Visual Studio Code)[https://code.visualstudio.com/]
+- (nRF Connect for VS Code extension)[https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code]
+- (nRF Command Line Tools)[https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download]
 
-Requirements
-************
+## Building the Firmware
 
-Your board must:
+1. Open the project in Visual Studio Code.
+2. Install the recommended VS Code extensions when prompted.
+3. Use the nRF Connect extension to build the firmware:
+   - Open the nRF Connect extension sidebar.
+   - Select your project configuration.
+   - Click on "Build" in the extension's toolbar.
 
-#. Have an LED connected via a GPIO pin (these are called "User LEDs" on many of
-   Zephyr's :ref:`boards`).
-#. Have the LED configured using the ``led0`` devicetree alias.
+## Flashing the Firmware
 
-Building and Running
-********************
+1. Double-tap the reset button on your device to enter bootloader mode. This will open a USB drive on your computer which is used for flashing.
+2. Locate the `zephyr.uf2` file in your build output directory.
+3. Copy the `zephyr.uf2` file to the USB drive that appeared when you put the device in bootloader mode.
+4. The device will automatically flash and restart with the new firmware.
 
-Build and flash Blinky as follows, changing ``reel_board`` for your board:
+## Device-Specific Builds
 
-.. zephyr-app-commands::
-   :zephyr-app: samples/basic/blinky
-   :board: reel_board
-   :goals: build flash
-   :compact:
+For different device versions (e.g., V1 and V2), use separate overlay files and project configuration files. See `CMakePresets.json` for the available configurations.
 
-After flashing, the LED starts to blink. If a runtime error occurs, the sample
-exits without printing to the console.
+These overlay files provide context on pins and device functions to the firmware when building. Each device will need its own unique build.
 
-Build errors
-************
+To select the appropriate overlay file select the configuration in the nRF Connect extension sidebar which is set in `CMakePresets.json`.
 
-You will see a build error at the source code line defining the ``struct
-gpio_dt_spec led`` variable if you try to build Blinky for an unsupported
-board.
+## Debugging
 
-On GCC-based toolchains, the error looks like this:
+To enable USB serial debugging:
 
-.. code-block:: none
+1. Uncomment the debug lines in `main.c`.
+2. Use the nRF Terminal in VS Code to view debug output.
+3. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
 
-   error: '__device_dts_ord_DT_N_ALIAS_led_P_gpios_IDX_0_PH_ORD' undeclared here (not in a function)
+## Key Components
 
-Adding board support
-********************
-
-To add support for your board, add something like this to your devicetree:
-
-.. code-block:: DTS
-
-   / {
-   	aliases {
-   		led0 = &myled0;
-   	};
-
-   	leds {
-   		compatible = "gpio-leds";
-   		myled0: led_0 {
-   			gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
-                };
-   	};
-   };
-
-The above sets your board's ``led0`` alias to use pin 13 on GPIO controller
-``gpio0``. The pin flags :c:macro:`GPIO_ACTIVE_HIGH` mean the LED is on when
-the pin is set to its high state, and off when the pin is in its low state.
-
-Tips:
-
-- See :dtcompatible:`gpio-leds` for more information on defining GPIO-based LEDs
-  in devicetree.
-
-- If you're not sure what to do, check the devicetrees for supported boards which
-  use the same SoC as your target. See :ref:`get-devicetree-outputs` for details.
-
-- See :zephyr_file:`include/zephyr/dt-bindings/gpio/gpio.h` for the flags you can use
-  in devicetree.
-
-- If the LED is built in to your board hardware, the alias should be defined in
-  your :ref:`BOARD.dts file <devicetree-in-out-files>`. Otherwise, you can
-  define one in a :ref:`devicetree overlay <set-devicetree-overlays>`.
+- **Main Application**: Coordinates the overall functionality of the device from initialization to shutdown.
+- **Audio Capture**: Handles microphone input and audio buffering.
+- **Codec**: Processes raw audio data.
+- **Transport**: Manages Bluetooth connectivity and audio streaming.
+- **Storage**: Handles SD card operations and audio file management.
+- **LED Control**: Provides visual feedback about device status.

@@ -1,10 +1,12 @@
 import os
 
-from fastapi import APIRouter, UploadFile, Depends
+from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
+from models.other import UploadProfile
 from utils import auth
-from utils.storage import retrieve_all_samples, upload_sample_storage
+from utils.redis_utils import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
+from utils.storage import retrieve_all_samples, upload_sample_storage, upload_profile_audio
 
 router = APIRouter()
 
@@ -16,13 +18,7 @@ def _endpoint1(file, uid):
     file_path = f"{path}/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-        aseg = AudioSegment.from_wav(file_path)
-        print(f'Uploading sample audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
         uploaded_url, count = upload_sample_storage(file_path, uid)
-        print('upload_sample ~ file uploaded')
-        # if count >= 5: # no soniox, let's do only deepgram for now.
-        #     threading.Thread(target=_create_profile, args=(uid,)).start()
-    # os.remove(file_path)
     return {"url": uploaded_url}
 
 
@@ -83,5 +79,42 @@ def my_samples(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v2/speech-profile', tags=['v1'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    print('has_speech_profile', uid, _has_speech_profile(uid))
     return {'has_profile': _has_speech_profile(uid)}
+
+
+# **********************
+# * Latest endpoints 2 *
+# **********************
+
+
+@router.get('/v3/speech-profile', tags=['v3'])
+def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return {'has_profile': len(get_user_speech_profile(uid)) > 0}
+
+
+@router.post('/v3/upload-bytes', tags=['v3'])
+def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user_uid)):
+    if data.duration < 10:
+        raise HTTPException(status_code=400, detail="Audio duration is too short")
+    if data.duration > 120:
+        raise HTTPException(status_code=400, detail="Audio duration is too long")
+
+    store_user_speech_profile(uid, data.bytes)
+    store_user_speech_profile_duration(uid, data.duration)
+    return {'status': 'ok'}
+
+
+# TODO: app improvement, if speaker 0 starts speaking, which is not the user, after killing ws 2, it will say speaker 0 is the user
+
+@router.post('/v3/upload-audio', tags=['v3'])
+def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
+    os.makedirs(f'_temp/{uid}', exist_ok=True)
+    file_path = f"_temp/{uid}/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+
+    aseg = AudioSegment.from_wav(file_path)
+    if aseg.frame_rate != 16000:
+        raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
+
+    return {"url": upload_profile_audio(file_path, uid)}

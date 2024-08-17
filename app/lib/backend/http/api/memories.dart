@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -29,6 +31,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   List<Tuple2<String, String>> photos = const [],
   bool triggerIntegrations = true,
   String? language,
+  File? audioFile,
 }) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations',
@@ -42,13 +45,15 @@ Future<CreateMemoryResponse?> createMemoryServer({
       'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
       'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
       'language': language, // maybe determine auto?
+      'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
     }),
   );
   if (response == null) return null;
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateMemoryResponse.fromJson(jsonDecode(response.body));
-  } else { // TODO: Server returns 304 doesn't recover
+  } else {
+    // TODO: Server returns 304 doesn't recover
     CrashReporting.reportHandledCrash(
       Exception('Failed to create memory'),
       StackTrace.current,

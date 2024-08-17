@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 from typing import List, Tuple, Optional
@@ -6,6 +7,7 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.history_aware_retriever import create_history_aware_retriever
 from langchain.chains.retrieval import create_retrieval_chain
+from langchain.output_parsers import BooleanOutputParser
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -20,6 +22,7 @@ from pydantic import BaseModel, Field
 from models.chat import Message, MessageSender
 from models.memory import Structured, MemoryPhoto
 from models.plugin import Plugin
+from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
 llm = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -34,8 +37,71 @@ llm_with_parser = llm.with_structured_output(Structured)
 # TODO: include caching layer, redis
 
 
-def get_transcript_structure(transcript: str, started_at: datetime, language_code: str,
-                             force_process: bool, use_cheaper_model: bool = False) -> Structured:
+def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
+    cleaned = []
+    has_user = any([item.is_user for item in segments])
+    for item in segments:
+        speaker_id = item.speaker_id
+        if has_user:
+            speaker_id = item.speaker_id + 1 if not item.is_user else 0
+        cleaned.append({'speaker_id': speaker_id, 'text': item.text})
+
+    prompt = f'''
+You are a helpful assistant for correcting transcriptions of recordings. You will be given a list of voice segments, each segment contains the fields (speaker id, text, and seconds [start, end])
+
+The transcription has a Word Error Rate of about 15% in english, in other languages could be up to 25%, and it is specially bad at speaker diarization.
+
+Your task is to improve the transcript by taking the following steps:
+
+1. Make the conversation coherent, if someone reads it, it should be clear what the conversation is about, remember the estimate percentage of WER, this could include missing words, incorrectly transcribed words, missing connectors, punctuation signs, etc.
+
+2. The speakers ids are most likely inaccurate, make sure to assign the correct speaker id to each segment, by understanding the whole conversation. For example, 
+- The transcript could have 4 different speakers, but by analyzing the overall context, one can discover that it was only 2, and the speaker identification, took incorrectly multiple people.
+- The transcript could have 1 single speaker, or 2, but in reality was 3.
+- The speaker id might be assigned incorrectly, a conversation could have speaker 0 said "Hi, how are you", and then also speaker 0 said "I'm doing great, thanks for asking" which of course would be incorrect.
+
+Considerations:
+- Return a list of segments same size as the input.
+- Do not change the order of the segments.
+
+Transcript segments:
+{json.dumps(cleaned, indent=2)}'''
+
+    with_parser = llm.with_structured_output(ImprovedTranscript)
+    response: ImprovedTranscript = with_parser.invoke(prompt)
+    return response.result
+
+
+def discard_memory(transcript: str) -> bool:
+    if len(transcript.split(' ')) > 100:
+        return False
+
+    parser = BooleanOutputParser()
+    prompt = ChatPromptTemplate.from_messages([
+        '''
+    You will be given a conversation transcript, and your task is to determine if the conversation is not worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output True.
+    
+    Transcript: ```{transcript}```
+    
+    {format_instructions}'''.replace('    ', '').strip()
+    ])
+    print(prompt)
+    chain = prompt | llm | parser
+    try:
+        response = chain.invoke({
+            'transcript': transcript.strip(),
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return False
+
+
+def get_transcript_structure(
+        transcript: str, started_at: datetime, language_code: str, force_process: bool
+) -> Structured:
     if len(transcript.split(' ')) > 100:
         force_process = True
 
@@ -98,6 +164,19 @@ def summarize_screen_pipe(description: str) -> Structured:
       For the category, classify the scenes into one of the available categories.
     
       Screenshots: ```{description}```
+      '''.replace('    ', '').strip()
+    # return groq_llm_with_parser.invoke(prompt)
+    return llm_with_parser.invoke(prompt)
+
+
+def summarize_experience_text(text: str) -> Structured:
+    prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
+
+      For the title, use the main topic of the experience or thought.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Text: ```{text}```
       '''.replace('    ', '').strip()
     # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)

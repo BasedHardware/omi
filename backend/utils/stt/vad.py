@@ -1,4 +1,7 @@
 # import numpy as np
+import os
+from enum import Enum
+
 import requests
 import torch
 
@@ -16,18 +19,47 @@ model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_v
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
-def is_speech_present(data, vad_iterator, window_size_samples=256):
+class SpeechState(str, Enum):
+    has_speech = 'has_speech'
+    no_speech = 'no_speech'
+
+
+def get_speech_state(data, vad_iterator, window_size_samples=256):
+    has_start, has_end = False, False
     for i in range(0, len(data), window_size_samples):
         chunk = data[i: i + window_size_samples]
         if len(chunk) < window_size_samples:
             break
         speech_dict = vad_iterator(chunk, return_seconds=False)
-        if speech_dict:
-            # vad_iterator.reset_states()
-            return True
-    # vad_iterator.reset_states()
-    return False
+        # TODO: should have like a buffer of start? or some way to not keep it, it ends appear first
+        #   maybe like, if `end` was last, then return end? TEST THIS
 
+        if speech_dict:
+            # print(speech_dict)
+            if 'start' in speech_dict:
+                has_start = True
+            elif 'end' in speech_dict:
+                has_end = True
+    # print('----')
+    if has_start:
+        return SpeechState.has_speech
+    elif has_end:
+        return SpeechState.no_speech
+    return None
+
+    # for i in range(0, len(data), window_size_samples):
+    #     chunk = data[i: i + window_size_samples]
+    #     if len(chunk) < window_size_samples:
+    #         break
+    #     speech_dict = vad_iterator(chunk, return_seconds=False)
+    #     if speech_dict:
+    #         print(speech_dict)
+    #         # how many times this triggers?
+    #         if 'start' in speech_dict:
+    #             return SpeechState.has_speech
+    #         elif 'end' in speech_dict:
+    #             return SpeechState.no_speech
+    # return None
 
 
 @timeit
@@ -75,7 +107,7 @@ def vad_is_empty(file_path, return_segments: bool = False):
     try:
         with open(file_path, 'rb') as file:
             files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-            response = requests.post('https://josancamon19--vad-vad-endpoint.modal.run/', files=files, timeout=10)
+            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files, timeout=10)
             segments = response.json()
             if return_segments:
                 return segments

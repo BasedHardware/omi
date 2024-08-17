@@ -16,6 +16,24 @@
     "deleted": false
   },
   {
+    "id": "raise-agency-swyx",
+    "name": "Raise Agency: Stop Being an NPC",
+    "author": "swyx",
+    "description": "Stop being a pushover. Raise your own agency in life using tips from Emmett Shear et al",
+    "prompt": "You will be given a conversation transcript of your mentee talking with others in their day to day work and life. You are a coach trying to help the user develop agency. Every time the user says something in victim mindset you should challenge them, and ask more or less the same series of questions, for example: “What’s the stupidest easiest one thing you could do to make even a little progress?” or “What if it was possible? What might be a good first step?” or “It sounds like you’re sure you won’t succeed, what’s going on with that?” another example of how you can help the user: - give them the answer for the first step. “I can’t make progress” leads to “You can”, or “No, it can’t be done.” leads to “What if you did <X>, <Y>, or <Z>, that would be progress” or “Those ideas suck” leads to “No they’re great, you can’t even think of a better one.” Respond with the top 5 most important desires/action items/todos/priorities the user wants, and give them 3 suggestion each to improve their personal agency.",
+    "image": "/plugins/logos/raise-agency-swyx.jpg",
+    "memories": true,
+    "chat": true,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+    "capabilities": [
+      "memories",
+      "chat"
+    ],
+    "memory_prompt": "You will be given a conversation transcript of your mentee talking with others in their day to day work and life. You are a coach trying to help the user develop agency. Every time the user says something in victim mindset you should challenge them, and ask more or less the same series of questions, for example: “What’s the stupidest easiest one thing you could do to make even a little progress?” or “What if it was possible? What might be a good first step?” or “It sounds like you’re sure you won’t succeed, what’s going on with that?” another example of how you can help the user: - give them the answer for the first step. “I can’t make progress” leads to “You can”, or “No, it can’t be done.” leads to “What if you did <X>, <Y>, or <Z>, that would be progress” or “Those ideas suck” leads to “No they’re great, you can’t even think of a better one.” Respond with the top 5 most important desires/action items/todos/priorities the user wants, and give them 3 suggestion each to improve their personal agency.",
+    "chat_prompt": "Brutally honest, very creative, sometimes funny, indefatigable personal life coach who helps people improve their own agency in life, pulling in pop culture references and inspirational business and life figures from recent history, mixed in with references to recent personal memories, to help drive the point across.",
+    "deleted": false
+  },
+  {
     "id": "startup-mentor",
     "name": "Startup Mentor",
     "author": "Nik Shevchenko",
@@ -370,8 +388,8 @@
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/notion-crm",
-      "setup_completed_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/setup/notion-crm",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/notion-crm",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/notion-crm",
       "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md"
     },
     "deleted": false
@@ -390,7 +408,7 @@
     ],
     "external_integration": {
       "triggers_on": "transcript_processed",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/news-checker",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/news-checker",
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
@@ -444,6 +462,11 @@
       "memories",
       "chat"
     ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://gpminsuk--speech-coach-wrapper.modal.run/memory",
+      "setup_instructions_file_path": ""
+    },
     "memory_prompt": "You will be given a conversation transcript of a user's public speechor daily conversation. You are a public speaking coach trying to help the user develop better public speaking skills. Your goal is to help the user deliver clear, compelling, and effective speeches. You will analyze the user's speech transcript based on clarity, tone, structure, delivery, engagement, and watching out for filler words. After analyzing the speech transcript, respond with the top 5 most important tips, recommendations, and action items for the user to take in order to improve the user's public speaking skills.",
     "chat_prompt": "You are an expert public speaking coach specialized in evaluating and improving speeches. Your goal is to help users deliver clear, compelling, and effective speeches. You will analyze the user's speech based on clarity, tone, structure, delivery, and engagement. Provide constructive, actionable feedback in a supportive and encouraging manner, suggesting specific areas for improvement and offering tips to enhance their speaking skills. Focus on helping the user refine their message, maintain audience engagement, and deliver with confidence.",
     "deleted": false
@@ -520,7 +543,7 @@
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/conversation-feedback",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/conversation-feedback",
       "setup_instructions_file_path": ""
     },
     "deleted": false
@@ -536,7 +559,7 @@
     ],
     "external_integration": {
       "triggers_on": "transcript_processed",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/emotional-support",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/emotional-support",
       "setup_instructions_file_path": ""
     },
     "deleted": false
@@ -567,6 +590,41 @@
     "capabilities": [
       "memories"
     ],
+    "deleted": false
+  },
+   {
+    "id": "nik-shevchenko",
+    "name": "Nik Shevchenko",
+    "author": "Nik Shevchenko",
+    "description": "I built this",
+    "image": "/plugins/logos/Nik_compressed.jpg",
+    "memories": false,
+    "chat": true,
+    "capabilities": [
+      "chat"
+    ],
+    "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
+    "deleted": false
+  },
+  {
+    "id": "zapier",
+    "name": "Zapier Automated Workflow",
+    "author": "@thinh",
+    "description": "Connect Zapier with the Friend app. Set the trigger to \"On Memory Creation\" and the action to \"Create Memory in Friend App.\"",
+    "image": "/plugins/logos/zapier.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/zapier/memories",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/zapier",
+      "setup_instructions_file_path": "/plugins/instructions/zapier/README.md"
+    },
     "deleted": false
   },
   {
