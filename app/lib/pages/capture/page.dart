@@ -132,16 +132,24 @@ class CapturePageState extends State<CapturePage>
           streamStartedAtSecond = null;
           secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
         }
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
-      onConnectionFailed: (err) => setState(() {}),
+      onConnectionFailed: (err) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
       onConnectionClosed: (int? closeCode, String? closeReason) {
         // connection was closed, either on resetState, or by backend, or by some other reason.
         // setState(() {});
       },
       onConnectionError: (err) {
         // connection was okay, but then failed.
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
@@ -289,12 +297,15 @@ class CapturePageState extends State<CapturePage>
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Memory creation failed. It\' stored locally and will be retried soon.',
-          style: TextStyle(color: Colors.white, fontSize: 14),
-        ),
-      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Memory creation failed. It\' stored locally and will be retried soon.',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ));
+      }
+
       // TODO: store anyways something temporal and retry once connected again.
     }
 
@@ -403,7 +414,6 @@ class CapturePageState extends State<CapturePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     record.dispose();
-
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _internetListener.cancel();
