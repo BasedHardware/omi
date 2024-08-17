@@ -1,10 +1,19 @@
 import os
+import hashlib
+import asyncio
+import random
+import threading
+import uuid
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import database.memories as memories_db
 from database.vector import delete_vector
 from models.memory import *
+from models.integrations import *
+from models.plugin import Plugin
+from utils.plugins import get_plugins_data
 from models.transcript_segment import TranscriptSegment
 from utils import auth
 from utils.llm import transcript_user_speech_fix, num_tokens_from_string

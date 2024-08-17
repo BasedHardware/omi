@@ -185,6 +185,20 @@ def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int
     response: Output = with_parser.invoke(prompt)
     return response.speaker_id
 
+  
+def summarize_experience_text(text: str) -> Structured:
+    prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
+
+      For the title, use the main topic of the experience or thought.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Text: ```{text}```
+      '''.replace('    ', '').strip()
+    # return groq_llm_with_parser.invoke(prompt)
+    return llm_with_parser.invoke(prompt)
+
+  
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     prompt = f'''
