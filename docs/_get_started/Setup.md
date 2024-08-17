@@ -45,11 +45,12 @@ Before starting, make sure you have the following installed:
    Create `.env` using template `.env.template`
     ```
     cd ..
-    cat .env.template > .env
+    cat .env.template > .dev.env
     ```
 
 5. **API Keys**:
    Add your API keys to the `.env` file. (Sentry is not needed)
+- `API_BASE_URL` is your backend url. Follow this guide to [install backend](https://github.com/BasedHardware/Omi/tree/main/backend) 
 
 6. **Run Build Runner**:
    Generate necessary files with Build Runner:
@@ -71,10 +72,12 @@ Before starting, make sure you have the following installed:
       ```
    - Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
 
+If you face auth issues when running the app, enable Google/Apple sign-in in Firebase
 
 8. **Run the App**:
     - Select your target device in Xcode or Android Studio.
     - Run the app.
 
+Having troubles? [Join Discord and search your issue in help channel](https://discord.gg/based-hardware-1192313062041067520)
 
 [Next Step: Buying Guide →](/assembly/Buying_Guide/){: .btn .btn-purple }
