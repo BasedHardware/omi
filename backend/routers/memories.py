@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
@@ -22,6 +23,16 @@ def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Create Memory endpoint.
+    :param create_memory: data to create memory
+    :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
+    :param language_code: language.
+    :param uid: user id.
+    :return: The new memory created + any messages triggered by on_memory_created integrations.
+
+    TODO: Should receive raw segments by deepgram, instead of the beautified ones? and get beautified on read?
+    """
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
@@ -57,7 +68,7 @@ async def postprocess_memory(
     TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
     https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
 
-    USE soniox here? with speech profile and stuff?
+    TODO: USE soniox here? with speech profile and stuff?
     """
 
     memory_data = _get_memory_by_id(uid, memory_id)
@@ -65,12 +76,11 @@ async def postprocess_memory(
     if memory.discarded:
         raise HTTPException(status_code=400, detail="Memory is discarded")
 
-    # TODO: can do VAD and still keep segments?
-    # TODO: should still VAD start end?
+    # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
-    file_path = f"_temp/{memory_id}_{file.filename}"
+    file_path = f"_temp/{memory.id}_{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
@@ -78,7 +88,7 @@ async def postprocess_memory(
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
         os.remove(file_path)
-        segments = fal_whisperx(url)
+        segments = fal_whisperx(url)  # TODO: should consider storing non beautified segments, and beautify on read?
         delete_postprocessing_audio(file_path)
 
         # Fix user speaker_id matching
@@ -86,7 +96,7 @@ async def postprocess_memory(
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
             transcript_tokens = num_tokens_from_string(
                 TranscriptSegment.segments_as_string(memory.transcript_segments, False))
-
+            # should limit a few segments, like first and last 100?
             if transcript_tokens < 40000:  # 40k tokens, costs about 10 usd per request
                 new = TranscriptSegment.segments_as_string(segments, False)
                 speaker_id: int = transcript_user_speech_fix(prev, new)
@@ -97,7 +107,15 @@ async def postprocess_memory(
                 if segment.speaker_id == speaker_id:
                     segment.is_user = True
 
+        memory.id = str(uuid.uuid4())
+
+        # Store previous and new segments in DB as collection.
+        memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
         memory.transcript_segments = segments
+        memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
+        # memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
+
+        # Reprocess memory with improved transcription
         result = process_memory(uid, memory.language, memory, force_process=True)
     except Exception as e:
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
@@ -115,6 +133,10 @@ async def postprocess_memory(
 def reprocess_memory(
         memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Whenever a user wants to reprocess a memory, or wants to force process a discarded one
+    :return: The updated memory after reprocessing.
+    """
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")

@@ -5,6 +5,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
+from models.transcript_segment import TranscriptSegment
 from ._client import db
 
 
@@ -17,15 +18,6 @@ def upsert_memory(uid: str, memory_data: dict):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     memory_ref.set(memory_data)
-
-
-def set_postprocessing_status(
-        uid: str, memory_id: str, status: PostProcessingStatus,
-        model: PostProcessingModel = PostProcessingModel.fal_whisperx
-):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
 
 
 def get_memory(uid, memory_id):
@@ -116,3 +108,29 @@ def get_memory_photos(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     photos_ref = memory_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
+
+
+# POST PROCESSING
+
+def set_postprocessing_status(
+        uid: str, memory_id: str, status: PostProcessingStatus,
+        model: PostProcessingModel = PostProcessingModel.fal_whisperx
+):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
+
+
+def store_model_segments_result(uid: str, memory_id: str, model_name: str, segments: List[TranscriptSegment]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    segments_ref = memory_ref.collection(model_name)
+    batch = db.batch()
+    for segment in segments:
+        segment_id = str(uuid.uuid4())
+        segment_ref = segments_ref.document(segment_id)
+        batch.set(segment_ref, segment.dict())
+        if len(batch._writes) >= 400:
+            batch.commit()
+            batch = db.batch()
+    batch.commit()
