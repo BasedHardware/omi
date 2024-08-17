@@ -50,11 +50,11 @@ def delete_fal_file(url: str):
 
 
 @timeit
-def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
+def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
     handler = fal_client.submit(
         "fal-ai/whisper",
         arguments={
-            "audio_url": audio_base64_url,
+            "audio_url": audio_url,
             'task': 'transcribe',
             'diarize': True,
             'language': 'en',
@@ -88,14 +88,10 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
     for segment in cleaned:
         segments.append(TranscriptSegment(
             text=segment['text'],
-            speaker=segment['speaker'],
+            speaker=segment['speaker'] or 'SPEAKER_00',
             is_user=segment['is_user'],
             start=segment['start'],
             end=segment['end'],
         ))
 
-    # TODO: Include pipeline post processing, so that is_user get's matched with the correct speaker
-    # TODO: Do punctuation correction with LLM
-
-    # eventually do speaker embedding matching
     return segments

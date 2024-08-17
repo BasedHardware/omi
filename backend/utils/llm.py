@@ -126,9 +126,6 @@ def get_transcript_structure(
 
         {format_instructions}'''.replace('    ', '').strip()
     )])
-    # if use_cheaper_model:
-    #     chain = prompt | groq_llm | parser
-    # else:
     chain = prompt | llm | parser
 
     response = chain.invoke({
@@ -167,6 +164,26 @@ def summarize_screen_pipe(description: str) -> Structured:
       '''.replace('    ', '').strip()
     # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)
+
+
+class Output(BaseModel):
+    speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    prompt = f'''
+    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
+    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    
+    Previous Transcript:
+    {prev_transcript}
+    
+    Improved Transcript:
+    {new_transcript}
+    '''
+    with_parser = llm.with_structured_output(Output)
+    response: Output = with_parser.invoke(prompt)
+    return response.speaker_id
 
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:

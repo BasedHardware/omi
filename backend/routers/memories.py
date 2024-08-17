@@ -1,19 +1,23 @@
 import hashlib
+import os
 import random
 import threading
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from pydub import AudioSegment
 
 import database.memories as memories_db
 from database.vector import delete_vector, upsert_vectors
 from models.memory import *
 from models.transcript_segment import TranscriptSegment
 from utils import auth
-from utils.process_memory import process_memory
-from utils.llm import generate_embedding
+from utils.llm import generate_embedding, transcript_user_speech_fix
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
+from utils.process_memory import process_memory
+from utils.storage import upload_postprocessing_audio, delete_postprocessing_audio
+from utils.stt.fal import fal_whisperx
 
 router = APIRouter()
 
@@ -41,6 +45,52 @@ def create_memory(
 
     messages = trigger_external_integrations(uid, memory)
     return CreateMemoryResponse(memory=memory, messages=messages)
+
+
+@router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
+async def postprocess_memory(
+        memory_id: str, file: Optional[UploadFile], uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    The objective of this endpoint, is to get the best possible transcript from the audio file.
+    Instead of storing the initial deepgram result, doing a full post-processing with whisper-x.
+    This increases the quality of transcript by at least 20%.
+    Which also includes a better summarization.
+    Which helps us create better vectors for the memory.
+    And improves the overall experience of the user.
+
+    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
+    https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
+
+    TODO: do soniox here? with speech profile and stuff?
+    """
+
+    memory_data = _get_memory_by_id(uid, memory_id)
+    # TODO: if transcript too large ignore? or if discarded?
+
+    file_path = f"_temp/{memory_id}_{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+
+    # Upload to GCP + remove file locally and cloud storage
+    url = upload_postprocessing_audio(file_path)
+    os.remove(file_path)
+    segments = fal_whisperx(url)
+    delete_postprocessing_audio(file_path)
+
+    memory = Memory(**memory_data)
+
+    # Fix user speaker_id matching
+    if any(segment.is_user for segment in memory.transcript_segments):
+        prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
+        new = TranscriptSegment.segments_as_string(segments, False)
+        speaker_id: int = transcript_user_speech_fix(prev, new)
+        for segment in segments:
+            if segment.speaker_id == speaker_id:
+                segment.is_user = True
+
+    memory.transcript_segments = segments
+    return process_memory(uid, memory.language, memory, force_process=True)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
@@ -212,6 +262,7 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
     threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
     return {}
 
+
 # Future<String> dailySummaryNotifications(List<Memory> memories) async {
 #   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
 #   if (memories.isEmpty) return msg;
@@ -234,3 +285,33 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
 #   debugPrint('dailySummaryNotifications result: $result');
 #   return result.replaceAll('```', '').trim();
 # }
+
+
+# def test():
+#     # 1.2 secs per minute of audio. min 6 secs ~ until 5 minutes I guess
+#     # has to be asynchronous
+#     aseg = AudioSegment.from_wav('_temp/639caae9-536a-446f-b267-e49646eb53b4_recording-20240817_003521.wav')
+#     # aseg = aseg * 60 # 2 hours of audio
+#     path = '_temp/1times.wav'
+#     aseg.export(path, format='wav')
+#     url = upload_postprocessing_audio(path)
+#     print(url)
+#     segments = fal_whisperx(url)
+#     print(segments)
+#     memory_data = _get_memory_by_id('DX8n89KAmUaG9O7Qvj8xTi81Zu12', 'd584fba3-3a31-4963-a3ce-138aecd3c7d5')
+#     memory = Memory(**memory_data)
+#     has_user_voice = any(segment.is_user for segment in memory.transcript_segments)
+#     prev_segments = memory.transcript_segments
+#     if has_user_voice:
+#         prev = TranscriptSegment.segments_as_string(prev_segments, False)
+#         new = TranscriptSegment.segments_as_string(segments, False)
+#         speaker_id: int = transcript_user_speech_fix(prev, new)
+#         for segment in segments:
+#             if segment.speaker_id == speaker_id:
+#                 segment.is_user = True
+#
+#     memory.transcript_segments = segments
+#     process_memory('DX8n89KAmUaG9O7Qvj8xTi81Zu12', memory.language, memory, force_process=True)
+#
+#
+# test()
