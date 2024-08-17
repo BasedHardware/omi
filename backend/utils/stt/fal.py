@@ -5,6 +5,7 @@ from typing import List
 import fal_client
 
 from models.transcript_segment import TranscriptSegment
+from utils.endpoints import timeit
 
 
 def file_to_base64_url(file_path):
@@ -31,13 +32,29 @@ def base64_to_file(base64_url, file_path):
     # Write the content to the file
     with open(file_path, 'wb') as file:
         file.write(file_content)
+    return file.read()
 
 
-def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
+def upload_fal_file(mid: str, audio_base64_url: str):
+    print(audio_base64_url)
+    file_bytes = base64_to_file(audio_base64_url, f"_temp/{mid}.wav")
+    url = fal_client.upload(file_bytes, "audio/wav")
+    print('url', url)
+    return url
+
+
+def delete_fal_file(url: str):
+    # url = fal_client.de(file_bytes, "audio/wav")
+    # return url
+    return False
+
+
+@timeit
+def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
     handler = fal_client.submit(
         "fal-ai/whisper",
         arguments={
-            "audio_url": audio_base64_url,
+            "audio_url": audio_url,
             'task': 'transcribe',
             'diarize': True,
             'language': 'en',
@@ -56,6 +73,7 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
         chunk['end'] = chunk['timestamp'][1]
         chunk['text'] = chunk['text'].strip()
         chunk['is_user'] = False
+        chunk['speaker'] = chunk.get('speaker') or 'SPEAKER_00'  # TODO: why is needed?
         del chunk['timestamp']
 
     cleaned = []
@@ -66,10 +84,15 @@ def fal_whisperx(audio_base64_url: str) -> List[TranscriptSegment]:
             cleaned[-1]['text'] += ' ' + chunk['text']
         else:
             cleaned.append(chunk)
+    segments = []
+    for segment in cleaned:
+        print(segment['start'], segment['end'], segment['speaker'], segment['text'])
+        segments.append(TranscriptSegment(
+            text=segment['text'],
+            speaker=segment['speaker'],
+            is_user=segment['is_user'],
+            start=segment['start'] or 0,
+            end=segment['end'] or segment['start'] + 1,
+        ))
 
-    # TODO: Include pipeline post processing, so that is_user get's matched with the correct speaker
-    # TODO: Do punctuation correction with LLM
-
-    # TODO: test other languages
-    # TODO: eventually do speaker embedding matching
-    return cleaned
+    return segments

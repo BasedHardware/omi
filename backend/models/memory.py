@@ -103,6 +103,21 @@ class MemorySource(str, Enum):
     workflow = 'workflow'
 
 
+class PostProcessingStatus(str, Enum):
+    in_progress = 'in_progress'
+    completed = 'completed'
+    failed = 'failed'
+
+
+class PostProcessingModel(str, Enum):
+    fal_whisperx = 'fal_whisperx'
+
+
+class MemoryPostProcessing(BaseModel):
+    status: PostProcessingStatus
+    model: PostProcessingModel
+
+
 class Memory(BaseModel):
     id: str
     created_at: datetime
@@ -121,6 +136,8 @@ class Memory(BaseModel):
 
     external_data: Optional[Dict] = None
 
+    postprocessing: Optional[MemoryPostProcessing] = None
+
     discarded: bool = False
     deleted: bool = False
 
@@ -137,8 +154,8 @@ class Memory(BaseModel):
             result.append(memory_str.strip())
         return "\n\n".join(result)
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
 class CreateMemory(BaseModel):
@@ -151,10 +168,9 @@ class CreateMemory(BaseModel):
 
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
-    audio_base64_url: Optional[str] = None
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
 class WorkflowMemorySource(str, Enum):
