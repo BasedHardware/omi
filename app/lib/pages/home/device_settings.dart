@@ -106,7 +106,7 @@ class DeviceSettings extends StatelessWidget {
                 child: TextButton(
                   onPressed: () {
                     if (device != null) bleDisconnectDevice(device!);
-                    SharedPreferencesUtil().deviceId = '';
+                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
                     SharedPreferencesUtil().deviceName = '';
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
