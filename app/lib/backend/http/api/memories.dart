@@ -69,7 +69,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   return null;
 }
 
-Future<bool> memoryPostProcessing(File file, String memoryId) async {
+Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing'),
@@ -82,15 +82,15 @@ Future<bool> memoryPostProcessing(File file, String memoryId) async {
     var response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      debugPrint('uploadProfile Response body: ${jsonDecode(response.body)}');
-      return true;
+      debugPrint('memoryPostProcessing Response body: ${jsonDecode(response.body)}');
+      return ServerMemory.fromJson(jsonDecode(response.body));
     } else {
-      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+      debugPrint('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
+      throw Exception('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    debugPrint('An error occurred uploadSample: $e');
-    throw Exception('An error occurred uploadSample: $e');
+    debugPrint('An error occurred memoryPostProcessing: $e');
+    throw Exception('An error occurred memoryPostProcessing: $e');
   }
 }
 
