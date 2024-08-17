@@ -1,17 +1,13 @@
-import hashlib
 import os
-import random
-import threading
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import database.memories as memories_db
-from database.vector import delete_vector, upsert_vectors
+from database.vector import delete_vector
 from models.memory import *
 from models.transcript_segment import TranscriptSegment
 from utils import auth
-from utils.llm import generate_embedding, transcript_user_speech_fix
+from utils.llm import transcript_user_speech_fix, num_tokens_from_string
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 from utils.process_memory import process_memory
@@ -61,39 +57,58 @@ async def postprocess_memory(
     TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
     https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
 
-    TODO: do soniox here? with speech profile and stuff?
+    USE soniox here? with speech profile and stuff?
     """
 
     memory_data = _get_memory_by_id(uid, memory_id)
-    # TODO: if transcript too large ignore? or if discarded?
+    memory = Memory(**memory_data)
+    if memory.discarded:
+        raise HTTPException(status_code=400, detail="Memory is discarded")
 
     # TODO: can do VAD and still keep segments?
+    # TODO: should still VAD start end?
+
+    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     file_path = f"_temp/{memory_id}_{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
-    # Upload to GCP + remove file locally and cloud storage
-    url = upload_postprocessing_audio(file_path)
-    os.remove(file_path)
-    segments = fal_whisperx(url)
-    delete_postprocessing_audio(file_path)
+    try:
+        # Upload to GCP + remove file locally and cloud storage
+        url = upload_postprocessing_audio(file_path)
+        os.remove(file_path)
+        segments = fal_whisperx(url)
+        delete_postprocessing_audio(file_path)
 
-    memory = Memory(**memory_data)
+        # Fix user speaker_id matching
+        if any(segment.is_user for segment in memory.transcript_segments):
+            prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
+            transcript_tokens = num_tokens_from_string(
+                TranscriptSegment.segments_as_string(memory.transcript_segments, False))
 
-    # Fix user speaker_id matching
-    if any(segment.is_user for segment in memory.transcript_segments):
-        prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
-        new = TranscriptSegment.segments_as_string(segments, False)
-        speaker_id: int = transcript_user_speech_fix(prev, new)
-        for segment in segments:
-            if segment.speaker_id == speaker_id:
-                segment.is_user = True
+            if transcript_tokens < 40000:  # 40k tokens, costs about 10 usd per request
+                new = TranscriptSegment.segments_as_string(segments, False)
+                speaker_id: int = transcript_user_speech_fix(prev, new)
+            else:  # simple way (this in theory should work for all) ~ Not super accurate most likely
+                speaker_id: int = [segment.speaker_id for segment in memory.transcript_segments if segment.is_user][0]
 
-    memory.transcript_segments = segments
-    # TODO: post-processing flag or smth in memory
-    # TODO: store unprocessed and compare?
-    return process_memory(uid, memory.language, memory, force_process=True)
+            for segment in segments:
+                if segment.speaker_id == speaker_id:
+                    segment.is_user = True
+
+        memory.transcript_segments = segments
+        result = process_memory(uid, memory.language, memory, force_process=True)
+    except Exception as e:
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
+    return result
+
+
+# url = upload_postprocessing_audio('_temp/639caae9-536a-446f-b267-e49646eb53b4_recording-20240817_003521.wav')
+# segments = fal_whisperx(url)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])

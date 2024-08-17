@@ -4,7 +4,7 @@ from typing import List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from models.memory import MemoryPhoto
+from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 from ._client import db
 
 
@@ -17,6 +17,15 @@ def upsert_memory(uid: str, memory_data: dict):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     memory_ref.set(memory_data)
+
+
+def set_postprocessing_status(
+        uid: str, memory_id: str, status: PostProcessingStatus,
+        model: PostProcessingModel = PostProcessingModel.fal_whisperx
+):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
 
 
 def get_memory(uid, memory_id):

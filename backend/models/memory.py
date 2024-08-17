@@ -102,6 +102,21 @@ class MemorySource(str, Enum):
     screenpipe = 'screenpipe'
 
 
+class PostProcessingStatus(str, Enum):
+    in_progress = 'in_progress'
+    completed = 'completed'
+    failed = 'failed'
+
+
+class PostProcessingModel(str, Enum):
+    fal_whisperx = 'fal_whisperx'
+
+
+class MemoryPostProcessing(BaseModel):
+    status: PostProcessingStatus
+    model: PostProcessingModel
+
+
 class Memory(BaseModel):
     id: str
     created_at: datetime
@@ -119,6 +134,8 @@ class Memory(BaseModel):
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
+
+    # postprocessing: Optional[MemoryPostProcessing] = None
 
     discarded: bool = False
     deleted: bool = False
