@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:sign_in_button/sign_in_button.dart';
@@ -103,6 +104,7 @@ class _AuthComponentState extends State<AuthComponent> {
     String? token;
     try {
       token = await getIdToken();
+      NotificationService.instance.saveNotificationToken();
     } catch (e, stackTrace) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Failed to retrieve firebase token, please try again.'),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/home/device_settings.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 
 class ConnectDevicePage extends StatefulWidget {
@@ -17,6 +19,20 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
         appBar: AppBar(
           title: const Text('Connect Your Friend'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DeviceSettings(
+                      isDeviceConnected: false,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings),
+            )
+          ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: ListView(
@@ -25,7 +41,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             FindDevicesPage(
               goNext: () {
                 debugPrint('onConnected');
-                Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (c) => const HomePageWrapper()));
+                routeToPage(context, const HomePageWrapper(), replace: true);
               },
               includeSkip: false,
             )

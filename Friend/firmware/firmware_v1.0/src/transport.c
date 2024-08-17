@@ -1,5 +1,5 @@
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -13,6 +13,8 @@
 #include "utils.h"
 #include "btutils.h"
 #include "lib/battery/battery.h"
+
+LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 
@@ -91,28 +93,28 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
-        printk("Client subscribed for notifications\n");
+        LOG_INF("Client subscribed for notifications");
     }
     else if (value == 0)
     {
-        printk("Client unsubscribed from notifications\n");
+        LOG_INF("Client unsubscribed from notifications");
     }
     else
     {
-        printk("Invalid CCC value: %u\n", value);
+        LOG_INF("Invalid CCC value: %u", value);
     }
 }
 
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("audio_data_read_characteristic\n");
+    LOG_DBG("audio_data_read_characteristic");
     return bt_gatt_attr_read(conn, attr, buf, len, offset, NULL, 0);
 }
 
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
-    printk("audio_codec_read_characteristic\n");
     uint8_t value[1] = {CODEC_ID};
+    LOG_DBG("audio_codec_read_characteristic %d", CODEC_ID);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
@@ -124,21 +126,21 @@ static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
-        printk("Client subscribed for notifications\n");
+        LOG_INF("Client subscribed for notifications");
     }
     else if (value == 0)
     {
-        printk("Client unsubscribed from notifications\n");
+        LOG_INF("Client unsubscribed from notifications");
     }
     else
     {
-        printk("Invalid CCC value: %u\n", value);
+        LOG_INF("Invalid CCC value: %u", value);
     }
 }
 
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-    printk("dfu_control_point_write_handler\n");
+    LOG_INF("dfu_control_point_write_handler");
     if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
     {
         NRF_POWER->GPREGRET = 0xA8;
@@ -172,15 +174,15 @@ void broadcast_battery_level(struct k_work *work_item) {
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
-        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+        LOG_INF("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
         if (err) {
-            printk("Error updating battery level: %d\n", err);
+            LOG_ERR("Error updating battery level: %d", err);
         }
     } else {
-        printk("Failed to read battery level\n");
+        LOG_ERR("Failed to read battery level");
     }
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
@@ -197,16 +199,16 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     err = bt_conn_get_info(conn, &info);
     if (err)
     {
-        printk("Failed to get connection info (err %d)\n", err);
+        LOG_ERR("Failed to get connection info (err %d)", err);
         return;
     }
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
-    printk("Connected\n");
-    printk("Interval: %d, latency: %d, timeout: %d\n", info.le.interval, info.le.latency, info.le.timeout);
-    printk("TX PHY %s, RX PHY %s\n", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
-    printk("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)\n", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
+    LOG_INF("Transport connected");
+    LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
+    LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
+    LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 
@@ -217,7 +219,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
 
-    printk("Disconnected\n");
+    LOG_INF("Transport disconnected");
     bt_conn_unref(conn);
     current_connection = NULL;
     current_mtu = 0;
@@ -225,10 +227,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 {
-    printk("Connection parameters update request received.\n");
-    printk("Minimum interval: %d, Maximum interval: %d\n",
-           param->interval_min, param->interval_max);
-    printk("Latency: %d, Timeout: %d\n", param->latency, param->timeout);
+    LOG_INF("Transport connection parameters update request received.");
+    LOG_DBG("Minimum interval: %d, Maximum interval: %d", param->interval_min, param->interval_max);
+    LOG_DBG("Latency: %d, Timeout: %d", param->latency, param->timeout);
 
     return true;
 }
@@ -236,23 +237,22 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
-    printk("Connection parameters updated.\n"
-           " interval: %d, latency: %d, timeout: %d\n",
-           interval, latency, timeout);
+    LOG_INF("Connection parameters updated.");
+	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
                             struct bt_conn_le_phy_info *param)
 {
-    printk("LE PHY updated: TX PHY %s, RX PHY %s\n",
+    LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
            phy2str(param->tx_phy), phy2str(param->rx_phy));
 }
 
 static void _le_data_length_updated(struct bt_conn *conn,
                                     struct bt_conn_le_data_len_info *info)
 {
-    printk("LE data len updated: TX (len: %d time: %d)"
-           " RX (len: %d time: %d)\n",
+    LOG_DBG("LE data len updated: TX (len: %d time: %d)"
+           " RX (len: %d time: %d)",
            info->tx_max_len,
            info->tx_max_time, info->rx_max_len, info->rx_max_time);
     current_mtu = info->tx_max_len;
@@ -311,7 +311,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        printk("Failed to read from ring buffer %d\n", tx_buffer_size);
+        LOG_WRN("Failed to read from ring buffer %d", tx_buffer_size);
         return false;
     }
 
@@ -363,8 +363,8 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Log failure
             if (err)
             {
-                printk("bt_gatt_notify failed (err %d)\n", err);
-                printk("MTU: %d, packet_size: %d\n", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                LOG_DBG("bt_gatt_notify failed (err %d)", err);
+                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
             }
 
@@ -448,10 +448,10 @@ int transport_start()
     int err = bt_enable(NULL);
     if (err)
     {
-        printk("Bluetooth init failed (err %d)\n", err);
+        LOG_ERR("Transport bluetooth init failed (err %d)", err);
         return err;
     }
-    printk("Bluetooth initialized\n");
+    LOG_INF("Transport bluetooth initialized");
 
     // Start advertising
     bt_gatt_service_register(&audio_service);
@@ -459,26 +459,26 @@ int transport_start()
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
-        printk("Advertising failed to start (err %d)\n", err);
+        LOG_ERR("Transport advertising failed to start (err %d)", err);
         return err;
     }
     else
     {
-        printk("Advertising successfully started\n");
+        LOG_INF("Advertising successfully started");
     }
 
-     int battErr = 0;
+    int battErr = 0;
 
 	battErr |= battery_init();
 	battErr |= battery_charge_start();
 
 	if (battErr)
 	{
-		 printk("Battery init failed (err %d)\n", battErr);
+		LOG_ERR("Battery init failed (err %d)", battErr);
 	}
 	else
 	{
-		  printk("Battery initialized\n");
+		LOG_INF("Battery initialized");
 	}
 
     // Start pusher

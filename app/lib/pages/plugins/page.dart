@@ -1,9 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -250,6 +252,22 @@ class _PluginsPageState extends State<PluginsPage> {
               ),
             ),
             // const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            filteredPlugins.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 64, left: 14, right: 14),
+                      child: Center(
+                        child: Text(
+                          ConnectivityController().isConnected.value
+                              ? 'No plugins found'
+                              : 'Unable to fetch plugins :(\n\nPlease check your internet connection and try again.',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  )
+                : const SliverToBoxAdapter(child: SizedBox(height: 8)),
             SliverList(
                 delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -267,10 +285,15 @@ class _PluginsPageState extends State<PluginsPage> {
                       await routeToPage(context, PluginDetailPage(plugin: plugin));
                       setState(() => plugins = SharedPreferencesUtil().pluginsList);
                     },
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.white,
-                      maxRadius: 28,
-                      backgroundImage: NetworkImage(plugin.getImageUrl()),
+                    leading: CachedNetworkImage(
+                      imageUrl: plugin.getImageUrl(),
+                      imageBuilder: (context, imageProvider) => CircleAvatar(
+                        backgroundColor: Colors.white,
+                        maxRadius: 28,
+                        backgroundImage: imageProvider,
+                      ),
+                      placeholder: (context, url) => const CircularProgressIndicator(),
+                      errorWidget: (context, url, error) => const Icon(Icons.error),
                     ),
                     title: Text(
                       plugin.name,

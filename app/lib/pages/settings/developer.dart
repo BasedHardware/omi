@@ -5,9 +5,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/memory_provider.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -151,7 +154,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     : () async {
                         if (loadingExportMemories) return;
                         setState(() => loadingExportMemories = true);
-                        File file = await MemoryProvider().exportMemoriesToFile();
+                        List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
+                        String json = getPrettyJSONString(memories.map((m) => m.toJson()).toList());
+                        final directory = await getApplicationDocumentsDirectory();
+                        final file = File('${directory.path}/memories.json');
+                        await file.writeAsString(json);
+
                         final result =
                             await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
                         if (result.status == ShareResultStatus.success) {
