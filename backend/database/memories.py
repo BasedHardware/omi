@@ -126,11 +126,11 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
     memory_ref = user_ref.collection('memories').document(memory_id)
     segments_ref = memory_ref.collection(model_name)
     batch = db.batch()
-    for segment in segments:
+    for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.dict())
-        if len(batch._writes) >= 400:
+        if i >= 400:
             batch.commit()
             batch = db.batch()
     batch.commit()

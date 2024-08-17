@@ -36,6 +36,7 @@ import 'logic/websocket_mixin.dart';
 class CapturePage extends StatefulWidget {
   final Function addMemory;
   final Function addMessage;
+  final Function(ServerMemory) updateMemory;
   final BTDeviceStruct? device;
 
   const CapturePage({
@@ -43,6 +44,7 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.addMemory,
     required this.addMessage,
+    required this.updateMemory,
   });
 
   @override
@@ -300,8 +302,11 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
-    if (memory != null && !memory.failed && file != null && segments.isNotEmpty & !memory.discarded) {
-      memoryPostProcessing(file, memory.id);
+    //
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
+      memoryPostProcessing(file, memory.id).then((postProcessed) {
+        widget.updateMemory(postProcessed);
+      });
     }
 
     SharedPreferencesUtil().transcriptSegments = [];

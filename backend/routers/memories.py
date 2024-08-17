@@ -1,5 +1,4 @@
 import os
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
@@ -16,6 +15,13 @@ from utils.storage import upload_postprocessing_audio, delete_postprocessing_aud
 from utils.stt.fal import fal_whisperx
 
 router = APIRouter()
+
+
+def _get_memory_by_id(uid: str, memory_id: str):
+    memory = memories_db.get_memory(uid, memory_id)
+    if memory is None or memory.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return memory
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -70,19 +76,17 @@ async def postprocess_memory(
 
     TODO: USE soniox here? with speech profile and stuff?
     """
-
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
     if memory.discarded:
         raise HTTPException(status_code=400, detail="Memory is discarded")
 
     # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
-
-    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
-
-    file_path = f"_temp/{memory.id}_{file.filename}"
+    file_path = f"_temp/{memory_id}_{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
+
+    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
         # Upload to GCP + remove file locally and cloud storage
@@ -107,13 +111,11 @@ async def postprocess_memory(
                 if segment.speaker_id == speaker_id:
                     segment.is_user = True
 
-        memory.id = str(uuid.uuid4())
-
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
         memory.transcript_segments = segments
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
-        # memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
+        memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
 
         # Reprocess memory with improved transcription
         result = process_memory(uid, memory.language, memory, force_process=True)
@@ -125,9 +127,17 @@ async def postprocess_memory(
     return result
 
 
-# url = upload_postprocessing_audio('_temp/639caae9-536a-446f-b267-e49646eb53b4_recording-20240817_003521.wav')
-# segments = fal_whisperx(url)
+# 843364d7-6a60-4f30-8684-0e74d0398c5c
+# caLCFj7IisV85UX9XrrV1aVf3pk1
 
+# util(
+#     'caLCFj7IisV85UX9XrrV1aVf3pk1',
+#     '843364d7-6a60-4f30-8684-0e74d0398c5c',
+#     '_temp/843364d7-6a60-4f30-8684-0e74d0398c5c_recording-20240817_145819.wav'
+# )
+
+# url = upload_postprocessing_audio('_temp/5a414d64-7c75-4df2-983e-18cee665a67d_recording-20240817_153755.wav')
+# segments = fal_whisperx(url)
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
 def reprocess_memory(
@@ -151,13 +161,6 @@ def reprocess_memory(
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset)
     return memories_db.get_memories(uid, limit, offset, include_discarded=True)
-
-
-def _get_memory_by_id(uid: str, memory_id: str):
-    memory = memories_db.get_memory(uid, memory_id)
-    if memory is None or memory.get('deleted', False):
-        raise HTTPException(status_code=404, detail="Memory not found")
-    return memory
 
 
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])

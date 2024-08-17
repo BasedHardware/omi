@@ -84,7 +84,6 @@ def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
             cleaned[-1]['text'] += ' ' + chunk['text']
         else:
             cleaned.append(chunk)
-
     segments = []
     for segment in cleaned:
         print(segment['start'], segment['end'], segment['speaker'], segment['text'])
@@ -96,4 +95,4 @@ def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
             end=segment['end'] or segment['start'] + 1,
         ))
 
-        return segments
+    return segments
