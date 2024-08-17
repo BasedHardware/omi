@@ -416,19 +416,26 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             textFieldFocusNode: memoriesTextFieldFocusNode,
                           ),
                           CapturePage(
-                            key: capturePageKey,
-                            device: _device,
-                            addMemory: (ServerMemory memory) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              memoriesCopy.insert(0, memory);
-                              setState(() => memories = memoriesCopy);
-                            },
-                            addMessage: (ServerMessage message) {
-                              var messagesCopy = List<ServerMessage>.from(messages);
-                              messagesCopy.insert(0, message);
-                              setState(() => messages = messagesCopy);
-                            },
-                          ),
+                              key: capturePageKey,
+                              device: _device,
+                              addMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                memoriesCopy.insert(0, memory);
+                                setState(() => memories = memoriesCopy);
+                              },
+                              addMessage: (ServerMessage message) {
+                                var messagesCopy = List<ServerMessage>.from(messages);
+                                messagesCopy.insert(0, message);
+                                setState(() => messages = messagesCopy);
+                              },
+                              updateMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                                if (index != -1) {
+                                  memoriesCopy[index] = memory;
+                                  setState(() => memories = memoriesCopy);
+                                }
+                              }),
                           ChatPage(
                             key: chatPageKey,
                             textFieldFocusNode: chatTextFieldFocusNode,
