@@ -1,9 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -22,68 +20,10 @@ class ConnectedDevice extends StatefulWidget {
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
 }
 
-class DeviceInfo {
-  String modelNumber;
-  String firmwareRevision;
-  String hardwareRevision;
-  String manufacturerName;
-
-  DeviceInfo(this.modelNumber, this.firmwareRevision, this.hardwareRevision, this.manufacturerName);
-
-  static Future<DeviceInfo> getDeviceInfo(BTDeviceStruct? device) async {
-    var modelNumber = 'Friend';
-    var firmwareRevision = '1.0.2';
-    var hardwareRevision = 'Seeed Xiao BLE Sense';
-    var manufacturerName = 'Based Hardware';
-
-    if (device == null) return DeviceInfo(modelNumber, firmwareRevision, hardwareRevision, manufacturerName);
-
-    String deviceId = device.id;
-
-    var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
-    if (deviceInformationService != null) {
-      var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
-      if (modelNumberCharacteristic != null) {
-        modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
-      }
-
-      var firmwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
-      if (firmwareRevisionCharacteristic != null) {
-        firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
-      }
-
-      var hardwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
-      if (hardwareRevisionCharacteristic != null) {
-        hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
-      }
-
-      var manufacturerNameCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
-      if (manufacturerNameCharacteristic != null) {
-        manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
-      }
-    }
-
-    return DeviceInfo(
-      modelNumber,
-      firmwareRevision,
-      hardwareRevision,
-      manufacturerName,
-    );
-  }
-}
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    var deviceId = widget.device?.id ?? SharedPreferencesUtil().deviceId;
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
@@ -96,21 +36,20 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             actions: [
-              deviceConnected
-                  ? IconButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => DeviceSettings(
-                              device: widget.device,
-                              deviceInfo: snapshot.data!,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.settings),
-                    )
-                  : const SizedBox.shrink(),
+              IconButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DeviceSettings(
+                        device: widget.device,
+                        deviceInfo: snapshot.data,
+                        isDeviceConnected: deviceConnected,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+              )
             ],
           ),
           body: Column(
@@ -122,7 +61,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                    '$deviceName (${widget.device?.getShortId() ?? ''})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -210,14 +149,13 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextButton(
-                  onPressed: () {
-                    if (widget.device != null) bleDisconnectDevice(widget.device!);
+                  onPressed: () async {
+                    if (widget.device != null) {
+                      await bleDisconnectDevice(widget.device!);
+                    }
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().deviceId = '';
                     SharedPreferencesUtil().deviceName = '';
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Your Friend is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
-                    ));
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(

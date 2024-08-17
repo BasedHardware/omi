@@ -1,3 +1,4 @@
+#include <zephyr/logging/log.h>
 #include <zephyr/sys/ring_buffer.h>
 #include "codec.h"
 #include "audio.h"
@@ -6,6 +7,8 @@
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif
+
+LOG_MODULE_REGISTER(codec, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
 // Output
@@ -90,7 +93,7 @@ void codec_entry()
 
 int codec_start()
 {
-    
+
 // OPUS
 #if CODEC_OPUS
     ASSERT_TRUE(opus_encoder_get_size(1) == sizeof(m_opus_encoder));
@@ -159,10 +162,10 @@ uint16_t execute_codec()
     opus_int32 size = opus_encode(m_opus_state, codec_input_samples, CODEC_PACKAGE_SAMPLES, codec_output_bytes, sizeof(codec_output_bytes));
     if (size < 0)
     {
-        printk("Opus encoding failed: %d\n", size);
+        LOG_WRN("Opus encoding failed: %d", size);
         return 0;
     }
-    // printk("Opus encoding success: %i\n", size);
+    LOG_DBG("Opus encoding success: %i", size);
     return size;
 }
 

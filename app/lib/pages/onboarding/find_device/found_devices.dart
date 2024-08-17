@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -23,13 +22,16 @@ class FoundDevices extends StatefulWidget {
   _FoundDevicesState createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMixin {
+class _FoundDevicesState extends State<FoundDevices> {
   bool _isClicked = false;
   bool _isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
   String deviceId = '';
   String? _connectingToDeviceId;
+
+  // TODO: improve this and find_device page.
+  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
 
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
@@ -63,6 +65,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
     await bleConnectDevice(device.id);
     deviceId = device.id;
     deviceName = device.name;
+    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
   }
 
@@ -95,7 +98,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
         if (!_isConnected) ..._devicesList(),
         if (_isConnected)
           Text(
-            '$deviceName (${deviceId.replaceAll(':', '').split('-').last.substring(0, 6)})',
+            '$deviceName (${BTDeviceStruct.shortId(deviceId)})',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w500,
@@ -153,7 +156,7 @@ class _FoundDevicesState extends State<FoundDevices> with TickerProviderStateMix
                         Align(
                           alignment: Alignment.center,
                           child: Text(
-                            '${device.name} (${device.id.replaceAll(':', '').split('-').last.substring(0, 6)})',
+                            '${device.name} (${device.getShortId()})',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
