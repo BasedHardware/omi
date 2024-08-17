@@ -150,7 +150,6 @@ class CreateMemory(BaseModel):
 
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
-    audio_base64_url: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)

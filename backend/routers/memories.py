@@ -5,7 +5,6 @@ import threading
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from pydub import AudioSegment
 
 import database.memories as memories_db
 from database.vector import delete_vector, upsert_vectors
@@ -261,7 +260,6 @@ def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_cur
     db_batch.commit()
     threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
     return {}
-
 
 # Future<String> dailySummaryNotifications(List<Memory> memories) async {
 #   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
