@@ -74,15 +74,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
     if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
     return await processTranscriptContent(
-      memory.transcriptSegments,
-      retrievedFromCache: true,
+      segments: memory.transcriptSegments,
       sendMessageToChat: null,
       startedAt: memory.startedAt,
       finishedAt: memory.finishedAt,
       geolocation: memory.geolocation,
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
-      language: memory.language,
+      language: memory.language ?? 'en',
     );
   }
 
@@ -330,7 +329,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
             if (previousConnection != isConnected) {
               previousConnection = isConnected;
               if (!isConnected) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+                Future.delayed(Duration.zero, () {
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('No internet connection. Please check your connection.'),
@@ -338,7 +337,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
@@ -347,7 +346,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   );
                 });
               } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                Future.delayed(Duration.zero, () {
+                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('Internet connection is restored.'),
@@ -355,21 +355,22 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
                       ],
+                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                      }),
                     ),
                   );
-                  Future.delayed(const Duration(seconds: 2), () {
-                    ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  });
+
                   if (memories.isEmpty) {
-                    await _initiateMemories();
+                    _initiateMemories();
                   }
                   if (messages.isEmpty) {
-                    await _refreshMessages();
+                    _refreshMessages();
                   }
                 });
               }

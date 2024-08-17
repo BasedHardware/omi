@@ -606,7 +606,7 @@
     "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
     "deleted": false
   },
-  ,
+[
   {
     "id": "doordash-order",
     "name": "DoorDash Order",
@@ -623,6 +623,26 @@
       "triggers_on": "transcript_processed",
       "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/doordash",
       "setup_instructions_file_path": "/plugins/instructions/doordash-plugin/README.md"
+    },
+    "deleted": false
+  },
+  {
+    "id": "zapier",
+    "name": "Zapier Automated Workflow",
+    "author": "@thinh",
+    "description": "Connect Zapier with the Friend app. Set the trigger to \"On Memory Creation\" and the action to \"Create Memory in Friend App.\"",
+    "image": "/plugins/logos/zapier.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/zapier/memories",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/zapier",
+      "setup_instructions_file_path": "/plugins/instructions/zapier/README.md"
     },
     "deleted": false
   }

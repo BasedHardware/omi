@@ -1,4 +1,5 @@
 import hashlib
+import asyncio
 import random
 import threading
 import uuid
@@ -7,80 +8,141 @@ from typing import Union
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from database.vector import upsert_vector, delete_vector, upsert_vectors
+from database.vector import delete_vector, upsert_vectors, upsert_vector
 from models.memory import *
+from models.integrations import *
 from models.plugin import Plugin
+from utils.plugins import get_plugins_data
 from models.transcript_segment import TranscriptSegment
-from routers.plugins import get_plugins_data
 from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
+from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass, summarize_experience_text
 from utils.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
 
 
-def _process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
-):
-    transcript = memory.get_transcript()
+def _process_get_memory_structered(memory: Union[Memory, CreateMemory, WorkflowCreateMemory], language_code: str, force_process: bool) -> (Structured, bool):
+    # From workflow
+    if memory.source == MemorySource.workflow:
+        if memory.text_source == WorkflowMemorySource.audio:
+            structured = get_transcript_structure(
+                memory.text, memory.started_at, language_code, True)
+            return (structured, False)
 
-    photos = []
+        if memory.text_source == WorkflowMemorySource.other:
+            structured = summarize_experience_text(memory.text)
+            return (structured, False)
+
+        # not workflow memory source support
+        raise HTTPException(status_code=400, detail='Invalid workflow memory source')
+
+    # Default source
+    should_clean_photos = False
+    transcript = memory.get_transcript()
+    if memory.photos:
+        structured: Structured = summarize_open_glass(memory.photos)
+        should_clean_photos = True  # Clear photos to avoid saving them in the memory
+        return (structured, should_clean_photos)
+
+    structured: Structured = get_transcript_structure(
+        transcript, memory.started_at, language_code, force_process
+    )
+
+    return (structured, should_clean_photos)
+
+
+def process_memory(
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory], force_process: bool = False, retries: int = 1
+):
+    # make structured
+    structured: Structured
     try:
-        if memory.photos:
-            structured: Structured = summarize_open_glass(memory.photos)
-            photos = memory.photos
-            memory.photos = []  # Clear photos to avoid saving them in the memory
-        else:
-            structured: Structured = get_transcript_structure(
-                transcript, memory.started_at, language_code, force_process
-            )
+        (structured, should_clean_photos) = _process_get_memory_structered(memory, language_code, force_process)
+        if should_clean_photos:
+            memory.photos = []
     except Exception as e:
         print(e)
         if retries == 2:
             raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
-        return _process_memory(uid, language_code, memory, force_process, retries + 1)
+        return process_memory(uid, language_code, memory, force_process, retries + 1)
 
     discarded = structured.title == ''
 
+    # new if
+    new_photos = []
     if isinstance(memory, CreateMemory):
         memory = Memory(
             id=str(uuid.uuid4()),
-            uid=uid,
-            structured=structured,
             **memory.dict(),
             created_at=datetime.utcnow(),
-            transcript=transcript,
-            discarded=discarded,
             deleted=False,
+            structured=structured,
+            discarded=discarded,
         )
-        if photos:
-            memories_db.store_memory_photos(uid, memory.id, photos)
+        new_photos = memory.photos
+    elif isinstance(memory, WorkflowCreateMemory):
+        create_memory = memory
+        memory = Memory(
+            id=str(uuid.uuid4()),
+            **memory.dict(),
+            created_at=datetime.utcnow(),
+            deleted=False,
+            structured=structured,
+            discarded=discarded,
+        )
+        memory.external_data = create_memory.dict()
     else:
-        memory.structured = structured
-        memory.discarded = discarded
+        print(f"Existing memory {memory.id}")
 
-    if not discarded:
-        structured_str = str(structured)
-        vector = generate_embedding(structured_str)
-        upsert_vector(uid, memory, vector)
-
-        plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-        filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
-        threads = []
-
-        def execute_plugin(plugin):
-            if result := get_plugin_result(transcript, plugin).strip():
-                memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
-
-        for plugin in filtered_plugins:
-            threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
-
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-
+    # store to db
     memories_db.upsert_memory(uid, memory.dict())
+    # photos
+    if new_photos:
+        memories_db.store_memory_photos(uid, memory.id, new_photos)
+
+    # afterward, should be async
+    asyncio.run(_process_memory_afterward(uid, memory))
+
     return memory
+
+
+def _process_get_memory_conversation_str(memory: Memory) -> str:
+    # Workflow
+    if memory.source == MemorySource.workflow:
+        return memory.external_data["text"]
+
+    # Default
+    return memory.get_transcript()
+
+
+async def _process_memory_afterward(uid: str, memory: Memory):
+    if memory.discarded:
+        return
+
+    structured = memory.structured
+    transcript = _process_get_memory_conversation_str(memory)
+
+    # forward to plugin
+    structured_str = str(structured)
+    vector = generate_embedding(structured_str)
+    upsert_vector(uid, memory, vector)
+
+    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled and plugin.trigger_workflow_memories]
+    threads = []
+
+    def execute_plugin(plugin):
+        if result := get_plugin_result(transcript, plugin).strip():
+            memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+
+    for plugin in filtered_plugins:
+        threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+
+    return
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -95,12 +157,12 @@ def create_memory(
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = create_memory.language
     else:
         create_memory.language = language_code
 
-    memory = _process_memory(uid, language_code, create_memory)
+    memory = process_memory(uid, language_code, create_memory)
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
@@ -116,10 +178,10 @@ def reprocess_memory(
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = memory.language or 'en'
 
-    return _process_memory(uid, language_code, memory, force_process=True)
+    return process_memory(uid, language_code, memory, force_process=True)
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
