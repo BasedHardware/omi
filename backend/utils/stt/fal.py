@@ -73,6 +73,7 @@ def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
         chunk['end'] = chunk['timestamp'][1]
         chunk['text'] = chunk['text'].strip()
         chunk['is_user'] = False
+        chunk['speaker'] = chunk.get('speaker') or 'SPEAKER_00'  # TODO: why is needed?
         del chunk['timestamp']
 
     cleaned = []
@@ -86,12 +87,13 @@ def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
 
     segments = []
     for segment in cleaned:
+        print(segment['start'], segment['end'], segment['speaker'], segment['text'])
         segments.append(TranscriptSegment(
             text=segment['text'],
-            speaker=segment['speaker'] or 'SPEAKER_00',
+            speaker=segment['speaker'],
             is_user=segment['is_user'],
-            start=segment['start'],
-            end=segment['end'],
+            start=segment['start'] or 0,
+            end=segment['end'] or segment['start'] + 1,
         ))
 
-    return segments
+        return segments
