@@ -300,8 +300,9 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
-    // memory.discarded == false
-    if (memory != null && !memory.failed && file != null) memoryPostProcessing(file, memory.id);
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty & !memory.discarded) {
+      memoryPostProcessing(file, memory.id);
+    }
 
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
