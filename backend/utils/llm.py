@@ -7,7 +7,6 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.history_aware_retriever import create_history_aware_retriever
 from langchain.chains.retrieval import create_retrieval_chain
-from langchain.output_parsers import BooleanOutputParser
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -72,42 +71,43 @@ Transcript segments:
     return response.result
 
 
-def discard_memory(transcript: str) -> bool:
+class DiscardMemory(BaseModel):
+    discard: bool = Field(description="If the memory should be discarded or not")
+
+
+def should_discard_memory(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = BooleanOutputParser()
+    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
     prompt = ChatPromptTemplate.from_messages([
         '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is not worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output True.
+    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
     
     Transcript: ```{transcript}```
     
     {format_instructions}'''.replace('    ', '').strip()
     ])
-    print(prompt)
     chain = prompt | llm | parser
     try:
-        response = chain.invoke({
+        response: DiscardMemory = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
-        return response
+        return response.discard
+
     except Exception as e:
         print(f'Error determining memory discard: {e}')
         return False
 
 
 def get_transcript_structure(
-        transcript: str, started_at: datetime, language_code: str, force_process: bool
+        transcript: str, started_at: datetime, language_code: str  # , force_process: bool
 ) -> Structured:
-    if len(transcript.split(' ')) > 100:
-        force_process = True
-
-    force_process_str = ''
-    if not force_process:
-        force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
+    # force_process_str = ''
+    # if not force_process:
+    #     force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
 
     prompt = ChatPromptTemplate.from_messages([(
         'system',

@@ -136,8 +136,8 @@ class Memory(BaseModel):
             result.append(memory_str.strip())
         return "\n\n".join(result)
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
 class CreateMemory(BaseModel):
@@ -152,8 +152,8 @@ class CreateMemory(BaseModel):
     language: Optional[str] = None
     audio_base64_url: Optional[str] = None
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
 class CreateMemoryResponse(BaseModel):
