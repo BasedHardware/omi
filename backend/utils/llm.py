@@ -135,7 +135,7 @@ def get_transcript_structure(
         'transcript': transcript.strip(),
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
-        'force_process_str': force_process_str,
+        'force_process_str': '',
         'started_at': started_at.isoformat(),
     })
     return response
