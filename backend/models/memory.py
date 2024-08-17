@@ -135,7 +135,7 @@ class Memory(BaseModel):
 
     external_data: Optional[Dict] = None
 
-    # postprocessing: Optional[MemoryPostProcessing] = None
+    postprocessing: Optional[MemoryPostProcessing] = None
 
     discarded: bool = False
     deleted: bool = False
