@@ -1,3 +1,10 @@
+---
+layout: default
+title: Backend Setup
+nav_order: 2
+---
+
+
 # Setup
 1. Install the google-cloud-sdk `brew install google-cloud-sdk` or if you use nix envdir, it should be installed for you
 
