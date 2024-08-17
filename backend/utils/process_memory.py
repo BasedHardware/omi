@@ -12,7 +12,6 @@ from models.plugin import Plugin
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory
 from utils.plugins import get_plugins_data
-from utils.stt.fal import fal_whisperx
 
 
 def _get_structured(
@@ -32,11 +31,11 @@ def _get_structured(
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
-        # TODO: test a 1h or 2h recording ~ should this be async ~~ also, how long does it take on frontend to upload that size?
-        if has_audio:
-            segments = fal_whisperx(memory.audio_base64_url)
-            memory.transcript_segments = segments
+        # has_audio = isinstance(memory, CreateMemory) and memory.audio_base64_url
+
+        # if has_audio:
+        #     segments = fal_whisperx(memory.audio_base64_url)
+        #     memory.transcript_segments = segments
 
         return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
     except Exception as e:
@@ -83,6 +82,7 @@ def _trigger_plugins(uid: str, transcript: str, memory: Memory):
     [t.join() for t in threads]
 
 
+# TODO: Test
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False):
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
