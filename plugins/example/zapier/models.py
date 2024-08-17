@@ -21,7 +21,7 @@ class ZapierCreateMemory(BaseModel):
 class ZapierActionCreateMemory(BaseModel):
     text: str
     source: WorkflowMemorySource # text_source
-    started_at: Optional[datetime]
-    finished_at: Optional[datetime]
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
     language: Optional[str] = None
     geolocation: Optional[Geolocation] = None
