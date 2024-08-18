@@ -15,7 +15,7 @@ void configure_button_for_wake_up(void) {
 
 void enter_deep_sleep(void)
 {
-        set_led_white(true);
+        set_led_green(true);
     // Actions to take before entering deep sleep mode here
 
     // Wait one second before turning off
