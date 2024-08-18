@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 
 import database.notifications as notification_db
-from routers.app.notifications import send_notification
+from routers.notifications import send_notification
 
 
 async def start_cron_job():
