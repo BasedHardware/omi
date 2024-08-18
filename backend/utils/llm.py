@@ -165,6 +165,7 @@ class Output(BaseModel):
 
 
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
     Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
