@@ -1,8 +1,8 @@
 import os
-
 import requests
+
+from models import WorkflowCreateMemory, Memory
 from .models import ZapierCreateMemory
-from models import WorkflowCreateMemory
 
 
 # """
@@ -206,6 +206,64 @@ class FriendClient:
         print(resp)
 
         return {"result": "{}"}
+
+    def get_latest_memory(self, uid: str):
+        resp: requests.Response
+        err = None
+        url = f"{self.base_url}/v1/integrations/workflow/memories?uid={uid}&limit=1"
+        try:
+            resp = requests.get(url, headers={
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'api-key': self.workflow_api_key,
+            })
+        except requests.exceptions.HTTPError:
+            resp_text = f"{resp.text()}"
+            err = {
+                "error": {
+                    "status": resp.status_code,
+                    "message": resp_text,
+                },
+            }
+        except requests.exceptions.Timeout:
+            err = {
+                "error": {
+                    "message": "Timeout",
+                },
+            }
+        except requests.exceptions.TooManyRedirects:
+            err = {
+                "error": {
+                    "message": "TooManyRedirects",
+                },
+            }
+        except requests.exceptions.RequestException as e:
+            err = {
+                "error": {
+                    "message": f"RequestException {e}",
+                },
+            }
+        if err is None and resp.status_code != 200:
+            resp_text = f"{resp}"
+            err = {
+                "error": {
+                    "status": resp.status_code,
+                    "message": resp_text,
+                },
+            }
+        if err is not None:
+            print(err)
+            return err
+
+        print(resp)
+
+        # view
+        resp_json = resp.json()
+        if len(resp_json) > 0:
+            latest_memory_json = resp_json[0]
+            return {"result": Memory(**latest_memory_json)}
+
+        return {"result": None}
 
 
 zap_client = ZapierClient()
