@@ -27,6 +27,7 @@ dist/
 **/android/.gradle
 **/android/gradlew
 **/android/gradlew.bat
+**/android/key.properties
 **/android/**/gradle-wrapper.jar
 **/android/**/local.properties
 **/android/**/GeneratedPluginRegistrant.java
