@@ -26,10 +26,15 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
-  // TODO: store device object rather
-  set deviceId(String value) => saveString('deviceId', value);
+  set btDeviceStruct(BTDeviceStruct value) {
+    saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
 
-  String get deviceId => getString('deviceId') ?? '';
+  BTDeviceStruct get btDeviceStruct {
+    final String device = getString('btDeviceStruct') ?? '';
+    if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
+    return BTDeviceStruct.fromJson(jsonDecode(device));
+  }
 
   set deviceName(String value) => saveString('deviceName', value);
 

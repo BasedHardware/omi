@@ -6,7 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 
 Future<BTDeviceStruct?> getConnectedDevice() async {
-  var deviceId = SharedPreferencesUtil().deviceId;
+  var deviceId = SharedPreferencesUtil().btDeviceStruct.id;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
       return BTDeviceStruct(
