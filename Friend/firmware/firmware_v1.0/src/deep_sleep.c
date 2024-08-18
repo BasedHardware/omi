@@ -4,9 +4,9 @@
 #include "deep_sleep.h"
 
 #include <nrf.h>
+#include <hal/nrf_gpio.h>  
 
-#define BUTTON_PIN  4  // GPIO pin connected to the button
-
+#define BUTTON_PIN  4  
 void configure_button_for_wake_up(void) {
     // Configure the button pin for wake-up from System OFF mode
     nrf_gpio_cfg_sense_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW);
@@ -21,6 +21,4 @@ void enter_deep_sleep(void)
     
     // Set the system to deep sleep mode. 
     NRF_POWER->SYSTEMOFF = 1;
-
-    // No need for __WFI() after setting SYSTEMOFF
 }
