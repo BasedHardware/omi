@@ -2,49 +2,22 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/hwinfo.h>
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
 #include "btutils.h"
+// #include "nfc.h"
 #include "lib/battery/battery.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define DEVICE_NAME CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
-
 extern bool is_connected;
-
-//
-// Device ID for NFC
-//
-int get_device_id(char *device_id, size_t len)
-{
-    if (len < 7) {  // 6 chars for ID + null terminator
-        return -EINVAL;
-    }
-
-    uint8_t dev_id[6];
-    ssize_t ret;
-
-    ret = hwinfo_get_device_id(dev_id, sizeof(dev_id));
-    if (ret < 0) {
-        return ret;
-    }
-
-    // Use the last 3 bytes of the device ID
-    snprintf(device_id, len, "%02X%02X%02X", dev_id[3], dev_id[4], dev_id[5]);
-
-    return 0;
-}
 
 //
 // Internal
@@ -96,17 +69,17 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 
-// Modify the bt_ad array to include the device ID
-static char device_id[7];
-
-static struct bt_data ad[] = {
+// Advertisement data
+static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-    BT_DATA(BT_DATA_MANUFACTURER_DATA, device_id, 6),
+    BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
+    BT_DATA(BT_DATA_NAME_COMPLETE, "Friend", sizeof("Friend") - 1),
 };
 
-static const struct bt_data sd[] = {
-    BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214)),
+// Scan response data
+static const struct bt_data bt_sd[] = {
+    BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+    BT_DATA(BT_DATA_UUID128_ALL, dfu_service_uuid.val, sizeof(dfu_service_uuid.val)),
 };
 
 //
@@ -240,7 +213,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 
-    is_connected = true;
+	is_connected = true;
+
+    // // Put NFC to sleep when Bluetooth is connected
+    // nfc_sleep();
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -251,6 +227,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     bt_conn_unref(conn);
     current_connection = NULL;
     current_mtu = 0;
+
+	// // restart NFC
+	// nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -481,21 +460,19 @@ int transport_start()
     }
     LOG_INF("Transport bluetooth initialized");
 
-    // Generate and set the device ID
-    err = get_device_id(device_id, sizeof(device_id));
-    if (err) {
-        LOG_ERR("Failed to get device ID: %d", err);
-        return err;
-    }
-    LOG_INF("Device ID: %s", device_id);
-
     // Start advertising
-    err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-    if (err) {
+    bt_gatt_service_register(&audio_service);
+    bt_gatt_service_register(&dfu_service);
+    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    if (err)
+    {
         LOG_ERR("Transport advertising failed to start (err %d)", err);
         return err;
     }
-    LOG_INF("Advertising successfully started");
+    else
+    {
+        LOG_INF("Advertising successfully started");
+    }
 
     int battErr = 0;
 
