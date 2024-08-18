@@ -1,19 +1,8 @@
-import os
-import hashlib
-import asyncio
-import random
-import threading
-import uuid
-from typing import Union
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import database.memories as memories_db
 from database.vector import delete_vector
 from models.memory import *
-from models.integrations import *
-from models.plugin import Plugin
-from utils.plugins import get_plugins_data
 from models.transcript_segment import TranscriptSegment
 from utils import auth
 from utils.llm import transcript_user_speech_fix, num_tokens_from_string
@@ -87,8 +76,8 @@ async def postprocess_memory(
     """
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
-    if memory.discarded:
-        raise HTTPException(status_code=400, detail="Memory is discarded")
+    # if memory.discarded:
+    #     raise HTTPException(status_code=400, detail="Memory is discarded")
 
     # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
     file_path = f"_temp/{memory_id}_{file.filename}"
@@ -102,7 +91,7 @@ async def postprocess_memory(
     try:
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
-        os.remove(file_path)
+        # os.remove(file_path)
         segments = fal_whisperx(url)  # TODO: should consider storing non beautified segments, and beautify on read?
         delete_postprocessing_audio(file_path)
 

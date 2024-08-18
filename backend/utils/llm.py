@@ -102,13 +102,7 @@ def should_discard_memory(transcript: str) -> bool:
         return False
 
 
-def get_transcript_structure(
-        transcript: str, started_at: datetime, language_code: str  # , force_process: bool
-) -> Structured:
-    # force_process_str = ''
-    # if not force_process:
-    #     force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
-
+def get_transcript_structure(transcript: str, started_at: datetime, language_code: str) -> Structured:
     prompt = ChatPromptTemplate.from_messages([(
         'system',
         '''Your task is to provide structure and clarity to the recording transcription of a conversation.
@@ -185,7 +179,7 @@ def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int
     response: Output = with_parser.invoke(prompt)
     return response.speaker_id
 
-  
+
 def summarize_experience_text(text: str) -> Structured:
     prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
 
@@ -198,7 +192,6 @@ def summarize_experience_text(text: str) -> Structured:
     # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)
 
-  
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     prompt = f'''
