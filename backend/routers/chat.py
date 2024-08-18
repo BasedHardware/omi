@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends
 
 import database.chat as chat_db
 from models.chat import Message, SendMessageRequest, MessageSender
-from utils import auth
+from utils.other import endpoints as auth
 from utils.llm import qa_rag, initial_chat_message
 from utils.plugins import get_plugin_by_id
-from utils.rag import retrieve_rag_context
+from utils.retrieval.rag import retrieve_rag_context
 
 router = APIRouter()
 
