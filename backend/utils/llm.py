@@ -60,6 +60,14 @@ class DiscardMemory(BaseModel):
     discard: bool = Field(description="If the memory should be discarded or not")
 
 
+class SpeakerIdMatch(BaseModel):
+    speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+# **********************************************
+# ************* MEMORY PROCESSING **************
+# **********************************************
+
 def should_discard_memory(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
@@ -117,66 +125,21 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     return response
 
 
-def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
-    photos_str = ''
-    for i, photo in enumerate(photos):
-        photos_str += f'{i + 1}. "{photo.description}"\n'
-    prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
-
-      For the title, use the main topic of the scenes.
-      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
-      For the category, classify the scenes into one of the available categories.
-    
-      Photos Descriptions: ```{photos_str}```
-      '''.replace('    ', '').strip()
-    return llm_with_parser.invoke(prompt)
-
-
-def summarize_screen_pipe(description: str) -> Structured:
-    prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
-
-      For the title, use the main topic of the scenes.
-      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
-      For the category, classify the scenes into one of the available categories.
-    
-      Screenshots: ```{description}```
-      '''.replace('    ', '').strip()
-    # return groq_llm_with_parser.invoke(prompt)
-    return llm_with_parser.invoke(prompt)
-
-
-class Output(BaseModel):
-    speaker_id: int = Field(description="The speaker id assigned to the segment")
-
-
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
     print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
     Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
-    
+
     Previous Transcript:
     {prev_transcript}
-    
+
     Improved Transcript:
     {new_transcript}
     '''
-    with_parser = llm.with_structured_output(Output)
-    response: Output = with_parser.invoke(prompt)
+    with_parser = llm.with_structured_output(SpeakerIdMatch)
+    response: SpeakerIdMatch = with_parser.invoke(prompt)
     return response.speaker_id
-
-
-def summarize_experience_text(text: str) -> Structured:
-    prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
-
-      For the title, use the main topic of the experience or thought.
-      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
-      For the category, classify the scenes into one of the available categories.
-    
-      Text: ```{text}```
-      '''.replace('    ', '').strip()
-    # return groq_llm_with_parser.invoke(prompt)
-    return llm_with_parser.invoke(prompt)
 
 
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
@@ -200,6 +163,55 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     if len(content) < 5:
         return ''
     return content
+
+
+# **************************************
+# ************* OPENGLASS **************
+# **************************************
+
+def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
+    photos_str = ''
+    for i, photo in enumerate(photos):
+        photos_str += f'{i + 1}. "{photo.description}"\n'
+    prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
+
+      For the title, use the main topic of the scenes.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Photos Descriptions: ```{photos_str}```
+      '''.replace('    ', '').strip()
+    return llm_with_parser.invoke(prompt)
+
+
+# **************************************************
+# ************* EXTERNAL INTEGRATIONS **************
+# **************************************************
+
+def summarize_screen_pipe(description: str) -> Structured:
+    prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
+
+      For the title, use the main topic of the scenes.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Screenshots: ```{description}```
+      '''.replace('    ', '').strip()
+    # return groq_llm_with_parser.invoke(prompt)
+    return llm_with_parser.invoke(prompt)
+
+
+def summarize_experience_text(text: str) -> Structured:
+    prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
+
+      For the title, use the main topic of the experience or thought.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
+    
+      Text: ```{text}```
+      '''.replace('    ', '').strip()
+    # return groq_llm_with_parser.invoke(prompt)
+    return llm_with_parser.invoke(prompt)
 
 
 def generate_embedding(content: str) -> List[float]:

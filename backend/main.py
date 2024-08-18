@@ -7,8 +7,7 @@ from fastapi import FastAPI
 from fastapi_utilities import repeat_at
 
 from modal import Image, App, asgi_app, Secret
-from routers.integrations import screenpipe, workflow
-from routers.app import firmware, transcribe, plugins, memories, speech_profile, chat, notifications
+from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
