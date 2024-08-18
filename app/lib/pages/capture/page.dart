@@ -305,8 +305,7 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
-    print('file: $file');
-    if (memory != null && !memory.failed && file != null && segments.isNotEmpty ) { // && !memory.discarded
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
       memoryPostProcessing(file, memory.id).then((postProcessed) {
         widget.updateMemory(postProcessed);
       });
