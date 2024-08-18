@@ -260,11 +260,11 @@ void check_button_level(struct k_work *work_item) {
 
             if (inc_count_1 > LONG_PRESS_INTERVAL) {
                 //If button is pressed for a long time.......
+
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
 
-                //Enter Deep Sleep
-                enter_deep_sleep();
+
 
                 current_button_state = GRACE;
                 reset_count();
@@ -280,7 +280,14 @@ void check_button_level(struct k_work *work_item) {
              
                 if (inc_count_1 > 0) { // if button has been pressed......
                 notify_unpress();
-                notify_double_tap();
+
+                //Enter Deep Sleep
+                enter_deep_sleep();
+
+                //wait one second before turning off
+                k_sleep(K_SECONDS(1));
+
+                //notify_double_tap();
                 
                 //Fire the notify and enter a grace period
                 current_button_state = GRACE;
@@ -303,11 +310,10 @@ void check_button_level(struct k_work *work_item) {
                 inc_count_1++;
             }
             if (inc_count_1 > threshold) {
-                notify_long_tap();
-                //Fire the notify and enter a grace period
 
-                //Enter Deep Sleep
-                enter_deep_sleep();
+
+                notify_long_tap();
+                //Fire the notify and enter a grace perio
 
                 current_button_state = GRACE;
                 reset_count();

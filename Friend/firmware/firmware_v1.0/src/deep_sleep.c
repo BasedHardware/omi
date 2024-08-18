@@ -5,6 +5,7 @@
 
 #include <nrf.h>
 #include <hal/nrf_gpio.h>  
+#include "led.h"
 
 #define BUTTON_PIN  4  
 void configure_button_for_wake_up(void) {
@@ -14,6 +15,7 @@ void configure_button_for_wake_up(void) {
 
 void enter_deep_sleep(void)
 {
+        set_led_blue(true);
     // Actions to take before entering deep sleep mode here
 
     // Wait one second before turning off
