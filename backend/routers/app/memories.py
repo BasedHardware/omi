@@ -10,7 +10,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.other import endpoints as auth
 from utils.llm import transcript_user_speech_fix, num_tokens_from_string
 from utils.memories.location import get_google_maps_location
-from utils.memories.plugins import trigger_external_integrations
+from utils.plugins import trigger_external_integrations
 from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
 from utils.stt.pre_recorded import fal_whisperx
