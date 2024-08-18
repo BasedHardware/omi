@@ -8,7 +8,7 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
+from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
 from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty
 
