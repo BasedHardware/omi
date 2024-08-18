@@ -126,8 +126,8 @@ async def postprocess_memory(
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
-        memory.transcript_segments = segments
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
+        memory.transcript_segments = segments
         memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
 
         # Reprocess memory with improved transcription
@@ -139,18 +139,6 @@ async def postprocess_memory(
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
 
-
-# 843364d7-6a60-4f30-8684-0e74d0398c5c
-# caLCFj7IisV85UX9XrrV1aVf3pk1
-
-# util(
-#     'caLCFj7IisV85UX9XrrV1aVf3pk1',
-#     '843364d7-6a60-4f30-8684-0e74d0398c5c',
-#     '_temp/843364d7-6a60-4f30-8684-0e74d0398c5c_recording-20240817_145819.wav'
-# )
-
-# url = upload_postprocessing_audio('_temp/5a414d64-7c75-4df2-983e-18cee665a67d_recording-20240817_153755.wav')
-# segments = fal_whisperx(url)
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
 def reprocess_memory(
