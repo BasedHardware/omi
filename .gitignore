@@ -142,3 +142,4 @@ app/lib/env/dev_env.g.dart
 app/lib/env/prod_env.g.dart
 /app/lib/libobjectbox.dylib
 /app/lib/objectbox-model.json
+/Friend/firmware/firmware_v1.0/build_1
