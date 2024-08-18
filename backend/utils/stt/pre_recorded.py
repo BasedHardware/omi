@@ -5,7 +5,7 @@ from typing import List
 import fal_client
 
 from models.transcript_segment import TranscriptSegment
-from utils.endpoints import timeit
+from utils.other.endpoints import timeit
 
 
 def file_to_base64_url(file_path):

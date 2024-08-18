@@ -6,8 +6,8 @@ from fastapi import Request, HTTPException
 import models.memory as memory_models
 import models.integrations as integration_models
 
-from utils.location import get_google_maps_location
-from routers.memories import process_memory, trigger_external_integrations
+from utils.memories.location import get_google_maps_location
+from routers.app.memories import process_memory, trigger_external_integrations
 
 router = APIRouter()
 

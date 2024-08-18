@@ -8,7 +8,7 @@ import requests
 from database.chat import add_plugin_message
 from models.memory import Memory, MemorySource
 from models.plugin import Plugin
-from routers.notifications import send_notification
+from routers.app.notifications import send_notification
 from database.redis_db import get_enabled_plugins, get_plugin_reviews
 
 
