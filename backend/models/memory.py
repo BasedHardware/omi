@@ -106,6 +106,7 @@ class MemorySource(str, Enum):
 class PostProcessingStatus(str, Enum):
     in_progress = 'in_progress'
     completed = 'completed'
+    canceled = 'canceled'
     failed = 'failed'
 
 

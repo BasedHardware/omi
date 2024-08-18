@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import database.memories as memories_db
@@ -76,8 +78,11 @@ async def postprocess_memory(
     """
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
-    # if memory.discarded:
-    #     raise HTTPException(status_code=400, detail="Memory is discarded")
+    if memory.discarded:
+        raise HTTPException(status_code=400, detail="Memory is discarded")
+
+    if memory.postprocessing is not None:
+        raise HTTPException(status_code=400, detail="Memory can't be post-processed again")
 
     # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
     file_path = f"_temp/{memory_id}_{file.filename}"
@@ -91,8 +96,16 @@ async def postprocess_memory(
     try:
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
-        # os.remove(file_path)
+        os.remove(file_path)
         segments = fal_whisperx(url)  # TODO: should consider storing non beautified segments, and beautify on read?
+
+        # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
+        count = len(''.join([segment.text for segment in memory.transcript_segments]))
+        new_count = len(''.join([segment.text for segment in segments]))
+        if new_count < (count * 0.9):
+            memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
+            raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
+
         delete_postprocessing_audio(file_path)
 
         # Fix user speaker_id matching
