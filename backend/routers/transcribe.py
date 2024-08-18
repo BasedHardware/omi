@@ -54,7 +54,7 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     is_speech_active = False
-    speech_timeout = 0.7 # Good for now but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
+    speech_timeout = 1.0 # Good for now (who doesnt like integer) but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
     last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -94,6 +94,7 @@ async def _websocket_util(
         chunk_size = int(byte_rate * REALTIME_RESOLUTION)
             
         timer_start = time.time()
+        audio_cursor = 0 # For sleep realtime logic
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
@@ -109,6 +110,7 @@ async def _websocket_util(
                 audio_buffer.extend(samples)
                 if len(audio_buffer) >= window_size_samples:
                     tensor_audio = torch.tensor(list(audio_buffer))
+                    # Good alr, but increase the window size to get wider context but server will be slower
                     if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
                         if not is_speech_active:
                             print('+Detected speech')
@@ -117,8 +119,9 @@ async def _websocket_util(
                     elif is_speech_active:
                         if time.time() - last_speech_time > speech_timeout:
                             is_speech_active = False
-                            # Clear only happens after the speech timeout
-                            audio_buffer.clear()
+                            # Reset only happens after the speech timeout
+                            # Reason : Better to carry vad context for a speech, then reset for any new speech
+                            vad_iterator.reset_states()
                             print('-NO Detected speech')
                             continue
                     else:
@@ -128,9 +131,16 @@ async def _websocket_util(
                 if elapsed_seconds > duration or not socket2:
                     databuffer.extend(data)
                     if len(databuffer) >= chunk_size:
-                        socket1.send(databuffer[:len(databuffer) - len(databuffer) % chunk_size])
-                        databuffer = databuffer[len(databuffer) - len(databuffer) % chunk_size:]
-                        await asyncio.sleep(REALTIME_RESOLUTION)
+                        # Sleep logic, because naive sleep is not accurate
+                        current_time = time.time()
+                        elapsed_time = current_time - timer_start
+                        if elapsed_time < audio_cursor + REALTIME_RESOLUTION:
+                            sleep_time = (audio_cursor + REALTIME_RESOLUTION) - elapsed_time
+                            await asyncio.sleep(sleep_time)
+                        # Just send them all, no difference
+                        socket1.send(databuffer)
+                        databuffer = bytearray(b"")
+                        audio_cursor += REALTIME_RESOLUTION
                     if socket2:
                         print('Killing socket2')
                         socket2.finish()
