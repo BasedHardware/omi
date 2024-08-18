@@ -133,6 +133,7 @@ async def postprocess_memory(
         # Reprocess memory with improved transcription
         result = process_memory(uid, memory.language, memory, force_process=True)
     except Exception as e:
+        print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
         raise HTTPException(status_code=500, detail=str(e))
 
