@@ -9,7 +9,7 @@ from deepgram.clients.live.v1 import LiveOptions
 from starlette.websockets import WebSocket
 
 import database.notifications as notification_db
-from utils.memories.plugins import trigger_realtime_integrations
+from utils.plugins import trigger_realtime_integrations
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
