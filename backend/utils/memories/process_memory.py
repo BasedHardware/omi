@@ -1,5 +1,4 @@
 import random
-import random
 import threading
 import uuid
 from typing import Union
@@ -12,7 +11,7 @@ from models.memory import *
 from models.plugin import Plugin
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text
-from utils.plugins import get_plugins_data
+from utils.memories.plugins import get_plugins_data
 
 
 def _get_structured(

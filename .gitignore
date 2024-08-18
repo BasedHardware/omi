@@ -131,6 +131,8 @@ plugins/example/tmp/
 backend/pretrained_models/
 /backend/scripts/data/
 /backend/pretrained_models/
+*/pretrained_models/
+/backend/_speech_profiles
 
 backend/google-credentials.json
 backend/google-credentials-dev.json
