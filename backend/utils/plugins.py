@@ -9,7 +9,7 @@ from database.chat import add_plugin_message
 from models.memory import Memory, MemorySource
 from models.plugin import Plugin
 from routers.notifications import send_notification
-from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
+from database.redis_db import get_enabled_plugins, get_plugin_reviews
 
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
