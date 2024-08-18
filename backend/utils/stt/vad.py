@@ -29,10 +29,8 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
         #   maybe like, if `end` was last, then return end? TEST THIS
 
         if speech_dict:
-            vad_iterator.reset_states()
             # print(speech_dict)
             return True
-    vad_iterator.reset_states()
     return False
 
 
