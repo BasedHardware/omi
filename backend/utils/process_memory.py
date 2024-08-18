@@ -1,4 +1,4 @@
-import asyncio
+import random
 import random
 import threading
 import uuid
@@ -85,7 +85,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-async def _trigger_plugins(uid: str, transcript: str, memory: Memory):
+def _trigger_plugins(uid: str, transcript: str, memory: Memory):
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     threads = []
@@ -109,7 +109,7 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
     if not discarded:
         vector = generate_embedding(str(structured))
         upsert_vector(uid, memory, vector)
-        asyncio.run(_trigger_plugins(uid, memory.get_transcript(False), memory))
+        _trigger_plugins(uid, memory.get_transcript(False), memory)  # async
 
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
