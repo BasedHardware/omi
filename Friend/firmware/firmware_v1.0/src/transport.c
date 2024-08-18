@@ -279,11 +279,12 @@ void check_button_level(struct k_work *work_item) {
         if (state_ == 0) {
              
                 if (inc_count_1 > 0) { // if button has been pressed......
-                notify_unpress();
+
 
                 //Enter Deep Sleep
                 enter_deep_sleep();
 
+                notify_unpress();
                 //wait one second before turning off
                 k_sleep(K_SECONDS(1));
 
