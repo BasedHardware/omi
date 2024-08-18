@@ -50,7 +50,7 @@ def delete_fal_file(url: str):
 
 
 @timeit
-def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
+def fal_whisperx(audio_url: str, duration: int = None) -> List[TranscriptSegment]:
     handler = fal_client.submit(
         "fal-ai/whisper",
         arguments={
@@ -84,15 +84,16 @@ def fal_whisperx(audio_url: str) -> List[TranscriptSegment]:
             cleaned[-1]['text'] += ' ' + chunk['text']
         else:
             cleaned.append(chunk)
+
     segments = []
     for segment in cleaned:
-        print(segment['start'], segment['end'], segment['speaker'], segment['text'])
+        # print(segment['start'], segment['end'], segment['speaker'], segment['text'])
         segments.append(TranscriptSegment(
             text=segment['text'],
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             start=segment['start'] or 0,
-            end=segment['end'] or segment['start'] + 1,
+            end=segment['end'] or duration or segment['start'] + 1,
         ))
 
     return segments
