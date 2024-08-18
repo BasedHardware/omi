@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -153,7 +154,9 @@ class CapturePageState extends State<CapturePage>
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
           //  losing from the audio the first part of the recording. All other parts are fine.
           FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
+          var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
+          var removeUpToSecond = newSegments[0].start.toInt();
+          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
           firstStreamReceivedAt = DateTime.now();
         }
         streamStartedAtSecond ??= newSegments[0].start;
@@ -302,8 +305,8 @@ class CapturePageState extends State<CapturePage>
     }
 
     if (memory != null) widget.addMemory(memory);
-    //
-    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
+    print('file: $file');
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty ) { // && !memory.discarded
       memoryPostProcessing(file, memory.id).then((postProcessed) {
         widget.updateMemory(postProcessed);
       });
