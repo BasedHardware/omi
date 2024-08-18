@@ -4,9 +4,9 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
 from models.other import UploadProfile
-from utils import auth
+from utils.other import endpoints as auth
 from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
-from utils.storage import upload_profile_audio
+from utils.other.storage import upload_profile_audio
 
 router = APIRouter()
 
