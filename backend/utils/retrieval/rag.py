@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 from database.memories import filter_memories_by_date, get_memories_by_id
-from database.vector import query_vectors
+from database.vector_db import query_vectors
 from models.chat import Message
 from models.memory import Memory
 from utils.llm import determine_requires_context

@@ -229,7 +229,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+    if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
       scanAndConnectDevice().then(_onConnected);
     }
 
@@ -291,7 +291,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateBleBatteryListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
-    SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().btDeviceStruct = _device!;
     SharedPreferencesUtil().deviceName = _device!.name;
     setState(() {});
   }
@@ -416,19 +416,26 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             textFieldFocusNode: memoriesTextFieldFocusNode,
                           ),
                           CapturePage(
-                            key: capturePageKey,
-                            device: _device,
-                            addMemory: (ServerMemory memory) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              memoriesCopy.insert(0, memory);
-                              setState(() => memories = memoriesCopy);
-                            },
-                            addMessage: (ServerMessage message) {
-                              var messagesCopy = List<ServerMessage>.from(messages);
-                              messagesCopy.insert(0, message);
-                              setState(() => messages = messagesCopy);
-                            },
-                          ),
+                              key: capturePageKey,
+                              device: _device,
+                              addMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                memoriesCopy.insert(0, memory);
+                                setState(() => memories = memoriesCopy);
+                              },
+                              addMessage: (ServerMessage message) {
+                                var messagesCopy = List<ServerMessage>.from(messages);
+                                messagesCopy.insert(0, message);
+                                setState(() => messages = messagesCopy);
+                              },
+                              updateMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                                if (index != -1) {
+                                  memoriesCopy[index] = memory;
+                                  setState(() => memories = memoriesCopy);
+                                }
+                              }),
                           ChatPage(
                             key: chatPageKey,
                             textFieldFocusNode: chatTextFieldFocusNode,
@@ -612,7 +619,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           )
                         : TextButton(
                             onPressed: () async {
-                              if (SharedPreferencesUtil().deviceId.isEmpty) {
+                              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {

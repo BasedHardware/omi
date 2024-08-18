@@ -4,7 +4,6 @@ import threading
 import time
 from typing import List
 
-import requests
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 from starlette.websockets import WebSocket
@@ -19,63 +18,51 @@ headers = {
 }
 
 
-def transcribe_file_deepgram(file_path: str, language: str = 'en'):
-    print('transcribe_file_deepgram', file_path, language)
-    url = ('https://api.deepgram.com/v1/listen?'
-           'model=nova-2-general&'
-           'detect_language=false&'
-           f'language={language}&'
-           'filler_words=false&'
-           'multichannel=false&'
-           'diarize=true&'
-           'punctuate=true&'
-           'smart_format=true')
-
-    with open(file_path, "rb") as file:
-        response = requests.post(url, headers=headers, data=file)
-
-    data = response.json()
-    result = data['results']['channels'][0]['alternatives'][0]
-    segments = []
-    for word in result['words']:
-        if not segments:
-            segments.append({
-                'speaker': f"SPEAKER_{word['speaker']}",
-                'start': word['start'],
-                'end': word['end'],
-                'text': word['word'],
-                'isUser': False
-            })
-        else:
-            last_segment = segments[-1]
-            if last_segment['speaker'] == f"SPEAKER_{word['speaker']}":
-                last_segment['text'] += f" {word['word']}"
-                last_segment['end'] = word['end']
-            else:
-                segments.append({
-                    'speaker': f"SPEAKER_{word['speaker']}",
-                    'start': word['start'],
-                    'end': word['end'],
-                    'text': word['word'],
-                    'isUser': False
-                })
-
-    return segments
-
-
-# async def send_initial_file(file_path, transcript_socket):
+# def transcribe_file_deepgram(file_path: str, language: str = 'en'):
+#     print('transcribe_file_deepgram', file_path, language)
+#     url = ('https://api.deepgram.com/v1/listen?'
+#            'model=nova-2-general&'
+#            'detect_language=false&'
+#            f'language={language}&'
+#            'filler_words=false&'
+#            'multichannel=false&'
+#            'diarize=true&'
+#            'punctuate=true&'
+#            'smart_format=true')
+#
 #     with open(file_path, "rb") as file:
-#         data = file.read()
-#     start = time.time()
-#     chunk_size = 4096  # Adjust as needed
-#     for i in range(0, len(data), chunk_size):
-#         chunk = data[i:i + chunk_size]
-#         transcript_socket.send(chunk)
-#         await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the socket
-#     print('send_initial_file', time.time() - start)
+#         response = requests.post(url, headers=headers, data=file)
+#
+#     data = response.json()
+#     result = data['results']['channels'][0]['alternatives'][0]
+#     segments = []
+#     for word in result['words']:
+#         if not segments:
+#             segments.append({
+#                 'speaker': f"SPEAKER_{word['speaker']}",
+#                 'start': word['start'],
+#                 'end': word['end'],
+#                 'text': word['word'],
+#                 'isUser': False
+#             })
+#         else:
+#             last_segment = segments[-1]
+#             if last_segment['speaker'] == f"SPEAKER_{word['speaker']}":
+#                 last_segment['text'] += f" {word['word']}"
+#                 last_segment['end'] = word['end']
+#             else:
+#                 segments.append({
+#                     'speaker': f"SPEAKER_{word['speaker']}",
+#                     'start': word['start'],
+#                     'end': word['end'],
+#                     'text': word['word'],
+#                     'isUser': False
+#                 })
+#
+#     return segments
 
 
-async def send_initial_file2(data: List[List[int]], transcript_socket):
+async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file2')
     start = time.time()
     # Reading and sending in chunks
@@ -86,9 +73,6 @@ async def send_initial_file2(data: List[List[int]], transcript_socket):
         await asyncio.sleep(0.00005)  # if it takes too long to transcribe
 
     print('send_initial_file', time.time() - start)
-
-
-# Add this new function to handle initial file sending
 
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))

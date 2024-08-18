@@ -1,25 +1,13 @@
 import json
-import os
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.history_aware_retriever import create_history_aware_retriever
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.output_parsers import BooleanOutputParser
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, PromptTemplate
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.tools import create_retriever_tool
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_pinecone import PineconeVectorStore
 from pydantic import BaseModel, Field
 
-from models.chat import Message, MessageSender
+from models.chat import Message
 from models.memory import Structured, MemoryPhoto
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
@@ -28,10 +16,6 @@ llm = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 llm_with_parser = llm.with_structured_output(Structured)
-
-
-# groq_llm = llm = ChatGroq(model="llama-3.1-70b-versatile", temperature=0, max_retries=2)
-# groq_llm_with_parser = groq_llm.with_structured_output(Structured)
 
 
 # TODO: include caching layer, redis
@@ -72,43 +56,46 @@ Transcript segments:
     return response.result
 
 
-def discard_memory(transcript: str) -> bool:
+class DiscardMemory(BaseModel):
+    discard: bool = Field(description="If the memory should be discarded or not")
+
+
+class SpeakerIdMatch(BaseModel):
+    speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+# **********************************************
+# ************* MEMORY PROCESSING **************
+# **********************************************
+
+def should_discard_memory(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = BooleanOutputParser()
+    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
     prompt = ChatPromptTemplate.from_messages([
         '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is not worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output True.
+    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
     
     Transcript: ```{transcript}```
     
     {format_instructions}'''.replace('    ', '').strip()
     ])
-    print(prompt)
     chain = prompt | llm | parser
     try:
-        response = chain.invoke({
+        response: DiscardMemory = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
-        return response
+        return response.discard
+
     except Exception as e:
         print(f'Error determining memory discard: {e}')
         return False
 
 
-def get_transcript_structure(
-        transcript: str, started_at: datetime, language_code: str, force_process: bool
-) -> Structured:
-    if len(transcript.split(' ')) > 100:
-        force_process = True
-
-    force_process_str = ''
-    if not force_process:
-        force_process_str = 'It is possible that the conversation is not worth storing, there are no interesting topics, facts, or information, in that case, output an empty title, overview, and action items.'
-
+def get_transcript_structure(transcript: str, started_at: datetime, language_code: str) -> Structured:
     prompt = ChatPromptTemplate.from_messages([(
         'system',
         '''Your task is to provide structure and clarity to the recording transcription of a conversation.
@@ -126,20 +113,61 @@ def get_transcript_structure(
 
         {format_instructions}'''.replace('    ', '').strip()
     )])
-    # if use_cheaper_model:
-    #     chain = prompt | groq_llm | parser
-    # else:
     chain = prompt | llm | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
-        'force_process_str': force_process_str,
+        'force_process_str': '',
         'started_at': started_at.isoformat(),
     })
     return response
 
+
+def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
+    prompt = f'''
+    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
+    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+
+    Previous Transcript:
+    {prev_transcript}
+
+    Improved Transcript:
+    {new_transcript}
+    '''
+    with_parser = llm.with_structured_output(SpeakerIdMatch)
+    response: SpeakerIdMatch = with_parser.invoke(prompt)
+    return response.speaker_id
+
+
+def get_plugin_result(transcript: str, plugin: Plugin) -> str:
+    prompt = f'''
+    Your are an AI with the following characteristics:
+    Name: ${plugin.name}, 
+    Description: ${plugin.description},
+    Task: ${plugin.memory_prompt}
+
+    Note: It is possible that the conversation you are given, has nothing to do with your task, \
+    in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
+
+    Conversation: ```{transcript.strip()}```,
+
+    Output your response in plain text, without markdown.
+    Make sure to be concise and clear.
+    '''
+
+    response = llm.invoke(prompt)
+    content = response.content.replace('```json', '').replace('```', '')
+    if len(content) < 5:
+        return ''
+    return content
+
+
+# **************************************
+# ************* OPENGLASS **************
+# **************************************
 
 def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
     photos_str = ''
@@ -155,6 +183,10 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
       '''.replace('    ', '').strip()
     return llm_with_parser.invoke(prompt)
 
+
+# **************************************************
+# ************* EXTERNAL INTEGRATIONS **************
+# **************************************************
 
 def summarize_screen_pipe(description: str) -> Structured:
     prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
@@ -182,148 +214,8 @@ def summarize_experience_text(text: str) -> Structured:
     return llm_with_parser.invoke(prompt)
 
 
-def get_plugin_result(transcript: str, plugin: Plugin) -> str:
-    prompt = f'''
-    Your are an AI with the following characteristics:
-    Name: ${plugin.name}, 
-    Description: ${plugin.description},
-    Task: ${plugin.memory_prompt}
-
-    Note: It is possible that the conversation you are given, has nothing to do with your task, \
-    in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
-
-    Conversation: ```{transcript.strip()}```,
-
-    Output your response in plain text, without markdown.
-    Make sure to be concise and clear.
-    '''
-
-    response = llm.invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
-    if len(content) < 5:
-        return ''
-    return content
-
-
 def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
-
-
-# ******************************************
-# ************** CHAT AGENT ****************
-# ******************************************
-
-
-def _get_retriever():
-    vectordb = PineconeVectorStore(
-        index_name=os.getenv('PINECONE_INDEX_NAME'),
-        pinecone_api_key=os.getenv('PINECONE_API_KEY'),
-        embedding=OpenAIEmbeddings(),
-    )
-    # TODO: maybe try mmr later, but similarity works great, llm aided is not possible here, no metadata.
-    # can tweak the number of docs to retrieve
-    return vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-
-
-def get_chat_history(messages: List[Message]) -> BaseChatMessageHistory:
-    history = ChatMessageHistory()
-    for message in messages:
-        if message.sender == MessageSender.human:
-            history.add_message(HumanMessage(content=message.text))
-        else:
-            history.add_message(AIMessage(content=message.text))
-    return history
-
-
-# CHAIN
-def _get_context_question():
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone question \
-    which can be understood without the chat history. Do NOT answer the question, \
-    just reformulate it if needed and otherwise return it as is."""
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-    return create_history_aware_retriever(llm, _get_retriever(), contextualize_q_prompt)
-
-
-def chat_qa_chain(uid: str, messages: List[Message]):
-    qa_system_prompt = """You are an assistant for question-answering tasks. \
-    Use the following pieces of retrieved context to answer the question. \
-    If you don't know the answer, just say that you don't have access to that information. \
-    Use three sentences maximum and keep the answer concise.\
-
-    {context}"""
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", qa_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    history_aware_retriever = _get_context_question()
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-    def get_session():
-        return get_chat_history(messages)
-
-    conversational_rag_chain = RunnableWithMessageHistory(
-        rag_chain,
-        get_session,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-        output_messages_key="answer",
-    )
-    return conversational_rag_chain.stream(
-        {"input": "What are common ways of doing it?"},
-        config={"configurable": {"session_id": uid}},
-    )
-
-
-# *************************************************
-# ************* AGENT RETRIEVER TOOL **************
-# *************************************************
-
-def _get_init_prompt():
-    return ChatPromptTemplate.from_messages([
-        SystemMessage(content=f'''
-        You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
-        If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
-        If the message doesn't require context, it will be empty, so answer the question casually.
-        '''),
-        MessagesPlaceholder(variable_name="chat_history"),
-        HumanMessagePromptTemplate.from_template("{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
-
-
-def _agent_with_retriever_tool(messages: List[Message]):
-    tool = create_retriever_tool(
-        _get_retriever(),
-        "conversations_retriever",
-        "Searches for relevant conversations the user has had in the past.",
-    )
-    agent = create_tool_calling_agent(llm, [tool], _get_init_prompt())
-    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=[tool], verbose=True)
-    return RunnableWithMessageHistory(
-        agent_executor,
-        lambda session_id: get_chat_history(messages),
-        input_messages_key="input",
-        output_messages_key="output",
-        history_messages_key="chat_history",
-    )
-
-
-def ask_agent(message: str, messages: List[Message]):
-    agent = _agent_with_retriever_tool(messages)
-    output = agent.invoke({'input': HumanMessage(content=message)},
-                          {"configurable": {"session_id": "unused"}})
-    return output['output']
 
 
 # ***************************************************
@@ -430,3 +322,14 @@ def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
         '''
     prompt = prompt.replace('    ', '').strip()
     return llm.invoke(prompt).content
+
+
+import tiktoken
+
+encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
