@@ -229,7 +229,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+    if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
       scanAndConnectDevice().then(_onConnected);
     }
 
@@ -291,7 +291,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateBleBatteryListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
-    SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().btDeviceStruct = _device!;
     SharedPreferencesUtil().deviceName = _device!.name;
     setState(() {});
   }
@@ -619,7 +619,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           )
                         : TextButton(
                             onPressed: () async {
-                              if (SharedPreferencesUtil().deviceId.isEmpty) {
+                              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {
