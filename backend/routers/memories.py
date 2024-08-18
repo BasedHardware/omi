@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
 
 import database.memories as memories_db
-from database.vector import delete_vector
+from database.vector_db import delete_vector
 from models.memory import *
 from models.transcript_segment import TranscriptSegment
 from utils import auth
@@ -100,6 +100,7 @@ async def postprocess_memory(
         duration = AudioSegment.from_wav(file_path).duration_seconds
         os.remove(file_path)
         segments = fal_whisperx(url, duration)
+        delete_postprocessing_audio(file_path)
         # TODO: should consider storing non beautified segments, and beautify on read?
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
@@ -109,7 +110,6 @@ async def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        delete_postprocessing_audio(file_path)
 
         # Fix user speaker_id matching
         if any(segment.is_user for segment in memory.transcript_segments):

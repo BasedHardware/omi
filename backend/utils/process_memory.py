@@ -7,7 +7,7 @@ from typing import Union
 from fastapi import HTTPException
 
 import database.memories as memories_db
-from database.vector import upsert_vector
+from database.vector_db import upsert_vector
 from models.memory import *
 from models.plugin import Plugin
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \

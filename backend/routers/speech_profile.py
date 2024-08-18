@@ -5,7 +5,7 @@ from pydub import AudioSegment
 
 from models.other import UploadProfile
 from utils import auth
-from utils.redis_utils import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
+from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
 from utils.storage import upload_profile_audio
 
 router = APIRouter()
