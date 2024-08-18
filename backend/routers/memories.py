@@ -1,6 +1,7 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from pydub import AudioSegment
 
 import database.memories as memories_db
 from database.vector import delete_vector
@@ -96,8 +97,10 @@ async def postprocess_memory(
     try:
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
+        duration = AudioSegment.from_wav(file_path).duration_seconds
         os.remove(file_path)
-        segments = fal_whisperx(url)  # TODO: should consider storing non beautified segments, and beautify on read?
+        segments = fal_whisperx(url, duration)
+        # TODO: should consider storing non beautified segments, and beautify on read?
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text for segment in memory.transcript_segments]))
@@ -110,6 +113,7 @@ async def postprocess_memory(
 
         # Fix user speaker_id matching
         if any(segment.is_user for segment in memory.transcript_segments):
+            # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
             transcript_tokens = num_tokens_from_string(
                 TranscriptSegment.segments_as_string(memory.transcript_segments, False))
