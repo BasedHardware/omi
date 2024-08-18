@@ -1,40 +1,37 @@
 import asyncio
-import os
 import time
-import uuid
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
-from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 import torch
 from collections import deque
 import opuslib
 
-from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
-from utils.stt.vad import VADIterator, model, vad_is_empty, is_speech_present
+from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
+from utils.stt.streaming import process_audio_dg, send_initial_file
+from utils.stt.vad import VADIterator, model, is_speech_present
 
 router = APIRouter()
 
 
 # @router.post("/v1/transcribe", tags=['v1'])
 # will be used again in Friend V2
-def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
-    upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
-    aseg = AudioSegment.from_wav(file_path)
-    print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
-
-    if vad_is_empty(file_path):  # TODO: get vad segments
-        os.remove(file_path)
-        return []
-    transcript = transcribe_file_deepgram(file_path, language=language)
-    os.remove(file_path)
-    return transcript
+# def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
+#     upload_id = str(uuid.uuid4())
+#     file_path = f"_temp/{upload_id}_{file.filename}"
+#     with open(file_path, 'wb') as f:
+#         f.write(file.file.read())
+#
+#     aseg = AudioSegment.from_wav(file_path)
+#     print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
+#
+#     if vad_is_empty(file_path):  # TODO: get vad segments
+#         os.remove(file_path)
+#         return []
+#     transcript = transcribe_file_deepgram(file_path, language=language)
+#     os.remove(file_path)
+#     return transcript
 
 
 # templates = Jinja2Templates(directory="templates")
@@ -70,7 +67,7 @@ async def _websocket_util(
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
-            await send_initial_file2(speech_profile, transcript_socket)
+            await send_initial_file(speech_profile, transcript_socket)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
