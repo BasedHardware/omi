@@ -51,7 +51,7 @@ async def _websocket_util(
     websocket_active = True
     duration = 0
     is_speech_active = False
-    speech_timeout = 1.0 # Good for now (who doesnt like integer) but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
+    speech_timeout = 2.0 # Good for now (who doesnt like integer) but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
     last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -74,7 +74,7 @@ async def _websocket_util(
         await websocket.close()
         return
 
-    threshold = 0.6
+    threshold = 0.7
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
     if codec == 'opus':
@@ -82,13 +82,14 @@ async def _websocket_util(
 
     async def receive_audio(socket1, socket2):
         nonlocal is_speech_active, last_speech_time, decoder, websocket_active
-        audio_buffer = deque(maxlen=sample_rate * 1)  # 1 secs
-        databuffer = bytearray(b"")
         
         REALTIME_RESOLUTION = 0.01
         sample_width = 2  # pcm8/16 here is 16 bit
         byte_rate = sample_width * sample_rate * channels
         chunk_size = int(byte_rate * REALTIME_RESOLUTION)
+        audio_buffer = deque(maxlen=byte_rate * 1)  # 1 secs
+        databuffer = bytearray(b"")
+        prespeech_audio = deque(maxlen=int(byte_rate * 0.5)) # Queue of audio that will included to data (sent to DG) when is_speech_active become True
             
         timer_start = time.time()
         audio_cursor = 0 # For sleep realtime logic
@@ -108,8 +109,11 @@ async def _websocket_util(
                 if len(audio_buffer) >= window_size_samples:
                     tensor_audio = torch.tensor(list(audio_buffer))
                     # Good alr, but increase the window size to get wider context but server will be slower
-                    if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
+                    if is_speech_present(tensor_audio[-window_size_samples * 4:], vad_iterator, window_size_samples):
                         if not is_speech_active:
+                            for audio in prespeech_audio:
+                                databuffer.extend(audio.int().numpy().tobytes())
+                            prespeech_audio.clear()
                             print('+Detected speech')
                         is_speech_active = True
                         last_speech_time = time.time()
@@ -119,9 +123,11 @@ async def _websocket_util(
                             # Reset only happens after the speech timeout
                             # Reason : Better to carry vad context for a speech, then reset for any new speech
                             vad_iterator.reset_states()
+                            prespeech_audio.extend(samples)
                             print('-NO Detected speech')
                             continue
                     else:
+                        prespeech_audio.extend(samples)
                         continue
             
                 elapsed_seconds = time.time() - timer_start
