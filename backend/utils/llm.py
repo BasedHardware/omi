@@ -126,6 +126,19 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    prev_transcript_tokens = num_tokens_from_string(prev_transcript)
+    count_user_appears = new_transcript.count('User:')
+    if count_user_appears == 0:
+        return -1
+    elif prev_transcript_tokens > 10000:
+        # if count_user_appears == 1: # most likely matching was a mistake
+        #     return -1
+        first_user_appears = new_transcript.index('User:')
+        # trim first user appears
+        prev_transcript = prev_transcript[first_user_appears:min(first_user_appears + 10000, len(prev_transcript))]
+        # new_transcript = new_transcript[first_user_appears:min(first_user_appears + 10000, len(new_transcript))]
+        # further improvement
+
     print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.

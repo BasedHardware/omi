@@ -96,33 +96,28 @@ async def postprocess_memory(
 
     try:
         # Upload to GCP + remove file locally and cloud storage
+        # TODO: try appending speech profile audio at the beggining, and use that speaker assignee
         url = upload_postprocessing_audio(file_path)
         aseg = AudioSegment.from_wav(file_path)
-        # TODO: use raw segments here, for speaker matching, then merge
-        segments = fal_whisperx(url, aseg.duration_seconds)
+        segments = fal_whisperx(url, aseg.duration_seconds)  # TODO: retry if 500
         delete_postprocessing_audio(file_path)
         os.remove(file_path)
         # TODO: should consider storing non beautified segments, and beautify on read?
+        # TODO: use raw segments here, for speaker matching, then merge
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text for segment in memory.transcript_segments]))
         new_count = len(''.join([segment.text for segment in segments]))
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
-            os.remove(file_path)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
+        # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
         if any(segment.is_user for segment in memory.transcript_segments):
-            # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
-            transcript_tokens = num_tokens_from_string(
-                TranscriptSegment.segments_as_string(memory.transcript_segments, False))
-            # should limit a few segments, like first and last 100?
-            if transcript_tokens < 40000:  # 40k tokens, costs about 10 usd per request
-                new = TranscriptSegment.segments_as_string(segments, False)
-                speaker_id: int = transcript_user_speech_fix(prev, new)
-            else:  # simple way (this in theory should work for all) ~ Not super accurate most likely
-                speaker_id: int = [segment.speaker_id for segment in memory.transcript_segments if segment.is_user][0]
+            new = TranscriptSegment.segments_as_string(segments, False)
+            speaker_id: int = transcript_user_speech_fix(prev, new)  # COULD BE TERRIBLE, use with caution
+            # good enough for now
 
             for segment in segments:
                 if segment.speaker_id == speaker_id:
