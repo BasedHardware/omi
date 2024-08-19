@@ -14,7 +14,7 @@ def _get_mesage(text: str, sender: str):
 conversation = [
     _get_mesage('Hi', 'human'),
     _get_mesage('Hi, how can I help you today?', 'ai'),
-    _get_mesage('Have I learned about business, life and regrets?', 'human'),
+    _get_mesage('Have I learned about business, and entreprenurship?', 'human'),
 ]
 
 
