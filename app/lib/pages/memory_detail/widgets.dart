@@ -10,6 +10,7 @@ import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.da
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -449,7 +450,10 @@ showOptionsBottomSheet(
                             setModalState(() => loadingPluginIntegrationTest = true);
                             // TODO: if not set, show dialog to set URL or take them to settings.
 
-                            webhookOnMemoryCreatedCall(memory, returnRawBody: true).then((response) {
+                            webhookOnMemoryCreatedCall(memory, returnRawBody: false).then((response) {
+                              print(response);
+                              NotificationService.instance.createNotification(
+                                  title: 'Developer: On Memory Created', body: response, notificationId: 11);
                               showDialog(
                                 context: context,
                                 builder: (c) => getDialog(
