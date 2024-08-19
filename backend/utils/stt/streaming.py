@@ -10,6 +10,7 @@ from starlette.websockets import WebSocket
 
 import database.notifications as notification_db
 from utils.plugins import trigger_realtime_integrations
+import numpy as np
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
@@ -87,6 +88,7 @@ async def process_audio_dg(
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
+        # print(sentence)
         if len(sentence) == 0:
             return
         # print(sentence)

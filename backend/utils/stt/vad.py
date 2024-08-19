@@ -12,13 +12,7 @@ model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_v
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
-class SpeechState(str, Enum):
-    has_speech = 'has_speech'
-    no_speech = 'no_speech'
-
-
-def get_speech_state(data, vad_iterator, window_size_samples=256):
-    has_start, has_end = False, False
+def is_speech_present(data, vad_iterator, window_size_samples=256):
     for i in range(0, len(data), window_size_samples):
         chunk = data[i: i + window_size_samples]
         if len(chunk) < window_size_samples:
@@ -29,17 +23,8 @@ def get_speech_state(data, vad_iterator, window_size_samples=256):
 
         if speech_dict:
             # print(speech_dict)
-            if 'start' in speech_dict:
-                has_start = True
-            elif 'end' in speech_dict:
-                has_end = True
-    # print('----')
-    if has_start:
-        return SpeechState.has_speech
-    elif has_end:
-        return SpeechState.no_speech
-    return None
-
+            return True
+    return False
 
 @timeit
 def is_audio_empty(file_path, sample_rate=8000):
