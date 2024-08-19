@@ -295,6 +295,7 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so answer the question casually.
     {plugin_info}
+    
     Conversation History:
     {conversation_history}
 
