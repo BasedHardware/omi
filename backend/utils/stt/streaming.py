@@ -88,7 +88,7 @@ async def process_audio_dg(
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
-        print(sentence)
+        # print(sentence)
         if len(sentence) == 0:
             return
         # print(sentence)
