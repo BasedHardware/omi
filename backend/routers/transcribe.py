@@ -6,7 +6,7 @@ from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from starlette.websockets import WebSocketState
 import torch
 from collections import deque
-# import opuslib
+import opuslib
 
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.streaming import process_audio_dg, send_initial_file
@@ -77,12 +77,11 @@ async def _websocket_util(
     threshold = 0.7
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
-    # if codec == 'opus':
-    #     decoder = opuslib.Decoder(sample_rate, channels)
+    if codec == 'opus':
+        decoder = opuslib.Decoder(sample_rate, channels)
 
     async def receive_audio(socket1, socket2):
-        nonlocal is_speech_active, last_speech_time, websocket_active
-        # nonlocal decoder
+        nonlocal is_speech_active, last_speech_time, websocket_active, decoder
         
         REALTIME_RESOLUTION = 0.01
         sample_width = 2  # pcm8/16 here is 16 bit
@@ -90,7 +89,7 @@ async def _websocket_util(
         chunk_size = int(byte_rate * REALTIME_RESOLUTION)
         audio_buffer = deque(maxlen=byte_rate * 1)  # 1 secs
         databuffer = bytearray(b"")
-        prespeech_audio = deque(maxlen=int(byte_rate * 0.5)) # Queue of audio that will included to data (sent to DG) when is_speech_active become True
+        prespeech_audio = deque(maxlen=int(byte_rate * 0.5)) # Queue of audio that will included to beginning of data (sent to DG) when is_speech_active become True
             
         timer_start = time.time()
         audio_cursor = 0 # For sleep realtime logic
@@ -99,45 +98,42 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 recv_time = time.time()
                 if codec == 'opus':
-                    # decoded_opus = decoder.decode(data, frame_size=320)
-                    # samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
-                    pass
+                    decoded_opus = decoder.decode(data, frame_size=160) # Version Firmware v1.0
+                    samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
                 elif codec in ['pcm8', 'pcm16']:  # Both are 16 bit
                     writable_data = bytearray(data)
                     samples = torch.frombuffer(writable_data, dtype=torch.int16).float() / 32768.0
                 else:
                     raise ValueError(f"Unsupported codec: {codec}")
-                # FIXME: opuslib is not working, so we are not using it
-                if codec != 'opus':
-                    audio_buffer.extend(samples)
-                    if len(audio_buffer) >= window_size_samples:
-                        tensor_audio = torch.tensor(list(audio_buffer))
-                        # Good alr, but increase the window size to get wider context but server will be slower
-                        if is_speech_present(tensor_audio[-window_size_samples * 4:], vad_iterator, window_size_samples):
-                            if not is_speech_active:
-                                for audio in prespeech_audio:
-                                    databuffer.extend(audio.int().numpy().tobytes())
-                                prespeech_audio.clear()
-                                print('+Detected speech')
-                            is_speech_active = True
-                            last_speech_time = time.time()
-                        elif is_speech_active:
-                            if recv_time - last_speech_time > speech_timeout:
-                                is_speech_active = False
-                                # Reset only happens after the speech timeout
-                                # Reason : Better to carry vad context for a speech, then reset for any new speech
-                                vad_iterator.reset_states()
-                                prespeech_audio.extend(samples)
-                                print('-NO Detected speech')
-                                continue
-                        else:
+                audio_buffer.extend(samples)
+                if len(audio_buffer) >= window_size_samples:
+                    tensor_audio = torch.tensor(list(audio_buffer))
+                    # Good alr, but increase the window size to get wider context but server will be slower
+                    if is_speech_present(tensor_audio[-window_size_samples * 4:], vad_iterator, window_size_samples):
+                        if not is_speech_active:
+                            for audio in prespeech_audio:
+                                databuffer.extend(audio.int().numpy().tobytes())
+                            prespeech_audio.clear()
+                            print('+Detected speech')
+                        is_speech_active = True
+                        last_speech_time = time.time()
+                    elif is_speech_active:
+                        if recv_time - last_speech_time > speech_timeout:
+                            is_speech_active = False
+                            # Reset only happens after the speech timeout
+                            # Reason : Better to carry vad context for a speech, then reset for any new speech
+                            vad_iterator.reset_states()
                             prespeech_audio.extend(samples)
+                            print('-NO Detected speech')
                             continue
+                    else:
+                        prespeech_audio.extend(samples)
+                        continue
             
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
                     databuffer.extend(data)
-                    if len(databuffer) >= chunk_size or codec == 'opus':
+                    if len(databuffer) >= chunk_size:
                         # Sleep logic, because naive sleep is not accurate
                         current_time = time.time()
                         elapsed_time = current_time - timer_start
@@ -158,7 +154,7 @@ async def _websocket_util(
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
-            print(f'Could not process audio: error {e}')
+            print(f'Could not process websocket audio: error {e}')
         finally:
             websocket_active = False
             socket1.finish()
