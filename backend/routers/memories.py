@@ -6,13 +6,12 @@ from pydub import AudioSegment
 import database.memories as memories_db
 from database.vector_db import delete_vector
 from models.memory import *
-from models.transcript_segment import TranscriptSegment
-from utils.other import endpoints as auth
-from utils.llm import transcript_user_speech_fix, num_tokens_from_string
+from utils.llm import num_tokens_from_string, transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
-from utils.plugins import trigger_external_integrations
 from utils.memories.process_memory import process_memory
+from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
+from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx
 
 router = APIRouter()
@@ -77,6 +76,7 @@ async def postprocess_memory(
 
     TODO: USE soniox here? with speech profile and stuff?
     """
+
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
     if memory.discarded:
@@ -97,9 +97,9 @@ async def postprocess_memory(
     try:
         # Upload to GCP + remove file locally and cloud storage
         url = upload_postprocessing_audio(file_path)
-        duration = AudioSegment.from_wav(file_path).duration_seconds
-        os.remove(file_path)
-        segments = fal_whisperx(url, duration)
+        aseg = AudioSegment.from_wav(file_path)
+        # TODO: use raw segments here, for speaker matching, then merge
+        segments = fal_whisperx(url, aseg.duration_seconds)
         delete_postprocessing_audio(file_path)
         # TODO: should consider storing non beautified segments, and beautify on read?
 
@@ -108,10 +108,9 @@ async def postprocess_memory(
         new_count = len(''.join([segment.text for segment in segments]))
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
+            os.remove(file_path)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-
-        # Fix user speaker_id matching
         if any(segment.is_user for segment in memory.transcript_segments):
             # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
@@ -143,6 +142,10 @@ async def postprocess_memory(
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
+
+
+# util('DX8n89KAmUaG9O7Qvj8xTi81Zu12', 'f650158a-a01f-4d7e-b780-becaa02bf8b9',
+#      '_temp/f650158a-a01f-4d7e-b780-becaa02bf8b9_recording-20240818_194948.wav')
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
