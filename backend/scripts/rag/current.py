@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Tuple
 
 from _shared import *
 from models.chat import Message
+from utils.llm import determine_requires_context
 
 
 def _get_mesage(text: str, sender: str):
@@ -11,8 +12,9 @@ def _get_mesage(text: str, sender: str):
 
 
 conversation = [
-    _get_mesage('What have I chat about entrepreneurship?', 'human'),
-    # _get_mesage('Hi, how can I help you today?', 'ai'),
+    _get_mesage('Hi', 'human'),
+    _get_mesage('Hi, how can I help you today?', 'ai'),
+    _get_mesage('Have I learned about business, life and regrets?', 'human'),
 ]
 
 
@@ -67,12 +69,12 @@ def get_markers(data, data_points, color, name, show_top=None):
 def visualize():
     uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
 
-    # context: Tuple = determine_requires_context(conversation)
-    # if not context or not context[0]:
-    #     print('No context is needed')
-    #     return
-    # topics = context[0]
-    topics = ['Business', 'Entrepreneurship', 'Failures']
+    context: Tuple = determine_requires_context(conversation)
+    if not context or not context[0]:
+        print('No context is needed')
+        return
+    topics = context[0]
+    # topics = ['Business', 'Entrepreneurship', 'Failures']
 
     data = get_data(uid, topics)
     all_embeddings = np.array([item['vector'] for item in data.values()])
