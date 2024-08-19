@@ -17,7 +17,7 @@ def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, L
     start_timestamp = dates_range[0].timestamp() if dates_range else None
     end_timestamp = dates_range[1].timestamp() if dates_range else None
 
-    def retrieve_for_topic(topic: str) -> List[Memory]:
+    def retrieve_for_topic(topic: str) -> List[str]:
         return query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp)
 
     memories_id = []
