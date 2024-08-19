@@ -101,6 +101,7 @@ async def postprocess_memory(
         # TODO: use raw segments here, for speaker matching, then merge
         segments = fal_whisperx(url, aseg.duration_seconds)
         delete_postprocessing_audio(file_path)
+        os.remove(file_path)
         # TODO: should consider storing non beautified segments, and beautify on read?
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
