@@ -96,6 +96,7 @@ async def _websocket_util(
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
+                recv_time = time.time()
                 if codec == 'opus':
                     decoded_opus = decoder.decode(data, frame_size=320)
                     samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
@@ -118,7 +119,7 @@ async def _websocket_util(
                         is_speech_active = True
                         last_speech_time = time.time()
                     elif is_speech_active:
-                        if time.time() - last_speech_time > speech_timeout:
+                        if recv_time - last_speech_time > speech_timeout:
                             is_speech_active = False
                             # Reset only happens after the speech timeout
                             # Reason : Better to carry vad context for a speech, then reset for any new speech
