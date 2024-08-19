@@ -6,7 +6,6 @@ import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
@@ -47,7 +46,6 @@ Future<CreateMemoryResponse?> createMemoryServer({
       'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
       'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
       'language': language, // maybe determine auto?
-      // 'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
     }),
   );
   if (response == null) return null;

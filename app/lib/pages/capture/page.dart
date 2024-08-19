@@ -378,7 +378,7 @@ class CapturePageState extends State<CapturePage>
   @override
   void initState() {
     btDevice = widget.device;
-    WavBytesUtil.clearTempWavFiles();
+    // WavBytesUtil.clearTempWavFiles();
     initiateWebsocket();
     startOpenGlass();
     initiateFriendAudioStreaming();

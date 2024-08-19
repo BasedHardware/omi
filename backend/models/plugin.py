@@ -25,6 +25,8 @@ class ExternalIntegration(BaseModel):
     webhook_url: str
     setup_completed_url: Optional[str] = None
     setup_instructions_file_path: str
+    include_audio_file: bool = False
+
     # TODO: refactor to be read from backend, so frontend doesn't do extra request (cache)
     # setup_instructions_markdown: str = ''
 

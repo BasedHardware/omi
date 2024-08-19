@@ -21,7 +21,9 @@ Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawB
   }
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   var data = memory.toJson();
-  // data['recordingFileBase64'] = await wavToBase64(memory.recordingFilePath ?? '');
+  data['recording_file_base64'] = await wavToBase64Url(
+      '/var/mobile/Containers/Data/Application/27ABDF9F-9B35-4BE6-93A7-EA06164C1DD7/Documents/recording-20240819_161742.wav');
+  // print('recording_file_base64: ${data["recording_file_base64"]}');
   try {
     var response = await makeApiCall(
       url: url,
@@ -89,12 +91,14 @@ Future<String?> wavToBase64Url(String filePath) async {
   if (filePath.isEmpty) return null;
   try {
     File file = File(filePath);
+    print('File exists: ${file.existsSync()}');
     if (!file.existsSync()) return null;
     List<int> fileBytes = await file.readAsBytes();
     String base64Encoded = base64Encode(fileBytes);
     String? mimeType = lookupMimeType(filePath) ?? 'application/octet-stream';
     return 'data:$mimeType;base64,$base64Encoded';
   } catch (e) {
-    return null; // Handle error gracefully in your application
+    print(e);
+    return null;
   }
 }

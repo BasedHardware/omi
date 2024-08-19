@@ -218,7 +218,7 @@ class WavBytesUtil {
   }
 
   Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
-    final directory = await getDir();
+    final directory = await getApplicationDocumentsDirectory();
     if (filename == null) {
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       filename = 'recording-$timestamp.wav';

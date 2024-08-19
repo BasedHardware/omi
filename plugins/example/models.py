@@ -78,10 +78,9 @@ class Memory(BaseModel):
     finished_at: Optional[datetime] = None
     transcript_segments: List[TranscriptSegment] = []
     photos: Optional[List[MemoryPhoto]] = []
-    # recordingFilePath: Optional[str] = None
-    # recordingFileBase64: Optional[str] = None
+    recording_file_base64: Optional[str] = None
     structured: Structured
-    plugins_results: List[PluginResult] = []
+    # plugins_results: List[PluginResult] = []
     discarded: bool
 
     def get_transcript(self) -> str:
