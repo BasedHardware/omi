@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -109,7 +110,7 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     return {}
 
 
-@router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=ZapierCreateMemory)
+@router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateMemory])
 async def get_trigger_memory_sample(request: Request, uid: str):
     """
     Get the latest memory or a sample to fullfill the triggers On memory created
@@ -161,7 +162,7 @@ async def get_trigger_memory_sample(request: Request, uid: str):
             overview=memory.structured.overview,
         )
 
-    return sample
+    return [sample]
 
 
 @router.get('/zapier/me', tags=['zapier'], response_model=EndpointResponse)
