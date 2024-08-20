@@ -98,7 +98,7 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 recv_time = time.time()
                 if codec == 'opus':
-                    copy_opus_byte = bytearray(data)
+                    copy_opus_byte = bytes(data)
                     decoded_opus = decoder.decode(copy_opus_byte, frame_size=160) # Version Firmware v1.0
                     writable_opus_data = bytearray(decoded_opus)
                     samples = torch.frombuffer(writable_opus_data, dtype=torch.int16).float() / 32768.0
