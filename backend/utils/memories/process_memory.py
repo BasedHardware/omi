@@ -1,17 +1,28 @@
 import random
+import datetime
 import threading
 import uuid
 from typing import Union
+
+import asyncio
 
 from fastapi import HTTPException
 
 import database.memories as memories_db
 from database.vector_db import upsert_vector
+import database.tasks as tasks_db
+import database.notifications as notification_db
 from models.memory import *
+from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.plugin import Plugin
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text
 from utils.plugins import get_plugins_data
+from utils.notifications import send_notification
+from utils.other.hume import get_hume, HumeJobLanguageModelPredictionResponseModel, HumeJobCallbackModel
+
+from utils.llm import qa_emotional_rag
+from utils.retrieval.rag import retrieve_rag_memory_context
 
 
 def _get_structured(
@@ -112,4 +123,135 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
 
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
+
+    asyncio.run(_process_memory_afterward(uid, language_code, memory))
     return memory
+
+async def _process_memory_afterward(uid: str, language_code: str, memory: Memory):
+    await _process_user_emotion(uid, language_code, memory)
+    return
+
+async def _process_user_emotion(uid: str, language_code: str, memory: Memory):
+    # save task
+    now = datetime.now()
+    task = Task(
+        id=str(uuid.uuid4()),
+        action=TaskAction.HUME_MERSURE_USER_EXPRESSION,
+        user_uid=uid,
+        memory_id=memory.id,
+        created_at=now,
+        status=TaskStatus.PROCESSING,
+    )
+    tasks_db.create(task.dict())
+
+    # emotion
+    transcript = memory.get_transcript(False)
+    ok = get_hume().request_user_expression_mersurement(transcript)
+    print(ok)
+    if "error" in ok:
+        err = ok["error"]
+        print(err)
+        return
+    job = ok["result"]
+    request_id = job.id
+    if not request_id or len(request_id) == 0:
+        print(f"Can not request users feeling. uid: {uid}")
+        return
+
+    # update task
+    task.request_id = request_id
+    task.updated_at = datetime.now()
+    tasks_db.update(task.id, task.dict())
+
+    return
+
+def process_user_expression_measurement_callback(provider: str, request_id: str, callback: HumeJobCallbackModel):
+    support_providers = [TaskActionProvider.HUME]
+    if provider not in support_providers:
+        print(f"Provider is not supported. {provider}")
+        return
+
+    # Get task
+    task_action = ""
+    if provider == TaskActionProvider.HUME:
+        task_action = TaskAction.HUME_MERSURE_USER_EXPRESSION
+    if len(task_action) == 0:
+        print("Task action is empty")
+        return
+
+    task_data = tasks_db.get_task_by_action_request(task_action, request_id)
+    if task_data is None:
+        print(f"Task not found. Action: {task_action}, Request ID: {request_id}")
+        return
+
+    task = Task(**task_data)
+
+    # Update
+    task_status = task.status
+    if callback.status == "COMPLETED":
+        task_status = TaskStatus.DONE
+    elif callback.status == "FAILED":
+        task_status = TaskStatus.ERROR
+    else:
+        print(f"Not support status {callback.status}")
+        return
+
+    # Not changed
+    if task_status == task.status:
+        print("Task status are synced")
+        return
+
+    task.status = task_status
+    task.updated_at = datetime.now()
+    tasks_db.update(task.id, task.dict())
+
+    # done or not
+    if task.status != TaskStatus.DONE:
+        print(f"Task is not done yet. Uid: {task.user_uid}, task_id: {task.id}, status: {task.status}")
+        return
+
+    # Get prediction
+    uid = task.user_uid
+    predictions = callback.predictions
+    if len(predictions) == 0 or len(predictions[0].emotions) == 0:
+        print(f"Can not predict user's expression. Uid: {uid}")
+        return
+
+    # Top emotion
+    emotions = sorted(predictions[0].emotions, key=lambda emotion: emotion.score, reverse=True)
+    top_emotions = emotions[:1]  # top 1
+
+    emotion_filters = []
+    emotion = top_emotions[0].name
+    if not emotion or len(emotion) == 0:
+        print(f"Can not extract users emmotion. uid: {uid}")
+        return
+    if len(emotion_filters) > 0 and emotion not in emotion_filters:
+        print(f"Emotion is not support {emotion}. Support: {emotion_filters}")
+        return
+
+    # Ask llms about notification content
+    title = "Omi"
+    memory_data = memories_db.get_memory(uid, task.memory_id)
+    if memory_data is None:
+        print(f"Memory is not found. Uid: {uid}. Memory: {task.memory_id}")
+        return
+
+    memory = Memory(**memory_data)
+
+    context_str, memories = retrieve_rag_memory_context(uid, [memory])
+    response: str = qa_emotional_rag(context_str, memories, emotion)
+    message = response
+    if message is None or len(message) == 0:
+        print(f"Message is too short. Uid: {uid}. Message: {message}")
+        return
+
+    # Send the notification
+    token = notification_db.get_token_only(uid)
+    if token is None:
+        print(f"User token is none. Uid: {uid}")
+        return
+
+    send_notification(token, title, message, None)
+
+    return
