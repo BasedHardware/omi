@@ -237,9 +237,64 @@ def generate_embedding(content: str) -> List[float]:
 
 
 class ContextOutput(BaseModel):
-    requires_context: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
-    topics: List[str] = Field(default=[], description="If context is required, the topics to retrieve context from")
-    dates_range: List[datetime] = Field(default=[], description="The dates range to retrieve context from")
+    topics: List[str] = Field(default=[], description="List of topics.")
+    # dates_range: List[datetime] = Field(default=[], description="The dates range to retrieve context from")
+
+
+class ContextOutput2(BaseModel):
+    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
+
+
+class RequiresContext(BaseModel):
+    value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
+
+
+def requires_context(messages: List[Message]) -> bool:
+    prompt = f'''
+    Based on the current conversation your task is to determine if the user is asking a question that requires context outside the conversation to be answered.
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+    
+    Conversation History:    
+    {Message.get_messages_as_string(messages)}
+    '''
+    with_parser = llm.with_structured_output(RequiresContext)
+    response: RequiresContext = with_parser.invoke(prompt)
+    return response.value
+
+
+# TODO: try query expansion, instead of topics / queries
+# TODO: include user name in prompt, and preferences.
+def retrieve_context_params(messages: List[Message]) -> List[str]:
+    prompt = f'''
+    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
+    
+    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
+    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+
+    Conversation:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(ContextOutput)
+    response: ContextOutput = with_parser.invoke(prompt)
+    return response.topics
+
+
+def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
+    prompt = f'''
+    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
+    
+    Your task is to to find the dates range in which the current conversation needs context about, in order to answer the most recent user request.
+    
+    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
+    Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
+    
+
+    Conversation:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(ContextOutput2)
+    response: ContextOutput2 = with_parser.invoke(prompt)
+    return response.dates_range
 
 
 def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[str], List[datetime]]]:
