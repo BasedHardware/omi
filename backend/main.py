@@ -44,9 +44,9 @@ image = (
 @modal_app.function(
     image=image,
     keep_warm=2,
-    memory=(1024, 2048),
-    cpu=4,
-    allow_concurrent_inputs=5,
+    memory=(512, 1024),
+    cpu=2,
+    allow_concurrent_inputs=10,
     # timeout=24 * 60 * 60,  # avoid timeout with websocket, but then containers do not die
     # can decrease memory and cpu size?
     timeout=60 * 10,
