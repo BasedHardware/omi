@@ -83,7 +83,7 @@ async def _websocket_util(
     async def receive_audio(socket1, socket2):
         nonlocal is_speech_active, last_speech_time, websocket_active, decoder
         
-        REALTIME_RESOLUTION = 0.01
+        REALTIME_RESOLUTION = 0.02
         sample_width = 2  # pcm8/16 here is 16 bit
         byte_rate = sample_width * sample_rate * channels
         chunk_size = int(byte_rate * REALTIME_RESOLUTION)
@@ -98,8 +98,10 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 recv_time = time.time()
                 if codec == 'opus':
-                    decoded_opus = decoder.decode(data, frame_size=160) # Version Firmware v1.0
-                    samples = torch.frombuffer(decoded_opus, dtype=torch.int16).float() / 32768.0
+                    copy_opus_byte = bytearray(data)
+                    decoded_opus = decoder.decode(copy_opus_byte, frame_size=160) # Version Firmware v1.0
+                    writable_opus_data = bytearray(decoded_opus)
+                    samples = torch.frombuffer(writable_opus_data, dtype=torch.int16).float() / 32768.0
                 elif codec in ['pcm8', 'pcm16']:  # Both are 16 bit
                     writable_data = bytearray(data)
                     samples = torch.frombuffer(writable_data, dtype=torch.int16).float() / 32768.0
