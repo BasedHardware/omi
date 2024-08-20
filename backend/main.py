@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi_utilities import repeat_at
 
 from modal import Image, App, asgi_app, Secret, Cron
-from routers import chat, memories, plugins, speech_profile, transcribe, screenpipe, firmware, notifications
-from utils.crons.notifications import start_cron_job
+from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile
+from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -24,7 +24,10 @@ app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 app.include_router(screenpipe.router)
+app.include_router(workflow.router)
 app.include_router(notifications.router)
+app.include_router(workflow.router)
+
 app.include_router(firmware.router)
 
 modal_app = App(
@@ -41,9 +44,9 @@ image = (
 @modal_app.function(
     image=image,
     keep_warm=2,
-    memory=(1024, 2048),
-    cpu=4,
-    allow_concurrent_inputs=5,
+    memory=(512, 1024),
+    cpu=2,
+    allow_concurrent_inputs=10,
     # timeout=24 * 60 * 60,  # avoid timeout with websocket, but then containers do not die
     # can decrease memory and cpu size?
     timeout=60 * 10,

@@ -1,11 +1,9 @@
-import logging
-
 from fastapi import APIRouter, Depends
 from firebase_admin import messaging
 
 import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
-from utils import auth
+from utils.other import endpoints as auth
 
 # logger = logging.getLogger('uvicorn.error')
 # logger.setLevel(logging.DEBUG)

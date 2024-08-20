@@ -26,10 +26,15 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
-  // TODO: store device object rather
-  set deviceId(String value) => saveString('deviceId', value);
+  set btDeviceStruct(BTDeviceStruct value) {
+    saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
 
-  String get deviceId => getString('deviceId') ?? '';
+  BTDeviceStruct get btDeviceStruct {
+    final String device = getString('btDeviceStruct') ?? '';
+    if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
+    return BTDeviceStruct.fromJson(jsonDecode(device));
+  }
 
   set deviceName(String value) => saveString('deviceName', value);
 
@@ -294,6 +299,10 @@ class SharedPreferencesUtil {
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 
   String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
+
+  bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
 
   set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
 
