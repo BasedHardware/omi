@@ -5,23 +5,42 @@
 # import torch
 # import torchaudio
 # from pydub import AudioSegment
-# from speechbrain.inference.speaker import SpeakerRecognition
-#
-# from utils.endpoints import timeit
-# from utils.preprocess import preprocess_audio
-# from utils.storage import upload_speaker_profile, retrieve_speaker_profile
-#
-# # device = "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = 'cpu'
-# # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import torch
+
+
+from speechbrain.inference.speaker import SpeakerRecognition
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = SpeakerRecognition.from_hparams(
+    source="speechbrain/spkrec-ecapa-voxceleb",
+    savedir="pretrained_models/spkrec-ecapa-voxceleb",
+    run_opts={"device": device},
+)
+
+
+def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> bool:
+    try:
+        # TODO: restore in a separate modal deployment
+        score, prediction = model.verify_files(sample_audio, segment)
+        print(score, prediction)
+        return bool(score[0] > 0.6)
+    except Exception as e:
+        return False
+
+# if aseg.frame_rate == 16000:  # do not allow pcm8
+#     if profile_path := get_profile_audio_if_exists(uid):
+#         for segment in segments:
+#             temporal_file = f"_temp/{memory_id}_{segment.start}_{segment.end}.wav"
+#             AudioSegment.from_wav(file_path)[segment.start * 1000:segment.end * 1000].export(
+#                 temporal_file, format="wav")
+#             matches = sample_same_speaker_as_segment(temporal_file, profile_path)
+#             print('Matches', matches, temporal_file)
+#             # os.remove(temporal_file)
 #
-# # device = "cpu"
-# verification = SpeakerRecognition.from_hparams(
-#     source="speechbrain/spkrec-ecapa-voxceleb",
-#     savedir="pretrained_models/spkrec-ecapa-voxceleb",
-#     run_opts={"device": device},
-# )
-#
+# # os.remove(file_path)
+
 #
 # def get_speaker_embedding(audio_path):
 #     # print('get_speaker_embedding', audio_path)

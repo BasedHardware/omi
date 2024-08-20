@@ -69,7 +69,7 @@ mixin WebSocketMixin {
           _reconnectionAttempts = 0;
           _isConnecting = false;
           onConnectionSuccess();
-          NotificationService.instance.clearNotification(2); // clear connection server conn issue?
+          NotificationService.instance.clearNotification(2);
         },
         onWebsocketConnectionFailed: (err) {
           debugPrint('WebSocket connection failed: $err');
