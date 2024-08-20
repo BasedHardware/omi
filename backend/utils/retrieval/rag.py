@@ -8,7 +8,7 @@ from models.chat import Message
 from models.memory import Memory
 from models.transcript_segment import TranscriptSegment
 from utils.llm import requires_context, retrieve_context_params, retrieve_context_dates, chunk_extraction, \
-    num_tokens_from_string
+    num_tokens_from_string, determine_requires_memory_context
 
 
 def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:
@@ -107,3 +107,28 @@ def retrieve_rag_context(
         return context_str, (memories if context_str else []), topics, dates_range
 
     return context_str, (memories if context_str else [])
+
+def retrieve_rag_memory_context(uid: str, prev_memories: List[Memory]) -> Tuple[str, List[Memory]]:
+    context = determine_requires_memory_context(prev_memories)
+    if not context or (not context[0] and not context[1]):
+        return '', []
+
+    topics = context[0]
+    dates_range = context[1]
+    start_timestamp = dates_range[0].timestamp() if dates_range else None
+    end_timestamp = dates_range[1].timestamp() if dates_range else None
+
+    def retrieve_for_topic(topic: str) -> List[str]:
+        return query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp)
+
+    memories_id = []
+    if topics:
+        for topic in topics:
+            memories_id.extend(retrieve_for_topic(topic))
+        memories = get_memories_by_id(uid, memories_id)
+    else:
+        memories = filter_memories_by_date(uid, dates_range[0], dates_range[1])
+    print('Found', len(memories), 'memories for context')
+    memories = [Memory(**memory) for memory in memories]
+
+    return Memory.memories_to_string(memories), memories
