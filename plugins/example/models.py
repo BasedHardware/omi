@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Dict
 
 from pydantic import BaseModel, Field
@@ -85,6 +86,35 @@ class Memory(BaseModel):
 
     def get_transcript(self) -> str:
         return TranscriptSegment.segments_as_string(list(map(lambda x: x.dict(), self.transcript_segments)))
+
+
+class Geolocation(BaseModel):
+    google_place_id: Optional[str] = None
+    latitude: float
+    longitude: float
+    address: Optional[str] = None
+    location_type: Optional[str] = None
+
+
+class MemorySource(str, Enum):
+    friend = 'friend'
+    openglass = 'openglass'
+    screenpipe = 'screenpipe'
+    workflow = 'workflow'
+
+
+class WorkflowMemorySource(str, Enum):
+    audio = 'audio_transcript'
+    other = 'other_text'
+
+
+class WorkflowCreateMemory(BaseModel):
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    text: str
+    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    language: Optional[str] = None
+    geolocation: Optional[Geolocation] = None
 
 
 class EndpointResponse(BaseModel):

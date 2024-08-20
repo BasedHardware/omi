@@ -67,6 +67,8 @@ void main() async {
     Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
+  // _setupAudioSession();
+
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -169,3 +171,23 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
+
+// void _setupAudioSession() {
+//   AudioSession.instance.then((audioSession) async {
+//     await audioSession.configure(const AudioSessionConfiguration(
+//       avAudioSessionCategory: AVAudioSessionCategory.playback,
+//       avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.mixWithOthers,
+//       avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+//       avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+//       avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+//       androidAudioAttributes: AndroidAudioAttributes(
+//         contentType: AndroidAudioContentType.speech,
+//         flags: AndroidAudioFlags.none,
+//         usage: AndroidAudioUsage.assistant,
+//       ),
+//       androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+//       androidWillPauseWhenDucked: true,
+//     ));
+//     audioSession.setActive(true);
+//   });
+// }
