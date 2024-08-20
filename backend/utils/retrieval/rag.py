@@ -108,6 +108,7 @@ def retrieve_rag_context(
 
     return context_str, (memories if context_str else [])
 
+
 def retrieve_rag_memory_context(uid: str, prev_memories: List[Memory]) -> Tuple[str, List[Memory]]:
     context = determine_requires_memory_context(prev_memories)
     if not context or (not context[0] and not context[1]):

@@ -246,6 +246,9 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         print(f"Message is too short. Uid: {uid}. Message: {message}")
         return
 
+    print(title)
+    print(message)
+
     # Send the notification
     token = notification_db.get_token_only(uid)
     if token is None:
