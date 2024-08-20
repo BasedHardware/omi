@@ -336,6 +336,29 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
         return None
 
 
+class SummaryOutput(BaseModel):
+    summary: str = Field(description="The extracted summary from the conversation, at most 250 tokens.")
+
+
+def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
+    content = TranscriptSegment.segments_as_string(segments)
+    prompt = f'''
+    You will be given a conversation transcript, and a list of topics.
+    Your task is to generate a summary of the conversation focused on the topics provided.
+    Include the most relevant information about the topics, people mentioned, events, locations, facts, phrases, and any other relevant information.
+    It is possible the topics are not related to the conversation, in that case, output an empty string.
+    
+    Conversation:
+    {content}
+    
+    Topics: {topics}
+    
+    '''
+    with_parser = llm.with_structured_output(SummaryOutput)
+    response: SummaryOutput = with_parser.invoke(prompt)
+    return response.summary
+
+
 def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
@@ -348,7 +371,8 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     prompt = f"""
     You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
     If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so answer the question casually.
+    If the message doesn't require context, it will be empty, so follow-up the conversation casually.
+    If there's not enough information to provide a valuable answer, ask the user for clarification questions.
     {plugin_info}
     
     Conversation History:
