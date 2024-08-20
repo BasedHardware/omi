@@ -22,8 +22,8 @@ Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawB
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
   var data = memory.toJson();
   data['recording_file_base64'] = await wavToBase64Url(
-      '/var/mobile/Containers/Data/Application/27ABDF9F-9B35-4BE6-93A7-EA06164C1DD7/Documents/recording-20240819_161742.wav');
-  // print('recording_file_base64: ${data["recording_file_base64"]}');
+      '/var/mobile/Containers/Data/Application/4AD953A2-2705-4FC3-9806-57A29FD4FE6A/Documents/recording-20240819_183216.wav');
+  print('recording_file_base64: ${data["recording_file_base64"]}');
   try {
     var response = await makeApiCall(
       url: url,

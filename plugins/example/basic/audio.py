@@ -8,7 +8,7 @@ import requests
 from fastapi import APIRouter, HTTPException
 from langchain_openai import ChatOpenAI
 
-from models import Memory, EndpointResponse
+from models import Memory
 
 router = APIRouter()
 api_key = os.getenv('HUME_API_KEY')
@@ -32,14 +32,15 @@ def wait_for_job_completion(job_id):
         time.sleep(2)
 
 
-@router.post('/audio/emotional', tags=['basic', 'memory_created'], response_model=EndpointResponse)
-def emotional_supporter(memory: Memory):
+@router.post('/audio/emotional')
+def emotional(memory: Memory):
     if memory.recording_file_base64 is None:
         return {}
 
     file_path = f"{str(uuid.uuid4())}.wav"
     base64_to_file(memory.recording_file_base64, file_path)
 
+    # Create Hume AI job
     response = requests.post(
         'https://api.hume.ai/v0/batch/jobs',
         headers={'X-Hume-Api-Key': api_key},
@@ -53,6 +54,7 @@ def emotional_supporter(memory: Memory):
         raise HTTPException(status_code=500, detail='Failed to create job')
 
     wait_for_job_completion(job_id)
+
     response = requests.get(f'https://api.hume.ai/v0/batch/jobs/{job_id}/predictions',
                             headers={'X-Hume-Api-Key': api_key})
     if response.status_code != 200:
@@ -60,12 +62,14 @@ def emotional_supporter(memory: Memory):
 
     predictions = response.json()[0]['results']['predictions'][0]['models']['prosody']['grouped_predictions'][0][
         'predictions']
+
     cleaned = []
     for p in predictions:
         text = p['text']
         emotions = [emotion['name'] for emotion in p['emotions'] if emotion['score'] > 0.2]
         cleaned.append({'text': text, 'emotions': emotions})
 
+    # Generate feedback using GPT-4
     prompt = f'''
         You are a Friend AI, and you are tasked with providing feedback on the emotional state of the speaker in the following audio.
         You will receive a list of text segments, each with a list of emotions detected in the speaker's voice.
@@ -76,4 +80,4 @@ def emotional_supporter(memory: Memory):
         {json.dumps(cleaned)}
         '''
     result = chat.invoke(prompt)
-    return {'message': result.content}
+    return {'message': result}

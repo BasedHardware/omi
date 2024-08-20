@@ -17,6 +17,7 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 import 'maps_util.dart';
@@ -453,7 +454,9 @@ showOptionsBottomSheet(
                             webhookOnMemoryCreatedCall(memory, returnRawBody: false).then((response) {
                               print(response);
                               NotificationService.instance.createNotification(
-                                  title: 'Developer: On Memory Created', body: response, notificationId: 11);
+                                  title: 'Developer: On Memory Created',
+                                  body: response.decodeSting,
+                                  notificationId: 11);
                               showDialog(
                                 context: context,
                                 builder: (c) => getDialog(
