@@ -19,7 +19,7 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     get_plugin_result, should_discard_memory, summarize_experience_text
 from utils.plugins import get_plugins_data
 from utils.notifications import send_notification
-from utils.other.hume import get_hume, HumeJobLanguageModelPredictionResponseModel, HumeJobCallbackModel
+from utils.other.hume import get_hume, HumeJobCallbackModel
 
 from utils.llm import qa_emotional_rag
 from utils.retrieval.rag import retrieve_rag_memory_context
@@ -124,14 +124,11 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
 
-    asyncio.run(_process_memory_afterward(uid, language_code, memory))
     return memory
 
-async def _process_memory_afterward(uid: str, language_code: str, memory: Memory):
-    await _process_user_emotion(uid, language_code, memory)
-    return
+def process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
+    print('process_user_emotion memory.id=', memory.id)
 
-async def _process_user_emotion(uid: str, language_code: str, memory: Memory):
     # save task
     now = datetime.now()
     task = Task(
@@ -145,9 +142,7 @@ async def _process_user_emotion(uid: str, language_code: str, memory: Memory):
     tasks_db.create(task.dict())
 
     # emotion
-    transcript = memory.get_transcript(False)
-    ok = get_hume().request_user_expression_mersurement(transcript)
-    print(ok)
+    ok = get_hume().request_user_expression_mersurement(urls)
     if "error" in ok:
         err = ok["error"]
         print(err)
@@ -218,17 +213,17 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         return
 
     # Top emotion
-    emotions = sorted(predictions[0].emotions, key=lambda emotion: emotion.score, reverse=True)
-    top_emotions = emotions[:1]  # top 1
-
     emotion_filters = []
-    emotion = top_emotions[0].name
-    if not emotion or len(emotion) == 0:
+    prediction = callback.predictions[0]
+    emotions = prediction.get_top_emotion_names(1, 0.5)
+    if len(emotion_filters) > 0:
+        emotions = filter(lambda emotion: emotion in emotion_filters, emotions)
+    if len(emotions) == 0:
         print(f"Can not extract users emmotion. uid: {uid}")
         return
-    if len(emotion_filters) > 0 and emotion not in emotion_filters:
-        print(f"Emotion is not support {emotion}. Support: {emotion_filters}")
-        return
+
+    emotion = ','.join(emotions)
+    print(f"Emotion Uid: {uid} {emotion}")
 
     # Ask llms about notification content
     title = "Omi"
