@@ -121,7 +121,7 @@ def postprocess_memory(
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
-        # delete_postprocessing_audio(file_path)
+        delete_postprocessing_audio(file_path)
         os.remove(file_path)
 
         if not segments:
