@@ -10,7 +10,7 @@ from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
-from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
+from utils.other.storage import upload_postprocessing_audio, get_profile_audio_if_exists, delete_postprocessing_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 
@@ -94,16 +94,14 @@ def postprocess_memory(
     try:
         aseg = AudioSegment.from_wav(file_path)
         profile_duration = 0
-        # TODO: normalizing audio would be needed for this to work
-        # ~ also normalizing helps the model to be more accurate, do preprocess again?
 
-        # if aseg.frame_rate == 16000:  # do not allow pcm8
+        # if aseg.frame_rate == 16000:  # do not allow pcm8 DOESNT PERFORM BETTER
         #     if profile_path := get_profile_audio_if_exists(uid):
         #         print('Processing audio with profile')
         #         # join (file_path + profile_path)
         #         profile_aseg = AudioSegment.from_wav(profile_path)
         #         separate_seconds = 30
-        #         final = profile_aseg + AudioSegment.silent(duration=separate_seconds) + aseg
+        #         final = profile_aseg + AudioSegment.silent(duration=separate_seconds * 1000) + aseg
         #         final.export(file_path, format="wav")
         #         profile_duration = profile_aseg.duration_seconds + separate_seconds
 
@@ -113,6 +111,7 @@ def postprocess_memory(
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         delete_postprocessing_audio(file_path)
         os.remove(file_path)
+
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="FAL WhisperX failed to process audio")
@@ -129,12 +128,14 @@ def postprocess_memory(
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
             new = TranscriptSegment.segments_as_string(segments, False)
             speaker_id: int = transcript_user_speech_fix(prev, new)  # COULD BE TERRIBLE, use with caution
+            print('matched speaker_id:', speaker_id)
             # good enough for now
 
             for segment in segments:
                 if segment.speaker_id == speaker_id:
                     segment.is_user = True
 
+        # TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
