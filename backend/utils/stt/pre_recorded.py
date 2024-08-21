@@ -54,6 +54,7 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, duration: int = Non
                 'version': '3',
                 'batch_size': 64,
                 'num_speakers': speakers_count,
+                # 'prompt': 'Let\'s listen to this conversation recording'
             },
         )
         result = handler.get()
@@ -68,11 +69,16 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, duration: int = Non
 
 def _words_cleaning(words: List[dict]):
     words_cleaned: List[dict] = []
-    for w in words:
+    for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
-        words_cleaned.append({'start': w['timestamp'][0], 'end': w['timestamp'][1], 'speaker': w['speaker'],
-                              'text': w['text'], 'is_user': False})
+        words_cleaned.append({
+            'start': round(w['timestamp'][0], 2),
+            'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
+            'speaker': w['speaker'],
+            'text': str(w['text']).strip(),
+            'is_user': False
+        })
 
     for i, word in enumerate(words_cleaned):
         speaker = word['speaker']
@@ -98,8 +104,8 @@ def _words_cleaning(words: List[dict]):
 
             words_cleaned[i]['speaker'] = speaker
 
-    # for chunk in words_cleaned:
-    #     print(chunk)
+    for chunk in words_cleaned:
+        print(chunk)
     return words_cleaned
 
 
@@ -142,12 +148,13 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
+    print(starts_at)
     return [TranscriptSegment(
-        text=segment['text'],
+        text=str(segment['text']).strip().capitalize(),
         speaker=segment['speaker'],
         is_user=segment['is_user'],
-        start=segment['start'] - starts_at,
-        end=segment['end'] - starts_at,
+        start=round(segment['start'] - starts_at, 2),
+        end=round(segment['end'] - starts_at, 2),
     ) for segment in segments]
 
 
