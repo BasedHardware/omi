@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # State management
+  provider: ^6.1.2
 
   flutter_localizations:
     sdk: flutter
