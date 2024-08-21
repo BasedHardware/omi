@@ -127,7 +127,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
     prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = new_transcript.count('User:')
+    count_user_appears = prev_transcript.count('User:')
     if count_user_appears == 0:
         return -1
     elif prev_transcript_tokens > 10000:
@@ -143,6 +143,7 @@ def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
     Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
 
     Previous Transcript:
     {prev_transcript}
