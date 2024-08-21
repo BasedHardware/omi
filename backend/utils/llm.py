@@ -446,45 +446,6 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def determine_requires_memory_context(memories: List[Memory]) -> Optional[Tuple[List[str], List[datetime]]]:
-    prompt = '''
-            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
-            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
-    
-            - First determine if the conversation requires context, in the field "requires_context".
-            - Context could be 2 different things:
-              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
-              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
-    
-            Conversation:
-            {conversation}
-            
-            {format_instructions}
-        '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=ContextOutput)
-
-    prompt = PromptTemplate(
-        template=prompt,
-        input_variables=["current_date", "conversation"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-
-    conversation = Memory.memories_to_string(memories)
-
-    prompt_and_model = prompt | llm
-    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
-
-    try:
-        parsed_output = parser.invoke(output)
-        topics = parsed_output.topics
-        dates = parsed_output.dates_range
-        print(f'topics: {topics}, dates: {dates}')
-        return (topics, dates) if parsed_output.requires_context else None
-    except Exception as e:
-        print(f'Error determining requires context: {e}')
-        return None
-
-
 def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
