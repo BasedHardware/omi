@@ -12,6 +12,7 @@ target_sources(app PRIVATE
     src/led.c
     src/audio.c
     src/codec.c
+	src/speaker.c
     src/lib/battery/battery.c
 )
 
