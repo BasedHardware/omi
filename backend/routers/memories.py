@@ -11,7 +11,7 @@ from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
-from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, create_signed_postprocessing_audio_url
+from utils.other.storage import create_signed_postprocessing_audio_url
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
