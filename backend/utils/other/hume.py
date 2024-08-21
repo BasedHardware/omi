@@ -1,40 +1,6 @@
 import os
 import requests
 
-class HumeJobCallbackModel:
-    def __init__(
-            self,
-            job_id,
-            status,
-            predictions,
-    ) -> None:
-        self.job_id = job_id
-        self.status = status
-        self.predictions = predictions
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "HumeJobCallbackModel":
-        # predictions[0] -> results -> predictions
-        predictions = []
-        if "predictions" in data and len(data["predictions"]) > 0:
-            prediction_data = data["predictions"][0]["results"]["predictions"]
-            predictions = HumeJobLanguageModelPredictionResponseModel.from_multi_dict(prediction_data)
-
-        model = cls(data["job_id"], data["status"], predictions)
-        return model
-
-class HumeJobResponseModel:
-    def __init__(
-            self,
-            id,
-    ) -> None:
-        self.id = id
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "HumeJobResponseModel":
-        model = cls(data["job_id"])
-        return model
-
 class HumePredictionEmotionResponseModel:
     def __init__(
             self,
@@ -49,49 +15,81 @@ class HumePredictionEmotionResponseModel:
         model = cls(data["name"], data["score"])
         return model
 
-    @classmethod
-    def from_multi_dict(cls, data: dict) -> "HumePredictionEmotionResponseModel":
-        model = []
-        for item in data:
-            model.append(cls.from_dict(item))
 
-        return model
-
-
-class HumeJobLanguageModelPredictionResponseModel:
+class HumeJobModelPredictionResponseModel:
     def __init__(
             self,
             emotions=[],
+            emotion_dict={},
     ) -> None:
         self.emotions = emotions
+        self.emotions_dict = emotion_dict
 
-    @classmethod
-    def from_dict(cls, data: dict) -> "HumeJobLanguageModelPredictionResponseModel":
-        # Validate model
-        # models -> language -> grouped_predictions
-        if "models" not in data or "language" not in data["models"] or "grouped_predictions" not in data["models"]["language"]:
-            print("Data is in valid")
-            return None
+    def get_top_emotion_names(self, k: int = 5, peak_threshold:float = .7):
+        n = len(self.emotions_dict)
+        emotions_average = {}
+        for emotion, score in self.emotions_dict.items():
+            if score >= peak_threshold:
+                emotions_average[emotion] = score / n
 
-        # grouped_predictions -> predictions -> emotions
-        grouped_predictions = data["models"]["language"]["grouped_predictions"]
-        if len(grouped_predictions) == 0 or "predictions" not in grouped_predictions[0] or len(grouped_predictions[0]["predictions"]) == 0 or "emotions" not in grouped_predictions[0]["predictions"][0]:
-            return cls()
+        ascend_sorted_emotion_average = sorted(emotions_average, key=emotions_average.get, reverse=True)
+        k = min(k, len(ascend_sorted_emotion_average))
+        return ascend_sorted_emotion_average[:k]
 
-        emotions = HumePredictionEmotionResponseModel.from_multi_dict(grouped_predictions[0]["predictions"][0]["emotions"])
+    @ classmethod
+    def from_dict(cls, prediction_model: str, data: dict) -> "HumeJobModelPredictionResponseModel":
+        model = cls()
+        for prediction in data["results"]["predictions"]:
+            for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
+                for grouped_prediction_prediction in grouped_prediction['predictions']:
+                    for emotion in grouped_prediction_prediction['emotions']:
+                        # emotion
+                        emo = HumePredictionEmotionResponseModel.from_dict(emotion)
+                        model.emotions.append(emo)
 
-        model = cls(emotions)
+                        # score dict
+                        if emo.name not in model.emotions_dict:
+                            model.emotions_dict[emo.name] = emo.score
+                        else:
+                            model.emotions_dict[emo.name] = model.emotions_dict[emo.name] + emo.score
 
         return model
 
-    @ classmethod
-    def from_multi_dict(cls, data: dict) -> "HumeJobLanguageModelPredictionResponseModel":
+
+class HumeJobCallbackModel:
+    def __init__(
+            self,
+            job_id,
+            status,
+            predictions: [HumeJobModelPredictionResponseModel] = [],
+    ) -> None:
+        self.job_id = job_id
+        self.status = status
+        self.predictions = predictions
+
+    @classmethod
+    def from_dict(cls, prediction_model: str, data: dict) -> "HumeJobCallbackModel":
+        # predictions[0] -> results -> predictions
         predictions = []
+        if "predictions" in data and len(data["predictions"]) > 0:
+            predictions = [HumeJobModelPredictionResponseModel.from_dict(prediction_model, data["predictions"][0])]
 
-        for item in data:
-            predictions.append(cls.from_dict(item))
+        model = cls(data["job_id"], data["status"], predictions)
+        return model
 
-        return predictions
+
+class HumeJobResponseModel:
+    def __init__(
+            self,
+            id,
+    ) -> None:
+        self.id = id
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "HumeJobResponseModel":
+        model = cls(data["job_id"])
+        return model
+
 
 class HumeClient:
     """
@@ -108,18 +106,18 @@ class HumeClient:
         self.api_key = api_key
         self.callback_url = callback_url
 
-    def request_user_expression_mersurement(self, transcript: str):
+    def request_user_expression_mersurement(self, urls: [str]):
         resp: requests.Response
         err = None
 
         # Model
         data = {
             "models": {
-                "language": {
-                    "granularity": "conversational_turn"
+                "prosody": {
+                    "granularity": "utterance"
                 }
             },
-            "text": [transcript],
+            "urls": urls,
             "callback_url": self.callback_url,
         }
         try:

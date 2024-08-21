@@ -1,4 +1,5 @@
 import json
+import datetime
 import os
 
 from google.cloud import storage
@@ -48,3 +49,14 @@ def delete_postprocessing_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
+
+def create_signed_postprocessing_audio_url(file_path: str):
+    bucket = storage_client.bucket(postprocessing_audio_bucket)
+    blob = bucket.blob(file_path)
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.timedelta(minutes=15),
+        method="GET",
+    )
+
+    return url
