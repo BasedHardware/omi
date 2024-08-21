@@ -384,43 +384,24 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
         return None
 
 
-def determine_requires_memory_context(memories: List[Memory]) -> Optional[Tuple[List[str], List[datetime]]]:
-    prompt = '''
-            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
-            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
+def retrieve_memory_context_params(memory: Memory) -> List[str]:
+    transcript = memory.get_transcript(False)
+    if len(transcript) == 0:
+        return []
+
+    prompt = f'''
+    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
     
-            - First determine if the conversation requires context, in the field "requires_context".
-            - Context could be 2 different things:
-              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
-              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
-    
-            Conversation:
-            {conversation}
-            
-            {format_instructions}
-        '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=ContextOutputWithDate)
+    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
+    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
 
-    prompt = PromptTemplate(
-        template=prompt,
-        input_variables=["current_date", "conversation"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
+    Conversation:
+    {transcript}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(ContextOutput)
+    response: ContextOutput = with_parser.invoke(prompt)
+    return response.topics
 
-    conversation = Memory.memories_to_string(memories)
-
-    prompt_and_model = prompt | llm
-    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
-
-    try:
-        parsed_output = parser.invoke(output)
-        topics = parsed_output.topics
-        dates = parsed_output.dates_range
-        print(f'topics: {topics}, dates: {dates}')
-        return (topics, dates) if parsed_output.requires_context else None
-    except Exception as e:
-        print(f'Error determining requires context: {e}')
-        return None
 
 
 class SummaryOutput(BaseModel):
