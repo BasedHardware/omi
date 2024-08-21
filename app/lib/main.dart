@@ -18,6 +18,8 @@ import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -128,6 +130,8 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
         providers: [
           ListenableProvider(create: (context) => HomeProvider()),
+          ListenableProvider(create: (context) => MessageProvider()),
+          ListenableProvider(create: (context) => MemoryProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

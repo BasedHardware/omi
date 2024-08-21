@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
@@ -24,6 +21,9 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart' as mp;
 import 'package:friend_private/scripts.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -32,28 +32,36 @@ import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
-import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:tuple/tuple.dart';
+import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
-class HomePageWrapper extends StatefulWidget {
+class HomePageWrapper extends StatelessWidget {
   const HomePageWrapper({super.key});
 
   @override
-  State<HomePageWrapper> createState() => _HomePageWrapperState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => HomeProvider(),
+      child: const HomePage(),
+    );
+  }
 }
 
-class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
-
-  List<ServerMemory> memories = [];
-  List<ServerMessage> messages = [];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
@@ -68,86 +76,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
-  bool loadingNewMemories = true;
-  bool loadingNewMessages = true;
 
-  Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
-    if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
-    return await processTranscriptContent(
-      segments: memory.transcriptSegments,
-      sendMessageToChat: null,
-      startedAt: memory.startedAt,
-      finishedAt: memory.finishedAt,
-      geolocation: memory.geolocation,
-      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
-      triggerIntegrations: false,
-      language: memory.language ?? 'en',
-    );
-  }
-
-  _retryFailedMemories() async {
-    if (SharedPreferencesUtil().failedMemories.isEmpty) return;
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
-    // retry failed memories
-    List<Future<ServerMemory?>> asyncEvents = [];
-    for (var item in SharedPreferencesUtil().failedMemories) {
-      asyncEvents.add(_retrySingleFailed(item));
-    }
-    // TODO: should be able to retry including created at date.
-    // TODO: should trigger integrations? probably yes, but notifications?
-
-    List<ServerMemory?> results = await Future.wait(asyncEvents);
-    var failedCopy = List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
-
-    for (var i = 0; i < results.length; i++) {
-      ServerMemory? newCreatedMemory = results[i];
-
-      if (newCreatedMemory != null) {
-        SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-        memories.insert(0, newCreatedMemory);
-      } else {
-        var prefsMemory = SharedPreferencesUtil().failedMemories[i];
-        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
-          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
-              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
-        SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
-      }
-    }
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
-    setState(() {});
-  }
-
-  _initiateMemories() async {
-    memories = await getMemories();
-    if (memories.isEmpty) {
-      memories = SharedPreferencesUtil().cachedMemories;
-    } else {
-      SharedPreferencesUtil().cachedMemories = memories;
-    }
-    loadingNewMemories = false;
-    setState(() {});
-    _retryFailedMemories();
-  }
-
-  _refreshMessages() async {
-    loadingNewMessages = true;
-    messages = await getMessagesServer();
-    if (messages.isEmpty) {
-      messages = SharedPreferencesUtil().cachedMessages;
-    } else {
-      SharedPreferencesUtil().cachedMessages = messages;
-    }
-    loadingNewMessages = false;
-    setState(() {});
-  }
+  // List<ServerMemory> memories = [];
+  // List<ServerMessage> messages = [];
 
   bool scriptsInProgress = false;
 
@@ -196,7 +127,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   _migrationScripts() async {
     setState(() => scriptsInProgress = true);
     await scriptMigrateMemoriesToBack();
-    _initiateMemories();
+    if (mounted) {
+      await context.read<mp.MemoryProvider>().initiateMemories();
+    }
     setState(() => scriptsInProgress = false);
   }
 
@@ -209,6 +142,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   @override
   void initState() {
+    // TODO: Being triggered multiple times during navigation. It ideally shouldn't
     connectivityController.init();
     _controller = TabController(
       length: 3,
@@ -223,11 +157,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
+      if (mounted) {
+        await context.read<MessageProvider>().refreshMessages();
+        await context.read<mp.MemoryProvider>().initiateMemories();
+      }
     });
-    _refreshMessages();
+
     _initiatePlugins();
     _setupHasSpeakerProfile();
-    _migrationScripts();
+    //TODO: Should this run everytime?
+    // _migrationScripts();
+
     authenticateGCP();
     if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
       scanAndConnectDevice().then(_onConnected);
@@ -250,10 +190,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   void _listenToMessagesFromNotification() {
     NotificationService.instance.listenForServerMessages.listen((message) {
-      var messagesCopy = List<ServerMessage>.from(messages);
-      messagesCopy.insert(0, message);
+      context.read<MessageProvider>().addMessage(message);
       chatPageKey.currentState?.scrollToBottom();
-      setState(() => messages = messagesCopy);
     });
   }
 
@@ -293,7 +231,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().btDeviceStruct = _device!;
     SharedPreferencesUtil().deviceName = _device!.name;
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   _initiateBleBatteryListener() async {
@@ -366,12 +306,16 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                     ),
                   );
 
-                  if (memories.isEmpty) {
-                    _initiateMemories();
-                  }
-                  if (messages.isEmpty) {
-                    _refreshMessages();
-                  }
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    if (mounted) {
+                      if (context.read<mp.MemoryProvider>().memories.isEmpty) {
+                        await context.read<mp.MemoryProvider>().initiateMemories();
+                      }
+                      if (context.read<MessageProvider>().messages.isEmpty) {
+                        await context.read<MessageProvider>().refreshMessages();
+                      }
+                    }
+                  });
                 });
               }
             }
@@ -384,182 +328,192 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   chatTextFieldFocusNode.unfocus();
                   memoriesTextFieldFocusNode.unfocus();
                 },
-                child: Stack(
-                  children: [
-                    Center(
-                      child: TabBarView(
-                        controller: _controller,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          MemoriesPage(
-                            memories: memories,
-                            updateMemory: (ServerMemory memory, int index) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              memoriesCopy[index] = memory;
-                              setState(() => memories = memoriesCopy);
-                            },
-                            deleteMemory: (ServerMemory memory, int index) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              memoriesCopy.removeAt(index);
-                              setState(() => memories = memoriesCopy);
-                            },
-                            loadMoreMemories: () async {
-                              if (memories.length % 50 != 0) return;
-                              if (loadingNewMemories) return;
-                              setState(() => loadingNewMemories = true);
-                              var newMemories = await getMemories(offset: memories.length);
-                              memories.addAll(newMemories);
-                              loadingNewMemories = false;
-                              setState(() {});
-                            },
-                            loadingNewMemories: loadingNewMemories,
-                            textFieldFocusNode: memoriesTextFieldFocusNode,
-                          ),
-                          CapturePage(
+                child: Consumer2<HomeProvider, mp.MemoryProvider>(builder: (context, provider, memProvider, child) {
+                  return Stack(
+                    children: [
+                      Center(
+                        child: TabBarView(
+                          controller: _controller,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            MemoriesPage(
+                              memories: memProvider.memories,
+                              updateMemory: (ServerMemory memory, int index) {
+                                //TODO: Memory Provider Migrate
+                                // var memoriesCopy = List<ServerMemory>.from(memories);
+                                // memoriesCopy[index] = memory;
+                                // setState(() => memories = memoriesCopy);
+                                memProvider.updateMemory(memory, index);
+                              },
+                              deleteMemory: (ServerMemory memory, int index) {
+                                // TODO: Memory Provider Migrate
+                                // var memoriesCopy = List<ServerMemory>.from(memories);
+                                // memoriesCopy.removeAt(index);
+                                // setState(() => memories = memoriesCopy);
+                                memProvider.deleteMemory(memory, index);
+                              },
+                              loadMoreMemories: () async {
+                                // ----------------------------------
+                                // if (memProvider.memories.length % 50 != 0) return;
+                                // if (context.read<mp.MemoryProvider>().isLoadingMemories) return;
+                                // context.read<mp.MemoryProvider>().setLoadingMemories(true);
+                                // var newMemories = await getMemories(offset: memProvider.memories.length);
+                                // memories.addAll(newMemories);
+                                // context.read<mp.MemoryProvider>().setLoadingMemories(false);
+                                // ----------------------------------
+                                await memProvider.getMoreMemoriesFromServer();
+                              },
+                              loadingNewMemories: context.read<mp.MemoryProvider>().isLoadingMemories,
+                              textFieldFocusNode: memoriesTextFieldFocusNode,
+                            ),
+                            CapturePage(
                               key: capturePageKey,
                               device: _device,
                               addMemory: (ServerMemory memory) {
-                                var memoriesCopy = List<ServerMemory>.from(memories);
-                                memoriesCopy.insert(0, memory);
-                                setState(() => memories = memoriesCopy);
+                                // TODO: Memory Provider Migrate
+                                // var memoriesCopy = List<ServerMemory>.from(memories);
+                                // memoriesCopy.insert(0, memory);
+                                // setState(() => memories = memoriesCopy);
+                                memProvider.addMemory(memory);
                               },
                               addMessage: (ServerMessage message) {
-                                var messagesCopy = List<ServerMessage>.from(messages);
-                                messagesCopy.insert(0, message);
-                                setState(() => messages = messagesCopy);
+                                context.read<MessageProvider>().addMessage(message);
+                                chatPageKey.currentState?.scrollToBottom();
                               },
                               updateMemory: (ServerMemory memory) {
-                                var memoriesCopy = List<ServerMemory>.from(memories);
-                                var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
-                                if (index != -1) {
-                                  memoriesCopy[index] = memory;
-                                  setState(() => memories = memoriesCopy);
-                                }
-                              }),
-                          ChatPage(
-                            key: chatPageKey,
-                            textFieldFocusNode: chatTextFieldFocusNode,
-                            messages: messages,
-                            isLoadingMessages: loadingNewMessages,
-                            addMessage: (ServerMessage message) {
-                              var messagesCopy = List<ServerMessage>.from(messages);
-                              messagesCopy.insert(0, message);
-                              setState(() => messages = messagesCopy);
-                            },
-                            updateMemory: (ServerMemory memory) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
-                              if (index != -1) {
-                                memoriesCopy[index] = memory;
-                                setState(() => memories = memoriesCopy);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
-                      const SizedBox.shrink()
-                    else
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Container(
-                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                          decoration: const BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.all(Radius.circular(16)),
-                            border: GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
-                              width: 2,
+                                // TODO: Memory Provider Migrate
+                                // var memoriesCopy = List<ServerMemory>.from(memories);
+                                // var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                                // if (index != -1) {
+                                //   memoriesCopy[index] = memory;
+                                //   setState(() => memories = memoriesCopy);
+                                // }
+                                memProvider.updateMemory(memory);
+                              },
                             ),
-                            shape: BoxShape.rectangle,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: MaterialButton(
-                                  onPressed: () => _tabChange(0),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                    child: Text('Memories',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            color: _controller!.index == 0 ? Colors.white : Colors.grey, fontSize: 16)),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: MaterialButton(
-                                  onPressed: () => _tabChange(1),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 20,
-                                      bottom: 20,
-                                    ),
-                                    child: Text('Capture',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            color: _controller!.index == 1 ? Colors.white : Colors.grey, fontSize: 16)),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: MaterialButton(
-                                  onPressed: () => _tabChange(2),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                    child: Text('Chat',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            color: _controller!.index == 2 ? Colors.white : Colors.grey, fontSize: 16)),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ChatPage(
+                              key: chatPageKey,
+                              textFieldFocusNode: chatTextFieldFocusNode,
+                              updateMemory: (ServerMemory memory) {
+                                // TODO: Memory Provider Migrate
+                                // var memoriesCopy = List<ServerMemory>.from(memories);
+                                // var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                                // if (index != -1) {
+                                //   memoriesCopy[index] = memory;
+                                //   setState(() => memories = memoriesCopy);
+                                // }
+                                memProvider.updateMemory(memory);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    if (scriptsInProgress)
-                      Center(
-                        child: Container(
-                          height: 150,
-                          width: 250,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
+                        const SizedBox.shrink()
+                      else
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.all(Radius.circular(16)),
+                              border: GradientBoxBorder(
+                                gradient: LinearGradient(colors: [
+                                  Color.fromARGB(127, 208, 208, 208),
+                                  Color.fromARGB(127, 188, 99, 121),
+                                  Color.fromARGB(127, 86, 101, 182),
+                                  Color.fromARGB(127, 126, 190, 236)
+                                ]),
+                                width: 2,
                               ),
-                              SizedBox(height: 16),
-                              Center(
-                                  child: Text(
-                                'Running migration, please wait! 🚨',
-                                style: TextStyle(color: Colors.white, fontSize: 16),
-                                textAlign: TextAlign.center,
-                              )),
-                            ],
+                              shape: BoxShape.rectangle,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: MaterialButton(
+                                    onPressed: () => _tabChange(0),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
+                                      child: Text('Memories',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              color: _controller!.index == 0 ? Colors.white : Colors.grey,
+                                              fontSize: 16)),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: MaterialButton(
+                                    onPressed: () => _tabChange(1),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: 20,
+                                        bottom: 20,
+                                      ),
+                                      child: Text('Capture',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              color: _controller!.index == 1 ? Colors.white : Colors.grey,
+                                              fontSize: 16)),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: MaterialButton(
+                                    onPressed: () => _tabChange(2),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
+                                      child: Text('Chat',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              color: _controller!.index == 2 ? Colors.white : Colors.grey,
+                                              fontSize: 16)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      )
-                    else
-                      const SizedBox.shrink(),
-                  ],
-                ),
+                      if (scriptsInProgress)
+                        Center(
+                          child: Container(
+                            height: 150,
+                            width: 250,
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                                SizedBox(height: 16),
+                                Center(
+                                    child: Text(
+                                  'Running migration, please wait! 🚨',
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                  textAlign: TextAlign.center,
+                                )),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
+                    ],
+                  );
+                }),
               ),
               appBar: AppBar(
                 automaticallyImplyLeading: false,
