@@ -41,7 +41,7 @@ def vad_is_empty(file_path, return_segments: bool = False):
     try:
         with open(file_path, 'rb') as file:
             files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files, timeout=10)
+            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
             segments = response.json()
             if return_segments:
                 return segments
