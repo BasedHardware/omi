@@ -34,7 +34,7 @@ async def main():
 
     try:
     # STEP 1: Create a Deepgram client using the API key from environment variables
-        deepgram = DeepgramClient(api_key="32dfeebbbaec89b061e174f5bbfc591b934aed16") #INSERT YOUT DEEPGRAM KEY HERE
+        deepgram = DeepgramClient(api_key="") #INSERT YOUT DEEPGRAM KEY HERE
 
         # STEP 2: Configure the options (such as model choice, audio configuration, etc.)
         options = SpeakOptions(
