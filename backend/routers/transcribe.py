@@ -111,7 +111,7 @@ async def _websocket_util(
                 if len(audio_buffer) >= window_size_samples:
                     tensor_audio = torch.tensor(list(audio_buffer))
                     # Good alr, but increase the window size to get wider context but server will be slower
-                    if is_speech_present(tensor_audio[-window_size_samples * 4:], vad_iterator, window_size_samples):
+                    if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
                         if not is_speech_active:
                             for audio in prespeech_audio:
                                 databuffer.extend(audio.int().numpy().tobytes())
@@ -153,8 +153,8 @@ async def _websocket_util(
                 else:
                     socket2.send(audio_buffer)
 
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
+        except WebSocketDisconnect as e:
+            print(f"WebSocket disconnected: {e}")
         except Exception as e:
             print(f'Could not process websocket audio: error {e}')
         finally:
@@ -172,8 +172,8 @@ async def _websocket_util(
                     await websocket.send_json({"type": "ping"})
                 else:
                     break
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
+        except WebSocketDisconnect as e:
+            print(f"WebSocket disconnected: {e}")
         except Exception as e:
             print(f'Heartbeat error: {e}')
         finally:

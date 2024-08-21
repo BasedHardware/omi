@@ -8,7 +8,7 @@ from utils.other.endpoints import timeit
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', onnx=True)
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
