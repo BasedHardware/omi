@@ -117,9 +117,9 @@ def postprocess_memory(
         #         final.export(file_path, format="wav")
         #         profile_duration = profile_aseg.duration_seconds + separate_seconds
 
-        url = upload_postprocessing_audio(file_path)
+        signed_url = create_signed_postprocessing_audio_url(file_path)
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
-        words = fal_whisperx(url, speakers_count, aseg.duration_seconds)
+        words = fal_whisperx(signed_url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         delete_postprocessing_audio(file_path)
         os.remove(file_path)
@@ -158,7 +158,6 @@ def postprocess_memory(
         result = process_memory(uid, memory.language, memory, force_process=True)
 
         # Process users emotion
-        signed_url = create_signed_postprocessing_audio_url(file_path)
         process_user_emotion(uid, memory.language, memory, [signed_url])
     except Exception as e:
         print(e)
