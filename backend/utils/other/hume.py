@@ -19,16 +19,25 @@ class HumePredictionEmotionResponseModel:
 class HumeJobModelPredictionResponseModel:
     def __init__(
             self,
+            time,
             emotions=[],
-            emotion_dict={},
     ) -> None:
         self.emotions = emotions
-        self.emotions_dict = emotion_dict
+        self.time = time
 
-    def get_top_emotion_names(self, k: int = 5, peak_threshold:float = .7):
-        n = len(self.emotions_dict)
+    @classmethod
+    def get_top_emotion_names(cls, emotions: [HumePredictionEmotionResponseModel] = [], k: int = 5, peak_threshold:float = .7):
+        emotions_dict = {}
+        for emo in emotions:
+            if emo.name not in emotions_dict:
+                emotions_dict[emo.name] = emo.score
+            else:
+                emotions_dict[emo.name] = emotions_dict[emo.name] + emo.score
+
+        n = len(emotions_dict)
+
         emotions_average = {}
-        for emotion, score in self.emotions_dict.items():
+        for emotion, score in emotions_dict.items():
             if score >= peak_threshold:
                 emotions_average[emotion] = score / n
 
@@ -37,24 +46,24 @@ class HumeJobModelPredictionResponseModel:
         return ascend_sorted_emotion_average[:k]
 
     @classmethod
-    def from_dict(cls, prediction_model: str, data: dict) -> "HumeJobModelPredictionResponseModel":
-        model = cls()
-        for prediction in data["results"]["predictions"]:
-            for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
-                for grouped_prediction_prediction in grouped_prediction['predictions']:
-                    for emotion in grouped_prediction_prediction['emotions']:
-                        # emotion
-                        emo = HumePredictionEmotionResponseModel.from_dict(emotion)
-                        model.emotions.append(emo)
-
-                        # score dict
-                        if emo.name not in model.emotions_dict:
-                            model.emotions_dict[emo.name] = emo.score
-                        else:
-                            model.emotions_dict[emo.name] = model.emotions_dict[emo.name] + emo.score
+    def from_dict(cls, data: dict) -> "HumeJobModelPredictionResponseModel":
+        grouped_prediction_prediction = data
+        model = cls((data["time"]["begin"], data["time"]["end"]))
+        for emotion in grouped_prediction_prediction['emotions']:
+            emo = HumePredictionEmotionResponseModel.from_dict(emotion)
+            model.emotions.append(emo)
 
         return model
 
+    @classmethod
+    def from_multi_dict(cls, prediction_model: str, data: dict) -> "[HumeJobModelPredictionResponseModel]":
+        model = []
+        for prediction in data["results"]["predictions"]:
+            for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
+                for grouped_prediction_prediction in grouped_prediction['predictions']:
+                    model.append(cls.from_dict(grouped_prediction_prediction))
+
+        return model
 
 class HumeJobCallbackModel:
     def __init__(
@@ -72,7 +81,7 @@ class HumeJobCallbackModel:
         # predictions[0] -> results -> predictions
         predictions = []
         if "predictions" in data and len(data["predictions"]) > 0:
-            predictions = [HumeJobModelPredictionResponseModel.from_dict(prediction_model, data["predictions"][0])]
+            predictions = HumeJobModelPredictionResponseModel.from_multi_dict(prediction_model, data["predictions"][0])
 
         model = cls(data["job_id"], data["status"], predictions)
         return model
