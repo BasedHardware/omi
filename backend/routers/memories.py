@@ -10,9 +10,10 @@ from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
-from utils.other.storage import upload_postprocessing_audio, get_profile_audio_if_exists, delete_postprocessing_audio
+from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
 
@@ -74,7 +75,6 @@ def postprocess_memory(
     TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
     TODO: USE soniox here? with speech profile and stuff?
     TODO: either do speech profile embeddings or use the profile audio as prefix
-    TODO: consider applying VAD and still keep segments? ~ should do something even with VAD start end?
     TODO: should consider storing non beautified segments, and beautify on read?
     """
     memory_data = _get_memory_by_id(uid, memory_id)
@@ -92,10 +92,22 @@ def postprocess_memory(
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
+        # Calling VAD to avoid processing empty parts and getting hallucinations from whisper.
+        vad_segments = vad_is_empty(file_path, return_segments=True)
+        if vad_segments:
+            start = vad_segments[0]['start']
+            end = vad_segments[-1]['end']
+            aseg = AudioSegment.from_wav(file_path)
+            aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+            aseg.export(file_path, format="wav")
+    except Exception as e:
+        print(e)
+
+    try:
         aseg = AudioSegment.from_wav(file_path)
         profile_duration = 0
 
-        # if aseg.frame_rate == 16000:  # do not allow pcm8 DOESNT PERFORM BETTER
+        # if aseg.frame_rate == 16000:  # do not allow pcm8 DOESN'T PERFORM BETTER
         #     if profile_path := get_profile_audio_if_exists(uid):
         #         print('Processing audio with profile')
         #         # join (file_path + profile_path)
@@ -109,7 +121,7 @@ def postprocess_memory(
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
-        delete_postprocessing_audio(file_path)
+        # delete_postprocessing_audio(file_path)
         os.remove(file_path)
 
         if not segments:
@@ -119,7 +131,7 @@ def postprocess_memory(
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text.strip() for segment in memory.transcript_segments]))
         new_count = len(''.join([segment.text.strip() for segment in segments]))
-        print(count, new_count)
+        print('Prev characters count:', count, 'New characters count:', new_count)
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
