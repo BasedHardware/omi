@@ -390,7 +390,7 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
         return []
 
     prompt = f'''
-    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
+    Based on the current transcript of a conversation.
     
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
     Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
@@ -401,7 +401,6 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
     with_parser = llm.with_structured_output(ContextOutput)
     response: ContextOutput = with_parser.invoke(prompt)
     return response.topics
-
 
 
 class SummaryOutput(BaseModel):
