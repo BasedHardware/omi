@@ -231,6 +231,49 @@ def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
 
 
+# ****************************************
+# ************* CHAT BASICS **************
+# ****************************************
+def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
+    if plugin is None:
+        prompt = '''
+        You are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    else:
+        prompt = f'''
+        You are an AI with the following characteristics:
+        Name: {plugin.name}, 
+        Personality/Description: {plugin.chat_prompt},
+        Task: {plugin.memory_prompt}
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    prompt = prompt.replace('    ', '').strip()
+    return llm.invoke(prompt).content
+
+
+import tiktoken
+
+encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+
 # ***************************************************
 # ************* CHAT CURRENT APP LOGIC **************
 # ***************************************************
@@ -386,43 +429,3 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     """.replace('    ', '').strip()
     print(prompt)
     return llm.invoke(prompt).content
-
-
-def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
-    if plugin is None:
-        prompt = '''
-        You are an AI with the following characteristics:
-        Name: Friend, 
-        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
-        Task: Provide assistance, answer questions, and engage in meaningful conversations.
-
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-
-        Output your response in plain text, without markdown.
-        '''
-    else:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: {plugin.name}, 
-        Personality/Description: {plugin.chat_prompt},
-        Task: {plugin.memory_prompt}
-
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-
-        Output your response in plain text, without markdown.
-        '''
-    prompt = prompt.replace('    ', '').strip()
-    return llm.invoke(prompt).content
-
-
-import tiktoken
-
-encoding = tiktoken.encoding_for_model('gpt-4')
-
-
-def num_tokens_from_string(string: str) -> int:
-    """Returns the number of tokens in a text string."""
-    num_tokens = len(encoding.encode(string))
-    return num_tokens

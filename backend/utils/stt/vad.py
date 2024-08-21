@@ -1,5 +1,4 @@
 import os
-from enum import Enum
 
 import requests
 import torch
@@ -25,6 +24,7 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
             # print(speech_dict)
             return True
     return False
+
 
 @timeit
 def is_audio_empty(file_path, sample_rate=8000):
