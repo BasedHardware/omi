@@ -234,7 +234,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     memory = Memory(**memory_data)
 
-    context_str, memories = retrieve_rag_memory_context(uid, [memory])
+    context_str, memories = retrieve_rag_memory_context(uid, memory)
     response: str = qa_emotional_rag(context_str, memories, emotion)
     message = response
     if message is None or len(message) == 0:
