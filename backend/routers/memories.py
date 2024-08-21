@@ -1,4 +1,5 @@
 import os
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
@@ -156,8 +157,8 @@ def postprocess_memory(
         # Reprocess memory with improved transcription
         result = process_memory(uid, memory.language, memory, force_process=True)
 
-        # Process users emotion
-        process_user_emotion(uid, memory.language, memory, [signed_url])
+        # Process users emotion, async
+        asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
@@ -165,6 +166,10 @@ def postprocess_memory(
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
+
+
+async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
+    process_user_emotion(uid, language_code, memory, urls)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
