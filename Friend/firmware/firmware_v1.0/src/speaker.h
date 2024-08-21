@@ -19,13 +19,4 @@ int speaker_init(void);
  */
 int play_tone(uint32_t frequency, uint32_t duration_ms);
 
-/**
- * @brief Play audio from a buffer
- *
- * @param len Length of the audio data
- * @param buf Buffer containing the audio data
- * @return 0 if successful, negative errno code on failure
- */
-uint16_t play_audio(uint16_t len, const void *buf);
-
 #endif /* SPEAKER_H */
