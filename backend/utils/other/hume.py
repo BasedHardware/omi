@@ -36,7 +36,7 @@ class HumeJobModelPredictionResponseModel:
         k = min(k, len(ascend_sorted_emotion_average))
         return ascend_sorted_emotion_average[:k]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, prediction_model: str, data: dict) -> "HumeJobModelPredictionResponseModel":
         model = cls()
         for prediction in data["results"]["predictions"]:
