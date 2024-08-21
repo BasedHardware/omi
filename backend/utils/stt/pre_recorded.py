@@ -69,8 +69,8 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, duration: int = Non
 def _words_cleaning(words: List[dict]):
     words_cleaned: List[dict] = []
     for w in words:
-        if w['timestamp'][0] != w['timestamp'][1]:
-            continue
+        # if w['timestamp'][0] == w['timestamp'][1]:
+        #     continue
         words_cleaned.append({'start': w['timestamp'][0], 'end': w['timestamp'][1], 'speaker': w['speaker'],
                               'text': w['text'], 'is_user': False})
 
@@ -79,24 +79,27 @@ def _words_cleaning(words: List[dict]):
         if not speaker:
             prev_chunk = words_cleaned[i - 1] if i > 0 else None
             next_chunk = words_cleaned[i + 1] if i < len(words_cleaned) - 1 else None
-            if prev_chunk and next_chunk:
-                if prev_chunk == next_chunk:
+            prev_speaker = prev_chunk['speaker'] if prev_chunk else None
+            next_speaker = next_chunk['speaker'] if next_chunk else None
+
+            if prev_speaker and next_speaker:
+                if prev_speaker == next_speaker:
                     speaker = prev_chunk['speaker']
                 else:
                     secs_from_prev = word['start'] - prev_chunk['end'] if prev_chunk else 0
                     secs_to_next = next_chunk['start'] - word['end'] if next_chunk else 0
-                    speaker = prev_chunk['speaker'] if secs_from_prev < secs_to_next else next_chunk['speaker']
-            elif prev_chunk:
-                speaker = prev_chunk['speaker']
-            elif next_chunk:
-                speaker = next_chunk['speaker']
+                    speaker = prev_speaker if secs_from_prev < secs_to_next else next_speaker
+            elif prev_speaker:
+                speaker = prev_speaker
+            elif next_speaker:
+                speaker = next_speaker
             else:
                 speaker = 'SPEAKER_00'
 
             words_cleaned[i]['speaker'] = speaker
 
-    for chunk in words_cleaned:
-        print(chunk)
+    # for chunk in words_cleaned:
+    #     print(chunk)
     return words_cleaned
 
 
