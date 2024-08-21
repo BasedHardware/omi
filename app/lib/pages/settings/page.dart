@@ -24,6 +24,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
+  late bool optInEmotionalFeedback;
   late bool devModeEnabled;
   late bool postMemoryNotificationIsChecked;
   late bool reconnectNotificationIsChecked;
@@ -34,6 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
+    optInEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
     postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
     reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
@@ -102,10 +104,17 @@ class _SettingsPageState extends State<SettingsPage> {
                         optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
                       });
                     },
+                    onOptInEmotionalFeedback: () {
+                      setState(() {
+                        optInEmotionalFeedback = !SharedPreferencesUtil().optInEmotionalFeedback;
+                        SharedPreferencesUtil().optInEmotionalFeedback = optInEmotionalFeedback;
+                      });
+                    },
                     viewPrivacyDetails: () {
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
                       MixpanelManager().privacyDetailsPageOpened();
                     },
+                    optInEmotionalFeedback: optInEmotionalFeedback,
                     optInAnalytics: optInAnalytics,
                     devModeEnabled: devModeEnabled,
                     onDevModeClicked: () {
