@@ -18,8 +18,8 @@ conversation = [
 ]
 
 
-def get_data(uid: str, topics: List[str], top_k: int = 1000) -> Dict[str, List]:
-    memories = get_memories(uid)
+def get_data(topics: List[str], top_k: int = 1000) -> Dict[str, List]:
+    memories = get_memories()
     memories = {memory['id']: memory for memory in memories}
     all_vectors = query_vectors('', uid, k=top_k)
     all_vectors = {
@@ -67,7 +67,6 @@ def get_markers(data, data_points, color, name, show_top=None):
 
 
 def visualize():
-    uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
 
     context: Tuple = determine_requires_context(conversation)
     if not context or not context[0]:
@@ -76,7 +75,7 @@ def visualize():
     topics = context[0]
     # topics = ['Business', 'Entrepreneurship', 'Failures']
 
-    data = get_data(uid, topics)
+    data = get_data(topics)
     all_embeddings = np.array([item['vector'] for item in data.values()])
 
     topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
