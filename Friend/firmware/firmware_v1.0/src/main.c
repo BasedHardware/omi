@@ -7,6 +7,7 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
+#include "speaker.h"
 
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
@@ -142,6 +143,14 @@ int main(void)
     // LOG_INF("Storage initialized successfully");
     // set_led_red(false);
     // test_sd_card();
+
+	// Initialize speaker
+	LOG_INF("Starting speaker initialization");
+	if (speaker_init() != 0) {
+        LOG_WRN("Speaker initialization failed\n");
+    }else{
+		play_boot_sound();
+	}
 
     // Indicate transport initialization
     set_led_green(true);
