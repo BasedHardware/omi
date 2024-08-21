@@ -19,7 +19,7 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     get_plugin_result, should_discard_memory, summarize_experience_text
 from utils.plugins import get_plugins_data
 from utils.notifications import send_notification
-from utils.other.hume import get_hume, HumeJobCallbackModel
+from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 
 from utils.llm import qa_emotional_rag
 from utils.retrieval.rag import retrieve_rag_memory_context
@@ -205,17 +205,47 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         print(f"Task is not done yet. Uid: {task.user_uid}, task_id: {task.id}, status: {task.status}")
         return
 
-    # Get prediction
     uid = task.user_uid
+
+    # Memory
+    memory_data = memories_db.get_memory(uid, task.memory_id)
+    if memory_data is None:
+        print(f"Memory is not found. Uid: {uid}. Memory: {task.memory_id}")
+        return
+
+    memory = Memory(**memory_data)
+
+    # Get prediction
     predictions = callback.predictions
     if len(predictions) == 0 or len(predictions[0].emotions) == 0:
         print(f"Can not predict user's expression. Uid: {uid}")
         return
 
-    # Top emotion
+    # Filter users emotions only
+    users_frames = []
+    for seg in filter(lambda seg: seg.is_user == True and seg.start >= 0 and seg.end > seg.start, memory.transcript_segments):
+        users_frames.append((seg.start, seg.end))
+    if len(users_frames) == 0:
+        print(f"User time frames are empty. Uid: {uid}")
+        return
+
+    users_predictions = []
+    for prediction in predictions:
+        for uf in users_frames:
+            if uf[0] <= prediction.time[0] and prediction.time[1] <= uf[1]:
+                users_predictions.append(prediction)
+                break
+    if len(users_predictions) == 0:
+        print(f"Predictions are filtered by user transcript segments. Uid: {uid}")
+        return
+
+    # Top emotions
     emotion_filters = []
-    prediction = callback.predictions[0]
-    emotions = prediction.get_top_emotion_names(1, 0.5)
+    user_emotions = []
+    for up in users_predictions:
+        user_emotions += up.emotions
+    emotions = HumeJobModelPredictionResponseModel.get_top_emotion_names(user_emotions, 1, 0.5)
+    print(emotions)
     if len(emotion_filters) > 0:
         emotions = filter(lambda emotion: emotion in emotion_filters, emotions)
     if len(emotions) == 0:
@@ -227,13 +257,6 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Ask llms about notification content
     title = "Omi"
-    memory_data = memories_db.get_memory(uid, task.memory_id)
-    if memory_data is None:
-        print(f"Memory is not found. Uid: {uid}. Memory: {task.memory_id}")
-        return
-
-    memory = Memory(**memory_data)
-
     context_str, memories = retrieve_rag_memory_context(uid, memory)
     response: str = qa_emotional_rag(context_str, memories, emotion)
     message = response
