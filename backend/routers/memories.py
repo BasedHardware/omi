@@ -63,7 +63,7 @@ def create_memory(
 
 @router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
 def postprocess_memory(
-        memory_id: str, file: Optional[UploadFile], uid: str = Depends(auth.get_current_user_uid)
+    memory_id: str, file: Optional[UploadFile], emotional_feedback: Optional[bool] = False, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     The objective of this endpoint, is to get the best possible transcript from the audio file.
@@ -158,7 +158,8 @@ def postprocess_memory(
         result = process_memory(uid, memory.language, memory, force_process=True)
 
         # Process users emotion, async
-        asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
+        if emotional_feedback:
+            asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
