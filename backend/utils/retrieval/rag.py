@@ -46,6 +46,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 
 def get_better_memory_chunk(memory: Memory, topics: List[str], context_data: dict) -> str:
     print('get_better_memory_chunk', memory.id, topics)
+    # TODO: prompt should use categories, and be optional, is possible it doesn't return anything.
     conversation = TranscriptSegment.segments_as_string(memory.transcript_segments)
     if num_tokens_from_string(conversation) < 250:
         return Memory.memories_to_string([memory])
@@ -55,8 +56,11 @@ def get_better_memory_chunk(memory: Memory, topics: List[str], context_data: dic
     context_data[memory.id] = chunk
 
 
-def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, List[Memory]]:
+def retrieve_rag_context(
+        uid: str, prev_messages: List[Message], return_context_params: bool = False
+) -> Tuple[str, List[Memory]]:
     requires = requires_context(prev_messages)
+
     if not requires:
         return '', []
 
@@ -71,6 +75,7 @@ def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, L
 
     memories_id_to_topics = {}
     if topics:
+        # TODO: Topics for time based, topics should return empty, use categories for topics instead
         memories_id_to_topics, memories = retrieve_memories_for_topics(uid, topics, dates_range)
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
@@ -86,13 +91,17 @@ def retrieve_rag_context(uid: str, prev_messages: List[Message]) -> Tuple[str, L
         context_data = {}
         threads = []
         for memory in memories:
-            topics = memories_id_to_topics.get(memory.id, [])
-            t = threading.Thread(target=get_better_memory_chunk, args=(memory, topics, context_data))
+            # TODO: if better memory chunk returns empty sometimes, memories are not filtered
+            m_topics = memories_id_to_topics.get(memory.id, [])
+            t = threading.Thread(target=get_better_memory_chunk, args=(memory, m_topics, context_data))
             threads.append(t)
         [t.start() for t in threads]
         [t.join() for t in threads]
         context_str = '\n'.join(context_data.values()).strip()
     else:
         context_str = Memory.memories_to_string(memories)
+
+    if return_context_params:
+        return context_str, (memories if context_str else []), topics, dates_range
 
     return context_str, (memories if context_str else [])
