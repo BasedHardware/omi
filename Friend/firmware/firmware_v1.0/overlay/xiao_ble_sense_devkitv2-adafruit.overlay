@@ -8,9 +8,9 @@
 &pinctrl {
     i2s0_default: i2s0_default {
         group1 {
-            psels = <NRF_PSEL(I2S_SCK_M, 0, 3)>,    // SCK pin (bit clock) A3
-                    <NRF_PSEL(I2S_LRCK_M, 0, 2)>,   // LRCK pin (word select clock) A2
-                    <NRF_PSEL(I2S_SDOUT, 0, 1)>;    // SDOUT pin (data out) A1
+            psels = <NRF_PSEL(I2S_SCK_M, 0, 29)>,    // SCK pin (bit clock) A3
+                    <NRF_PSEL(I2S_LRCK_M, 0, 28)>,   // LRCK pin (word select clock) A2
+                    <NRF_PSEL(I2S_SDOUT, 0, 3)>;    // SDOUT pin (data out) A1
         };
     };
 };
