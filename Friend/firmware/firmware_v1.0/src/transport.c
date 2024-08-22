@@ -456,6 +456,8 @@ int transport_start()
     bt_conn_cb_register(&_callback_references);
     int r = speaker_init();
     // Enable Bluetooth
+    buzz();
+    
     int err = bt_enable(NULL);
     if (err)
     {
