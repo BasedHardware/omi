@@ -27,8 +27,8 @@ class TranscriptSegment(BaseModel):
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
-            timestamp_str = f'[{segment.get_timestamp_string()}]' if include_timestamps else ''
-            transcript += f'{timestamp_str} {"User" if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
+            timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
+            transcript += f'{timestamp_str}{"User" if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
         return transcript.strip()
 
     @staticmethod

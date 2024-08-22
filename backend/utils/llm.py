@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
-from models.memory import Structured, MemoryPhoto
+from models.memory import Structured, MemoryPhoto, CategoryEnum
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
@@ -280,17 +280,16 @@ def num_tokens_from_string(string: str) -> int:
 # ***************************************************
 
 
-class ContextOutput(BaseModel):
-    topics: List[str] = Field(default=[], description="List of topics.")
-    # dates_range: List[datetime] = Field(default=[], description="The dates range to retrieve context from")
-
-
-class ContextOutput2(BaseModel):
-    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
-
-
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
+
+
+class TopicsContext(BaseModel):
+    topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
+
+
+class DatesContext(BaseModel):
+    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
 
 def requires_context(messages: List[Message]) -> bool:
@@ -308,19 +307,23 @@ def requires_context(messages: List[Message]) -> bool:
 
 # TODO: try query expansion, instead of topics / queries
 # TODO: include user name in prompt, and preferences.
+
 def retrieve_context_params(messages: List[Message]) -> List[str]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
     
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
     Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+    
+    It is possible that the data needed is not related to a topic, in that case, output an empty list. 
 
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput)
-    response: ContextOutput = with_parser.invoke(prompt)
-    return response.topics
+    with_parser = llm.with_structured_output(TopicsContext)
+    response: TopicsContext = with_parser.invoke(prompt)
+    topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
+    return topics
 
 
 def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
@@ -336,8 +339,8 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput2)
-    response: ContextOutput2 = with_parser.invoke(prompt)
+    with_parser = llm.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
 
@@ -356,7 +359,7 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
             
             {format_instructions}
         '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=ContextOutput)
+    parser = PydanticOutputParser(pydantic_object=TopicsContext)
 
     prompt = PromptTemplate(
         template=prompt,
