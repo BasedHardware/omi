@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/BtServiceDef.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/devices/deviceType.dart';
@@ -74,10 +76,6 @@ class FriendDevice extends BtleDevice {
 
       final friendService = await getService(friendServiceUuid);
       if (friendService != null) {
-        imageCaptureControlCharacteristic =
-            await getCharacteristic(imageCaptureControlCharacteristicUuid);
-        imageDataStreamCharacteristic =
-            await getCharacteristic(imageDataStreamCharacteristicUuid);
         audioDataStreamCharacteristic =
             await getCharacteristic(audioDataStreamCharacteristicUuid);
         audioCodecCharacteristic =
@@ -99,8 +97,6 @@ class FriendDevice extends BtleDevice {
       print('Error initializing FriendDevice: $e');
     }
   }
-
-  
 
   String? _firmwareRevision;
   String? _hardwareRevision;
@@ -136,10 +132,6 @@ class FriendDevice extends BtleDevice {
     return _modelNumber!;
   }
 
-
-
-  BluetoothCharacteristic? imageCaptureControlCharacteristic;
-  BluetoothCharacteristic? imageDataStreamCharacteristic;
   BluetoothCharacteristic? audioDataStreamCharacteristic;
   BluetoothCharacteristic? audioCodecCharacteristic;
   BluetoothCharacteristic? batteryLevelCharacteristic;
@@ -151,30 +143,12 @@ class FriendDevice extends BtleDevice {
 
   @override
   Future<void> cameraStartPhotoController() async {
-    imageCaptureControlCharacteristic = await ensureCharacteristicFilled(
-        imageCaptureControlCharacteristic,
-        imageCaptureControlCharacteristicUuid);
-
-    if (imageCaptureControlCharacteristic == null) {
-      logCharacteristicNotFoundError('Image capture control', id);
-      return;
-    }
-    // Capture photo once every 10s
-    await imageCaptureControlCharacteristic!.write([0x0A]);
+    throw UnimplementedError();
   }
 
   @override
   Future<void> cameraStopPhotoController() async {
-    imageCaptureControlCharacteristic = await ensureCharacteristicFilled(
-        imageCaptureControlCharacteristic,
-        imageCaptureControlCharacteristicUuid);
-
-    if (imageCaptureControlCharacteristic == null) {
-      logCharacteristicNotFoundError('Image capture control', id);
-      return;
-    }
-
-    await imageCaptureControlCharacteristic!.write([0x00]);
+    throw UnimplementedError();
   }
 
   @override
@@ -240,8 +214,6 @@ class FriendDevice extends BtleDevice {
     return listener;
   }
 
-
-
   @override
   Future<StreamSubscription<List<int>>?> getBatteryLevelListener(
       {void Function(int)? onBatteryLevelChange}) async {
@@ -270,46 +242,14 @@ class FriendDevice extends BtleDevice {
     return listener;
   }
 
-  @override
-  Future<StreamSubscription?> getImageBytesListener(
+  Future<StreamSubscription?> _getImageBytesListener(
       {required void Function(List<int>) onImageBytesReceived}) async {
-    imageDataStreamCharacteristic = await ensureCharacteristicFilled(
-        imageDataStreamCharacteristic, imageDataStreamCharacteristicUuid);
-
-    if (imageDataStreamCharacteristic == null) {
-      logCharacteristicNotFoundError('Image data stream', id);
-      return null;
-    }
-
-    try {
-      await imageDataStreamCharacteristic!.setNotifyValue(true);
-    } catch (e, stackTrace) {
-      logSubscribeError('Image data stream', id, e, stackTrace);
-      return null;
-    }
-
-    debugPrint('Subscribed to imageBytes stream from Friend Device');
-    var listener =
-        imageDataStreamCharacteristic!.lastValueStream.listen((value) {
-      if (value.isNotEmpty) onImageBytesReceived(value);
-    });
-
-    final device = BluetoothDevice.fromId(id);
-    device.cancelWhenDisconnected(listener);
-
-    return listener;
+    return null;
   }
 
   @override
   Future<bool> canPhotoStream() async {
-    imageDataStreamCharacteristic = await ensureCharacteristicFilled(
-        imageDataStreamCharacteristic, imageDataStreamCharacteristicUuid);
-
-    if (imageDataStreamCharacteristic == null) {
-      logCharacteristicNotFoundError('Image data stream', id);
-      return false;
-    }
-    return true;
+    return false;
   }
 
   @override
@@ -329,4 +269,11 @@ class FriendDevice extends BtleDevice {
 
   @override
   Future<void> afterConnect() async {}
+
+  @override
+  Future<StreamSubscription?> getImageListener(
+      {required void Function(Uint8List base64JpgData) onImageReceived}) async {
+        print("called getImageListener on a Friend device, which does not support photo streaming");
+    return null;
+  }
 }

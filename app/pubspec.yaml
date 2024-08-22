@@ -136,6 +136,7 @@ flutter:
     - assets/pdfs/
     - assets/silero_vad.onnx
     - shorebird.yaml
+    - assets/device_assets/frameLib.lua
   fonts:
     - family: 'SF Pro Display'
       fonts:

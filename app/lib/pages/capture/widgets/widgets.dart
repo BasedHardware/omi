@@ -272,8 +272,12 @@ getTranscriptWidget(
     );
   }
 
-  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
-  return TranscriptWidget(segments: segments);
+  return Column(
+    children: [
+      if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (segments.isNotEmpty) TranscriptWidget(segments: segments),
+    ],
+  );
 }
 
 connectionStatusWidgets(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/devices/friend/friendDeviceType.dart';
+import 'package:friend_private/devices/friend/openGlassDeviceType.dart';
 import 'frame/frameDeviceType.dart';
 
 abstract class DeviceType {
@@ -74,7 +75,7 @@ class AnyDeviceType extends BtleDeviceType {
 
   @override
   Type get deviceType => Device;
-  List<DeviceType> get deviceTypes => [FriendDeviceType(), FrameDeviceType()];
+  List<DeviceType> get deviceTypes => [FriendDeviceType(), FrameDeviceType(), OpenGlassDeviceType()];
 
   @override
   Device createDeviceFromScan(String name, String id, int? rssi) {

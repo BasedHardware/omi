@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/devices/deviceType.dart';
 import 'package:friend_private/devices/friend/friendDeviceType.dart';
@@ -77,7 +78,7 @@ abstract class Device {
 
   Future<bool> canPhotoStream();
 
-  Future<StreamSubscription?> getImageBytesListener({
-    required void Function(List<int>) onImageBytesReceived,
+  Future<StreamSubscription?> getImageListener({
+    required void Function(Uint8List) onImageReceived,
   });
 }

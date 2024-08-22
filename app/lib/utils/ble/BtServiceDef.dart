@@ -3,6 +3,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 class BtServiceDef {
   final String uuid;
   final String name;
+  Guid get guid => Guid(uuid);
 
   const BtServiceDef(this.uuid, this.name);
   
