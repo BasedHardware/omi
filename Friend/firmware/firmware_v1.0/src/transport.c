@@ -75,8 +75,6 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-    // BT_GATT_CHARACTERISTIC(&button_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, button_data_read_characteristic, NULL, NULL),
-    // BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -702,11 +700,11 @@ int transport_start()
 		LOG_INF("D4 Pin ready\n");
 	}
     	else {
-		LOG_INF("Error setting up D4 Pin\n");
+		LOG_ERR("Error setting up D4 Pin\n");
 	}
 
 	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) {
-		LOG_INF("Error setting up D4 Pin Voltage\n");
+		LOG_ERR("Error setting up D4 Pin Voltage\n");
 	}
 	else {
 		LOG_INF("D4 ready to transmit voltage\n");
@@ -715,13 +713,13 @@ int transport_start()
 		LOG_INF("D5 Pin ready\n");
 	}
 	else {
-		LOG_INF("D5 Pin not ready\n");
+		LOG_ERR("D5 Pin not ready\n");
 	}
 
 	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
 	if (err2 != 0) {
-		LOG_INF("Error setting up D5 Pin\n");
+		LOG_ERR("Error setting up D5 Pin\n");
 		return 0;
 	}
 	else {
@@ -730,7 +728,7 @@ int transport_start()
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) {
-		LOG_INF("D5 unable to detect button presses\n");
+		LOG_ERR("D5 unable to detect button presses\n");
 		return 0;
 	}
 	else {
