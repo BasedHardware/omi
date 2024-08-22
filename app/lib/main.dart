@@ -21,6 +21,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -133,6 +134,11 @@ class _MyAppState extends State<MyApp> {
           ListenableProvider(create: (context) => HomeProvider()),
           ListenableProvider(create: (context) => MemoryProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
+          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+            create: (context) => CaptureProvider(),
+            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
+                CaptureProvider()..updateProviderInstances(memory, message),
+          ),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
