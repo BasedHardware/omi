@@ -21,6 +21,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -134,6 +135,7 @@ class _MyAppState extends State<MyApp> {
           ListenableProvider(create: (context) => MessageProvider()),
           ListenableProvider(create: (context) => MemoryProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
+          ChangeNotifierProvider(create: (context) => OnboardingProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
