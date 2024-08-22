@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
-from models.memory import Structured, MemoryPhoto
+from models.memory import Structured, MemoryPhoto, CategoryEnum
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
@@ -127,7 +127,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
     prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = new_transcript.count('User:')
+    count_user_appears = prev_transcript.count('User:')
     if count_user_appears == 0:
         return -1
     elif prev_transcript_tokens > 10000:
@@ -143,6 +143,7 @@ def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
     Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
 
     Previous Transcript:
     {prev_transcript}
@@ -231,22 +232,64 @@ def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
 
 
+# ****************************************
+# ************* CHAT BASICS **************
+# ****************************************
+def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
+    if plugin is None:
+        prompt = '''
+        You are an AI with the following characteristics:
+        Name: Friend, 
+        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
+        Task: Provide assistance, answer questions, and engage in meaningful conversations.
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    else:
+        prompt = f'''
+        You are an AI with the following characteristics:
+        Name: {plugin.name}, 
+        Personality/Description: {plugin.chat_prompt},
+        Task: {plugin.memory_prompt}
+
+        Send an initial message to start the conversation, make sure this message reflects your personality, \
+        humor, and characteristics.
+
+        Output your response in plain text, without markdown.
+        '''
+    prompt = prompt.replace('    ', '').strip()
+    return llm.invoke(prompt).content
+
+
+import tiktoken
+
+encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+
 # ***************************************************
 # ************* CHAT CURRENT APP LOGIC **************
 # ***************************************************
 
 
-class ContextOutput(BaseModel):
-    topics: List[str] = Field(default=[], description="List of topics.")
-    # dates_range: List[datetime] = Field(default=[], description="The dates range to retrieve context from")
-
-
-class ContextOutput2(BaseModel):
-    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
-
-
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
+
+
+class TopicsContext(BaseModel):
+    topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
+
+
+class DatesContext(BaseModel):
+    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
 
 def requires_context(messages: List[Message]) -> bool:
@@ -264,19 +307,23 @@ def requires_context(messages: List[Message]) -> bool:
 
 # TODO: try query expansion, instead of topics / queries
 # TODO: include user name in prompt, and preferences.
+
 def retrieve_context_params(messages: List[Message]) -> List[str]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
     
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
     Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+    
+    It is possible that the data needed is not related to a topic, in that case, output an empty list. 
 
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput)
-    response: ContextOutput = with_parser.invoke(prompt)
-    return response.topics
+    with_parser = llm.with_structured_output(TopicsContext)
+    response: TopicsContext = with_parser.invoke(prompt)
+    topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
+    return topics
 
 
 def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
@@ -292,8 +339,8 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput2)
-    response: ContextOutput2 = with_parser.invoke(prompt)
+    with_parser = llm.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
 
@@ -312,7 +359,7 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
             
             {format_instructions}
         '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=ContextOutput)
+    parser = PydanticOutputParser(pydantic_object=TopicsContext)
 
     prompt = PromptTemplate(
         template=prompt,
@@ -386,43 +433,3 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     """.replace('    ', '').strip()
     print(prompt)
     return llm.invoke(prompt).content
-
-
-def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
-    if plugin is None:
-        prompt = '''
-        You are an AI with the following characteristics:
-        Name: Friend, 
-        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
-        Task: Provide assistance, answer questions, and engage in meaningful conversations.
-
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-
-        Output your response in plain text, without markdown.
-        '''
-    else:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: {plugin.name}, 
-        Personality/Description: {plugin.chat_prompt},
-        Task: {plugin.memory_prompt}
-
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-
-        Output your response in plain text, without markdown.
-        '''
-    prompt = prompt.replace('    ', '').strip()
-    return llm.invoke(prompt).content
-
-
-import tiktoken
-
-encoding = tiktoken.encoding_for_model('gpt-4')
-
-
-def num_tokens_from_string(string: str) -> int:
-    """Returns the number of tokens in a text string."""
-    num_tokens = len(encoding.encode(string))
-    return num_tokens

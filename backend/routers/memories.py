@@ -6,13 +6,14 @@ from pydub import AudioSegment
 import database.memories as memories_db
 from database.vector_db import delete_vector
 from models.memory import *
-from utils.llm import num_tokens_from_string, transcript_user_speech_fix
+from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
 from utils.plugins import trigger_external_integrations
-from utils.stt.pre_recorded import fal_whisperx
+from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
 
@@ -60,7 +61,7 @@ def create_memory(
 
 
 @router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
-async def postprocess_memory(
+def postprocess_memory(
         memory_id: str, file: Optional[UploadFile], uid: str = Depends(auth.get_current_user_uid)
 ):
     """
@@ -71,12 +72,11 @@ async def postprocess_memory(
     Which helps us create better vectors for the memory.
     And improves the overall experience of the user.
 
-    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
-    https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
-
+    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
     TODO: USE soniox here? with speech profile and stuff?
+    TODO: either do speech profile embeddings or use the profile audio as prefix
+    TODO: should consider storing non beautified segments, and beautify on read?
     """
-
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
     if memory.discarded:
@@ -85,44 +85,69 @@ async def postprocess_memory(
     if memory.postprocessing is not None:
         raise HTTPException(status_code=400, detail="Memory can't be post-processed again")
 
-    # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
     file_path = f"_temp/{memory_id}_{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
-    # TODO: try https://dev.hume.ai/reference/expression-measurement-api/batch/start-inference-job-from-local-file
+    try:
+        # Calling VAD to avoid processing empty parts and getting hallucinations from whisper.
+        vad_segments = vad_is_empty(file_path, return_segments=True)
+        if vad_segments:
+            start = vad_segments[0]['start']
+            end = vad_segments[-1]['end']
+            aseg = AudioSegment.from_wav(file_path)
+            aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+            aseg.export(file_path, format="wav")
+    except Exception as e:
+        print(e)
 
     try:
-        # Upload to GCP + remove file locally and cloud storage
-        # TODO: try appending speech profile audio at the beggining, and use that speaker assignee
-        url = upload_postprocessing_audio(file_path)
         aseg = AudioSegment.from_wav(file_path)
-        segments = fal_whisperx(url, aseg.duration_seconds)  # TODO: retry if 500
+        profile_duration = 0
+
+        # if aseg.frame_rate == 16000:  # do not allow pcm8 DOESN'T PERFORM BETTER
+        #     if profile_path := get_profile_audio_if_exists(uid):
+        #         print('Processing audio with profile')
+        #         # join (file_path + profile_path)
+        #         profile_aseg = AudioSegment.from_wav(profile_path)
+        #         separate_seconds = 30
+        #         final = profile_aseg + AudioSegment.silent(duration=separate_seconds * 1000) + aseg
+        #         final.export(file_path, format="wav")
+        #         profile_duration = profile_aseg.duration_seconds + separate_seconds
+
+        url = upload_postprocessing_audio(file_path)
+        speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
+        words = fal_whisperx(url, speakers_count, aseg.duration_seconds)
+        segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         delete_postprocessing_audio(file_path)
         os.remove(file_path)
-        # TODO: should consider storing non beautified segments, and beautify on read?
-        # TODO: use raw segments here, for speaker matching, then merge
+
+        if not segments:
+            memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
+            raise HTTPException(status_code=500, detail="FAL WhisperX failed to process audio")
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
-        count = len(''.join([segment.text for segment in memory.transcript_segments]))
-        new_count = len(''.join([segment.text for segment in segments]))
+        count = len(''.join([segment.text.strip() for segment in memory.transcript_segments]))
+        new_count = len(''.join([segment.text.strip() for segment in segments]))
+        print('Prev characters count:', count, 'New characters count:', new_count)
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
         if any(segment.is_user for segment in memory.transcript_segments):
             prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
             new = TranscriptSegment.segments_as_string(segments, False)
             speaker_id: int = transcript_user_speech_fix(prev, new)  # COULD BE TERRIBLE, use with caution
+            print('matched speaker_id:', speaker_id)
             # good enough for now
 
             for segment in segments:
                 if segment.speaker_id == speaker_id:
                     segment.is_user = True
 
+        # TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
@@ -138,10 +163,6 @@ async def postprocess_memory(
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
-
-
-# util('DX8n89KAmUaG9O7Qvj8xTi81Zu12', 'f650158a-a01f-4d7e-b780-becaa02bf8b9',
-#      '_temp/f650158a-a01f-4d7e-b780-becaa02bf8b9_recording-20240818_194948.wav')
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
