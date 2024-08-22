@@ -198,7 +198,9 @@ class CapturePageState extends State<CapturePage>
               time: DateTime.parse(data['time']),
             ));
       } else {
-        context.read<CaptureProvider>().setGeolocation(null);
+        if (mounted) {
+          context.read<CaptureProvider>().setGeolocation(null);
+        }
       }
     }
   }
@@ -252,8 +254,8 @@ class CapturePageState extends State<CapturePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    context.read<CaptureProvider>().closeBleStream();
-    context.read<CaptureProvider>().cancelMemoryCreationTimer();
+    // context.read<CaptureProvider>().closeBleStream();
+    // context.read<CaptureProvider>().cancelMemoryCreationTimer();
     record.dispose();
     _internetListener.cancel();
     // websocketChannel
