@@ -122,12 +122,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   try {
                     var content = (await xFile.readAsString());
                     var decoded = jsonDecode(content);
-                    List<Memory> memories = decoded.map<Memory>((e) => Memory.fromJson(e)).toList();
+                    // Export uses [ServerMemory] structure
+                    List<ServerMemory> memories = decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
                     debugPrint('Memories: $memories');
-                    MemoryProvider().storeMemories(memories);
+                    var memoriesJson = memories.map((m) => m.toJson()).toList();
+                    bool result = await migrateMemoriesToBackend(memoriesJson);
+                    if (!result) {
+                      SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
+                      _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
+                    }
                     _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
                     MixpanelManager().importedMemories();
-                    SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
+                    SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
                   } catch (e) {
                     debugPrint(e.toString());
                     _snackBar('Make sure the file is a valid JSON file.');
