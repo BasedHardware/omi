@@ -1,5 +1,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/i2s.h>
+#include <zephyr/random/rand32.h>
 #include <math.h>
 #include "speaker.h"
 
@@ -59,18 +60,34 @@ int speaker_init(void)
     return 0;
 }
 
-static void generate_gentle_chime(int16_t *buffer, int num_samples)
+static void generate_boot_sound(int16_t *buffer, int num_samples)
 {
-    float frequencies[] = {523.25, 659.25, 783.99, 1046.50}; // C5, E5, G5, C6
-    int num_freqs = sizeof(frequencies) / sizeof(frequencies[0]);
+    float fundamental_freq = 136.1f;  // C3 note, a common frequency for Om
+    float harmonics[] = {1.0f, 2.0f, 3.0f, 4.0f};  // Fundamental and overtones
+    float harmonic_strengths[] = {1.0f, 0.5f, 0.25f, 0.125f};
+    int num_harmonics = sizeof(harmonics) / sizeof(harmonics[0]);
 
     for (int i = 0; i < num_samples; i++) {
         float t = (float)i / SAMPLE_FREQUENCY;
-        float sample = 0;
-        for (int j = 0; j < num_freqs; j++) {
-            sample += sinf(2 * PI * frequencies[j] * t) * (1.0 - t);
+        float envelope = sinf(PI * t / 2) * (1.0f - t * 0.5f);  // Slow attack, long decay
+
+        float sample = 0.0f;
+        for (int j = 0; j < num_harmonics; j++) {
+            sample += sinf(2 * PI * fundamental_freq * harmonics[j] * t) * harmonic_strengths[j];
         }
-        int16_t int_sample = (int16_t)(sample / num_freqs * 32767 * 0.5);
+
+        // Add subtle vibrato
+        float vibrato = sinf(2 * PI * 5 * t) * 0.005f;
+        sample *= (1.0f + vibrato);
+
+        // Add a tiny bit of noise for naturalism
+        sample += ((float)sys_rand32_get() / UINT32_MAX - 0.5f) * 0.005f;
+
+        // Apply envelope and normalize
+        sample *= envelope * 0.5f;
+
+        // Convert to 16-bit and store
+        int16_t int_sample = (int16_t)(sample * 32767.0f);
         buffer[i * NUM_CHANNELS] = int_sample;
         buffer[i * NUM_CHANNELS + 1] = int_sample;
     }
@@ -82,7 +99,7 @@ int play_boot_sound(void)
     int16_t *buffer = (int16_t *)audio_buffer;
     int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
 
-    generate_gentle_chime(buffer, samples_per_block);
+    generate_boot_sound(buffer, samples_per_block);
 
     ret = i2s_write(i2s_dev, buffer, MAX_BLOCK_SIZE);
     if (ret < 0) {
@@ -96,7 +113,7 @@ int play_boot_sound(void)
         return ret;
     }
 
-    k_sleep(K_MSEC(1000));
+    k_sleep(K_MSEC(2000));  // Increased from 1000 to 2000 ms
 
     ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
     if (ret != 0) {
