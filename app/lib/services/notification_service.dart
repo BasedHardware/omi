@@ -73,6 +73,7 @@ class NotificationService {
     Map<String, String?>? payload,
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
+    NotificationLayout layout = NotificationLayout.Default,
   }) {
     _awesomeNotifications.createNotification(
       content: NotificationContent(
@@ -82,6 +83,7 @@ class NotificationService {
         title: title,
         body: body,
         payload: payload,
+        notificationLayout: layout,
       ),
     );
   }
@@ -142,16 +144,21 @@ class NotificationService {
   Future<void> listenForMessages() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
+      final noti = message.notification;
 
       // Plugin
       if (data.isNotEmpty && data['notification_type'] == 'plugin') {
-        _showForegroundNotification(message.notification);
+        if (noti != null) {
+          _showForegroundNotification(noti: noti);
+        }
         data['from_integration'] = data['from_integration'] == 'true';
         _serverMessageStreamController.add(ServerMessage.fromJson(data));
       }
 
       // Announcement likes
-      _showForegroundNotification(message.notification);
+      if (noti != null) {
+        _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
+      }
     });
   }
 
@@ -159,11 +166,10 @@ class NotificationService {
 
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
-  Future<void> _showForegroundNotification(RemoteNotification? notification) async {
-    if (notification != null) {
-      final id = Random().nextInt(10000);
-      showNotification(id: id, title: notification.title!, body: notification.body!);
-    }
+  Future<void> _showForegroundNotification(
+      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default}) async {
+    final id = Random().nextInt(10000);
+    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
   }
 }
 
