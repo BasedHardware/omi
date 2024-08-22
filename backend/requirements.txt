@@ -103,7 +103,6 @@ marshmallow==3.21.3
 matplotlib==3.9.2
 matplotlib-inline==0.1.7
 mdurl==0.1.2
-mem0ai==0.1.2
 modal==0.64.7
 monotonic==1.6
 mplcursors==0.5.3
@@ -122,7 +121,6 @@ omegaconf==2.3.0
 onnxruntime==1.19.0
 openai==1.39.0
 optuna==3.6.1
-opuslib==3.0.1
 orjson==3.10.6
 packaging==24.1
 pandas==2.2.2
