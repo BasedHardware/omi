@@ -54,7 +54,18 @@ static struct bt_gatt_attr button_service_attr[] = {
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-    LOG_INF("Handler\n");
+        if (value == BT_GATT_CCC_NOTIFY)
+    {
+        LOG_INF("Client subscribed for notifications");
+    }
+    else if (value == 0)
+    {
+        LOG_INF("Client unsubscribed from notifications");
+    }
+    else
+    {
+        LOG_ERR("Invalid CCC value: %u", value);
+    }
 
 }
 
@@ -197,13 +208,13 @@ static void notify_unpress() {
 
 static void notify_tap() {
       final_button_state[0] = SINGLE_TAP;
-    LOG_INF("tap\n");
+    LOG_INF("tap");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
 static void notify_double_tap() {
       final_button_state[0] = DOUBLE_TAP; //button press
-    LOG_INF("double tap\n");
+    LOG_INF("double tap");
     bt_gatt_notify(current_connection, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
 }
 
@@ -321,8 +332,8 @@ void check_button_level(struct k_work *work_item) {
 
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-     LOG_INF("button_data_read_characteristic\n");
-     LOG_INF("was_pressed: %d\n", was_pressed);
+     LOG_INF("button_data_read_characteristic");
+     LOG_INF("was_pressed: %d", was_pressed);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &was_pressed, sizeof(was_pressed));
 
 }
@@ -413,7 +424,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_INF("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
