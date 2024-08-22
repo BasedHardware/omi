@@ -11,6 +11,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
+LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
+
 #define MAX_BLOCK_SIZE   25000 //24000 * 2
 #define BLOCK_COUNT      1
 #define SAMPLE_FREQUENCY 8000
@@ -26,10 +28,10 @@ static struct device *speaker;
 static uint16_t current_length;
 static uint16_t offset;
 int speaker_init() {
-    const struct device *mic = device_get_binding("I2S_0");
-    speaker = mic;
+        const struct device *mic = device_get_binding("I2S_0");
+        speaker = mic;
 	    if (!device_is_ready(mic)) {
-        printk("Microphone device is not supported : %s\n", mic->name);
+        LOG_INF("Microphone device is not supported : %s", mic->name);
         return;
     }
         struct i2s_config config = {
@@ -46,17 +48,17 @@ int speaker_init() {
 
     	int err = i2s_configure(mic, I2S_DIR_TX, &config);
 	if (err < 0) {
-		printk("Failed to configure Microphone (%d)\n", err);
+		LOG_INF("Failed to configure Microphone (%d)", err);
 
 	}
 	err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
 	if (err) {
-		printk("Failed to allocate memory again(%d)\n", err);
+		LOG_INF("Failed to allocate memory again(%d)", err);
 	}
 
-    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
+        memset(rx_buffer, 0, MAX_BLOCK_SIZE);
 
-    return 1;
+        return 1;
 }
 
 
@@ -64,19 +66,19 @@ int speaker_init() {
 uint16_t speak(uint16_t len, const void *buf) {
   
 	uint16_t amount = 0;
-    amount = len;
+        amount = len;
 	if (len == 4)  //if stage 1 
 	{
         current_length = ((uint32_t *)buf)[0];
-		printk("About to write %u bytes\n", current_length);
+	LOG_INF("About to write %u bytes", current_length);
         ptr2 = (int16_t *)rx_buffer;
         clear_ptr = (int16_t *)rx_buffer;
 	}
     else { //if not stage 1
         if (current_length > PACKET_SIZE) {
-            printk("Data length: %u\n", len);
+            LOG_INF("Data length: %u\n", len);
             current_length = current_length - PACKET_SIZE;
-            printk("remaining data: %u\n", current_length);
+            LOG_INF("remaining data: %u", current_length);
 
             for (int i = 0; i < len/2; i++) {
                 *ptr2++ = ((int16_t *)buf)[i];  
@@ -86,10 +88,10 @@ uint16_t speak(uint16_t len, const void *buf) {
             offset = offset + len;
         }
         else if (current_length < PACKET_SIZE) {
-            printk("entered the final stretch\n");
-            printk("Data length: %u\n", len);
+            LOG_INF("entered the final stretch");
+            LOG_INF("Data length: %u", len);
             current_length = current_length - len;
-            printk("remaining data: %u\n", current_length);
+            LOG_INF("remaining data: %u", current_length);
             // memcpy(rx_buffer+offset, buf, len);
             for (int i = 0; i < len/2; i++) {
                 *ptr2 = ((int16_t *)buf)[i];
@@ -98,12 +100,12 @@ uint16_t speak(uint16_t len, const void *buf) {
                 ptr2++;
             }
             offset = offset + len;
-            printk("offset: %u\n", offset);
+            LOG_INF("offset: %u", offset);
             
             
-         	i2s_write(speaker, rx_buffer,  MAX_BLOCK_SIZE);
+            i2s_write(speaker, rx_buffer,  MAX_BLOCK_SIZE);
             i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
-	        i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+	    i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
 
             //clear the buffer
 
@@ -112,6 +114,5 @@ uint16_t speak(uint16_t len, const void *buf) {
         }
 
     }
-    printk("\n");
     return amount;
 }
