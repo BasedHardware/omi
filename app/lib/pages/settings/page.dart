@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -8,6 +11,7 @@ import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -51,6 +55,27 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> _showMockupOmiFeebackNotification() async {
+      var rdm = Random();
+      // 1.
+      NotificationService.instance.showNotification(
+          layout: NotificationLayout.BigText,
+          id: rdm.nextInt(1000) + 1,
+          title: "Omi",
+          body:
+              "i think it went super well! you were so passionate and clear about your vision for friend. i'm pretty sure kurt was really into it too. [sample]");
+
+      await Future.delayed(const Duration(seconds: 5));
+
+      // 2.
+      NotificationService.instance.showNotification(
+          layout: NotificationLayout.BigText,
+          id: rdm.nextInt(1000 + 1),
+          title: "Omi",
+          body:
+              "he seemed super engaged, asking all the right questions and stuff. plus, he was all like \"this is gonna be a fun little story\" at the end, so that's a good sign, right? [sample]");
+    }
+
     return PopScope(
         canPop: true,
         child: Scaffold(
@@ -105,10 +130,17 @@ class _SettingsPageState extends State<SettingsPage> {
                       });
                     },
                     onOptInEmotionalFeedback: () {
+                      var enabled = !SharedPreferencesUtil().optInEmotionalFeedback;
+                      SharedPreferencesUtil().optInEmotionalFeedback = enabled;
+
                       setState(() {
-                        optInEmotionalFeedback = !SharedPreferencesUtil().optInEmotionalFeedback;
-                        SharedPreferencesUtil().optInEmotionalFeedback = optInEmotionalFeedback;
+                        optInEmotionalFeedback = enabled;
                       });
+
+                      // Show a mockup notifications to help user understand about Omi Feedback
+                      if (enabled) {
+                        _showMockupOmiFeebackNotification();
+                      }
                     },
                     viewPrivacyDetails: () {
                       Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
