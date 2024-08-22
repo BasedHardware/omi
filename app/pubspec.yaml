@@ -92,7 +92,7 @@ dependencies:
   flutter_sound: ^9.10.0
   audio_session:
 
-  frame_sdk: ^0.0.4
+  frame_sdk: ^0.0.6
 
   web_socket_channel: any
 dependency_overrides:

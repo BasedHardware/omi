@@ -228,7 +228,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
+    if (SharedPreferencesUtil().btDeviceStruct?.id.isNotEmpty == true) {
       scanAndConnectDevice().then(_onConnected);
     }
 
@@ -617,7 +617,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           )
                         : TextButton(
                             onPressed: () async {
-                              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+                              if (SharedPreferencesUtil().btDeviceStruct?.id.isEmpty == true) {
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {

@@ -126,7 +126,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                    'Current Firmware: ${widget.device!.firmwareRevision ?? 'Unknown'}'),
+                                    'Current Firmware: ${widget.device?.firmwareRevision ?? 'Unknown'}'),
                                 Text('Latest Firmware: ${latestFirmwareDetails['version']}'),
                                 const SizedBox(height: 10),
                                 Text(

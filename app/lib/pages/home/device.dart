@@ -57,7 +57,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId()})',
+                    '$deviceName (${widget.device?.shortId ?? SharedPreferencesUtil().btDeviceStruct?.shortId})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -150,7 +150,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       await widget.device?.disconnectDevice();
                     }
                     Navigator.of(context).pop();
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
+                    SharedPreferencesUtil().btDeviceStruct = null;
                     SharedPreferencesUtil().deviceName = '';
                     MixpanelManager().disconnectFriendClicked();
                   },

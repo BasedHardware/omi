@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/devices/device.dart';
+import 'package:friend_private/utils/ble/connected.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -43,8 +44,8 @@ class _FoundDevicesState extends State<FoundDevices> {
         _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().device = device;
-      SharedPreferencesUtil().deviceName = btDevice.name;
+      SharedPreferencesUtil().btDeviceStruct = device;
+      SharedPreferencesUtil().deviceName = device.name;
       widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
@@ -81,7 +82,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       if (connectedDevice != null) {
         if (mounted) {
           connectionStateTimer?.cancel();
-          var battery = await retrieveBatteryLevel(connectedDevice.id);
+          var battery = await connectedDevice.retrieveBatteryLevel();
           setState(() {
             deviceName = connectedDevice.name;
             deviceId = connectedDevice.id;

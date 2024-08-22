@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/devices/device.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -26,14 +27,18 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
-  set btDeviceStruct(BTDeviceStruct value) {
-    saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  set btDeviceStruct(Device? value) {
+    if (value == null) {
+      saveString('btDeviceStruct', '');
+    } else {
+      saveString('btDeviceStruct', jsonEncode(value.toJson()));
+    }
   }
 
-  BTDeviceStruct get btDeviceStruct {
+  Device? get btDeviceStruct {
     final String device = getString('btDeviceStruct') ?? '';
-    if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
-    return BTDeviceStruct.fromJson(jsonDecode(device));
+    if (device.isEmpty) return null;
+    return Device.fromJson(jsonDecode(device));
   }
 
   set deviceName(String value) => saveString('deviceName', value);

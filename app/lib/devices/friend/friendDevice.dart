@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/BtServiceDef.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/devices/deviceType.dart';

@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_sdk/bluetooth.dart';
-import 'package:frame_sdk/display.dart';
 import 'package:frame_sdk/frame_sdk.dart';
 import '../../backend/schema/bt_device.dart';
 import '../deviceType.dart';
@@ -66,6 +65,9 @@ class FrameDevice extends BtleDevice {
     if (_frame == null || _frame!.isConnected == false) {
       return;
     }
+    _frame!.bluetooth.stringResponse.listen((data) {
+      print("Frame printed: $data");
+    });
     bool isLoaded = false;
     bool isRunning = false;
     final String mainLuaContent =
@@ -98,9 +100,6 @@ class FrameDevice extends BtleDevice {
       print("Frame already loaded, running start()");
       await _frame!.runLua("start()");
     }
-    _frame!.bluetooth.stringResponse.listen((data) {
-      print("Frame printed: $data");
-    });
     await Future.delayed(const Duration(milliseconds: 1000));
 
     // Set up heartbeat timer and stream
@@ -114,7 +113,7 @@ class FrameDevice extends BtleDevice {
     device.cancelWhenDisconnected(_heartbeatSubscription!);
   }
 
-  Future<void> sendUntilEchoed(String data,
+  Future<bool> sendUntilEchoed(String data,
       {int maxAttempts = 3,
       Duration timeout = const Duration(seconds: 10)}) async {
     Uint8List bytesToSend = Uint8List.fromList(utf8.encode(data));
@@ -128,20 +127,23 @@ class FrameDevice extends BtleDevice {
         await _frame!.bluetooth.sendData(bytesToSend);
         await future;
         print("Received ECHO:$data from frame");
-        return;
+        return true;
       } catch (e) {
         if (e is TimeoutException) {
           print(
               "Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
           if (attempt == maxAttempts) {
-            throw TimeoutException(
+            print(
                 "Failed to receive echo for $data after $maxAttempts attempts");
+            await disconnectDevice();
+            return false;
           }
         } else {
           rethrow;
         }
       }
     }
+    return false;
   }
 
   @override
@@ -184,7 +186,10 @@ class FrameDevice extends BtleDevice {
     await Future.delayed(const Duration(milliseconds: 50));
     await sendUntilEchoed("bitDepth=${audioCodec.bitDepth}");
     await Future.delayed(const Duration(milliseconds: 50));
-    await sendUntilEchoed("MIC START");
+    if (!await sendUntilEchoed("MIC START")) {
+      subscription.cancel();
+      return null;
+    }
 
     debugPrint('Subscribed to audioBytes stream from Frame Device');
 
@@ -228,6 +233,7 @@ class FrameDevice extends BtleDevice {
   @override
   Future<void> init() async {
     _frame ??= Frame();
+    _frame!.useLibrary = false;
     if (await _frame!.connectToDevice(id)) {
       _firmwareRevision = await _frame!.evaluate("frame.FIRMWARE_VERSION");
       _hardwareRevision = "1";

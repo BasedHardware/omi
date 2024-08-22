@@ -325,7 +325,7 @@ function mainLoop()
 			micState = 4
 		elseif micState == 4 then
 			micLoops = 0
-			while micLoops < 100 do
+			while micLoops < 500 do
 				micLoops = micLoops + 1
 				micData = frame.microphone.read(maxDataLen)
 				if micData == nil then break end
@@ -397,7 +397,7 @@ function start()
 	photoQuality = 25
 	autoExpTimeDelay = 5
 	autofocusType = 'CENTER_WEIGHTED'
-	delayBetweenPhotos = 20
+	delayBetweenPhotos = 15
 	sampleRate = 8000
 	bitDepth = 16
 	--noiseFloor = 0
