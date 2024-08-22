@@ -127,7 +127,7 @@ void broadcast_accel(struct k_work *work_item) {
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
     if (err) {
-       LOG_INF("Error updating accelerometer data\n");
+       LOG_ERR("Error updating accelerometer data");
     }
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
@@ -145,7 +145,7 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
     else
     {
-        LOG_INF("Invalid CCC value: %u", value);
+        LOG_ERR("Invalid CCC value: %u", value);
     }
 }
 
@@ -154,11 +154,11 @@ int accel_start() {
     lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
     k_msleep(50);
     if (lsm6dsl_dev == NULL) {
-        LOG_INF("Could not get LSM6DSL device\n");
+        LOG_ERR("Could not get LSM6DSL device");
         return 0;
 	}
     if (!device_is_ready(lsm6dsl_dev)) {
-		LOG_INF("LSM6DSL: not ready\n");
+		LOG_ERR("LSM6DSL: not ready");
 		return 0;
 	}
     odr_attr.val1 = 52;
@@ -166,16 +166,16 @@ int accel_start() {
 
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
 		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_INF("Cannot set sampling frequency for accelerometer.\n");
+	LOG_ERR("Cannot set sampling frequency for accelerometer.");
 		return 0;
 	}
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
 		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_INF("Cannot set sampling frequency for gyro.\n");
+	LOG_ERR("Cannot set sampling frequency for gyro.");
 	    return 0;
 	}
     if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
-    LOG_INF("Sensor sample update error\n");
+    LOG_ERR("Sensor sample update error");
     return 0;
 	}
 
