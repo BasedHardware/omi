@@ -4,21 +4,72 @@ import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryProvider extends ChangeNotifier {
   List<ServerMemory> memories = [];
+  List<ServerMemory> filteredMemories = [];
+  List memoriesWithDates = [];
 
   bool isLoadingMemories = false;
+  bool displayDiscardMemories = false;
+
+  String previousQuery = '';
+
+  void populateMemoriesWithDates() {
+    memoriesWithDates = [];
+    for (var i = 0; i < filteredMemories.length; i++) {
+      if (i == 0) {
+        memoriesWithDates.add(filteredMemories[i]);
+      } else {
+        if (filteredMemories[i].createdAt.day != filteredMemories[i - 1].createdAt.day) {
+          memoriesWithDates.add(filteredMemories[i].createdAt);
+        }
+        memoriesWithDates.add(filteredMemories[i]);
+      }
+    }
+    notifyListeners();
+  }
+
+  void initFilteredMemories() {
+    filteredMemories = memories;
+    populateMemoriesWithDates();
+    notifyListeners();
+  }
+
+  void filterMemories(String query) {
+    if (query == previousQuery) return;
+    filteredMemories = [];
+    filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
+    filteredMemories = query.isEmpty
+        ? memories
+        : memories
+            .where(
+              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
+                  .toLowerCase()
+                  .contains(query.toLowerCase()),
+            )
+            .toList();
+    populateMemoriesWithDates();
+    notifyListeners();
+  }
+
+  void toggleDiscardMemories() {
+    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
+    displayDiscardMemories = !displayDiscardMemories;
+    filterMemories('');
+    notifyListeners();
+  }
 
   void setLoadingMemories(bool value) {
     isLoadingMemories = value;
     notifyListeners();
   }
 
-  Future initiateMemories() async {
+  Future getInitialMemories() async {
     memories = await getMemoriesFromServer();
     if (memories.isEmpty) {
       memories = SharedPreferencesUtil().cachedMemories;
