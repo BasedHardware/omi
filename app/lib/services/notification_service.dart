@@ -142,12 +142,16 @@ class NotificationService {
   Future<void> listenForMessages() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
-      if (data.isEmpty) return;
-      if (data['notification_type'] == 'plugin') {
+
+      // Plugin
+      if (data.isNotEmpty && data['notification_type'] == 'plugin') {
         _showForegroundNotification(message.notification);
         data['from_integration'] = data['from_integration'] == 'true';
         _serverMessageStreamController.add(ServerMessage.fromJson(data));
       }
+
+      // Announcement likes
+      _showForegroundNotification(message.notification);
     });
   }
 
