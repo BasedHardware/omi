@@ -1,5 +1,4 @@
 import os
-from enum import Enum
 
 import requests
 import torch
@@ -26,6 +25,7 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
             return True
     return False
 
+
 @timeit
 def is_audio_empty(file_path, sample_rate=8000):
     wav = read_audio(file_path)
@@ -41,7 +41,7 @@ def vad_is_empty(file_path, return_segments: bool = False):
     try:
         with open(file_path, 'rb') as file:
             files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files, timeout=10)
+            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
             segments = response.json()
             if return_segments:
                 return segments
