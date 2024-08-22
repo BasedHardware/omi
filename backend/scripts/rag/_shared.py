@@ -15,6 +15,8 @@ from pinecone import Pinecone
 # noinspection PyUnresolvedReferences
 from plotly.subplots import make_subplots
 
+import database.memories as memories_db
+
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
@@ -41,7 +43,10 @@ def query_vectors(query: str, uid: str, k: int = 1000) -> List[str]:
 
 def get_memories():
     if not os.path.exists('memories.json'):
-        raise Exception("Memories file not found. Please run _setup.py")
+        memories = memories_db.get_memories(uid, limit=1000)
+        with open('memories.json', 'w') as f:
+            f.write(json.dumps(memories, indent=4, default=str))
+
     with open('memories.json', 'r') as f:
         return json.loads(f.read())
 

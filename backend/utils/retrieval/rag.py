@@ -11,9 +11,9 @@ from utils.llm import requires_context, retrieve_context_params, retrieve_contex
     num_tokens_from_string
 
 
-def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, memories_id) -> List[str]:
-    result = query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp)
-    print('retrieve_for_topic', topic, len(result))
+def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:
+    result = query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp, k=k)
+    print('retrieve_for_topic', topic, [start_timestamp, end_timestamp], 'found:', len(result), 'vectors')
     for memory_id in result:
         memories_id[memory_id].append(topic)
     return result
@@ -25,9 +25,10 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 
     memories_id = defaultdict(list)
     threads = []
+    top_k = 10 if len(topics) == 1 else 5
     for topic in topics:
         t = threading.Thread(target=retrieve_for_topic,
-                             args=(uid, topic, start_timestamp, end_timestamp, memories_id))
+                             args=(uid, topic, start_timestamp, end_timestamp, top_k, memories_id))
         threads.append(t)
     [t.start() for t in threads]
     [t.join() for t in threads]
@@ -36,7 +37,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     if not memories_id and dates_range:
         threads = []
         for topic in topics:
-            t = threading.Thread(target=retrieve_for_topic, args=(uid, topic, None, None, memories_id))
+            t = threading.Thread(target=retrieve_for_topic, args=(uid, topic, None, None, top_k, memories_id))
             threads.append(t)
         [t.start() for t in threads]
         [t.join() for t in threads]
@@ -46,12 +47,11 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 
 def get_better_memory_chunk(memory: Memory, topics: List[str], context_data: dict) -> str:
     print('get_better_memory_chunk', memory.id, topics)
-    # TODO: prompt should use categories, and be optional, is possible it doesn't return anything.
-    conversation = TranscriptSegment.segments_as_string(memory.transcript_segments)
+    conversation = TranscriptSegment.segments_as_string(memory.transcript_segments, include_timestamps=True)
     if num_tokens_from_string(conversation) < 250:
         return Memory.memories_to_string([memory])
     chunk = chunk_extraction(memory.transcript_segments, topics)
-    if not chunk:
+    if not chunk or len(chunk) < 10:
         return
     context_data[memory.id] = chunk
 
@@ -76,7 +76,6 @@ def retrieve_rag_context(
     memories_id_to_topics = {}
     memories = None
     if topics:
-        # TODO: Topics for time based, topics should return empty, use categories for topics instead
         memories_id_to_topics, memories = retrieve_memories_for_topics(uid, topics, dates_range)
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
@@ -91,17 +90,16 @@ def retrieve_rag_context(
 
     # not performing as expected
     if memories_id_to_topics:
-        # TODO: restore sorthing here
         context_data = {}
         threads = []
         for memory in memories:
-            # TODO: if better memory chunk returns empty sometimes, memories are not filtered
             m_topics = memories_id_to_topics.get(memory.id, [])
             t = threading.Thread(target=get_better_memory_chunk, args=(memory, m_topics, context_data))
             threads.append(t)
         [t.start() for t in threads]
         [t.join() for t in threads]
-        context_str = '\n'.join(context_data.values()).strip()
+        memories = list(filter(lambda x: x.id in context_data, memories))
+        context_str = '\n\n---------------------\n\n'.join(context_data.values()).strip()
     else:
         context_str = Memory.memories_to_string(memories)
 
