@@ -7,6 +7,7 @@ class AppSnackbar {
       SnackBar(
         content: Text(message),
         backgroundColor: color,
+        duration: duration ?? const Duration(seconds: 2),
       ),
     );
   }
