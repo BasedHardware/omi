@@ -232,9 +232,3 @@ Future<StreamSubscription?> getBleImageBytesListener(
 
   return listener;
 }
-
-  final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
-
-  return listener;
-}
