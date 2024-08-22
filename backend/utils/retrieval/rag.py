@@ -74,18 +74,22 @@ def retrieve_rag_context(
         topics = topics[:5]
 
     memories_id_to_topics = {}
+    memories = None
     if topics:
         # TODO: Topics for time based, topics should return empty, use categories for topics instead
         memories_id_to_topics, memories = retrieve_memories_for_topics(uid, topics, dates_range)
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
-    else:
+
+    if not memories and dates_range:
+        memories_id_to_topics = {}
         memories = filter_memories_by_date(uid, dates_range[0], dates_range[1])
 
     memories = [Memory(**memory) for memory in memories]
     if len(memories) > 10:
         memories = memories[:10]
 
+    # not performing as expected
     if memories_id_to_topics:
         # TODO: restore sorthing here
         context_data = {}
