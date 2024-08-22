@@ -281,6 +281,10 @@ def num_tokens_from_string(string: str) -> int:
 # ***************************************************
 
 
+class ContextOutput(BaseModel):
+    topics: List[str] = Field(default=[], description="List of topics.")
+
+
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
 
