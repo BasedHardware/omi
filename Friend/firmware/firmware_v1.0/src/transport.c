@@ -454,7 +454,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         return;
     }
 
-    LOG_INF("bluetooth activated\n");
+    LOG_INF("bluetooth activated");
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
