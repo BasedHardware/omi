@@ -4,6 +4,13 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class HomeProvider extends ChangeNotifier {
+  int selectedIndex = 1;
+
+  void setIndex(int index) {
+    selectedIndex = index;
+    notifyListeners();
+  }
+
   Future setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');

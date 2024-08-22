@@ -134,16 +134,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _initiatePlugins();
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
-        await context.read<MessageProvider>().refreshMessages();
+        //TODO: already disposed
+        // await context.read<MessageProvider>().refreshMessages();
         await context.read<HomeProvider>().setupHasSpeakerProfile();
       }
     });
-
-    _initiatePlugins();
 
     //TODO: Should this run everytime?
     // _migrationScripts();
@@ -231,9 +231,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   _tabChange(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     FocusScope.of(context).unfocus();
-    setState(() {
-      _controller!.index = index;
-    });
+    context.read<HomeProvider>().setIndex(index);
+    _controller!.animateTo(index);
   }
 
   @override
@@ -372,12 +371,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     onPressed: () => _tabChange(0),
                                     child: Padding(
                                       padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text('Memories',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 0 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Memories',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -389,12 +391,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         top: 20,
                                         bottom: 20,
                                       ),
-                                      child: Text('Capture',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 1 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Capture',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -403,12 +408,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     onPressed: () => _tabChange(2),
                                     child: Padding(
                                       padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text('Chat',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 2 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Chat',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
