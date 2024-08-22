@@ -73,25 +73,6 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
-//Acceleration data
-//this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
-//
-//Arbritrary uuid, feel free to change
-//use d4,d5
-// static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-//         if (value == BT_GATT_CCC_NOTIFY)
-//     {
-//         printk("Client subscribed for notifications\n");
-//     }
-//     else if (value == 0)
-//     {
-//         printk("Client unsubscribed from notifications\n");
-//     }
-//     else
-//     {
-//         printk("Invalid CCC value: %u\n", value);
-//     }
-// }
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
