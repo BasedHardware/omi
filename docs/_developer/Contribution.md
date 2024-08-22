@@ -7,6 +7,15 @@ nav_order: 4
 # Contribution
 
 We welcome contributions from the community! If you are interested in improving Friend, check out our [current tasks](https://github.com/BasedHardware/Omi/issues) (Some of the tasks have paid bounties)
+To contribute:
+* Fork the repository
+* Do the changes
+* create a Pull Request and specifiy which issue is it related to
+
+## Docs Contribution
+Docs contributions are as important as code contributions! Our docs are located at [github docs folder](https://github.com/BasedHardware/Omi/tree/main/docs) and synced real-time with docs.basedhardware.com 
+
+You can modify the docs directly from Github interface by Createing a fork => [clicking this icon](https://share.cleanshot.com/dkBSffGr) => click "preview" => create pull request  
 
 # Rewards
 You can get rewards by submitting approved PRs (significant contribution):
@@ -38,8 +47,7 @@ Some of the tickets are paid bounties! You can check which ones, but filtering w
 If there are no paid bounties available, you can suggest your own. Simply filter by [open issues](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+) with no "bounty" label and suggest your own bounty while pinging @ josancamon19 or @kodjima33
 
 
-## Docs Contribution
-Docs contributions are as important as code contributions! Our docs are located at docs.basedhardware.com but synced real-time with [github docs folder ](https://github.com/BasedHardware/Omi/tree/main/docs)
+
 
 
 

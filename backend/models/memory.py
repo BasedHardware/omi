@@ -145,15 +145,20 @@ class Memory(BaseModel):
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:
         result = []
-        for memory in memories:
-            memory_str = f"{memory.created_at.isoformat().split('.')[0]}\nTitle: {memory.structured.title}\nSummary: {memory.structured.overview}\n"
+        for i, memory in enumerate(memories):
+            formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
+            memory_str = (f"Memory #{i + 1}\n"
+                          f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                          f"{str(memory.structured.title).capitalize()}\n"
+                          f"{str(memory.structured.overview).capitalize()}\n")
+
             if memory.structured.action_items:
                 memory_str += "Action Items:\n"
                 for item in memory.structured.action_items:
-                    memory_str += f"  - {item.description}\n"
-            memory_str += f"Category: {memory.structured.category}\n"
+                    memory_str += f"- {item.description}\n"
             result.append(memory_str.strip())
-        return "\n\n".join(result)
+
+        return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
