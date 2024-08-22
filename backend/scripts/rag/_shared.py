@@ -1,3 +1,4 @@
+import json
 import os
 # noinspection PyUnresolvedReferences
 from typing import List
@@ -9,11 +10,12 @@ import plotly.graph_objects as go
 # noinspection PyUnresolvedReferences
 import umap
 from dotenv import load_dotenv
-from google.cloud import firestore
 from langchain_openai import OpenAIEmbeddings
 from pinecone import Pinecone
 # noinspection PyUnresolvedReferences
 from plotly.subplots import make_subplots
+
+import database.memories as memories_db
 
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
@@ -24,7 +26,8 @@ if os.getenv('PINECONE_API_KEY') is not None:
 else:
     index = None
 
-db = firestore.Client()
+uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
+
 openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 
@@ -38,11 +41,14 @@ def query_vectors(query: str, uid: str, k: int = 1000) -> List[str]:
     return data
 
 
-def get_memories(uid: str):
-    # TODO: test with a lot of users too, many uid's, also
-    memories_ref = (db.collection('users').document(uid).collection('memories'))
-    memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    return [doc.to_dict() for doc in memories_ref.stream()]
+def get_memories():
+    if not os.path.exists('memories.json'):
+        memories = memories_db.get_memories(uid, limit=1000)
+        with open('memories.json', 'w') as f:
+            f.write(json.dumps(memories, indent=4, default=str))
+
+    with open('memories.json', 'r') as f:
+        return json.loads(f.read())
 
 
 def get_all_markers(data, data_points, target):

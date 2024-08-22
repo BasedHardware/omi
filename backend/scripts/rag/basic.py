@@ -1,8 +1,8 @@
 from _shared import *
 
 
-def get_data(uid: str, query: str, top_k: int = 1000):
-    memories = get_memories(uid)
+def get_data(query: str, top_k: int = 1000):
+    memories = get_memories()
     memories = {memory['id']: memory for memory in memories}
     vectors = query_vectors(query, uid, k=top_k)
 
@@ -16,12 +16,11 @@ def get_data(uid: str, query: str, top_k: int = 1000):
 
 
 def visualize():
-    uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
     query = ''
     top_k = 1000
     target = 5
 
-    data = get_data(uid, query, top_k=top_k)
+    data = get_data(query, top_k=top_k)
     embeddings = np.array([item[1] for item in data])
 
     query_embedding = openai_embeddings.embed_query(query)
