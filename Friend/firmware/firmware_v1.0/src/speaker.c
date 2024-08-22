@@ -6,22 +6,18 @@
 #define SAMPLE_FREQUENCY 44100
 #define SAMPLE_BIT_WIDTH 16
 #define NUM_CHANNELS 2
-#define SAMPLE_NO 64
 
 #define PI 3.14159265358979323846
 
 #define MAX_BLOCK_SIZE 25000
 #define BLOCK_COUNT 1
-#define PACKET_SIZE 400
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 static const struct device *i2s_dev;
-static void *rx_buffer;
-static int16_t *ptr2;
-static int16_t *clear_ptr;
-static uint32_t current_length;
-static uint32_t offset;
+static void *audio_buffer;
+static uint32_t buffer_offset;
+static uint32_t total_length;
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 
@@ -53,30 +49,40 @@ int speaker_init(void)
     }
     LOG_INF("I2S configured successfully");
 
-    ret = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_NO_WAIT);
+    ret = k_mem_slab_alloc(&mem_slab, &audio_buffer, K_NO_WAIT);
     if (ret) {
         LOG_ERR("Failed to allocate memory (%d)", ret);
         return ret;
     }
-    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
+    memset(audio_buffer, 0, MAX_BLOCK_SIZE);
 
     return 0;
+}
+
+static void generate_gentle_chime(int16_t *buffer, int num_samples)
+{
+    float frequencies[] = {523.25, 659.25, 783.99, 1046.50}; // C5, E5, G5, C6
+    int num_freqs = sizeof(frequencies) / sizeof(frequencies[0]);
+
+    for (int i = 0; i < num_samples; i++) {
+        float t = (float)i / SAMPLE_FREQUENCY;
+        float sample = 0;
+        for (int j = 0; j < num_freqs; j++) {
+            sample += sinf(2 * PI * frequencies[j] * t) * (1.0 - t);
+        }
+        int16_t int_sample = (int16_t)(sample / num_freqs * 32767 * 0.5);
+        buffer[i * NUM_CHANNELS] = int_sample;
+        buffer[i * NUM_CHANNELS + 1] = int_sample;
+    }
 }
 
 int play_boot_sound(void)
 {
     int ret;
-    int16_t *buffer = (int16_t *)rx_buffer;
+    int16_t *buffer = (int16_t *)audio_buffer;
     int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
-    float frequency = 440.0f;
 
-    for (int i = 0; i < samples_per_block; i++) {
-        float t = (float)i / SAMPLE_FREQUENCY;
-        float value = sinf(2 * PI * frequency * t);
-        int16_t sample = (int16_t)(value * 32767);
-        buffer[i * NUM_CHANNELS] = sample;
-        buffer[i * NUM_CHANNELS + 1] = sample;
-    }
+    generate_gentle_chime(buffer, samples_per_block);
 
     ret = i2s_write(i2s_dev, buffer, MAX_BLOCK_SIZE);
     if (ret < 0) {
@@ -99,4 +105,59 @@ int play_boot_sound(void)
     }
 
     return 0;
+}
+
+int start_audio_playback(uint32_t length)
+{
+    if (length == 0 || length > MAX_BLOCK_SIZE) {
+        LOG_ERR("Invalid audio length: %u", length);
+        return -EINVAL;
+    }
+
+    total_length = length;
+    buffer_offset = 0;
+    memset(audio_buffer, 0, MAX_BLOCK_SIZE);
+
+    LOG_INF("Starting audio playback, total length: %u bytes", total_length);
+    return 0;
+}
+
+int write_audio_data(const void *data, uint16_t length)
+{
+    if (buffer_offset + length > total_length) {
+        LOG_ERR("Attempting to write more data than expected");
+        return -EINVAL;
+    }
+
+    memcpy((uint8_t *)audio_buffer + buffer_offset, data, length);
+    buffer_offset += length;
+
+    if (buffer_offset == total_length) {
+        LOG_INF("Audio data complete, starting playback");
+        int ret = i2s_write(i2s_dev, audio_buffer, total_length);
+        if (ret < 0) {
+            LOG_ERR("Failed to write I2S data: %d", ret);
+            return ret;
+        }
+
+        ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_START);
+        if (ret != 0) {
+            LOG_ERR("Failed to start I2S transmission: %d", ret);
+            return ret;
+        }
+
+        k_sleep(K_MSEC(2000));  // Adjust this based on your audio length
+
+        ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
+        if (ret != 0) {
+            LOG_ERR("Failed to stop I2S transmission: %d", ret);
+            return ret;
+        }
+
+        // Reset for next playback
+        buffer_offset = 0;
+        total_length = 0;
+    }
+
+    return length;
 }
