@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
-from models.memory import Structured, MemoryPhoto
+from models.memory import Structured, MemoryPhoto, CategoryEnum
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
@@ -127,7 +127,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
     prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = new_transcript.count('User:')
+    count_user_appears = prev_transcript.count('User:')
     if count_user_appears == 0:
         return -1
     elif prev_transcript_tokens > 10000:
@@ -143,6 +143,7 @@ def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int
     prompt = f'''
     You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
     Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
 
     Previous Transcript:
     {prev_transcript}
@@ -231,163 +232,9 @@ def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
 
 
-# ***************************************************
-# ************* CHAT CURRENT APP LOGIC **************
-# ***************************************************
-
-
-class ContextOutput(BaseModel):
-    topics: List[str] = Field(default=[], description="List of topics.")
-    # dates_range: List[datetime] = Field(default=[], description="The dates range to retrieve context from")
-
-
-class ContextOutput2(BaseModel):
-    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
-
-
-class RequiresContext(BaseModel):
-    value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
-
-
-def requires_context(messages: List[Message]) -> bool:
-    prompt = f'''
-    Based on the current conversation your task is to determine if the user is asking a question that requires context outside the conversation to be answered.
-    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
-    
-    Conversation History:    
-    {Message.get_messages_as_string(messages)}
-    '''
-    with_parser = llm.with_structured_output(RequiresContext)
-    response: RequiresContext = with_parser.invoke(prompt)
-    return response.value
-
-
-# TODO: try query expansion, instead of topics / queries
-# TODO: include user name in prompt, and preferences.
-def retrieve_context_params(messages: List[Message]) -> List[str]:
-    prompt = f'''
-    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
-    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
-    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
-
-    Conversation:
-    {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput)
-    response: ContextOutput = with_parser.invoke(prompt)
-    return response.topics
-
-
-def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
-    prompt = f'''
-    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
-    Your task is to to find the dates range in which the current conversation needs context about, in order to answer the most recent user request.
-    
-    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
-    Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
-    
-
-    Conversation:
-    {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput2)
-    response: ContextOutput2 = with_parser.invoke(prompt)
-    return response.dates_range
-
-
-def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[str], List[datetime]]]:
-    prompt = '''
-            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
-            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
-    
-            - First determine if the conversation requires context, in the field "requires_context".
-            - Context could be 2 different things:
-              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
-              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
-    
-            Conversation:
-            {conversation}
-            
-            {format_instructions}
-        '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=ContextOutput)
-
-    prompt = PromptTemplate(
-        template=prompt,
-        input_variables=["current_date", "conversation"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-
-    conversation = Message.get_messages_as_string(messages)
-
-    prompt_and_model = prompt | llm
-    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
-
-    try:
-        parsed_output = parser.invoke(output)
-        topics = parsed_output.topics
-        dates = parsed_output.dates_range
-        print(f'topics: {topics}, dates: {dates}')
-        return (topics, dates) if parsed_output.requires_context else None
-    except Exception as e:
-        print(f'Error determining requires context: {e}')
-        return None
-
-
-class SummaryOutput(BaseModel):
-    summary: str = Field(description="The extracted summary from the conversation, at most 250 tokens.")
-
-
-def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
-    content = TranscriptSegment.segments_as_string(segments)
-    prompt = f'''
-    You will be given a conversation transcript, and a list of topics.
-    Your task is to generate a summary of the conversation focused on the topics provided.
-    Include the most relevant information about the topics, people mentioned, events, locations, facts, phrases, and any other relevant information.
-    It is possible the topics are not related to the conversation, in that case, output an empty string.
-    
-    Conversation:
-    {content}
-    
-    Topics: {topics}
-    
-    '''
-    with_parser = llm.with_structured_output(SummaryOutput)
-    response: SummaryOutput = with_parser.invoke(prompt)
-    return response.summary
-
-
-def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
-    conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
-    )
-
-    plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
-
-    prompt = f"""
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
-    If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so follow-up the conversation casually.
-    If there's not enough information to provide a valuable answer, ask the user for clarification questions.
-    {plugin_info}
-    
-    Conversation History:
-    {conversation_history}
-
-    Context:
-    ```
-    {context}
-    ```
-    Answer:
-    """.replace('    ', '').strip()
-    print(prompt)
-    return llm.invoke(prompt).content
-
-
+# ****************************************
+# ************* CHAT BASICS **************
+# ****************************************
 def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
     if plugin is None:
         prompt = '''
@@ -426,3 +273,163 @@ def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     num_tokens = len(encoding.encode(string))
     return num_tokens
+
+
+# ***************************************************
+# ************* CHAT CURRENT APP LOGIC **************
+# ***************************************************
+
+
+class RequiresContext(BaseModel):
+    value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
+
+
+class TopicsContext(BaseModel):
+    topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
+
+
+class DatesContext(BaseModel):
+    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
+
+
+def requires_context(messages: List[Message]) -> bool:
+    prompt = f'''
+    Based on the current conversation your task is to determine if the user is asking a question that requires context outside the conversation to be answered.
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+    
+    Conversation History:    
+    {Message.get_messages_as_string(messages)}
+    '''
+    with_parser = llm.with_structured_output(RequiresContext)
+    response: RequiresContext = with_parser.invoke(prompt)
+    return response.value
+
+
+# TODO: try query expansion, instead of topics / queries
+# TODO: include user name in prompt, and preferences.
+
+def retrieve_context_params(messages: List[Message]) -> List[str]:
+    prompt = f'''
+    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
+    
+    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
+    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+    
+    It is possible that the data needed is not related to a topic, in that case, output an empty list. 
+
+    Conversation:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(TopicsContext)
+    response: TopicsContext = with_parser.invoke(prompt)
+    topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
+    return topics
+
+
+def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
+    prompt = f'''
+    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
+    
+    Your task is to to find the dates range in which the current conversation needs context about, in order to answer the most recent user request.
+    
+    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
+    Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
+    
+
+    Conversation:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+
+def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[str], List[datetime]]]:
+    prompt = '''
+            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
+            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
+    
+            - First determine if the conversation requires context, in the field "requires_context".
+            - Context could be 2 different things:
+              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
+              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
+    
+            Conversation:
+            {conversation}
+            
+            {format_instructions}
+        '''.replace('    ', '').strip()
+    parser = PydanticOutputParser(pydantic_object=TopicsContext)
+
+    prompt = PromptTemplate(
+        template=prompt,
+        input_variables=["current_date", "conversation"],
+        partial_variables={"format_instructions": parser.get_format_instructions()},
+    )
+
+    conversation = Message.get_messages_as_string(messages)
+
+    prompt_and_model = prompt | llm
+    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
+
+    try:
+        parsed_output = parser.invoke(output)
+        topics = parsed_output.topics
+        dates = parsed_output.dates_range
+        print(f'topics: {topics}, dates: {dates}')
+        return (topics, dates) if parsed_output.requires_context else None
+    except Exception as e:
+        print(f'Error determining requires context: {e}')
+        return None
+
+
+class SummaryOutput(BaseModel):
+    summary: str = Field(description="The extracted content, maximum 500 words.")
+
+
+def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
+    content = TranscriptSegment.segments_as_string(segments)
+    prompt = f'''
+    You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
+    You will be given a conversation transcript of a low quality recording, and a list of topics.
+    
+    Include the most relevant information about the topics, people mentioned, events, locations, facts, phrases, and any other relevant information.
+    It is possible that the conversation doesn't have anything related to the topics, in that case, output an empty string.
+    
+    Conversation:
+    {content}
+    
+    Topics: {topics}
+    '''
+    with_parser = llm.with_structured_output(SummaryOutput)
+    response: SummaryOutput = with_parser.invoke(prompt)
+    return response.summary
+
+
+def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+    conversation_history = Message.get_messages_as_string(
+        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+    )
+
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    prompt = f"""
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
+    If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
+    If the message doesn't require context, it will be empty, so follow-up the conversation casually.
+    If there's not enough information to provide a valuable answer, ask the user for clarification questions.
+    {plugin_info}
+    
+    Conversation History:
+    {conversation_history}
+
+    Context:
+    ```
+    {context}
+    ```
+    Answer:
+    """.replace('    ', '').strip()
+    print(prompt)
+    return llm.invoke(prompt).content

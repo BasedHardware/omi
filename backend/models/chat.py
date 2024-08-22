@@ -55,7 +55,7 @@ class Message(BaseModel):
             return message.sender.upper()
 
         formatted_messages = [
-            f"({message.created_at.isoformat().split('.')[0]}) {get_sender_name(message)}: {message.text}"
+            f"({message.created_at.strftime('%d %b, at %H:%M')}) {get_sender_name(message)}: {message.text}"
             for message in sorted_messages
         ]
 
