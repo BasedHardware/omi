@@ -384,22 +384,22 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
 
 
 class SummaryOutput(BaseModel):
-    summary: str = Field(description="The extracted summary from the conversation, at most 250 tokens.")
+    summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
 def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
     content = TranscriptSegment.segments_as_string(segments)
     prompt = f'''
-    You will be given a conversation transcript, and a list of topics.
-    Your task is to generate a summary of the conversation focused on the topics provided.
+    You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
+    You will be given a conversation transcript of a low quality recording, and a list of topics.
+    
     Include the most relevant information about the topics, people mentioned, events, locations, facts, phrases, and any other relevant information.
-    It is possible the topics are not related to the conversation, in that case, output an empty string.
+    It is possible that the conversation doesn't have anything related to the topics, in that case, output an empty string.
     
     Conversation:
     {content}
     
     Topics: {topics}
-    
     '''
     with_parser = llm.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)

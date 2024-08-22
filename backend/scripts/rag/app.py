@@ -92,7 +92,6 @@ if 'memories' not in st.session_state:
     st.session_state.memories = state['memories']
 
 
-
 def add_message(message: Message):
     st.session_state.messages.append(message.__dict__)
     save_state()
@@ -127,7 +126,7 @@ def send_message(text: str):
     ai_message_id = str(uuid.uuid4())
     if topics:
         file_name = f'{ai_message_id}.html'
-        generate_topics_visualization(topics, file_name)
+        generate_visualization(topics, memories, file_name)
         visualization_path = os.path.join(project_root, 'scripts', 'rag', 'visualizations', file_name)
         if os.path.exists(visualization_path):
             with open(visualization_path, 'r') as f:

@@ -42,14 +42,14 @@ def upsert_vectors(
     print('upsert_vectors', res)
 
 
-def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None) -> List[str]:
+def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k:int = 5) -> List[str]:
     filter_data = {'uid': uid}
     if starts_at is not None:
         filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
 
     # print('filter_data', filter_data)
     xq = embeddings.embed_query(query)
-    xc = index.query(vector=xq, top_k=5, include_metadata=False, filter=filter_data, namespace="ns1")
+    xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
     # print(xc)
     return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
 

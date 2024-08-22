@@ -90,7 +90,6 @@ dist/
 hs_err_pid*
 
 # Servers
-backend/app-server/dist
 src/recordings
 
 # Apps
@@ -130,6 +129,8 @@ docs/_site/
 plugins/example/tmp/
 
 backend/pretrained_models/
+backend/scripts/rag/*.json
+backend/scripts/rag/visualizations/
 /backend/scripts/data/
 /backend/pretrained_models/
 */pretrained_models/
