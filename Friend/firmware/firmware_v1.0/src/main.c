@@ -150,6 +150,7 @@ int main(void)
         LOG_WRN("Speaker initialization failed\n");
     }else{
 		play_boot_sound();
+		// vibrate_speaker();
 	}
 
     // Indicate transport initialization
