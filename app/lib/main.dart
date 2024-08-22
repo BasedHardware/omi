@@ -21,6 +21,8 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
@@ -131,11 +133,21 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
         providers: [
-          ListenableProvider(create: (context) => HomeProvider()),
-          ListenableProvider(create: (context) => MessageProvider()),
-          ListenableProvider(create: (context) => MemoryProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => OnboardingProvider()),
+          ListenableProvider(create: (context) => HomeProvider()),
+          ListenableProvider(create: (context) => MemoryProvider()),
+          ListenableProvider(create: (context) => PluginProvider()),
+          ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
+            create: (context) => MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                MessageProvider()..updatePluginProvider(value),
+          ),
+          ChangeNotifierProxyProvider<MemoryProvider, CaptureProvider>(
+            create: (context) => CaptureProvider(),
+            update: (BuildContext context, memory, CaptureProvider? previous) =>
+                CaptureProvider()..updateProviderInstances(memory),
+          ),
         ],
         builder: (context, child) {
           return WithForegroundTask(

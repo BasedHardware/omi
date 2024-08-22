@@ -23,6 +23,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
+import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/scripts.dart';
 import 'package:friend_private/services/notification_service.dart';
@@ -77,32 +78,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
-  // List<ServerMemory> memories = [];
-  // List<ServerMessage> messages = [];
-
   bool scriptsInProgress = false;
 
-  _setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
-    debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
-    MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
-    setState(() {});
-  }
-
-  _edgeCasePluginNotAvailable() {
-    var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
-    debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
-    var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
-      SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
-    }
-  }
-
   Future<void> _initiatePlugins() async {
+    context.read<PluginProvider>().getPlugins();
     plugins = SharedPreferencesUtil().pluginsList;
-    plugins = await retrievePlugins();
-    _edgeCasePluginNotAvailable();
-    setState(() {});
   }
 
   @override
@@ -128,7 +108,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     setState(() => scriptsInProgress = true);
     await scriptMigrateMemoriesToBack();
     if (mounted) {
-      await context.read<mp.MemoryProvider>().initiateMemories();
+      await context.read<mp.MemoryProvider>().getInitialMemories();
     }
     setState(() => scriptsInProgress = false);
   }
@@ -154,17 +134,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _initiatePlugins();
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
-        await context.read<MessageProvider>().refreshMessages();
-        await context.read<mp.MemoryProvider>().initiateMemories();
+        //TODO: already disposed
+        // await context.read<MessageProvider>().refreshMessages();
+        await context.read<HomeProvider>().setupHasSpeakerProfile();
       }
     });
 
-    _initiatePlugins();
-    _setupHasSpeakerProfile();
     //TODO: Should this run everytime?
     // _migrationScripts();
 
@@ -251,9 +231,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   _tabChange(int index) {
     MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     FocusScope.of(context).unfocus();
-    setState(() {
-      _controller!.index = index;
-    });
+    context.read<HomeProvider>().setIndex(index);
+    _controller!.animateTo(index);
   }
 
   @override
@@ -309,7 +288,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
                     if (mounted) {
                       if (context.read<mp.MemoryProvider>().memories.isEmpty) {
-                        await context.read<mp.MemoryProvider>().initiateMemories();
+                        await context.read<mp.MemoryProvider>().getInitialMemories();
                       }
                       if (context.read<MessageProvider>().messages.isEmpty) {
                         await context.read<MessageProvider>().refreshMessages();
@@ -337,43 +316,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           physics: const NeverScrollableScrollPhysics(),
                           children: [
                             MemoriesPage(
-                              memories: memProvider.memories,
-                              updateMemory: (ServerMemory memory, int index) {
-                                //TODO: Memory Provider Migrate
-                                // var memoriesCopy = List<ServerMemory>.from(memories);
-                                // memoriesCopy[index] = memory;
-                                // setState(() => memories = memoriesCopy);
-                                memProvider.updateMemory(memory, index);
-                              },
-                              deleteMemory: (ServerMemory memory, int index) {
-                                // TODO: Memory Provider Migrate
-                                // var memoriesCopy = List<ServerMemory>.from(memories);
-                                // memoriesCopy.removeAt(index);
-                                // setState(() => memories = memoriesCopy);
-                                memProvider.deleteMemory(memory, index);
-                              },
-                              loadMoreMemories: () async {
-                                // ----------------------------------
-                                // if (memProvider.memories.length % 50 != 0) return;
-                                // if (context.read<mp.MemoryProvider>().isLoadingMemories) return;
-                                // context.read<mp.MemoryProvider>().setLoadingMemories(true);
-                                // var newMemories = await getMemories(offset: memProvider.memories.length);
-                                // memories.addAll(newMemories);
-                                // context.read<mp.MemoryProvider>().setLoadingMemories(false);
-                                // ----------------------------------
-                                await memProvider.getMoreMemoriesFromServer();
-                              },
-                              loadingNewMemories: context.read<mp.MemoryProvider>().isLoadingMemories,
                               textFieldFocusNode: memoriesTextFieldFocusNode,
                             ),
                             CapturePage(
                               key: capturePageKey,
                               device: _device,
                               addMemory: (ServerMemory memory) {
-                                // TODO: Memory Provider Migrate
-                                // var memoriesCopy = List<ServerMemory>.from(memories);
-                                // memoriesCopy.insert(0, memory);
-                                // setState(() => memories = memoriesCopy);
                                 memProvider.addMemory(memory);
                               },
                               addMessage: (ServerMessage message) {
@@ -381,13 +329,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 chatPageKey.currentState?.scrollToBottom();
                               },
                               updateMemory: (ServerMemory memory) {
-                                // TODO: Memory Provider Migrate
-                                // var memoriesCopy = List<ServerMemory>.from(memories);
-                                // var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
-                                // if (index != -1) {
-                                //   memoriesCopy[index] = memory;
-                                //   setState(() => memories = memoriesCopy);
-                                // }
                                 memProvider.updateMemory(memory);
                               },
                             ),
@@ -395,13 +336,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               key: chatPageKey,
                               textFieldFocusNode: chatTextFieldFocusNode,
                               updateMemory: (ServerMemory memory) {
-                                // TODO: Memory Provider Migrate
-                                // var memoriesCopy = List<ServerMemory>.from(memories);
-                                // var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
-                                // if (index != -1) {
-                                //   memoriesCopy[index] = memory;
-                                //   setState(() => memories = memoriesCopy);
-                                // }
                                 memProvider.updateMemory(memory);
                               },
                             ),
@@ -437,12 +371,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     onPressed: () => _tabChange(0),
                                     child: Padding(
                                       padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text('Memories',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 0 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Memories',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -454,12 +391,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         top: 20,
                                         bottom: 20,
                                       ),
-                                      child: Text('Capture',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 1 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Capture',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -468,12 +408,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     onPressed: () => _tabChange(2),
                                     child: Padding(
                                       padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text('Chat',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              color: _controller!.index == 2 ? Colors.white : Colors.grey,
-                                              fontSize: 16)),
+                                      child: Text(
+                                        'Chat',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),

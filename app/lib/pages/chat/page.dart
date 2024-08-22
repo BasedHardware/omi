@@ -50,7 +50,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     plugins = prefs.pluginsList;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
+    SchedulerBinding.instance.addPostFrameCallback((_) async {
+      await context.read<MessageProvider>().refreshMessages();
       _moveListToBottom();
     });
     // _initDailySummary();
