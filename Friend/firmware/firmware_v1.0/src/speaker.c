@@ -98,9 +98,9 @@ int play_boot_sound(void)
 
     k_sleep(K_MSEC(2000));  // Increased from 1000 to 2000 ms
 
-    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
+    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (ret != 0) {
-        LOG_ERR("Failed to stop I2S transmission: %d", ret);
+        LOG_ERR("Failed to drain I2S transmission: %d", ret);
         return ret;
     }
 
@@ -151,15 +151,14 @@ int vibrate_speaker(void)
 
     k_sleep(K_MSEC(500));  // Duration of the vibration (adjust as needed)
 
-    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
+    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (ret != 0) {
-        LOG_ERR("Failed to stop I2S transmission: %d", ret);
+        LOG_ERR("Failed to drain I2S transmission: %d", ret);
         return ret;
     }
 
     return 0;
 }
-
 
 int start_audio_playback(uint32_t length)
 {
@@ -202,9 +201,9 @@ int write_audio_data(const void *data, uint16_t length)
 
         k_sleep(K_MSEC(2000));  // Adjust this based on your audio length
 
-        ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
+        ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
         if (ret != 0) {
-            LOG_ERR("Failed to stop I2S transmission: %d", ret);
+            LOG_ERR("Failed to drain I2S transmission: %d", ret);
             return ret;
         }
 
