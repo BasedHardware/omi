@@ -41,7 +41,6 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void filterMemories(String query) {
-    if (query == previousQuery) return;
     filteredMemories = [];
     filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
     filteredMemories = query.isEmpty
