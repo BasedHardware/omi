@@ -127,7 +127,7 @@ void broadcast_accel(struct k_work *work_item) {
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
     if (err) {
-       LOG_ERR("Error updating accelerometer data");
+       LOG_ERR("Error updating Accelerometer data");
     }
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
@@ -166,7 +166,7 @@ int accel_start() {
 
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
 		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_ERR("Cannot set sampling frequency for accelerometer.");
+	LOG_ERR("Cannot set sampling frequency for Accelerometer.");
 		return 0;
 	}
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
@@ -179,7 +179,8 @@ int accel_start() {
     return 0;
 	}
 
-    LOG_INF("accelerometer is ready for use \n");
+    LOG_INF("A
+	    ccelerometer is ready for use \n");
     
     return 1;
 }
@@ -570,7 +571,7 @@ int transport_start()
     err = accel_start();
 
     if (!err) {
-        LOG_INF("accelerometer failed to activate\n");
+        LOG_INF("Accelerometer failed to activate\n");
     }
     else {
         bt_gatt_service_register(&accel_service);
