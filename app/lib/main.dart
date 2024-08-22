@@ -17,6 +17,7 @@ import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -132,6 +133,7 @@ class _MyAppState extends State<MyApp> {
           ListenableProvider(create: (context) => HomeProvider()),
           ListenableProvider(create: (context) => MessageProvider()),
           ListenableProvider(create: (context) => MemoryProvider()),
+          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
