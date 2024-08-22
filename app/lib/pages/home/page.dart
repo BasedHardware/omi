@@ -297,7 +297,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     setState(() {});
   }
 
-
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = await getBleBatteryLevelListener(
@@ -570,7 +569,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                         builder: (c) => ConnectedDevice(
                                               device: _device!,
                                               batteryLevel: batteryLevel,
-                      
                                             )));
                                     MixpanelManager().batteryIndicatorClicked();
                                   },
