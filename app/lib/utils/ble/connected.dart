@@ -7,7 +7,7 @@ import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/devices/deviceType.dart';
 
 Future<Device?> getConnectedDevice() async {
-  var deviceId = SharedPreferencesUtil().deviceId;
+  var deviceId = SharedPreferencesUtil().device.id;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
       return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());

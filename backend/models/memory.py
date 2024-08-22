@@ -100,6 +100,23 @@ class MemorySource(str, Enum):
     friend = 'friend'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
+    workflow = 'workflow'
+
+
+class PostProcessingStatus(str, Enum):
+    in_progress = 'in_progress'
+    completed = 'completed'
+    canceled = 'canceled'
+    failed = 'failed'
+
+
+class PostProcessingModel(str, Enum):
+    fal_whisperx = 'fal_whisperx'
+
+
+class MemoryPostProcessing(BaseModel):
+    status: PostProcessingStatus
+    model: PostProcessingModel
 
 
 class Memory(BaseModel):
@@ -120,24 +137,31 @@ class Memory(BaseModel):
 
     external_data: Optional[Dict] = None
 
+    postprocessing: Optional[MemoryPostProcessing] = None
+
     discarded: bool = False
     deleted: bool = False
 
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:
         result = []
-        for memory in memories:
-            memory_str = f"{memory.created_at.isoformat().split('.')[0]}\nTitle: {memory.structured.title}\nSummary: {memory.structured.overview}\n"
+        for i, memory in enumerate(memories):
+            formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
+            memory_str = (f"Memory #{i + 1}\n"
+                          f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                          f"{str(memory.structured.title).capitalize()}\n"
+                          f"{str(memory.structured.overview).capitalize()}\n")
+
             if memory.structured.action_items:
                 memory_str += "Action Items:\n"
                 for item in memory.structured.action_items:
-                    memory_str += f"  - {item.description}\n"
-            memory_str += f"Category: {memory.structured.category}\n"
+                    memory_str += f"- {item.description}\n"
             result.append(memory_str.strip())
-        return "\n\n".join(result)
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+        return "\n\n---------------------\n\n".join(result).strip()
+
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
 class CreateMemory(BaseModel):
@@ -151,8 +175,24 @@ class CreateMemory(BaseModel):
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=True)
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
+
+class WorkflowMemorySource(str, Enum):
+    audio = 'audio_transcript'
+    other = 'other_text'
+
+
+class WorkflowCreateMemory(BaseModel):
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    text: str
+    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    geolocation: Optional[Geolocation] = None
+
+    source: MemorySource = MemorySource.workflow
+    language: Optional[str] = None
 
 
 class CreateMemoryResponse(BaseModel):

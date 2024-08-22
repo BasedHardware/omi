@@ -97,9 +97,12 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
       List<Device> orderedDevices = foundDevicesMap.values.toList();
 
       if (orderedDevices.isNotEmpty) {
-        setState(() {
-          deviceList = orderedDevices;
-        });
+        if (mounted) {
+          setState(() {
+            deviceList = orderedDevices;
+          });
+        }
+
         _didNotMakeItTimer.cancel();
       }
     });

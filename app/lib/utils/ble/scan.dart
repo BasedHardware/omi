@@ -3,8 +3,11 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/devices/deviceType.dart';
 
-Future<Device?> scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
-  var deviceId = SharedPreferencesUtil().deviceId;
+
+Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
+  print('scanAndConnectDevice');
+  var deviceId = SharedPreferencesUtil().device.id;
+  print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
       return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());
@@ -19,7 +22,7 @@ Future<Device?> scanAndConnectDevice({bool autoConnect = true, bool timeout = fa
       // Technically, there should be only one
       if (deviceId == '') {
         deviceId = device.id;
-        SharedPreferencesUtil().deviceId = device.id;
+        SharedPreferencesUtil().btDeviceStruct = device;
         SharedPreferencesUtil().deviceName = device.name;
       }
 

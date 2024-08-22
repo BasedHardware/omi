@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TranscriptSegment(BaseModel):
@@ -27,8 +27,8 @@ class TranscriptSegment(BaseModel):
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
-            timestamp_str = f'[{segment.get_timestamp_string()}]' if include_timestamps else ''
-            transcript += f'{timestamp_str} {"User" if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
+            timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
+            transcript += f'{timestamp_str}{"User" if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
         return transcript.strip()
 
     @staticmethod
@@ -40,5 +40,11 @@ class TranscriptSegment(BaseModel):
         return True
 
 
+class ImprovedTranscriptSegment(BaseModel):
+    speaker_id: int = Field(..., description='The correctly assigned speaker id')
+    text: str = Field(..., description='The corrected text of the segment')
+    # seconds: List[float] = Field(..., description='The start and end time of the segment')
+
+
 class ImprovedTranscript(BaseModel):
-    result: List[TranscriptSegment]
+    result: List[ImprovedTranscriptSegment]

@@ -28,6 +28,8 @@ class _FoundDevicesState extends State<FoundDevices> {
   String deviceId = '';
   String? _connectingToDeviceId;
 
+  Timer? connectionStateTimer;
+
   // TODO: improve this and find_device page.
   // TODO: include speech profile, once it's well tested, in a few days, rn current version works
 
@@ -41,8 +43,8 @@ class _FoundDevicesState extends State<FoundDevices> {
         _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().deviceId = device.id;
-      SharedPreferencesUtil().deviceName = device.name;
+      SharedPreferencesUtil().device = device;
+      SharedPreferencesUtil().deviceName = btDevice.name;
       widget.goNext();
     } catch (e) {
       print("Error fetching battery level: $e");
@@ -65,6 +67,40 @@ class _FoundDevicesState extends State<FoundDevices> {
     deviceName = device.name;
     device.getAudioCodec().then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
+  }
+
+  @override
+  void initState() {
+    _initiateConnectionListener();
+    super.initState();
+  }
+
+  _initiateConnectionListener() async {
+    connectionStateTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      var connectedDevice = await getConnectedDevice();
+      if (connectedDevice != null) {
+        if (mounted) {
+          connectionStateTimer?.cancel();
+          var battery = await retrieveBatteryLevel(connectedDevice.id);
+          setState(() {
+            deviceName = connectedDevice.name;
+            deviceId = connectedDevice.id;
+            batteryPercentage = battery;
+            _isConnected = true;
+            _isClicked = false;
+            _connectingToDeviceId = null;
+          });
+          await Future.delayed(const Duration(seconds: 2));
+          widget.goNext();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    connectionStateTimer?.cancel();
+    super.dispose();
   }
 
   @override

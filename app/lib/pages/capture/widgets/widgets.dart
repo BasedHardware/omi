@@ -30,7 +30,7 @@ getConnectionStateWidgets(
   if (device == null) {
     return [
       const DeviceAnimationWidget(sizeMultiplier: 0.7),
-      SharedPreferencesUtil().deviceId.isEmpty
+      SharedPreferencesUtil().btDeviceStruct.id == ''
           ? _getNoFriendConnectedYet(context)
           : const ScanningUI(
               string1: 'Looking for Friend wearable',
@@ -339,7 +339,7 @@ connectionStatusWidgets(
 }
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
+  if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
     visible: true,
     child: Padding(
