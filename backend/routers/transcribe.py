@@ -133,25 +133,27 @@ async def _websocket_util(
                         continue
             
                 elapsed_seconds = time.time() - timer_start
+                databuffer.extend(data)
+                # Sleep logic, because naive sleep is not accurate
+                current_time = time.time()
+                elapsed_time = current_time - timer_start
+                if elapsed_time < audio_cursor + REALTIME_RESOLUTION:
+                    sleep_time = (audio_cursor + REALTIME_RESOLUTION) - elapsed_time
+                    await asyncio.sleep(sleep_time)
+                    
                 if elapsed_seconds > duration or not socket2:
-                    databuffer.extend(data)
-                    # if len(databuffer) >= chunk_size:
-                    # Sleep logic, because naive sleep is not accurate
-                    current_time = time.time()
-                    elapsed_time = current_time - timer_start
-                    if elapsed_time < audio_cursor + REALTIME_RESOLUTION:
-                        sleep_time = (audio_cursor + REALTIME_RESOLUTION) - elapsed_time
-                        await asyncio.sleep(sleep_time)
                     # Just send them all, no difference
                     socket1.send(databuffer)
-                    databuffer = bytearray(b"")
-                    audio_cursor += REALTIME_RESOLUTION
                     if socket2:
                         print('Killing socket2')
                         socket2.finish()
                         socket2 = None
                 else:
-                    socket2.send(audio_buffer)
+                    # Socket2 send all too
+                    socket2.send(databuffer)
+                    
+                databuffer = bytearray(b"")
+                audio_cursor += REALTIME_RESOLUTION
 
         except WebSocketDisconnect as e:
             print(f"WebSocket disconnected: {e}")
