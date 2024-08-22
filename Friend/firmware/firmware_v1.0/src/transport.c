@@ -708,42 +708,42 @@ int transport_start()
     LOG_INF("Transport bluetooth initialized");
 
     	if (gpio_is_ready_dt(&d4_pin)) {
-		LOG_INF("D4 Pin ready\n");
+		LOG_INF("D4 Pin ready");
 	}
     	else {
-		LOG_ERR("Error setting up D4 Pin\n");
+		LOG_ERR("Error setting up D4 Pin");
 	}
 
 	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) {
-		LOG_ERR("Error setting up D4 Pin Voltage\n");
+		LOG_ERR("Error setting up D4 Pin Voltage");
 	}
 	else {
-		LOG_INF("D4 ready to transmit voltage\n");
+		LOG_INF("D4 ready to transmit voltage");
 	}
 	if (gpio_is_ready_dt(&d5_pin_input)) {
-		LOG_INF("D5 Pin ready\n");
+		LOG_INF("D5 Pin ready");
 	}
 	else {
-		LOG_ERR("D5 Pin not ready\n");
+		LOG_ERR("D5 Pin not ready");
 	}
 
 	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
 	if (err2 != 0) {
-		LOG_ERR("Error setting up D5 Pin\n");
+		LOG_ERR("Error setting up D5 Pin");
 		return 0;
 	}
 	else {
-		LOG_INF("D5 ready\n");
+		LOG_INF("D5 ready");
 	}
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) {
-		LOG_ERR("D5 unable to detect button presses\n");
+		LOG_ERR("D5 unable to detect button presses");
 		return 0;
 	}
 	else {
-		LOG_INF("D5 ready to detect button presses\n");
+		LOG_INF("D5 ready to detect button presses");
 	}
 
 
