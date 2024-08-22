@@ -3,14 +3,14 @@
 #include <math.h>
 #include "speaker.h"
 
-#define SAMPLE_FREQUENCY 44100
+#define SAMPLE_FREQUENCY 7500
 #define SAMPLE_BIT_WIDTH 16
 #define NUM_CHANNELS 2
 
 #define PI 3.14159265358979323846
 
 #define MAX_BLOCK_SIZE 25000
-#define BLOCK_COUNT 1
+#define BLOCK_COUNT 3
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -40,7 +40,7 @@ int speaker_init(void)
     i2s_cfg.frame_clk_freq = SAMPLE_FREQUENCY;
     i2s_cfg.block_size = MAX_BLOCK_SIZE;
     i2s_cfg.mem_slab = &mem_slab;
-    i2s_cfg.timeout = 1000;
+    i2s_cfg.timeout = 10000;
 
     ret = i2s_configure(i2s_dev, I2S_DIR_TX, &i2s_cfg);
     if (ret < 0) {
@@ -106,6 +106,60 @@ int play_boot_sound(void)
 
     return 0;
 }
+
+static void generate_vibrate(int16_t *buffer, int num_samples)
+{
+    float frequency = 30.0; // Slightly higher frequency
+    float period = SAMPLE_FREQUENCY / frequency;
+
+    for (int i = 0; i < num_samples; i++) {
+        float t = (float)i / SAMPLE_FREQUENCY;
+        float phase = fmodf(t * frequency, 1.0f);
+        float sample;
+
+        if (phase < 0.5f) {
+            sample = phase * 4.0f - 1.0f; // Triangle wave rising edge
+        } else {
+            sample = 3.0f - phase * 4.0f; // Triangle wave falling edge
+        }
+
+        int16_t int_sample = (int16_t)(sample * 32767 * 0.5); // Adjust amplitude
+        buffer[i * NUM_CHANNELS] = int_sample;
+        buffer[i * NUM_CHANNELS + 1] = int_sample;
+    }
+}
+
+int vibrate_speaker(void)
+{
+    int ret;
+    int16_t *buffer = (int16_t *)audio_buffer;
+    int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
+
+    generate_vibrate(buffer, samples_per_block);
+
+    ret = i2s_write(i2s_dev, buffer, MAX_BLOCK_SIZE);
+    if (ret < 0) {
+        LOG_ERR("Failed to write vibrate I2S data: %d", ret);
+        return ret;
+    }
+
+    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_START);
+    if (ret != 0) {
+        LOG_ERR("Failed to start I2S transmission: %d", ret);
+        return ret;
+    }
+
+    k_sleep(K_MSEC(500));  // Duration of the vibration (adjust as needed)
+
+    ret = i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
+    if (ret != 0) {
+        LOG_ERR("Failed to stop I2S transmission: %d", ret);
+        return ret;
+    }
+
+    return 0;
+}
+
 
 int start_audio_playback(uint32_t length)
 {
