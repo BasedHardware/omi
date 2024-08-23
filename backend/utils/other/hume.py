@@ -1,5 +1,7 @@
 import os
+
 import requests
+
 
 class HumePredictionEmotionResponseModel:
     def __init__(
@@ -26,7 +28,8 @@ class HumeJobModelPredictionResponseModel:
         self.time = time
 
     @classmethod
-    def get_top_emotion_names(cls, emotions: [HumePredictionEmotionResponseModel] = [], k: int = 5, peak_threshold:float = .7):
+    def get_top_emotion_names(cls, emotions: [HumePredictionEmotionResponseModel] = [], k: int = 5,
+                              peak_threshold: float = .7):
         emotions_dict = {}
         for emo in emotions:
             if emo.name not in emotions_dict:
@@ -64,6 +67,7 @@ class HumeJobModelPredictionResponseModel:
                     model.append(cls.from_dict(grouped_prediction_prediction))
 
         return model
+
 
 class HumeJobCallbackModel:
     def __init__(
@@ -134,7 +138,7 @@ class HumeClient:
                 'Content-Type': 'application/json',
                 'Accept': 'application/json; charset=utf-8',
                 'X-Hume-Api-Key': self.api_key,
-            }, timeout=300,)
+            }, timeout=300, )
         except requests.exceptions.HTTPError:
             resp_text = f"{resp}"
             err = {
@@ -180,6 +184,7 @@ hume_client = HumeClient(
     api_key=os.getenv('HUME_API_KEY'),
     callback_url=os.getenv('HUME_CALLBACK_URL'),
 )
+
 
 def get_hume():
     return hume_client

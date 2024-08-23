@@ -13,21 +13,35 @@ from utils.llm import new_facts_extractor
 
 
 def get_facts_from_memory(memories: List[dict], uid: str) -> List[Tuple[str, List[Fact]]]:
-    all_facts: List[Tuple[str, List[Fact]]] = []
-    only_facts: List[Fact] = []
+    all_facts = {}
     user_name = get_user_name(uid)
     print('User:', user_name)
-    for i, memory in enumerate(memories):
-        data = Memory(**memory)
-        new_facts = new_facts_extractor(data.transcript_segments, user_name, only_facts)
-        if not new_facts:
-            continue
-        all_facts.append([memory['id'], new_facts])
-        only_facts.extend(new_facts)
+    chunks = [memories[i:i + 50] for i in range(0, len(memories), 50)]
 
-        print(uid, 'Memory #', i + 1, 'retrieved', len(new_facts), 'facts')
+    def execute(chunk):
+        only_facts: List[Fact] = []
+        for i, memory in enumerate(chunk):
+            data = Memory(**memory)
+            new_facts = new_facts_extractor(user_name, only_facts, data.transcript_segments)
+            if not new_facts:
+                continue
+            all_facts[memory['id']] = new_facts
+            only_facts.extend(new_facts)
 
-    return all_facts
+            print(uid, 'Memory #', i + 1, 'retrieved', len(new_facts), 'facts')
+
+    threads = []
+    for chunk in chunks:
+        t = threading.Thread(target=execute, args=(chunk,))
+        threads.append(t)
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    data: List[Tuple[str, List[Fact]]] = []
+    for key, value in all_facts.items():
+        data.append([key, value])
+
+    return data
 
 
 def execute_for_user(uid: str):
@@ -46,6 +60,7 @@ def execute_for_user(uid: str):
 
 def script_migrate_users():
     uids = get_users_uid()
+    print('Migrating', len(uids), 'users')
     # uids = ['DX8n89KAmUaG9O7Qvj8xTi81Zu12']
 
     threads = []
@@ -53,9 +68,10 @@ def script_migrate_users():
         t = threading.Thread(target=execute_for_user, args=(uid,))
         threads.append(t)
 
-    chunk_size = 10
+    chunk_size = 25
     chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        print('STARTING CHUNK', i + 1)
         [t.start() for t in chunk]
         [t.join() for t in chunk]
 
