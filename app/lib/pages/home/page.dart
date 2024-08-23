@@ -211,9 +211,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().btDeviceStruct = _device!;
     SharedPreferencesUtil().deviceName = _device!.name;
-    if (mounted) {
-      setState(() {});
-    }
+    // if (mounted) {
+    //   setState(() {});
+    // }
   }
 
   _initiateBleBatteryListener() async {
@@ -522,7 +522,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               } else {
                                 await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
                               }
-                              setState(() {});
+                              // setState(() {});
                             },
                             style: TextButton.styleFrom(
                               padding: EdgeInsets.zero,
