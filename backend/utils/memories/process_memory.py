@@ -1,27 +1,27 @@
-import random
 import datetime
+import random
 import threading
 import uuid
 from typing import Union
 
-import asyncio
-
 from fastapi import HTTPException
 
+import database.facts as facts_db
 import database.memories as memories_db
-from database.vector_db import upsert_vector
-import database.tasks as tasks_db
 import database.notifications as notification_db
+import database.tasks as tasks_db
+from database.auth import get_user_name
+from database.vector_db import upsert_vector
+from models.facts import Fact, FactDB
 from models.memory import *
-from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.plugin import Plugin
+from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
+from utils.llm import qa_emotional_rag
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result, should_discard_memory, summarize_experience_text
-from utils.plugins import get_plugins_data
+    get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
-
-from utils.llm import qa_emotional_rag
+from utils.plugins import get_plugins_data
 from utils.retrieval.rag import retrieve_rag_memory_context
 
 
@@ -95,13 +95,13 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-def _trigger_plugins(uid: str, transcript: str, memory: Memory):
+def _trigger_plugins(uid: str, memory: Memory):
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     threads = []
 
     def execute_plugin(plugin):
-        if result := get_plugin_result(transcript, plugin).strip():
+        if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
             memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
 
     for plugin in filtered_plugins:
@@ -109,6 +109,20 @@ def _trigger_plugins(uid: str, transcript: str, memory: Memory):
 
     [t.start() for t in threads]
     [t.join() for t in threads]
+
+
+def _extract_facts(uid: str, memory: Memory):
+    # TODO: maybe instead (once they can edit them) we should not tie it this hard
+    facts_db.delete_facts_for_memory(uid, memory.id)
+    existing_facts = facts_db.get_facts(uid)
+    existing_facts = [Fact(**fact) for fact in existing_facts]
+    user_name = get_user_name(uid)
+    new_facts = new_facts_extractor(memory.transcript_segments, user_name, existing_facts)
+    parsed_facts = []
+    for fact in new_facts:
+        parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
+        print('fact:', fact.category.value.upper(), '~', fact.content)
+    facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
@@ -119,12 +133,14 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
     if not discarded:
         vector = generate_embedding(str(structured))
         upsert_vector(uid, memory, vector)
-        _trigger_plugins(uid, memory.get_transcript(False), memory)  # async
+        _trigger_plugins(uid, memory)
+        threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
 
     return memory
+
 
 def process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
     print('process_user_emotion memory.id=', memory.id)
@@ -159,6 +175,7 @@ def process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [st
     tasks_db.update(task.id, task.dict())
 
     return
+
 
 def process_user_expression_measurement_callback(provider: str, request_id: str, callback: HumeJobCallbackModel):
     support_providers = [TaskActionProvider.HUME]
@@ -223,7 +240,8 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Filter users emotions only
     users_frames = []
-    for seg in filter(lambda seg: seg.is_user == True and seg.start >= 0 and seg.end > seg.start, memory.transcript_segments):
+    for seg in filter(lambda seg: seg.is_user == True and seg.start >= 0 and seg.end > seg.start,
+                      memory.transcript_segments):
         users_frames.append((seg.start, seg.end))
     if len(users_frames) == 0:
         print(f"User time frames are empty. Uid: {uid}")
@@ -258,7 +276,10 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     # Ask llms about notification content
     title = "Omi"
     context_str, memories = retrieve_rag_memory_context(uid, memory)
-    response: str = qa_emotional_rag(context_str, memories, emotion)
+
+    user_name = get_user_name(uid)
+    user_facts = [Fact(**fact) for fact in facts_db.get_facts(uid)]
+    response: str = qa_emotional_rag(user_name, user_facts, context_str, memories, emotion)
     message = response
     if message is None or len(message) == 0:
         print(f"Message is too short. Uid: {uid}. Message: {message}")
