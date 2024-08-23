@@ -89,12 +89,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(
                     height: 25,
                   ),
-                  _MockNotification(
-                    path: 'assets/images/emotional_feedback_2.png',
-                  ),
-                  const SizedBox(
-                    height: 25,
-                  ),
                   Text(
                     "Omi will send you feedback in real-time.",
                     textAlign: TextAlign.center,
