@@ -23,12 +23,6 @@ class PluginsPage extends StatefulWidget {
 }
 
 class _PluginsPageState extends State<PluginsPage> {
-  bool isLoading = true;
-
-  // bool filterChat = true;
-  // bool filterMemories = true;
-  // bool filterExternal = true;
-
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -43,8 +37,8 @@ class _PluginsPageState extends State<PluginsPage> {
   }
 
   Future<void> _togglePlugin(String pluginId, bool isEnabled, int idx) async {
-    // if (pluginLoading[idx]) return;
-    // setState(() => pluginLoading[idx] = true);
+    if (context.read<PluginProvider>().pluginLoading[idx]) return;
+    context.read<PluginProvider>().setPluginLoading(idx, true);
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
       var enabled = await enablePluginServer(pluginId);
@@ -59,7 +53,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   'If this is an integration plugin, make sure the setup is completed.',
                   singleButton: true,
                 ));
-        // setState(() => pluginLoading[idx] = false);
+        context.read<PluginProvider>().setPluginLoading(idx, false);
         return;
       }
       prefs.enablePlugin(pluginId);
@@ -69,8 +63,7 @@ class _PluginsPageState extends State<PluginsPage> {
       prefs.disablePlugin(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
-    // setState(() => pluginLoading[idx] = false);
-    // setState(() => plugins = SharedPreferencesUtil().pluginsList);
+    context.read<PluginProvider>().setPluginLoading(idx, false);
   }
 
   @override
@@ -234,7 +227,19 @@ class _PluginsPageState extends State<PluginsPage> {
                 ),
               ),
               // const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              provider.filteredPlugins.isEmpty
+              provider.isLoading
+                  ? const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 64, left: 14, right: 14),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SliverToBoxAdapter(child: SizedBox(height: 1)),
+              provider.filteredPlugins.isEmpty && !provider.isLoading
                   ? SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.only(top: 64, left: 14, right: 14),
