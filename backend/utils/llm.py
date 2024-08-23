@@ -1,7 +1,7 @@
 import tiktoken
 import json
 from datetime import datetime
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
+from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
@@ -281,10 +282,6 @@ def num_tokens_from_string(string: str) -> int:
 # ***************************************************
 
 
-class ContextOutput(BaseModel):
-    topics: List[str] = Field(default=[], description="List of topics.")
-
-
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
 
@@ -349,45 +346,6 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     return response.dates_range
 
 
-def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[str], List[datetime]]]:
-    prompt = '''
-            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
-            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
-    
-            - First determine if the conversation requires context, in the field "requires_context".
-            - Context could be 2 different things:
-              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
-              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
-    
-            Conversation:
-            {conversation}
-            
-            {format_instructions}
-        '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=TopicsContext)
-
-    prompt = PromptTemplate(
-        template=prompt,
-        input_variables=["current_date", "conversation"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-
-    conversation = Message.get_messages_as_string(messages)
-
-    prompt_and_model = prompt | llm
-    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
-
-    try:
-        parsed_output = parser.invoke(output)
-        topics = parsed_output.topics
-        dates = parsed_output.dates_range
-        print(f'topics: {topics}, dates: {dates}')
-        return (topics, dates) if parsed_output.requires_context else None
-    except Exception as e:
-        print(f'Error determining requires context: {e}')
-        return None
-
-
 def retrieve_memory_context_params(memory: Memory) -> List[str]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
@@ -402,13 +360,22 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
     Conversation:
     {transcript}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput)
-    response: ContextOutput = with_parser.invoke(prompt)
-    return response.topics
+
+    try:
+        with_parser = llm.with_structured_output(TopicsContext)
+        response: TopicsContext = with_parser.invoke(prompt)
+        return response.topics
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return []
 
 
 class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
+
+
+class UserFacts(BaseModel):
+    facts: List[Fact] = Field(description="List of new user facts, preferences, interests, or topics.")
 
 
 def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
@@ -428,6 +395,46 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     with_parser = llm.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
+
+
+def new_facts_extractor(
+        segments: List[TranscriptSegment], user_name: str, existing_facts: List[Fact]
+) -> List[Fact]:
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    if not content or len(content) < 100:  # less than 100 chars, probably nothing
+        return []
+    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
+    # TODO: include negative facts too? Things the user doesn't like?
+
+    existing_facts = [f"{f.content} ({f.category.value})" for f in existing_facts]
+    facts = '' if not existing_facts else '\n- ' + '\n- '.join(existing_facts)
+    prompt = f'''
+    You are an experienced detective, whose job is to create detailed profile personas based on conversations.
+    
+    You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
+    Your task is to determine **new** facts, preferences, and interests about {user_name}, based on the transcript.
+    
+    Make sure these facts are:
+    - Relevant, and not repetitive or close to the existing facts we know about {user_name}.
+    - Use a format of "{user_name} likes to play tennis on weekends.".
+    - Contain one of the categories available.
+    - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
+    
+    This way we can create a more accurate profile. 
+    Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+
+    Existing Facts: {facts}
+
+    Conversation:
+    ```
+    {content}
+    ```
+    '''.replace('    ', '').strip()
+    # print(prompt)
+
+    with_parser = llm.with_structured_output(UserFacts)
+    response: UserFacts = with_parser.invoke(prompt)
+    return response.facts
 
 
 def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:

@@ -1,4 +1,5 @@
 import os
+import threading
 import asyncio
 import time
 
@@ -120,12 +121,16 @@ def postprocess_memory(
         #         profile_duration = profile_aseg.duration_seconds + separate_seconds
 
         signed_url = upload_postprocessing_audio(file_path)
+
+        # Ensure delete uploaded file in 15m
+        threads = threading.Thread(target=_delete_postprocessing_audio, args=(file_path, ))
+        threads.start()
+
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         os.remove(file_path)
 
-        asyncio.run(_delete_postprocessing_audio(file_path))
 
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
@@ -171,8 +176,7 @@ def postprocess_memory(
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
 
-
-async def _delete_postprocessing_audio(file_path: str):
+def _delete_postprocessing_audio(file_path):
     time.sleep(900)  # 15m
     delete_postprocessing_audio(file_path)
 
