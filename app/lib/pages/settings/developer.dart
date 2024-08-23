@@ -65,6 +65,127 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: ListView(
+            children: [
+              const SizedBox(height: 32),
+              _getText('Store your audios in Google Cloud Storage', bold: true),
+              const SizedBox(height: 16.0),
+              TextField(
+                controller: gcpCredentialsController,
+                obscureText: false,
+                autocorrect: false,
+                enableSuggestions: false,
+                enabled: true,
+                decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              TextField(
+                controller: gcpBucketNameController,
+                obscureText: false,
+                autocorrect: false,
+                enabled: true,
+                enableSuggestions: false,
+                decoration: _getTextFieldDecoration('GCP Bucket Name'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                title: const Text('Import Memories'),
+                subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
+                contentPadding: EdgeInsets.zero,
+                trailing: loadingImportMemories
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.download),
+                onTap: () async {
+                  if (loadingImportMemories) return;
+                  setState(() => loadingImportMemories = true);
+                  // open file picker
+                  var file = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['json'],
+                  );
+                  MixpanelManager().importMemories();
+                  if (file == null) {
+                    setState(() => loadingImportMemories = false);
+                    return;
+                  }
+                  var xFile = file.files.first.xFile;
+                  try {
+                    var content = (await xFile.readAsString());
+                    var decoded = jsonDecode(content);
+                    // Export uses [ServerMemory] structure
+                    List<ServerMemory> memories = decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
+                    debugPrint('Memories: $memories');
+                    var memoriesJson = memories.map((m) => m.toJson()).toList();
+                    bool result = await migrateMemoriesToBackend(memoriesJson);
+                    if (!result) {
+                      SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
+                      _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
+                    }
+                    _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
+                    MixpanelManager().importedMemories();
+                    SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
+                  } catch (e) {
+                    debugPrint(e.toString());
+                    _snackBar('Make sure the file is a valid JSON file.');
+                  }
+                  setState(() => loadingImportMemories = false);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Export Memories'),
+                subtitle: const Text('Export all your memories to a JSON file.'),
+                trailing: loadingExportMemories
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.upload),
+                onTap: loadingExportMemories
+                    ? null
+                    : () async {
+                        if (loadingExportMemories) return;
+                        setState(() => loadingExportMemories = true);
+                        List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
+                        String json = getPrettyJSONString(memories.map((m) => m.toJson()).toList());
+                        final directory = await getApplicationDocumentsDirectory();
+                        final file = File('${directory.path}/memories.json');
+                        await file.writeAsString(json);
+
+                        final result =
+                            await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                        if (result.status == ShareResultStatus.success) {
+                          debugPrint('Thank you for sharing the picture!');
+                        }
+                        MixpanelManager().exportMemories();
+                        // 54d2c392-57f1-46dc-b944-02740a651f7b
+                        setState(() => loadingExportMemories = false);
+                      },
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const SizedBox(height: 32),
                   _getText('Store your audios in Google Cloud Storage', bold: true),

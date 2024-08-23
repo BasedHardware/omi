@@ -1,3 +1,4 @@
+import tiktoken
 import json
 from datetime import datetime
 from typing import List, Tuple, Optional
@@ -8,7 +9,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
-from models.memory import Structured, MemoryPhoto, CategoryEnum
+from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
 
@@ -280,6 +281,10 @@ def num_tokens_from_string(string: str) -> int:
 # ***************************************************
 
 
+class ContextOutput(BaseModel):
+    topics: List[str] = Field(default=[], description="List of topics.")
+
+
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
 
@@ -383,6 +388,25 @@ def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[s
         return None
 
 
+def retrieve_memory_context_params(memory: Memory) -> List[str]:
+    transcript = memory.get_transcript(False)
+    if len(transcript) == 0:
+        return []
+
+    prompt = f'''
+    Based on the current transcript of a conversation.
+    
+    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
+    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+
+    Conversation:
+    {transcript}
+    '''.replace('    ', '').strip()
+    with_parser = llm.with_structured_output(ContextOutput)
+    response: ContextOutput = with_parser.invoke(prompt)
+    return response.topics
+
+
 class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
@@ -422,6 +446,27 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     If there's not enough information to provide a valuable answer, ask the user for clarification questions.
     {plugin_info}
     
+    Conversation History:
+    {conversation_history}
+
+    Context:
+    ```
+    {context}
+    ```
+    Answer:
+    """.replace('    ', '').strip()
+    print(prompt)
+    return llm.invoke(prompt).content
+
+
+def qa_emotional_rag(context: str, memories: List[Memory], emotion: str) -> str:
+    conversation_history = Memory.memories_to_string(memories)
+
+    prompt = f"""
+    You are a thoughtful friend. Use the following pieces of retrieved context, the conversation history and user's emotions to share your thoughts and give the user positive advice.
+    Thoughts and positive advice should be like a chat message. Keep it short.
+    User's emotions:
+    {emotion}
     Conversation History:
     {conversation_history}
 
