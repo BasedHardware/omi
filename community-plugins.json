@@ -644,6 +644,7 @@
       "setup_completed_url": "",
       "setup_instructions_file_path": "/plugins/instructions/screenpipe/README.md"
     },
+    "deleted": false
   },
   {
     "id": "echosense",
