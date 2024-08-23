@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import Dict, Tuple
+from typing import Dict
 
 from _shared import *
 from models.chat import Message
-from utils.llm import determine_requires_context
+from models.memory import Memory
 
 
 def _get_mesage(text: str, sender: str):
@@ -18,8 +18,8 @@ conversation = [
 ]
 
 
-def get_data(uid: str, topics: List[str], top_k: int = 1000) -> Dict[str, List]:
-    memories = get_memories(uid)
+def get_data(topics: List[str], top_k: int = 1000) -> Dict[str, List]:
+    memories = get_memories()
     memories = {memory['id']: memory for memory in memories}
     all_vectors = query_vectors('', uid, k=top_k)
     all_vectors = {
@@ -66,17 +66,17 @@ def get_markers(data, data_points, color, name, show_top=None):
     )
 
 
-def visualize():
-    uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
-
-    context: Tuple = determine_requires_context(conversation)
-    if not context or not context[0]:
-        print('No context is needed')
-        return
-    topics = context[0]
+def generate_topics_visualization(topics: List[str], file_path: str = 'embedding_visualization_multi_topic.html'):
+    # context: Tuple = determine_requires_context(conversation)
+    # if not context or not context[0]:
+    #     print('No context is needed')
+    #     return
+    # topics = context[0]
     # topics = ['Business', 'Entrepreneurship', 'Failures']
+    os.makedirs('visualizations/', exist_ok=True)
+    file_path = os.path.join('visualizations/', file_path)
 
-    data = get_data(uid, topics)
+    data = get_data(topics)
     all_embeddings = np.array([item['vector'] for item in data.values()])
 
     topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
@@ -108,14 +108,85 @@ def visualize():
         title='Embedding Visualization for Multiple Topics',
         xaxis_title='UMAP Dimension 1',
         yaxis_title='UMAP Dimension 2',
-        width=1000,
-        height=800,
+        width=800,
+        height=600,
         showlegend=True,
         hovermode='closest'
     )
 
-    generate_html_visualization(fig, file_name='embedding_visualization_multi_topic.html')
+    generate_html_visualization(fig, file_name=file_path)
+
+
+def get_data2(topics: List[str], retrieved_memories: List[Memory]) -> Dict[str, List]:
+    memories = get_memories()
+    memories = {memory['id']: memory for memory in memories}
+    all_vectors = query_vectors('', uid, k=1000)
+    all_vectors = {mid: {'vector': vector, 'topics': []} for mid, vector in all_vectors}
+
+    result = {}
+    retrieved_memories_id = {memory.id for memory in retrieved_memories}
+    for mid, data in all_vectors.items():
+        memory = memories.get(mid)
+        if not memory:
+            continue
+        result[mid] = {
+            'title': memory['structured']['title'],
+            'vector': data['vector'],
+            'topics': [] if memory['id'] not in retrieved_memories_id else topics
+        }
+
+    return result
+
+
+def generate_visualization(
+        topics: List[str], memories: List[Memory], file_path: str = 'embedding_visualization_multi_topic.html'
+):
+    # TODO: combine in single function
+    print('topics', topics)
+    os.makedirs('visualizations/', exist_ok=True)
+    file_path = os.path.join('visualizations/', file_path)
+
+    data = get_data2(topics, memories)
+    print('data', len(data))
+    all_embeddings = np.array([item['vector'] for item in data.values()])
+
+    topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
+    all_embeddings = np.vstack([all_embeddings] + topic_embeddings)
+
+    umap_transform = umap.UMAP(n_components=2, random_state=0, transform_seed=0)
+    umap_embeddings = umap_transform.fit_transform(all_embeddings)
+
+    data_points = umap_embeddings[:-len(topics)]
+    topic_points = umap_embeddings[-len(topics):]
+
+    fig = make_subplots(rows=1, cols=1)
+
+    colors = ['blue', 'green', 'orange', 'purple', 'cyan', 'magenta']
+
+    # Add all vectors
+    fig.add_trace(get_markers(data, data_points, 'gray', 'All Vectors'))
+
+    # Add vectors for each topic
+    for i, topic in enumerate(topics):
+        color = colors[i % len(colors)]
+        topic_data = {mid: item for mid, item in data.items() if topic in item['topics']}
+        topic_data_points = np.array([data_points[list(data.keys()).index(mid)] for mid in topic_data.keys()])
+
+        fig.add_trace(get_markers(topic_data, topic_data_points, color, f'Top 5 - {topic}'))
+        fig.add_trace(get_query_marker(topic_points[i], topic))
+
+    fig.update_layout(
+        title='Embedding Visualization for Multiple Topics',
+        xaxis_title='UMAP Dimension 1',
+        yaxis_title='UMAP Dimension 2',
+        width=800,
+        height=600,
+        showlegend=True,
+        hovermode='closest'
+    )
+
+    generate_html_visualization(fig, file_name=file_path)
 
 
 if __name__ == '__main__':
-    visualize()
+    generate_topics_visualization([])
