@@ -170,6 +170,10 @@ def postprocess_memory(
 
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
+    if not any(segment.is_user for segment in memory.transcript_segments):
+        print(f"Users transcript segments is emty. uid: {uid}. memory: {memory.id}")
+        return
+
     process_user_emotion(uid, language_code, memory, urls)
 
 
