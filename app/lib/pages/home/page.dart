@@ -319,13 +319,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             CapturePage(
                               key: capturePageKey,
                               device: _device,
-                              addMemory: (ServerMemory memory) {
-                                memProvider.addMemory(memory);
-                              },
-                              addMessage: (ServerMessage message) {
-                                context.read<MessageProvider>().addMessage(message);
-                                chatPageKey.currentState?.scrollToBottom();
-                              },
                               updateMemory: (ServerMemory memory) {
                                 memProvider.updateMemory(memory);
                               },

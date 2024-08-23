@@ -8,7 +8,6 @@ import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -29,16 +28,12 @@ import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
-  final Function addMemory;
-  final Function addMessage;
   final Function(ServerMemory) updateMemory;
   final BTDeviceStruct? device;
 
   const CapturePage({
     super.key,
     required this.device,
-    required this.addMemory,
-    required this.addMessage,
     required this.updateMemory,
   });
 
@@ -163,10 +158,6 @@ class CapturePageState extends State<CapturePage>
     debugPrint('restartWebSocket');
     closeWebSocket();
     context.read<CaptureProvider>().streamAudioToWs(btDevice!.id, SharedPreferencesUtil().deviceCodec);
-  }
-
-  void sendMessageToChat(ServerMessage message) {
-    widget.addMessage(message);
   }
 
   setHasTranscripts(bool hasTranscripts) {
