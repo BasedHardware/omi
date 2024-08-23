@@ -425,7 +425,7 @@ def new_facts_extractor(
     {content}
     ```
     '''.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
 
     with_parser = llm.with_structured_output(UserFacts)
     response: UserFacts = with_parser.invoke(prompt)

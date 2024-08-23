@@ -29,11 +29,11 @@ class FactDB(Fact):
     updated_at: datetime
 
     memory_id: str
-    # memory_category: CategoryEnum
+    memory_category: CategoryEnum
 
     reviewed: bool = False
     user_review: Optional[bool] = None
 
     manually_added: bool = False
-    manually_edited: bool = False
+    edited: bool = False
     deleted: bool = False

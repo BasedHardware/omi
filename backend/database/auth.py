@@ -24,13 +24,14 @@ def get_user_from_uid(uid: str):
 
 
 def get_user_name(uid: str):
+    # TODO: "The User" or "User"?
     if cached_name := get_cached_user_name(uid):
         return cached_name
 
     user = get_user_from_uid(uid)
     display_name = user.get('display_name', 'User').split(' ')[0] if user else 'User'
     if display_name == 'AnonymousUser':
-        display_name = 'The User'
+        display_name = 'User'
 
     cache_user_name(uid, display_name)
     return display_name
