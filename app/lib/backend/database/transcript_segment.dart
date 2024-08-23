@@ -1,11 +1,6 @@
-import 'dart:convert';
-
 import 'package:friend_private/backend/preferences.dart';
-import 'package:objectbox/objectbox.dart';
 
-@Entity()
 class TranscriptSegment {
-  @Id()
   int id = 0;
 
   String text;

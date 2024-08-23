@@ -276,17 +276,25 @@ List<Widget> getPluginsWidgets(
                         imageBuilder: (context, imageProvider) {
                           return CircleAvatar(
                             backgroundColor: Colors.white,
-                            maxRadius: 16,
+                            radius: 16,
                             backgroundImage: imageProvider,
                           );
                         },
                         errorWidget: (context, url, error) {
                           return const CircleAvatar(
                             backgroundColor: Colors.white,
-                            maxRadius: 16,
+                            radius: 16,
                             child: Icon(Icons.error_outline_rounded),
                           );
                         },
+                        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                          backgroundColor: Colors.white,
+                          radius: 16,
+                          child: CircularProgressIndicator(
+                            value: progress.progress,
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
                       ),
                       title: Text(
                         plugin.name,
