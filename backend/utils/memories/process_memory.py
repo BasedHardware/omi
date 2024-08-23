@@ -16,9 +16,10 @@ from models.facts import Fact, FactDB
 from models.memory import *
 from models.plugin import Plugin
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
-from utils.llm import qa_emotional_rag
+from utils.llm import obtain_emotional_message
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor
+from utils.memories.facts import get_prompt_data
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.plugins import get_plugins_data
@@ -117,7 +118,7 @@ def _extract_facts(uid: str, memory: Memory):
     existing_facts = facts_db.get_facts(uid)
     existing_facts = [Fact(**fact) for fact in existing_facts]
     user_name = get_user_name(uid)
-    new_facts = new_facts_extractor(memory.transcript_segments, user_name, existing_facts)
+    new_facts = new_facts_extractor(user_name, existing_facts, memory.transcript_segments)
     parsed_facts = []
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
@@ -240,8 +241,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Filter users emotions only
     users_frames = []
-    for seg in filter(lambda seg: seg.is_user == True and seg.start >= 0 and seg.end > seg.start,
-                      memory.transcript_segments):
+    for seg in filter(lambda seg: seg.is_user and 0 <= seg.start < seg.end, memory.transcript_segments):
         users_frames.append((seg.start, seg.end))
     if len(users_frames) == 0:
         print(f"User time frames are empty. Uid: {uid}")
@@ -277,13 +277,9 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     title = "Omi"
     context_str, memories = retrieve_rag_memory_context(uid, memory)
 
-    user_name = get_user_name(uid)
-    user_facts = [Fact(**fact) for fact in facts_db.get_facts(uid)]
-    response: str = qa_emotional_rag(user_name, user_facts, context_str, memories, emotion)
+    user_name, user_facts = get_prompt_data(uid)
+    response: str = obtain_emotional_message(user_name, user_facts, context_str, memories, emotion)
     message = response
-    if message is None or len(message) == 0:
-        print(f"Message is too short. Uid: {uid}. Message: {message}")
-        return
 
     print(title)
     print(message)

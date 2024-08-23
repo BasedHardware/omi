@@ -34,6 +34,34 @@ def delete_facts(uid: str):
     batch.commit()
 
 
+def get_fact(uid: str, fact_id: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    return fact_ref.get().to_dict()
+
+
+def review_fact(uid: str, fact_id: str, value: bool):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'reviewed': True, 'user_review': value})
+
+
+def edit_fact(uid: str, fact_id: str, value: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'content': value, 'edited': True})
+
+
+def delete_fact(uid: str, fact_id: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'deleted': True})
+
+
 def delete_facts_for_memory(uid: str, memory_id: str):
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
