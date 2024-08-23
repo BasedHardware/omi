@@ -1,7 +1,7 @@
 import tiktoken
 import json
 from datetime import datetime
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
@@ -360,9 +360,14 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
     Conversation:
     {transcript}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(TopicsContext)
-    response: TopicsContext = with_parser.invoke(prompt)
-    return response.topics
+
+    try:
+        with_parser = llm.with_structured_output(TopicsContext)
+        response: TopicsContext = with_parser.invoke(prompt)
+        return response.topics
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return []
 
 
 class SummaryOutput(BaseModel):
