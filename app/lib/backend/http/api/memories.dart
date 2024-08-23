@@ -7,6 +7,7 @@ import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
@@ -70,9 +71,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
 }
 
 Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
+  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing'),
+    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});

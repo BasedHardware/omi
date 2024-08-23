@@ -88,6 +88,10 @@ class SharedPreferencesUtil {
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
 
+  bool get optInEmotionalFeedback => getBool('optInEmotionalFeedback') ?? false;
+
+  set optInEmotionalFeedback(bool value) => saveBool('optInEmotionalFeedback', value);
+
   bool get devModeEnabled => getBool('devModeEnabled') ?? false;
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
