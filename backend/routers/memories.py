@@ -173,7 +173,7 @@ def postprocess_memory(
 
 
 async def _delete_postprocessing_audio(file_path: str):
-    time.sleep(900)  # 15m
+    await asyncio.sleep(900)  # 15m
     delete_postprocessing_audio(file_path)
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
