@@ -195,6 +195,7 @@ class WorkflowCreateMemory(BaseModel):
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
 
+
 class CreateMemoryResponse(BaseModel):
     memory: Memory
     messages: List[Message] = []

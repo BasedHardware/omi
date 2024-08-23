@@ -22,3 +22,12 @@ def save_facts(uid: str, data: List[dict]):
         fact_ref = facts_ref.document(fact['id'])
         batch.set(fact_ref, fact)
     batch.commit()
+
+
+def delete_facts(uid: str):
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    for doc in facts_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
