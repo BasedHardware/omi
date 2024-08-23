@@ -73,14 +73,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   int batteryLevel = -1;
   BTDeviceStruct? _device;
 
-  List<Plugin> plugins = [];
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
   bool scriptsInProgress = false;
 
   Future<void> _initiatePlugins() async {
     context.read<PluginProvider>().getPlugins();
-    plugins = SharedPreferencesUtil().pluginsList;
   }
 
   @override
@@ -526,45 +524,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                           ),
                     _controller!.index == 2
-                        ? Padding(
-                            padding: const EdgeInsets.only(left: 0),
-                            child: Container(
-                              // decoration: BoxDecoration(
-                              //   border: Border.all(color: Colors.grey),
-                              //   borderRadius: BorderRadius.circular(30),
-                              // ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: DropdownButton<String>(
-                                menuMaxHeight: 350,
-                                value: SharedPreferencesUtil().selectedChatPluginId,
-                                onChanged: (s) async {
-                                  if ((s == 'no_selected' && plugins.where((p) => p.enabled).isEmpty) ||
-                                      s == 'enable') {
-                                    await routeToPage(context, const PluginsPage(filterChatOnly: true));
-                                    plugins = SharedPreferencesUtil().pluginsList;
-                                    setState(() {});
-                                    return;
-                                  }
-                                  print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
-                                  if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+                        ? Consumer<PluginProvider>(builder: (context, provider, child) {
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 0),
+                              child: Container(
+                                // decoration: BoxDecoration(
+                                //   border: Border.all(color: Colors.grey),
+                                //   borderRadius: BorderRadius.circular(30),
+                                // ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: DropdownButton<String>(
+                                  menuMaxHeight: 350,
+                                  value: SharedPreferencesUtil().selectedChatPluginId,
+                                  onChanged: (s) async {
+                                    if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) ||
+                                        s == 'enable') {
+                                      await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                                      return;
+                                    }
+                                    print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
+                                    if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
 
-                                  SharedPreferencesUtil().selectedChatPluginId = s;
-                                  var plugin = plugins.firstWhereOrNull((p) => p.id == s);
-                                  chatPageKey.currentState?.sendInitialPluginMessage(plugin);
-                                  setState(() {});
-                                },
-                                icon: Container(),
-                                alignment: Alignment.center,
-                                dropdownColor: Colors.black,
-                                style: const TextStyle(color: Colors.white, fontSize: 16),
-                                underline: Container(height: 0, color: Colors.transparent),
-                                isExpanded: false,
-                                itemHeight: 48,
-                                padding: EdgeInsets.zero,
-                                items: _getPluginsDropdownItems(context),
+                                    SharedPreferencesUtil().selectedChatPluginId = s;
+                                    var plugin = provider.plugins.firstWhereOrNull((p) => p.id == s);
+                                    chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                                  },
+                                  icon: Container(),
+                                  alignment: Alignment.center,
+                                  dropdownColor: Colors.black,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  underline: Container(height: 0, color: Colors.transparent),
+                                  isExpanded: false,
+                                  itemHeight: 48,
+                                  padding: EdgeInsets.zero,
+                                  items: _getPluginsDropdownItems(context, provider),
+                                ),
                               ),
-                            ),
-                          )
+                            );
+                          })
                         : const SizedBox(width: 16),
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
@@ -578,8 +575,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
                           capturePageKey.currentState?.restartWebSocket();
                         }
-                        plugins = SharedPreferencesUtil().pluginsList;
-                        setState(() {});
                       },
                     )
                   ],
@@ -592,7 +587,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     ));
   }
 
-  _getPluginsDropdownItems(BuildContext context) {
+  _getPluginsDropdownItems(BuildContext context, PluginProvider provider) {
     var items = [
           DropdownMenuItem<String>(
             value: 'no_selected',
@@ -602,14 +597,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           )
         ] +
-        plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
+        provider.plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
             child: Row(
@@ -632,7 +627,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
           );
         }).toList();
-    if (plugins.where((p) => p.enabled).isNotEmpty) {
+    if (provider.plugins.where((p) => p.enabled).isNotEmpty) {
       items.add(const DropdownMenuItem<String>(
         value: 'enable',
         child: Row(

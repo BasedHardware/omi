@@ -64,6 +64,7 @@ class _PluginsPageState extends State<PluginsPage> {
       MixpanelManager().pluginDisabled(pluginId);
     }
     context.read<PluginProvider>().setPluginLoading(idx, false);
+    context.read<PluginProvider>().getPlugins();
   }
 
   @override
