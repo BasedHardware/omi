@@ -145,6 +145,8 @@ class Memory(BaseModel):
     def memories_to_string(memories: List['Memory']) -> str:
         result = []
         for i, memory in enumerate(memories):
+            if isinstance(memory, dict):
+                memory = Memory(**memory)          
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
