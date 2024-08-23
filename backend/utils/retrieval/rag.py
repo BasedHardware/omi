@@ -8,7 +8,7 @@ from models.chat import Message
 from models.memory import Memory
 from models.transcript_segment import TranscriptSegment
 from utils.llm import requires_context, retrieve_context_params, retrieve_context_dates, chunk_extraction, \
-    num_tokens_from_string
+    num_tokens_from_string, retrieve_memory_context_params
 
 
 def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:
@@ -105,5 +105,41 @@ def retrieve_rag_context(
 
     if return_context_params:
         return context_str, (memories if context_str else []), topics, dates_range
+
+    return context_str, (memories if context_str else [])
+
+
+def retrieve_rag_memory_context(uid: str, memory: Memory) -> Tuple[str, List[Memory]]:
+    topics = retrieve_memory_context_params(memory)
+    print('retrieve_memory_rag_context', topics)
+    if not topics:
+        return '', []
+
+    if len(topics) > 5:
+        topics = topics[:5]
+
+    memories_id_to_topics = {}
+    if topics:
+        memories_id_to_topics, memories = retrieve_memories_for_topics(uid, topics, [])
+        id_counter = Counter(memory['id'] for memory in memories)
+        memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
+
+    memories = [Memory(**memory) for memory in memories]
+    if len(memories) > 10:
+        memories = memories[:10]
+
+    if memories_id_to_topics:
+        # TODO: restore sorthing here
+        context_data = {}
+        threads = []
+        for memory in memories:
+            topics = memories_id_to_topics.get(memory.id, [])
+            t = threading.Thread(target=get_better_memory_chunk, args=(memory, topics, context_data))
+            threads.append(t)
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        context_str = '\n'.join(context_data.values()).strip()
+    else:
+        context_str = Memory.memories_to_string(memories)
 
     return context_str, (memories if context_str else [])
