@@ -28,6 +28,8 @@ else:
     index = None
 
 import database.memories as memories_db
+# noinspection PyUnresolvedReferences
+import database.facts as facts_db
 
 uid = 'DX8n89KAmUaG9O7Qvj8xTi81Zu12'
 
