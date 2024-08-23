@@ -17,12 +17,18 @@ class HumePredictionEmotionResponseModel:
         model = cls(data["name"], data["score"])
         return model
 
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'score': self.score,
+        }
+
 
 class HumeJobModelPredictionResponseModel:
     def __init__(
             self,
             time,
-            emotions=[],
+            emotions: [HumePredictionEmotionResponseModel] = [],
     ) -> None:
         self.emotions = emotions
         self.time = time
