@@ -7,6 +7,8 @@ class PluginProvider extends ChangeNotifier {
   List<Plugin> plugins = [];
   List<Plugin> filteredPlugins = [];
 
+  bool isLoading = false;
+
   bool filterChat = true;
   bool filterMemories = true;
   bool filterExternal = true;
@@ -16,6 +18,11 @@ class PluginProvider extends ChangeNotifier {
 
   void setPluginLoading(int index, bool value) {
     pluginLoading[index] = value;
+    notifyListeners();
+  }
+
+  void setLoading(bool value) {
+    isLoading = value;
     notifyListeners();
   }
 
@@ -63,6 +70,7 @@ class PluginProvider extends ChangeNotifier {
   }
 
   Future getPlugins() async {
+    setLoading(true);
     if (SharedPreferencesUtil().pluginsList.isEmpty) {
       plugins = await retrievePlugins();
     } else {
@@ -70,6 +78,7 @@ class PluginProvider extends ChangeNotifier {
     }
     filteredPlugins = plugins;
     pluginLoading = List.filled(plugins.length, false);
+    setLoading(false);
     notifyListeners();
   }
 }
