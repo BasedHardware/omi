@@ -7,7 +7,7 @@ from database.vector_db import query_vectors
 from models.chat import Message
 from models.memory import Memory
 from models.transcript_segment import TranscriptSegment
-from utils.llm import requires_context, retrieve_context_params, retrieve_context_dates, chunk_extraction, \
+from utils.llm import requires_context, retrieve_context_topics, retrieve_context_dates, chunk_extraction, \
     num_tokens_from_string, retrieve_memory_context_params
 
 
@@ -20,8 +20,8 @@ def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: 
 
 
 def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List):
-    start_timestamp = dates_range[0].timestamp() if dates_range else None
-    end_timestamp = dates_range[1].timestamp() if dates_range else None
+    start_timestamp = dates_range[0].timestamp() if len(dates_range) == 2 else None
+    end_timestamp = dates_range[1].timestamp() if len(dates_range) == 2 else None
 
     memories_id = defaultdict(list)
     threads = []
@@ -34,7 +34,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     [t.join() for t in threads]
 
     # FIXME, fix the source of the issue, not this patch
-    if not memories_id and dates_range:
+    if not memories_id and len(dates_range) == 2:
         threads = []
         for topic in topics:
             t = threading.Thread(target=retrieve_for_topic, args=(uid, topic, None, None, top_k, memories_id))
@@ -64,7 +64,7 @@ def retrieve_rag_context(
     if not requires:
         return '', []
 
-    topics = retrieve_context_params(prev_messages)
+    topics = retrieve_context_topics(prev_messages)
     dates_range = retrieve_context_dates(prev_messages)
     print('retrieve_rag_context', topics, dates_range)
     if not topics and len(dates_range) != 2:
