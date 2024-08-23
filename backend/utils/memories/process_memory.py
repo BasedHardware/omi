@@ -207,6 +207,10 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     uid = task.user_uid
 
+    # Save predictions
+    if len(callback.predictions) > 0:
+        memories_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider, callback.predictions)
+
     # Memory
     memory_data = memories_db.get_memory(uid, task.memory_id)
     if memory_data is None:
