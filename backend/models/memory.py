@@ -161,6 +161,7 @@ class Memory(BaseModel):
         return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool) -> str:
+        # Warn: missing transcript for workflow source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
@@ -194,6 +195,8 @@ class WorkflowCreateMemory(BaseModel):
     source: MemorySource = MemorySource.workflow
     language: Optional[str] = None
 
+    def get_transcript(self, include_timestamps: bool) -> str:
+        return self.text
 
 class CreateMemoryResponse(BaseModel):
     memory: Memory
