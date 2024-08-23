@@ -2,13 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from models.chat import Message
 from models.transcript_segment import TranscriptSegment
-
-app = FastAPI()
 
 
 class CategoryEnum(str, Enum):
@@ -30,6 +27,8 @@ class CategoryEnum(str, Enum):
     social = 'social'
     work = 'work'
     sports = 'sports'
+    literature = 'literature'
+    history = 'history'
     other = 'other'
 
 
@@ -197,6 +196,7 @@ class WorkflowCreateMemory(BaseModel):
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
+
 
 class CreateMemoryResponse(BaseModel):
     memory: Memory
