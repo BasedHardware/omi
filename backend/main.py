@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 
@@ -64,6 +63,6 @@ for path in paths:
         os.makedirs(path)
 
 
-@modal_app.function(image=image,schedule=Cron('15 * * * *'))
+@modal_app.function(image=image,schedule=Cron('* * * * *'))
 async def start_job():
-    asyncio.run(start_cron_job())
+    await start_cron_job()
