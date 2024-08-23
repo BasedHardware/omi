@@ -26,6 +26,8 @@ def get_memory(uid, memory_id):
     return memory_ref.get().to_dict()
 
 
+
+
 def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False):
     memories_ref = (
         db.collection('users').document(uid).collection('memories')

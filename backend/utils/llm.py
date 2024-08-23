@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
+from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
@@ -387,6 +388,10 @@ class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
+class UserFacts(BaseModel):
+    facts: List[Fact] = Field(description="List of new user facts, preferences, interests, or topics.")
+
+
 def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
     content = TranscriptSegment.segments_as_string(segments)
     prompt = f'''
@@ -404,6 +409,46 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     with_parser = llm.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
+
+
+def new_facts_extractor(
+        segments: List[TranscriptSegment], user_name: str, existing_facts: List[Fact]
+) -> List[Fact]:
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    if not content or len(content) < 100:  # less than 100 chars, probably nothing
+        return []
+    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
+    # TODO: include negative facts too? Things the user doesn't like?
+
+    existing_facts = [f"{f.content} ({f.category.value})" for f in existing_facts]
+    facts = '' if not existing_facts else '\n- ' + '\n- '.join(existing_facts)
+    prompt = f'''
+    You are an experienced detective, whose job is to create detailed profile personas based on conversations.
+    
+    You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
+    Your task is to determine **new** facts, preferences, and interests about {user_name}, based on the transcript.
+    
+    Make sure these facts are:
+    - Relevant, and not repetitive or close to the existing facts we know about {user_name}.
+    - Use a format of "{user_name} likes to play tennis on weekends.".
+    - Contain one of the categories available.
+    - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
+    
+    This way we can create a more accurate profile. 
+    Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+
+    Existing Facts: {facts}
+
+    Conversation:
+    ```
+    {content}
+    ```
+    '''.replace('    ', '').strip()
+    print(prompt)
+
+    with_parser = llm.with_structured_output(UserFacts)
+    response: UserFacts = with_parser.invoke(prompt)
+    return response.facts
 
 
 def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
