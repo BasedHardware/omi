@@ -10,7 +10,7 @@ Future<Device?> scanAndConnectDevice({bool autoConnect = true, bool timeout = fa
   print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());
+      return AnyDeviceType().getOrCreate(device.platformName, device.remoteId.str, await device.readRssi());
     }
   }
   int timeoutCounter = 0;

@@ -12,6 +12,7 @@ class FrameDeviceType extends BtleDeviceType {
 
   @override
   Device createDeviceFromScan(String name, String id, int? rssi) {
+    print("Creating FrameDevice from scan with id $id, name $name, rssi $rssi");
     FrameDevice device = FrameDevice(id);
     device.name = name;
     if (rssi != null) {

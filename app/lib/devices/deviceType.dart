@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/devices/btleDevice.dart';
 import 'package:friend_private/devices/device.dart';
 import 'package:friend_private/devices/friend/friendDeviceType.dart';
 import 'package:friend_private/devices/friend/openGlassDeviceType.dart';
@@ -13,6 +14,20 @@ abstract class DeviceType {
 
   Device createDeviceFromScan(String name, String id, int? rssi);
   Future<List<Device>> findDevices();
+
+  static final Map<String, Device> _deviceInstances = {};
+
+  Device getOrCreate(String name, String id, int? rssi) {
+    if (_deviceInstances.containsKey(id) && _deviceInstances[id] != null) {
+      if (rssi != null && _deviceInstances[id] is BtleDevice) {
+        (_deviceInstances[id] as BtleDevice).rssi = rssi;
+      }
+      return _deviceInstances[id]!;
+    }
+    final newDevice = createDeviceFromScan(name, id, rssi); 
+    _deviceInstances[id] = newDevice;
+    return newDevice;
+  }
 }
 
 abstract class BtleDeviceType extends DeviceType {
@@ -33,7 +48,7 @@ abstract class BtleDeviceType extends DeviceType {
           scannedDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
 
           devices = scannedDevices.map((deviceResult) {
-            return createDeviceFromScan(
+            return getOrCreate(
               deviceResult.device.platformName,
               deviceResult.device.remoteId.str,
               deviceResult.rssi,
@@ -82,7 +97,7 @@ class AnyDeviceType extends BtleDeviceType {
     print('createDeviceFromScan: $name');
     for (var deviceType in deviceTypes) {
       if (name.startsWith(deviceType.deviceNameForMatching)) {
-        return deviceType.createDeviceFromScan(name, id, rssi);
+        return deviceType.getOrCreate(name, id, rssi);
       }
     }
     throw Exception('Device type not found: $name');

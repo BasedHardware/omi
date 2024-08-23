@@ -7,6 +7,7 @@ import 'device.dart';
 
 abstract class BtleDevice extends Device {
   BtleDevice() : super();
+  BluetoothDevice? device;
 
   int? rssi;
   StreamSubscription<BluetoothConnectionState>?
@@ -15,11 +16,17 @@ abstract class BtleDevice extends Device {
       BluetoothConnectionState.disconnected;
 
   void _initConnectionStateListener(
-      Stream<BluetoothConnectionState> connectionStateStream) {
+      Stream<BluetoothConnectionState> connectionStateStream) async {
     if (_connectionStateStreamSubscription != null) {
       _connectionStateStreamSubscription!.cancel();
     }
     _connectionStateStreamSubscription = connectionStateStream.listen((state) {
+      if (state == BluetoothConnectionState.connected && _connectionState == BluetoothConnectionState.disconnected) {
+        print("Connected to device: $name");
+        init();
+      } else if (state == BluetoothConnectionState.disconnected && _connectionState == BluetoothConnectionState.connected) {
+        print("Disconnected from device: $name");
+      }
       _connectionState = state;
     });
   }
@@ -32,8 +39,8 @@ abstract class BtleDevice extends Device {
   }
 
   Stream<BluetoothConnectionState> get connectionStateStream {
-    final device = BluetoothDevice.fromId(id);
-    return device.connectionState;
+    device ??= BluetoothDevice.fromId(id);
+    return device!.connectionState;
   }
 
   @override
@@ -44,27 +51,23 @@ abstract class BtleDevice extends Device {
     if (isConnected) {
       return this;
     }
-    final device = BluetoothDevice.fromId(id);
+    device ??= BluetoothDevice.fromId(id);
     try {
       // TODO: for android seems like the reconnect or resetState is not working
       if (!autoConnect) {
-        await device.connect(autoConnect: false);
-        await init();
-        await afterConnect();
+        await device!.connect(autoConnect: false);
         return this;
       }
-      name = device.platformName;
+      name = device!.platformName;
       // Step 1: Connect with autoConnect
-      await device.connect(autoConnect: true, mtu: null);
+      await device!.connect(autoConnect: true, mtu: null);
       // Step 2: Listen to the connection state to ensure the device is connected
-      _initConnectionStateListener(device.connectionState);
-      await device.connectionState
+      _initConnectionStateListener(device!.connectionState);
+      await device!.connectionState
           .where((state) => state == BluetoothConnectionState.connected)
           .first;
 
-      rssi = await device.readRssi();
-      await init();
-      await afterConnect();
+      rssi = await device!.readRssi();
     } catch (e) {
       print('bleConnectDevice failed: $e');
     }
@@ -73,9 +76,9 @@ abstract class BtleDevice extends Device {
 
   @override
   Future disconnectDevice() async {
-    final device = BluetoothDevice.fromId(id);
+    device ??= BluetoothDevice.fromId(id);
     try {
-      await device.disconnect(queue: false);
+      await device!.disconnect(queue: false);
     } catch (e) {
       print('bleDisconnectDevice failed: $e');
     }
@@ -99,8 +102,8 @@ abstract class BtleDevice extends Device {
   }
 
   Future<BluetoothService?> getService(BtServiceDef serviceDef) async {
-    final device = BluetoothDevice.fromId(id);
-    final allServices = await device.discoverServices();
+    device ??= BluetoothDevice.fromId(id);
+    final allServices = await device!.discoverServices();
     return allServices.firstWhereOrNull((s) => serviceDef.matchesService(s));
   }
 

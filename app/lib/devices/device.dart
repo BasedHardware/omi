@@ -37,8 +37,6 @@ abstract class Device {
     }
   }
 
-  
-
   factory Device.fromJson(Map<String, dynamic> json) {
     late DeviceType type;
     if (json['type'] != null) {
@@ -49,7 +47,7 @@ abstract class Device {
       type = FriendDeviceType();
     }
 
-    return type.createDeviceFromScan(
+    return type.getOrCreate(
         json['name'] as String, json['id'] as String, json['rssi'] as int?);
   }
 

@@ -53,6 +53,7 @@ class FrameDevice extends BtleDevice {
   }
 
   Future<void> sendHeartbeat() async {
+    print("Sending heartbeat to frame");
     final heartbeatBytes = Uint8List.fromList(utf8.encode("HEARTBEAT"));
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
@@ -60,12 +61,12 @@ class FrameDevice extends BtleDevice {
   @override
   Future<void> afterConnect() async {
     if (_frame == null) {
-      await init();
+      throw Exception("Frame is not initialised");
     }
-    if (_frame == null || _frame!.isConnected == false) {
+    if (_frame!.isConnected == false) {
       return;
     }
-    _frame!.bluetooth.stringResponse.listen((data) {
+    var debugSubscription = _frame!.bluetooth.stringResponse.listen((data) {
       print("Frame printed: $data");
     });
     bool isLoaded = false;
@@ -96,9 +97,11 @@ class FrameDevice extends BtleDevice {
       }
       await _frame!.runLua("require('main')");
       await _frame!.runLua("start()");
-    } else {
+    } else if (!isRunning) {
       print("Frame already loaded, running start()");
       await _frame!.runLua("start()");
+    } else {
+      print("Frame loop already running");
     }
     await Future.delayed(const Duration(milliseconds: 1000));
 
@@ -109,15 +112,16 @@ class FrameDevice extends BtleDevice {
     });
 
     // Cancel heartbeat subscription when device disconnects
-    final device = BluetoothDevice.fromId(id);
-    device.cancelWhenDisconnected(_heartbeatSubscription!);
+    device ??= BluetoothDevice.fromId(id);
+    device!.cancelWhenDisconnected(_heartbeatSubscription!);
+    device!.cancelWhenDisconnected(debugSubscription);
   }
 
   Future<bool> sendUntilEchoed(String data,
       {int maxAttempts = 3,
       Duration timeout = const Duration(seconds: 10)}) async {
     Uint8List bytesToSend = Uint8List.fromList(utf8.encode(data));
-    print("Sending $data to frame");
+    //print("Sending $data to frame");
 
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -126,7 +130,7 @@ class FrameDevice extends BtleDevice {
             .timeout(timeout);
         await _frame!.bluetooth.sendData(bytesToSend);
         await future;
-        print("Received ECHO:$data from frame");
+        //print("Received ECHO:$data from frame");
         return true;
       } catch (e) {
         if (e is TimeoutException) {
@@ -139,7 +143,8 @@ class FrameDevice extends BtleDevice {
             return false;
           }
         } else {
-          rethrow;
+          print("Error sending $data to frame: $e");
+          return false;
         }
       }
     }
@@ -165,10 +170,10 @@ class FrameDevice extends BtleDevice {
   Future<StreamSubscription?> getAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
-      await init();
-    }
-    if (_frame == null || _frame!.isConnected == false) {
-      return null;
+      await Future.doWhile(() async {
+        await Future.delayed(Duration(milliseconds: 100));
+        return !(_frame?.isConnected ?? false);
+      });
     }
 
     StreamSubscription<Uint8List> subscription =
@@ -178,8 +183,8 @@ class FrameDevice extends BtleDevice {
       await sendUntilEchoed("MIC STOP");
     });
 
-    final device = BluetoothDevice.fromId(id);
-    device.cancelWhenDisconnected(subscription);
+    device ??= BluetoothDevice.fromId(id);
+    device!.cancelWhenDisconnected(subscription);
 
     final audioCodec = await getAudioCodec();
     await sendUntilEchoed("sampleRate=${audioCodec.sampleRate}");
@@ -199,11 +204,11 @@ class FrameDevice extends BtleDevice {
   @override
   Future<StreamSubscription<List<int>>?> getBatteryLevelListener(
       {void Function(int)? onBatteryLevelChange}) async {
-    if (_frame == null) {
-      await init();
-    }
     if (_frame == null || _frame!.isConnected == false) {
-      return null;
+      await Future.doWhile(() async {
+        await Future.delayed(Duration(milliseconds: 100));
+        return !(_frame?.isConnected ?? false);
+      });
     }
 
     Future<void> checkBatteryLevel(Uint8List data) async {
@@ -219,8 +224,8 @@ class FrameDevice extends BtleDevice {
       if (value.isNotEmpty) checkBatteryLevel(value);
     });
 
-    final device = BluetoothDevice.fromId(id);
-    device.cancelWhenDisconnected(subscription);
+    device ??= BluetoothDevice.fromId(id);
+    device!.cancelWhenDisconnected(subscription);
 
     return subscription;
   }
@@ -232,17 +237,31 @@ class FrameDevice extends BtleDevice {
 
   @override
   Future<void> init() async {
+    bool wasConnected = _frame?.isConnected ?? false;
+    print("Initialising Frame Device");
     _frame ??= Frame();
     _frame!.useLibrary = false;
-    if (await _frame!.connectToDevice(id)) {
+    device ??= BluetoothDevice.fromId(id);
+    bool connected = false;
+    if (device!.isConnected) {
+      print("Device is already connected, so attaching to existing connection");
+      connected = await _frame!.connectToExistingBleDevice(device!);
+    } else {
+      print("Device is not connected, so connecting to device");
+      connected = await _frame!.connectToDevice(id);
+    }
+    if (connected) {
       _firmwareRevision = await _frame!.evaluate("frame.FIRMWARE_VERSION");
       _hardwareRevision = "1";
       _modelNumber = "1";
 
       if (Platform.isAndroid) {
-        final device = BluetoothDevice.fromId(id);
-        await device.requestMtu(512);
+        await device!.requestMtu(512);
       }
+
+      
+      await afterConnect();
+      
     }
   }
 
@@ -256,7 +275,10 @@ class FrameDevice extends BtleDevice {
   @override
   Future<int> retrieveBatteryLevel() async {
     if (_frame == null || _frame!.isConnected == false) {
-      await init();
+      await Future.doWhile(() async {
+        await Future.delayed(Duration(milliseconds: 100));
+        return !(_frame?.isConnected ?? false);
+      });
     }
     return _batteryLevel ?? -1;
   }
@@ -268,10 +290,10 @@ class FrameDevice extends BtleDevice {
   Future<StreamSubscription?> getImageListener(
       {required void Function(Uint8List p1) onImageReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
-      await init();
-    }
-    if (_frame == null || _frame!.isConnected == false) {
-      return null;
+      await Future.doWhile(() async {
+        await Future.delayed(Duration(milliseconds: 100));
+        return !(_frame?.isConnected ?? false);
+      });
     }
 
     StreamSubscription<Uint8List> subscription = _frame!.bluetooth
@@ -281,13 +303,16 @@ class FrameDevice extends BtleDevice {
         print("Received photo data from frame, length = ${value.length}");
         final header = base64.decode(_photoHeader);
         final combinedData = Uint8List.fromList([...header, ...value]);
-        print("Processed photo data from frame, length = ${combinedData.length}");
+        print(
+            "Processed photo data from frame, length = ${combinedData.length}");
         onImageReceived(combinedData);
       }
     });
     subscription.onDone(() async {
       // await sendUntilEchoed("CAMERA STOP");
     });
+
+    device!.cancelWhenDisconnected(subscription);
 
     return subscription;
   }

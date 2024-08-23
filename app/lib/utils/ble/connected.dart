@@ -10,7 +10,7 @@ Future<Device?> getConnectedDevice() async {
   var deviceId = SharedPreferencesUtil().btDeviceStruct?.id;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      return AnyDeviceType().createDeviceFromScan(device.platformName, device.remoteId.str, await device.readRssi());
+      return AnyDeviceType().getOrCreate(device.platformName, device.remoteId.str, await device.readRssi());
     }
   }
   debugPrint('getConnectedDevice: device not found');
@@ -29,7 +29,7 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener({
         onDisconnected();
       } else if (event.connectionState == BluetoothConnectionState.connected) {
         print('Connected to ${event.device.platformName}');
-        onConnected(AnyDeviceType().createDeviceFromScan(event.device.platformName, event.device.remoteId.str, await event.device.readRssi()));
+        onConnected(AnyDeviceType().getOrCreate(event.device.platformName, event.device.remoteId.str, await event.device.readRssi()));
       }
     }
   });

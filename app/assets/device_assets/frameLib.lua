@@ -412,3 +412,5 @@ function start()
 	mainLoop()
 	print("FrameLib start() done")
 end
+
+start()
