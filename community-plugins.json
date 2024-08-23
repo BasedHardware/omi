@@ -628,6 +628,24 @@
     "deleted": false
   },
   {
+    "id": "screenpipe",
+    "name": "screenpipe",
+    "author": "Matthew Diakonov",
+    "description": "Stream your desktop memories to Friend and stream your Friend memories to screenpipe",
+    "image": "/plugins/instructions/screenpipe/assets/screenpipe_logo.png",
+    "memories": false,
+    "chat": false,
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": ["memory_creation", "transcript_processed"],
+      "webhook_url": "",
+      "setup_completed_url": "",
+      "setup_instructions_file_path": "/plugins/instructions/screenpipe/README.md"
+    },
+  },
+  {
     "id": "echosense",
     "name": "EchoSense",
     "author": "Luis Arano",
