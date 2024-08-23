@@ -4,6 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from database._client import document_id_from_seed
 from models.memory import CategoryEnum
 
 
@@ -21,6 +22,11 @@ class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
 
+    @staticmethod
+    def get_facts_as_str(facts):
+        existing_facts = [f"{f.content} ({f.category.value})" for f in facts]
+        return '' if not existing_facts else '\n- ' + '\n- '.join(existing_facts)
+
 
 class FactDB(Fact):
     id: str
@@ -37,3 +43,16 @@ class FactDB(Fact):
     manually_added: bool = False
     edited: bool = False
     deleted: bool = False
+
+    @staticmethod
+    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum) -> 'FactDB':
+        return FactDB(
+            id=document_id_from_seed(fact.content),
+            uid=uid,
+            content=fact.content,
+            category=fact.category,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            memory_id=memory_id,
+            memory_category=memory_category,
+        )
