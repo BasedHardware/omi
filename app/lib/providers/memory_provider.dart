@@ -44,8 +44,8 @@ class MemoryProvider extends ChangeNotifier {
     filteredMemories = [];
     filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
     filteredMemories = query.isEmpty
-        ? memories
-        : memories
+        ? filteredMemories
+        : filteredMemories
             .where(
               (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
                   .toLowerCase()
@@ -60,6 +60,7 @@ class MemoryProvider extends ChangeNotifier {
     MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
     displayDiscardMemories = !displayDiscardMemories;
     filterMemories('');
+    populateMemoriesWithDates();
     notifyListeners();
   }
 
@@ -100,6 +101,7 @@ class MemoryProvider extends ChangeNotifier {
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
+    filterMemories('');
     notifyListeners();
   }
 
@@ -112,6 +114,7 @@ class MemoryProvider extends ChangeNotifier {
         memories[i] = memory;
       }
     }
+    filterMemories('');
     notifyListeners();
   }
 
