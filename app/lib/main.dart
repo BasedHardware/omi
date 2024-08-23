@@ -7,7 +7,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/database/box.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
@@ -44,7 +43,6 @@ Future<bool> _init() async {
 
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
-  await ObjectBoxUtil.init();
   await MixpanelManager.init();
 
   listenAuthTokenChanges();
