@@ -1,37 +1,36 @@
 import asyncio
-import os
 import time
-import uuid
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
-from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from utils.redis_utils import get_user_speech_profile, get_user_speech_profile_duration
-from utils.stt.deepgram_util import process_audio_dg, send_initial_file2, transcribe_file_deepgram
-from utils.stt.vad import VADIterator, model, get_speech_state, SpeechState, vad_is_empty
+from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
+from utils.stt.streaming import process_audio_dg, send_initial_file
+from utils.stt.vad import VADIterator, model
+
+# import opuslib
 
 router = APIRouter()
 
 
 # @router.post("/v1/transcribe", tags=['v1'])
 # will be used again in Friend V2
-def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
-    upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
-    aseg = AudioSegment.from_wav(file_path)
-    print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
-
-    if vad_is_empty(file_path):  # TODO: get vad segments
-        os.remove(file_path)
-        return []
-    transcript = transcribe_file_deepgram(file_path, language=language)
-    os.remove(file_path)
-    return transcript
+# def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
+#     upload_id = str(uuid.uuid4())
+#     file_path = f"_temp/{upload_id}_{file.filename}"
+#     with open(file_path, 'wb') as f:
+#         f.write(file.file.read())
+#
+#     aseg = AudioSegment.from_wav(file_path)
+#     print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
+#
+#     if vad_is_empty(file_path):  # TODO: get vad segments
+#         os.remove(file_path)
+#         return []
+#     transcript = transcribe_file_deepgram(file_path, language=language)
+#     os.remove(file_path)
+#     return transcript
 
 
 # templates = Jinja2Templates(directory="templates")
@@ -64,7 +63,7 @@ async def _websocket_util(
                                                    preseconds=duration)
         if duration:
             transcript_socket2 = await process_audio_dg(uid, websocket, language, sample_rate, codec, channels)
-            await send_initial_file2(speech_profile, transcript_socket)
+            await send_initial_file(speech_profile, transcript_socket)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
@@ -78,7 +77,7 @@ async def _websocket_util(
         nonlocal websocket_active
         audio_buffer = bytearray()
         timer_start = time.time()
-        speech_state = SpeechState.no_speech
+        # speech_state = SpeechState.no_speech
         voice_found, not_voice = 0, 0
         # path = 'scripts/vad/audio_bytes.txt'
         # if os.path.exists(path):
@@ -88,28 +87,6 @@ async def _websocket_util(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
-
-                if codec == 'pcm8':
-                    frame_size, frames_count = 160, 16
-                    if len(audio_buffer) < (frame_size * frames_count):
-                        continue
-
-                    latest_speech_state = get_speech_state(
-                        audio_buffer[:window_size_samples * 10], vad_iterator, window_size_samples
-                    )
-                    if latest_speech_state:
-                        speech_state = latest_speech_state
-
-                    if (voice_found or not_voice) and (voice_found + not_voice) % 100 == 0:
-                        print(uid, '\t', str(int((voice_found / (voice_found + not_voice)) * 100)) + '% \thas voice.')
-
-                    if speech_state == SpeechState.no_speech:
-                        not_voice += 1
-                        # audio_buffer = bytearray()
-                        # continue
-                    else:
-                        # audio_file.write(audio_buffer.hex() + "\n")
-                        voice_found += 1
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:

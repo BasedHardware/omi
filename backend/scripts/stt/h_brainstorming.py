@@ -7,7 +7,7 @@ import fal_client
 from groq import Groq
 from openai import OpenAI
 
-from utils.endpoints import timeit
+from utils.other.endpoints import timeit
 
 os.environ['GROQ_API_KEY'] = ''
 os.environ['FAL_KEY'] = ''

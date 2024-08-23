@@ -28,8 +28,8 @@ modal_app = App(
             .pip_install_from_requirements('requirements.txt')
     ),
     keep_warm=1,  # need 7 for 1rps
-    memory=(1024, 2048),
-    cpu=4,
+    memory=(128, 256),
+    cpu=1,
     allow_concurrent_inputs=10,
 )
 @asgi_app()
