@@ -17,6 +17,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -56,24 +57,83 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     Future<void> _showMockupOmiFeebackNotification() async {
-      var rdm = Random();
-      // 1.
-      NotificationService.instance.showNotification(
-          layout: NotificationLayout.BigText,
-          id: rdm.nextInt(1000) + 1,
-          title: "Omi",
-          body:
-              "i think it went super well! you were so passionate and clear about your vision for friend. i'm pretty sure kurt was really into it too. [sample]");
-
-      await Future.delayed(const Duration(seconds: 5));
-
-      // 2.
-      NotificationService.instance.showNotification(
-          layout: NotificationLayout.BigText,
-          id: rdm.nextInt(1000 + 1),
-          title: "Omi",
-          body:
-              "he seemed super engaged, asking all the right questions and stuff. plus, he was all like \"this is gonna be a fun little story\" at the end, so that's a good sign, right? [sample]");
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            elevation: 5.0,
+            backgroundColor: Colors.black,
+            child: Container(
+              padding: EdgeInsets.all(20.0),
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MockNotification(
+                    path: 'assets/images/emotional_feedback_1.png',
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  _MockNotification(
+                    path: 'assets/images/emotional_feedback_2.png',
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  Text(
+                    "Omi will send you feedback in real-time.",
+                    style: TextStyle(color: Color.fromRGBO(255, 255, 255, .8)),
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  Container(
+                    padding: EdgeInsets.only(
+                      left: 111,
+                      right: 111,
+                      top: 8,
+                      bottom: 8,
+                    ),
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size(50, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        alignment: Alignment.center,
+                      ),
+                      child: Text(
+                        "I understand!",
+                        style: TextStyle(
+                          color: Color.fromRGBO(255, 255, 255, .8),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
     }
 
     return PopScope(
@@ -274,5 +334,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ));
+  }
+}
+
+class _MockNotification extends StatelessWidget {
+  const _MockNotification({super.key, required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    // Forgive me, should be a goog dynamic layout but not static image, btw I have no time.
+    return Image.asset(
+      path,
+      fit: BoxFit.fitWidth,
+    );
   }
 }
