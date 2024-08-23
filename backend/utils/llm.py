@@ -485,3 +485,21 @@ def qa_emotional_rag(context: str, memories: List[Memory], emotion: str) -> str:
     """.replace('    ', '').strip()
     print(prompt)
     return llm.invoke(prompt).content
+
+def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
+    conversation_history = Memory.memories_to_string(memories)
+
+    prompt = f"""
+    The following are a list of ${user_name}'s memories from today, with the transcripts with its respective structuring, that ${user_name} had during his day.
+    ${user_name} wants to get a summary of the key action items he has to take based on his today's memories.
+
+    Remember ${user_name} is busy so this has to be very efficient and concise.
+    Respond in at most 50 words.
+  
+    Output your response in plain text, without markdown.
+    ```
+    ${conversation_history}
+    ```
+    """.replace('    ', '').strip()
+    print(prompt)
+    return llm.invoke(prompt).content
