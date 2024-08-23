@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
@@ -11,7 +12,7 @@ from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
-from utils.other.storage import create_signed_postprocessing_audio_url
+from utils.other.storage import create_signed_postprocessing_audio_url, upload_postprocessing_audio, delete_postprocessing_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
@@ -118,11 +119,13 @@ def postprocess_memory(
         #         final.export(file_path, format="wav")
         #         profile_duration = profile_aseg.duration_seconds + separate_seconds
 
-        signed_url = create_signed_postprocessing_audio_url(file_path)
+        signed_url = upload_postprocessing_audio(file_path)
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         os.remove(file_path)
+
+        asyncio.run(_delete_postprocessing_audio(file_path))
 
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
@@ -168,6 +171,10 @@ def postprocess_memory(
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
 
+
+async def _delete_postprocessing_audio(file_path: str):
+    time.sleep(900)  # 15m
+    delete_postprocessing_audio(file_path)
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
     if not any(segment.is_user for segment in memory.transcript_segments):
