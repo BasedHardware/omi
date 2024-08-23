@@ -1,4 +1,5 @@
 import os
+import threading
 import asyncio
 import time
 
@@ -125,7 +126,9 @@ def postprocess_memory(
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         os.remove(file_path)
 
-        asyncio.run(_delete_postprocessing_audio(file_path))
+        # Delete uploaded file in 15m
+        threads = threading.Thread(target=_delete_postprocessing_audio, args=(file_path, ))
+        threads.start()
 
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
@@ -171,9 +174,8 @@ def postprocess_memory(
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
 
-
-async def _delete_postprocessing_audio(file_path: str):
-    await asyncio.sleep(900)  # 15m
+def _delete_postprocessing_audio(file_path):
+    time.sleep(900)  # 15m
     delete_postprocessing_audio(file_path)
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
