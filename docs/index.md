@@ -27,7 +27,7 @@ voice memos wherever you are.
 - **Efficient Summarization:** Get instant insights and summaries powered by ChatGPT in just 5 seconds.
 - **Connectivity:** Bluetooth enabled, LED, accelerometer, and USB-C charging.
 - **App Marketplace:** Expand functionality with our app marketplace.
-- **Conversation Coach:** Omi helps you communicate better, gives you tips and advises during conversations.
+- **Conversation Coach:** Omi helps you communicate better, Offering tips and advises during conversations.
 
 ## Get the app
 
