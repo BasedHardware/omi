@@ -1,12 +1,12 @@
 import uuid
-from typing import List
 from datetime import datetime
+from typing import List
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 import utils.other.hume as hume
+from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
@@ -137,7 +137,11 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
             batch = db.batch()
     batch.commit()
 
-def store_model_emotion_predictions_result(uid: str, memory_id: str, model_name: str, predictions: List[hume.HumeJobModelPredictionResponseModel]):
+
+def store_model_emotion_predictions_result(
+        uid: str, memory_id: str, model_name: str,
+        predictions: List[hume.HumeJobModelPredictionResponseModel]
+):
     now = datetime.now()
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
