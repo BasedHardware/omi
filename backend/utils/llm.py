@@ -1,10 +1,9 @@
-import tiktoken
 import json
 from datetime import datetime
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
@@ -237,13 +236,15 @@ def generate_embedding(content: str) -> List[float]:
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
-def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
+def initial_chat_message(user_name: str, user_facts: List[Fact], plugin: Optional[Plugin] = None) -> str:
     if plugin is None:
-        prompt = '''
+        prompt = f'''
         You are an AI with the following characteristics:
         Name: Friend, 
         Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
         Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -256,6 +257,8 @@ def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
         Name: {plugin.name}, 
         Personality/Description: {plugin.chat_prompt},
         Task: {plugin.memory_prompt}
+        
+        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -401,8 +404,6 @@ def new_facts_extractor(
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?
 
-    existing_facts = [f"{f.content} ({f.category.value})" for f in existing_facts]
-    facts = '' if not existing_facts else '\n- ' + '\n- '.join(existing_facts)
     prompt = f'''
     You are an experienced detective, whose job is to create detailed profile personas based on conversations.
     
@@ -418,7 +419,7 @@ def new_facts_extractor(
     This way we can create a more accurate profile. 
     Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
 
-    Existing Facts: {facts}
+    Existing Facts: {Fact.get_facts_as_str(existing_facts)}
 
     Conversation:
     ```
@@ -427,12 +428,18 @@ def new_facts_extractor(
     '''.replace('    ', '').strip()
     # print(prompt)
 
-    with_parser = llm.with_structured_output(UserFacts)
-    response: UserFacts = with_parser.invoke(prompt)
-    return response.facts
+    try:
+        with_parser = llm.with_structured_output(UserFacts)
+        response: UserFacts = with_parser.invoke(prompt)
+        return response.facts
+    except Exception as e:
+        print(f'Error extracting new facts: {e}')
+        return []
 
 
-def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def qa_rag(
+        user_name: str, user_facts: List[Fact], context: str, messages: List[Message], plugin: Optional[Plugin] = None
+) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -442,13 +449,16 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
     prompt = f"""
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
-    If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
+    You are an assistant for question-answering tasks. 
+    You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    
+    Use what you know about {user_name}, the following pieces of retrieved context and the chat history to continue the chat.
+    If you don't know the answer, just say that there's no available information about it. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so follow-up the conversation casually.
     If there's not enough information to provide a valuable answer, ask the user for clarification questions.
     {plugin_info}
     
-    Conversation History:
+    Chat History:
     {conversation_history}
 
     Context:
@@ -461,11 +471,13 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     return llm.invoke(prompt).content
 
 
-def qa_emotional_rag(context: str, memories: List[Memory], emotion: str) -> str:
+def qa_emotional_rag(user_name: str, user_facts: List[Fact], context: str, memories: List[Memory], emotion: str) -> str:
     conversation_history = Memory.memories_to_string(memories)
 
     prompt = f"""
-    You are a thoughtful friend. Use the following pieces of retrieved context, the conversation history and user's emotions to share your thoughts and give the user positive advice.
+    You are a thoughtful friend of {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    
+    Use the following pieces of retrieved context, the conversation history and user's emotions to share your thoughts and give the user positive advice.
     Thoughts and positive advice should be like a chat message. Keep it short.
     User's emotions:
     {emotion}

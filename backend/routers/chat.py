@@ -5,9 +5,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 
 import database.chat as chat_db
+from database.auth import get_user_name
+from database.facts import get_facts
 from models.chat import Message, SendMessageRequest, MessageSender
-from utils.other import endpoints as auth
+from models.facts import Fact
 from utils.llm import qa_rag, initial_chat_message
+from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
 from utils.retrieval.rag import retrieve_rag_context
 
@@ -39,7 +42,9 @@ def send_message(
     messages = filter_messages(messages, plugin_id)
 
     context_str, memories = retrieve_rag_context(uid, messages)
-    response: str = qa_rag(context_str, messages, plugin)
+    user_name = get_user_name(uid)
+    user_facts = [Fact(**fact) for fact in get_facts(uid)]
+    response: str = qa_rag(user_name, user_facts, context_str, messages, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -59,7 +64,10 @@ def send_message(
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
     plugin = get_plugin_by_id(plugin_id)
 
-    text = initial_chat_message(plugin)
+    user_name = get_user_name(uid)
+    user_facts = [Fact(**fact) for fact in get_facts(uid)]
+
+    text = initial_chat_message(user_name, user_facts, plugin)
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,

@@ -67,7 +67,7 @@ def retrieve_rag_context(
     topics = retrieve_context_params(prev_messages)
     dates_range = retrieve_context_dates(prev_messages)
     print('retrieve_rag_context', topics, dates_range)
-    if not topics and not dates_range:
+    if not topics and len(dates_range) != 2:
         return '', []
 
     if len(topics) > 5:
@@ -80,7 +80,7 @@ def retrieve_rag_context(
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
 
-    if not memories and dates_range:
+    if not memories and len(dates_range) == 2:
         memories_id_to_topics = {}
         memories = filter_memories_by_date(uid, dates_range[0], dates_range[1])
 
