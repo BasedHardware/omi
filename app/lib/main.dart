@@ -134,17 +134,18 @@ class _MyAppState extends State<MyApp> {
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => OnboardingProvider()),
           ListenableProvider(create: (context) => HomeProvider()),
-          ListenableProvider(create: (context) => MemoryProvider()),
+          ChangeNotifierProvider(create: (context) => MemoryProvider()),
+          ChangeNotifierProvider(create: (context) => MessageProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
-                MessageProvider()..updatePluginProvider(value),
+                (previous?..updatePluginProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider<MemoryProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, CaptureProvider? previous) =>
-                CaptureProvider()..updateProviderInstances(memory),
+            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
           ),
         ],
         builder: (context, child) {

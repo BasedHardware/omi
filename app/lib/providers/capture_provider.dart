@@ -28,6 +28,11 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
 
+  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
+    memoryProvider = mp;
+    messageProvider = p;
+  }
+
   List<TranscriptSegment> segments = [];
   Geolocation? geolocation;
 
@@ -50,11 +55,6 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
   // -----------------------
-
-  void updateProviderInstances(MemoryProvider mp, MessageProvider p) {
-    memoryProvider = mp;
-    messageProvider = p;
-  }
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -97,6 +97,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       photos: photos,
       sendMessageToChat: (v) {
         // use message provider to send message to chat
+        messageProvider?.addMessage(v);
       },
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
@@ -125,14 +126,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
     if (memory != null) {
       // use memory provider to add memory
-      // widget.addMemory(memory);
+      memoryProvider?.addMemory(memory);
     }
 
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
       await memoryPostProcessing(file, memory.id).then((postProcessed) {
         // use memory provider to update memory
-        // widget.updateMemory(postProcessed);
+        memoryProvider?.updateMemory(postProcessed);
       });
+      setMemoryCreating(false);
     }
 
     SharedPreferencesUtil().transcriptSegments = [];
