@@ -15,9 +15,10 @@ from pinecone import Pinecone
 # noinspection PyUnresolvedReferences
 from plotly.subplots import make_subplots
 
-import database.memories as memories_db
+# noinspection PyUnresolvedReferences
+from models.memory import Memory
 
-load_dotenv('../../.env')
+load_dotenv('../../.dev.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 if os.getenv('PINECONE_API_KEY') is not None:
@@ -26,7 +27,9 @@ if os.getenv('PINECONE_API_KEY') is not None:
 else:
     index = None
 
-uid = 'mLHEZwhBj0PLQHmCLZNLXQwcJXg2'
+import database.memories as memories_db
+
+uid = 'DX8n89KAmUaG9O7Qvj8xTi81Zu12'
 
 openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
@@ -41,9 +44,12 @@ def query_vectors(query: str, uid: str, k: int = 1000) -> List[str]:
     return data
 
 
-def get_memories():
-    if not os.path.exists('memories.json'):
+def get_memories(ignore_cached: bool = False):
+    if not os.path.exists('memories.json') or ignore_cached:
         memories = memories_db.get_memories(uid, limit=1000)
+        if ignore_cached:
+            return memories
+
         with open('memories.json', 'w') as f:
             f.write(json.dumps(memories, indent=4, default=str))
 

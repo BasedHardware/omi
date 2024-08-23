@@ -2,13 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from models.chat import Message
 from models.transcript_segment import TranscriptSegment
-
-app = FastAPI()
 
 
 class CategoryEnum(str, Enum):
