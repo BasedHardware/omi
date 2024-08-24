@@ -140,19 +140,42 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
+  Future<void> onNotificationTap() async {
+    final message = await FirebaseMessaging.instance.getInitialMessage();
+    if (message != null) {
+      _handleOnTap(message);
+    }
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
+  }
+
+  void _handleOnTap(RemoteMessage message) {
+    final data = message.data;
+    if (data.isNotEmpty) {
+      if (message.data['notification_type'] == 'daily_summary') {
+        SharedPreferencesUtil().pageToShowFromNotification = 2;
+        MyApp.navigatorKey.currentState
+            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+      }
+    }
+  }
 
   Future<void> listenForMessages() async {
+    onNotificationTap();
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
 
       // Plugin
-      if (data.isNotEmpty && data['notification_type'] == 'plugin') {
+      if (data.isNotEmpty) {
         if (noti != null) {
           _showForegroundNotification(noti: noti);
         }
-        data['from_integration'] = data['from_integration'] == 'true';
-        _serverMessageStreamController.add(ServerMessage.fromJson(data));
+        final notificationType = data['notification_type'];
+        if (notificationType == 'plugin' || notificationType == 'daily_summary') {
+          data['from_integration'] = data['from_integration'] == 'true';
+          _serverMessageStreamController.add(ServerMessage.fromJson(data));
+        }
       }
 
       // Announcement likes

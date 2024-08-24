@@ -1,9 +1,9 @@
 import asyncio
 import concurrent.futures
 from datetime import datetime, timedelta
-
+import uuid
 import pytz
-
+import database.chat as chat_db
 import database.notifications as notification_db
 import database.memories as memories_db
 from utils.notifications import send_notification, send_bulk_notification
@@ -52,8 +52,17 @@ def _send_summary_notification(user_data: tuple):
         summary = msg
     else:
         summary = get_memory_summary('This User', memories)
-
-    send_notification(fcm_token, daily_summary_title, summary)
+    data = {
+        "text": summary,
+        'id': str(uuid.uuid4()),
+        'created_at': datetime.now().isoformat(),
+        'sender': 'ai',
+        'type': 'day_summary',
+        'from_integration': 'false',
+        'notification_type': 'daily_summary',
+    }
+    chat_db.add_summary_message(summary, user_id)
+    send_notification(fcm_token, daily_summary_title, summary, data)
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
