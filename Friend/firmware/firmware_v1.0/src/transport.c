@@ -50,7 +50,7 @@ static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(B
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
@@ -123,11 +123,9 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-    uint16_t amount;
-    amount = speak(len, buf);
+    uint16_t amount = 0;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
-
-
+    amount = speak(len, buf);
     return len;
 }
 //
@@ -249,7 +247,8 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
     LOG_INF("Connection parameters updated.");
-	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+	LOG_INF("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+ 
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
@@ -454,10 +453,10 @@ int transport_start()
 {
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
-    int r = speaker_init();
+
+
     // Enable Bluetooth
-    buzz();
-    
+
     int err = bt_enable(NULL);
     if (err)
     {
@@ -465,6 +464,14 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
+
+    err = speaker_init(); 
+    if (!err){
+
+        LOG_ERR("Speaker failed to start");
+        return 0;
+         
+    }
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);

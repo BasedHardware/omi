@@ -2,10 +2,8 @@ import argparse
 import os
 from dotenv import load_dotenv
 import wave
-from deepgram import (
-    DeepgramClient,
-    SpeakOptions,
-)
+from deepgram import( DeepgramClient,SpeakOptions,)
+
 import asyncio
 import bleak
 import numpy as np
@@ -19,13 +17,16 @@ remaining_bytes = 0
 remaining_bytes_b = bytearray()
 packet_size = 400
 total_offset = 0
+device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
+deepgram_api_id="32dfeebbbaec89b061e174f5bbfc591b934aed16" #enter your deepgram id here
+audio_write_characteristic_uuid = "19B10003-E8F2-537E-4F6C-D104768A1214" #dont change this
 MAX_ALLOWED_SAMPLES = 50000
 
 gain = 5
-uuid = "19B10003-E8F2-537E-4F6C-D104768A1214"
+
 async def main():
     global remaining_bytes
-    global uuid
+    global audio_write_characteristic_uuid
     parser = argparse.ArgumentParser(description="Accept a string and print it")
     parser.add_argument("input_string", type=str, help="The string to be printed")
     args = parser.parse_args()
@@ -34,7 +35,7 @@ async def main():
 
     try:
     # STEP 1: Create a Deepgram client using the API key from environment variables
-        deepgram = DeepgramClient(api_key="") #INSERT YOUT DEEPGRAM KEY HERE
+        deepgram = DeepgramClient(api_key=deepgram_api_id) #INSERT YOUT DEEPGRAM KEY HERE
 
         # STEP 2: Configure the options (such as model choice, audio configuration, etc.)
         options = SpeakOptions(
@@ -108,7 +109,7 @@ async def main():
         exit()
     print("Number of samples about to be sent: ",remaining_bytes)
     print("about to start...")
-    async with BleakClient("3CE1CE0A-A629-2E92-D708-E49E71045D07") as client:
+    async with BleakClient(device_id) as client:
         print(client.address)
         offset_ = client.mtu_size
         print(offset_)
@@ -121,7 +122,7 @@ async def main():
             global total_offset
             global remaining_bytes_b
             global packet_size
-            global uuid
+            global audio_write_characteristic_uuid
             print(np.frombuffer(data,dtype=np.int16)[0])
             if (remaining_bytes > packet_size):
                 
@@ -129,7 +130,7 @@ async def main():
                 total_offset = packet_size + total_offset
                 remaining_bytes = remaining_bytes - packet_size
                 print("sending indexes %d to %d",final_offset,final_offset+packet_size)
-                await client.write_gatt_char(uuid, f[final_offset:(final_offset+packet_size)], response=True)
+                await client.write_gatt_char(audio_write_characteristic_uuid, f[final_offset:(final_offset+packet_size)], response=True)
                 
             elif (remaining_bytes > 0 and remaining_bytes <= packet_size):
                 print('almost done')
@@ -139,15 +140,15 @@ async def main():
                 offset_ = remaining_bytes
                 remaining_bytes = 0
                 print("sending indexes",start_idx,start_idx+offset_)
-                await client.write_gatt_char(uuid, f[start_idx:(start_idx+offset_)], response=True)
+                await client.write_gatt_char(audio_write_characteristic_uuid, f[start_idx:(start_idx+offset_)], response=True)
             else:
                 print('done')
                 print(total_offset)
                 print('Shutting down')
                 exit()
-        await client.start_notify(uuid, on_notify)
+        await client.start_notify(audio_write_characteristic_uuid, on_notify)
         await asyncio.sleep(1)
-        await client.write_gatt_char(uuid, remaining_bytes_b, response=True)
+        await client.write_gatt_char(audio_write_characteristic_uuid, remaining_bytes_b, response=True)
         await asyncio.sleep(1)   
         while True:
            await asyncio.sleep(1)

@@ -14,7 +14,7 @@
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_BLOCK_SIZE   25000 //24000 * 2
-#define BLOCK_COUNT      2
+#define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
 #define NUMBER_OF_CHANNELS 2
 #define PACKET_SIZE 400
@@ -31,7 +31,7 @@ int speaker_init() {
         const struct device *mic = device_get_binding("I2S_0");
         speaker = mic;
 	    if (!device_is_ready(mic)) {
-        LOG_INF("Microphone device is not supported : %s", mic->name);
+        LOG_ERR("Speaker device is not supported : %s", mic->name);
         return 0;
     }
         struct i2s_config config = {
@@ -46,13 +46,12 @@ int speaker_init() {
         .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or SYS_FOREVER_MS */
     };
 
-    	int err = i2s_configure(mic, I2S_DIR_TX, &config);
+    int err = i2s_configure(mic, I2S_DIR_TX, &config);
 	if (err < 0) {
 		LOG_INF("Failed to configure Microphone (%d)", err);
         return 0;
-
 	}
-	err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
+    	err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
 	if (err) {
 		LOG_INF("Failed to allocate memory again(%d)", err);
         return 0;
@@ -78,11 +77,11 @@ int speaker_init() {
 uint16_t speak(uint16_t len, const void *buf) {
   
 	uint16_t amount = 0;
-        amount = len;
+    amount = len;
 	if (len == 4)  //if stage 1 
 	{
         current_length = ((uint32_t *)buf)[0];
-	LOG_INF("About to write %u bytes", current_length);
+	    LOG_INF("About to write %u bytes", current_length);
         ptr2 = (int16_t *)rx_buffer;
         clear_ptr = (int16_t *)rx_buffer;
 	}
@@ -94,9 +93,10 @@ uint16_t speak(uint16_t len, const void *buf) {
 
             for (int i = 0; i < len/2; i++) {
                 *ptr2++ = ((int16_t *)buf)[i];  
-                *ptr2++ = 0;
+                ptr2++;
 
             }
+            // memcpy(rx_buffer+offset,buf,len);
             offset = offset + len;
         }
         else if (current_length < PACKET_SIZE) {
@@ -106,9 +106,7 @@ uint16_t speak(uint16_t len, const void *buf) {
             LOG_INF("remaining data: %u", current_length);
             // memcpy(rx_buffer+offset, buf, len);
             for (int i = 0; i < len/2; i++) {
-                *ptr2 = ((int16_t *)buf)[i];
-                ptr2++;
-                *ptr2 = 0;
+                *ptr2++ = ((int16_t *)buf)[i];  
                 ptr2++;
             }
             offset = offset + len;
@@ -117,7 +115,7 @@ uint16_t speak(uint16_t len, const void *buf) {
             
             i2s_write(speaker, rx_buffer,  MAX_BLOCK_SIZE);
             i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
-	    i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+	        i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
 
             //clear the buffer
 
