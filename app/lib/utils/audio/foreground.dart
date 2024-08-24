@@ -46,6 +46,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     print("Foreground repeat event triggered");
+    await locationInBackground();
   }
 
   @override
@@ -98,7 +99,7 @@ class ForegroundUtil {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 5000,
+        interval: 30000,
         isOnceEvent: false,
         autoRunOnBoot: false,
         allowWakeLock: true,
