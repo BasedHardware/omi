@@ -21,7 +21,6 @@ class ConnectedDevice extends StatefulWidget {
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
 }
 
-
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   @override
   Widget build(BuildContext context) {
@@ -62,7 +61,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${widget.device?.getShortId() ?? ''})',
+                    '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId()})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -155,7 +154,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       await bleDisconnectDevice(widget.device!);
                     }
                     Navigator.of(context).pop();
-                    SharedPreferencesUtil().deviceId = '';
+                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
                     SharedPreferencesUtil().deviceName = '';
                     MixpanelManager().disconnectFriendClicked();
                   },

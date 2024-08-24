@@ -388,8 +388,8 @@
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/notion-crm",
-      "setup_completed_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/setup/notion-crm",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/notion-crm",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/notion-crm",
       "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md"
     },
     "deleted": false
@@ -408,7 +408,7 @@
     ],
     "external_integration": {
       "triggers_on": "transcript_processed",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/news-checker",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/news-checker",
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
@@ -543,7 +543,7 @@
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/conversation-feedback",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/conversation-feedback",
       "setup_instructions_file_path": ""
     },
     "deleted": false
@@ -559,7 +559,7 @@
     ],
     "external_integration": {
       "triggers_on": "transcript_processed",
-      "webhook_url": "https://josancamon19--plugins-examples-plugins-app.modal.run/emotional-support",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/emotional-support",
       "setup_instructions_file_path": ""
     },
     "deleted": false
@@ -604,6 +604,41 @@
       "chat"
     ],
     "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
+    "deleted": false
+  },
+  {
+    "id": "zapier",
+    "name": "Zapier Automated Workflow",
+    "author": "@thinh",
+    "description": "Connect Zapier with the Friend app. Set the trigger to \"On Memory Creation\" and the action to \"Create Memory in Friend App.\"",
+    "image": "/plugins/logos/zapier.png",
+    "prompt": "",
+    "memories": false,
+    "chat": false,
+    "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/zapier/memories",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/zapier",
+      "setup_instructions_file_path": "/plugins/instructions/zapier/README.md"
+    },
+    "deleted": false
+  },
+  {
+    "id": "echosense",
+    "name": "EchoSense",
+    "author": "Luis Arano",
+    "description": "Analyzes the emotional tone and communication quality of a transcribed conversation. It identifies the speaker's emotional state, offers constructive feedback on their communication style, and encourages reflection on how their words might have been perceived. The goal is to help users connect more deeply with their emotions and improve their communication skills.",
+    "image": "/plugins/logos/your-plugin-logo.jpg",
+    "memories": true, 
+    "chat": false,
+    "capabilities": [
+      "chat"
+    ],
+    "memory_prompt": "Analyze for its emotional tone and communicative quality. Identify the emotional tone of the conversation. Determine whether the speaker(s) sounded angry, mad, upset, happy, content, neutral, or any other emotional state. Provide specific examples from the text to support your analysis. Offer constructive feedback on how the conversation was communicated. Highlight any patterns or phrases that contributed to the identified tone. Suggest ways to improve or maintain effective communication based on the emotional undertones detected. Encourage the speaker(s) to reflect on how their choice of words and tone might have impacted the conversation. Provide insights into how the conversation might have been perceived by others and how it could be adjusted for different outcomes. The goal of this analysis is to help the user connect more deeply with their words and emotions, and to better understand the impact of their communication style.",
     "deleted": false
   }
 ]

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -35,6 +37,7 @@ import 'logic/websocket_mixin.dart';
 class CapturePage extends StatefulWidget {
   final Function addMemory;
   final Function addMessage;
+  final Function(ServerMemory) updateMemory;
   final BTDeviceStruct? device;
 
   const CapturePage({
@@ -42,6 +45,7 @@ class CapturePage extends StatefulWidget {
     required this.device,
     required this.addMemory,
     required this.addMessage,
+    required this.updateMemory,
   });
 
   @override
@@ -125,22 +129,31 @@ class CapturePageState extends State<CapturePage>
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
+      includeSpeechProfile: true,
       onConnectionSuccess: () {
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
           secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
         }
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
-      onConnectionFailed: (err) => setState(() {}),
+      onConnectionFailed: (err) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
       onConnectionClosed: (int? closeCode, String? closeReason) {
         // connection was closed, either on resetState, or by backend, or by some other reason.
         // setState(() {});
       },
       onConnectionError: (err) {
         // connection was okay, but then failed.
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
@@ -149,7 +162,9 @@ class CapturePageState extends State<CapturePage>
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
           //  losing from the audio the first part of the recording. All other parts are fine.
           FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
+          var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
+          var removeUpToSecond = newSegments[0].start.toInt();
+          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
           firstStreamReceivedAt = DateTime.now();
         }
         streamStartedAtSecond ??= newSegments[0].start;
@@ -261,7 +276,7 @@ class CapturePageState extends State<CapturePage>
     }
 
     ServerMemory? memory = await processTranscriptContent(
-      segments,
+      segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocation,
@@ -269,6 +284,7 @@ class CapturePageState extends State<CapturePage>
       sendMessageToChat: sendMessageToChat,
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
+      audioFile: file,
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
@@ -287,16 +303,24 @@ class CapturePageState extends State<CapturePage>
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Memory creation failed. It\' stored locally and will be retried soon.',
-          style: TextStyle(color: Colors.white, fontSize: 14),
-        ),
-      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Memory creation failed. It\' stored locally and will be retried soon.',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ));
+      }
+
       // TODO: store anyways something temporal and retry once connected again.
     }
 
     if (memory != null) widget.addMemory(memory);
+    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
+      memoryPostProcessing(file, memory.id).then((postProcessed) {
+        widget.updateMemory(postProcessed);
+      });
+    }
 
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
@@ -325,8 +349,7 @@ class CapturePageState extends State<CapturePage>
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
-      segments,
-      retrievedFromCache: true,
+      segments: segments,
       sendMessageToChat: null,
       triggerIntegrations: false,
       language: SharedPreferencesUtil().recordingsLanguage,
@@ -402,7 +425,6 @@ class CapturePageState extends State<CapturePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     record.dispose();
-
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _internetListener.cancel();

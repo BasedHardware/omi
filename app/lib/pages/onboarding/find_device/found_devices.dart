@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/utils/ble/connected.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -30,6 +31,11 @@ class _FoundDevicesState extends State<FoundDevices> {
   String deviceId = '';
   String? _connectingToDeviceId;
 
+  Timer? connectionStateTimer;
+
+  // TODO: improve this and find_device page.
+  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
+
   Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
     try {
       var battery = await retrieveBatteryLevel(btDevice.id);
@@ -40,7 +46,7 @@ class _FoundDevicesState extends State<FoundDevices> {
         _connectingToDeviceId = null; // Reset the connecting device
       });
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().deviceId = btDevice.id;
+      SharedPreferencesUtil().btDeviceStruct = btDevice;
       SharedPreferencesUtil().deviceName = btDevice.name;
       widget.goNext();
     } catch (e) {
@@ -64,6 +70,40 @@ class _FoundDevicesState extends State<FoundDevices> {
     deviceName = device.name;
     getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(device);
+  }
+
+  @override
+  void initState() {
+    _initiateConnectionListener();
+    super.initState();
+  }
+
+  _initiateConnectionListener() async {
+    connectionStateTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      var connectedDevice = await getConnectedDevice();
+      if (connectedDevice != null) {
+        if (mounted) {
+          connectionStateTimer?.cancel();
+          var battery = await retrieveBatteryLevel(connectedDevice.id);
+          setState(() {
+            deviceName = connectedDevice.name;
+            deviceId = connectedDevice.id;
+            batteryPercentage = battery;
+            _isConnected = true;
+            _isClicked = false;
+            _connectingToDeviceId = null;
+          });
+          await Future.delayed(const Duration(seconds: 2));
+          widget.goNext();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    connectionStateTimer?.cancel();
+    super.dispose();
   }
 
   @override

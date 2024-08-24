@@ -1,14 +1,23 @@
 import uuid
+from datetime import datetime
 from typing import List
+import json
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from models.memory import MemoryPhoto
+import utils.other.hume as hume
+from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
+from models.transcript_segment import TranscriptSegment
 from ._client import db
 
 
 def upsert_memory(uid: str, memory_data: dict):
+    if 'audio_base64_url' in memory_data:
+        del memory_data['audio_base64_url']
+    if 'photos' in memory_data:
+        del memory_data['photos']
+
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_data['id'])
     memory_ref.set(memory_data)
@@ -102,3 +111,54 @@ def get_memory_photos(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     photos_ref = memory_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
+
+
+# POST PROCESSING
+
+def set_postprocessing_status(
+        uid: str, memory_id: str, status: PostProcessingStatus,
+        model: PostProcessingModel = PostProcessingModel.fal_whisperx
+):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
+
+
+def store_model_segments_result(uid: str, memory_id: str, model_name: str, segments: List[TranscriptSegment]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    segments_ref = memory_ref.collection(model_name)
+    batch = db.batch()
+    for i, segment in enumerate(segments):
+        segment_id = str(uuid.uuid4())
+        segment_ref = segments_ref.document(segment_id)
+        batch.set(segment_ref, segment.dict())
+        if i >= 400:
+            batch.commit()
+            batch = db.batch()
+    batch.commit()
+
+
+def store_model_emotion_predictions_result(
+        uid: str, memory_id: str, model_name: str,
+        predictions: List[hume.HumeJobModelPredictionResponseModel]
+):
+    now = datetime.now()
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    predictions_ref = memory_ref.collection(model_name)
+    batch = db.batch()
+    count = 1
+    for prediction in predictions:
+        prediction_id = str(uuid.uuid4())
+        prediction_ref = predictions_ref.document(prediction_id)
+        batch.set(prediction_ref, {
+            "created_at": now,
+            "start": prediction.time[0],
+            "end": prediction.time[1],
+            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
+        })
+        if count % 400 == 0:
+            batch.commit()
+            batch = db.batch()
+    batch.commit()

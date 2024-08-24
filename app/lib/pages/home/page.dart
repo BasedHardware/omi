@@ -77,15 +77,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
     if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
     return await processTranscriptContent(
-      memory.transcriptSegments,
-      retrievedFromCache: true,
+      segments: memory.transcriptSegments,
       sendMessageToChat: null,
       startedAt: memory.startedAt,
       finishedAt: memory.finishedAt,
       geolocation: memory.geolocation,
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
-      language: memory.language,
+      language: memory.language ?? 'en',
     );
   }
 
@@ -233,7 +232,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _setupHasSpeakerProfile();
     _migrationScripts();
     authenticateGCP();
-    if (SharedPreferencesUtil().deviceId.isNotEmpty) {
+    if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
       scanAndConnectDevice().then(_onConnected);
     }
 
@@ -296,7 +295,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _initiateBleButtonListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
-    SharedPreferencesUtil().deviceId = _device!.id;
+    SharedPreferencesUtil().btDeviceStruct = _device!;
     SharedPreferencesUtil().deviceName = _device!.name;
     setState(() {});
   }
@@ -343,20 +342,20 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: ValueListenableBuilder(
           valueListenable: connectivityController.isConnected,
-          builder: (context, isConnected, child) {
+          builder: (ctx, isConnected, child) {
             previousConnection ??= true;
             if (previousConnection != isConnected) {
               previousConnection = isConnected;
               if (!isConnected) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
+                Future.delayed(Duration.zero, () {
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('No internet connection. Please check your connection.'),
                       backgroundColor: Colors.red,
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
@@ -365,30 +364,32 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   );
                 });
               } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
+                Future.delayed(Duration.zero, () {
+                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
                       content: const Text('Internet connection is restored.'),
                       backgroundColor: Colors.green,
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
                           child: const Text('Dismiss'),
                         ),
                       ],
+                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                      }),
                     ),
 
                   );
-                  Future.delayed(const Duration(seconds: 2), () {
-                    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                  });
+
                   if (memories.isEmpty) {
-                    await _initiateMemories();
+                    _initiateMemories();
                   }
                   if (messages.isEmpty) {
-                    await _refreshMessages();
+                    _refreshMessages();
                   }
                 });
               }
@@ -434,19 +435,26 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                             textFieldFocusNode: memoriesTextFieldFocusNode,
                           ),
                           CapturePage(
-                            key: capturePageKey,
-                            device: _device,
-                            addMemory: (ServerMemory memory) {
-                              var memoriesCopy = List<ServerMemory>.from(memories);
-                              memoriesCopy.insert(0, memory);
-                              setState(() => memories = memoriesCopy);
-                            },
-                            addMessage: (ServerMessage message) {
-                              var messagesCopy = List<ServerMessage>.from(messages);
-                              messagesCopy.insert(0, message);
-                              setState(() => messages = messagesCopy);
-                            },
-                          ),
+                              key: capturePageKey,
+                              device: _device,
+                              addMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                memoriesCopy.insert(0, memory);
+                                setState(() => memories = memoriesCopy);
+                              },
+                              addMessage: (ServerMessage message) {
+                                var messagesCopy = List<ServerMessage>.from(messages);
+                                messagesCopy.insert(0, message);
+                                setState(() => messages = messagesCopy);
+                              },
+                              updateMemory: (ServerMemory memory) {
+                                var memoriesCopy = List<ServerMemory>.from(memories);
+                                var index = memoriesCopy.indexWhere((m) => m.id == memory.id);
+                                if (index != -1) {
+                                  memoriesCopy[index] = memory;
+                                  setState(() => memories = memoriesCopy);
+                                }
+                              }),
                           ChatPage(
                             key: chatPageKey,
                             textFieldFocusNode: chatTextFieldFocusNode,
@@ -631,7 +639,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           )
                         : TextButton(
                             onPressed: () async {
-                              if (SharedPreferencesUtil().deviceId.isEmpty) {
+                              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {
