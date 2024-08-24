@@ -118,6 +118,8 @@ def generate_topics_visualization(topics: List[str], file_path: str = 'embedding
 
 
 def get_data2(topics: List[str], retrieved_memories: List[Memory]) -> Dict[str, List]:
+    # print('get_data2', len(topics), topics)
+    # print('retrieved_memories', len(retrieved_memories))
     memories = get_memories()
     memories = {memory['id']: memory for memory in memories}
     all_vectors = query_vectors('', uid, k=1000)
@@ -147,7 +149,7 @@ def generate_visualization(
     file_path = os.path.join('visualizations/', file_path)
 
     data = get_data2(topics, memories)
-    print('data', len(data))
+    # print('data', len(data))
     all_embeddings = np.array([item['vector'] for item in data.values()])
 
     topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]

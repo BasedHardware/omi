@@ -64,6 +64,14 @@ def filter_memories_by_date(uid, start_date, end_date):
     return [doc.to_dict() for doc in query.stream()]
 
 
+# data = [
+#     datetime(2024, 8, 18, 0, 0, ),  # tzinfo=TzInfo(UTC)
+#     datetime(2024, 8, 24, 23, 59, 59, )  # tzinfo=TzInfo(UTC)
+# ]
+# result = filter_memories_by_date('viUv7GtdoHXbK1UBCDlPuTDuPgJ2', data[0], data[1])
+# print(len(result))
+
+
 def get_memories_batch_operation():
     batch = db.batch()
     return batch
