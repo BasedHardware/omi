@@ -1,15 +1,16 @@
 from typing import List
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 
 
 def get_facts(uid: str, limit: int = 100, offset: int = 0):
-    facts_ref = (
-        db.collection('users').document(uid).collection('facts')
-    )
-    facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    # TODO: cache this
+    facts_ref = db.collection('users').document(uid).collection('facts')
+    facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING).where(
+        filter=FieldFilter('deleted', '==', False))
     facts_ref = facts_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in facts_ref.stream()]
 
@@ -31,3 +32,48 @@ def delete_facts(uid: str):
     for doc in facts_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
+
+
+def get_fact(uid: str, fact_id: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    return fact_ref.get().to_dict()
+
+
+def review_fact(uid: str, fact_id: str, value: bool):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'reviewed': True, 'user_review': value})
+
+
+def edit_fact(uid: str, fact_id: str, value: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'content': value, 'edited': True})
+
+
+def delete_fact(uid: str, fact_id: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'deleted': True})
+
+
+def delete_facts_for_memory(uid: str, memory_id: str):
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    query = (
+        facts_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
+
+    removed_ids = []
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
+        removed_ids.append(doc.id)
+    batch.commit()
+    print('delete_facts_for_memory', memory_id, len(removed_ids))

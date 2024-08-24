@@ -1,4 +1,6 @@
+import asyncio
 from firebase_admin import messaging
+import math
 
 def send_notification(token: str, title: str, body: str, data: dict = None):
     print('send_notification', token, title, body, data)
@@ -8,8 +10,36 @@ def send_notification(token: str, title: str, body: str, data: dict = None):
     if data:
         message.data = data
 
-    try:
+    try:        
         response = messaging.send(message)
         print("Successfully sent message:", response)
     except Exception as e:
         print("Error sending message:", e)
+
+
+async def send_bulk_notification(user_tokens: list, title: str, body: str):
+    try: 
+        batch_size = 500  
+        num_batches = math.ceil(len(user_tokens) / batch_size)
+        
+        def send_batch(batch_users):
+            messages = [
+                messaging.Message(
+                    notification=messaging.Notification(title=title, body=body),
+                    token=token
+                ) for token in batch_users
+            ]
+            return messaging.send_all(messages)
+
+        tasks = []
+        for i in range(num_batches):
+            start = i * batch_size
+            end = start + batch_size
+            batch_users = user_tokens[start:end]
+            task = asyncio.to_thread(send_batch, batch_users)
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
+
+    except Exception as e:
+         print("Error sending message:", e)
