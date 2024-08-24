@@ -1,26 +1,29 @@
 from _bleio import adapter
-from board import IMU_PWR, IMU_SCL, IMU_SDA
-from busio import I2C
+from board import IMU_PWR, IMU_SCL, IMU_SDA, TX, RX
+from busio import I2C, UART
 from digitalio import DigitalInOut, Direction
 from time import sleep
-
+from adafruit_ble import BLERadio
 from adafruit_lsm6ds.lsm6ds3 import LSM6DS3
+from adafruit_ble.services.nordic import UARTService
+
+ble = BLERadio()
 
 # Customize the device behavior here
 DEVICE_NAME = "XIAO nRF52840 Sense"
-INTERVAL = 0.1
+INTERVAL = 2
 SENSITIVITY = 0.01
 
 # Turn on IMU and wait 50 ms
 imu_pwr = DigitalInOut(IMU_PWR)
 imu_pwr.direction = Direction.OUTPUT
 imu_pwr.value = True
-sleep(0.05)
-
+sleep(0.2)
+print('imu turned on')
 # Set up I2C bus and initialize IMU
 i2c_bus = I2C(IMU_SCL, IMU_SDA)
 sensor = LSM6DS3(i2c_bus)
-
+uart = UARTService()
 
 class BTHomeAdvertisement:
     _ADV_FLAGS = [0x02, 0x01, 0x06]
@@ -47,20 +50,22 @@ class BTHomeAdvertisement:
 
 
 bthome = BTHomeAdvertisement(DEVICE_NAME)
-
+print('advert started')
 while True:
-    gyro_x, gyro_y, gyro_z = sensor.gyro
-    moving = gyro_x**2 + gyro_y**2 + gyro_z**2
-    if moving > SENSITIVITY:
-        print("Moving")
-        adv_data = bthome.adv_data(1)
-    else:
-        adv_data = bthome.adv_data(0)
-    adapter.start_advertising(
-        "adscascasdc", scan_response=None, connectable=True, interval=INTERVAL * 2
-    )
-    sleep(INTERVAL)
-    adapter.stop_advertising()
-
-
+    # print('running')
+    while ble.connected:
+        print('connected')
+        uart.write('hi')
+        while True:
+            gyro_x, gyro_y, gyro_z = sensor.gyro
+            moving = gyro_x**2 + gyro_y**2 + gyro_z**2
+            if moving > SENSITIVITY:
+                print("Moving")
+                uart.write(f"[{gyro_x},{gyro_y},{gyro_z}]".encode('utf8'))
+                sleep(0.01)
+                adv_data = bthome.adv_data(1)
+            else:
+                adv_data = bthome.adv_data(0)
+            sleep(INTERVAL)
+            adapter.stop_advertising()
 
