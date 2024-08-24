@@ -23,6 +23,10 @@ class HumePredictionEmotionResponseModel:
             'score': self.score,
         }
 
+    @classmethod
+    def to_multi_dict(cls, emotions: []):
+        return [e.to_dict() for e in emotions]
+
 
 class HumeJobModelPredictionResponseModel:
     def __init__(

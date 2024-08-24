@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List
+import json
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -163,13 +164,9 @@ def store_model_emotion_predictions_result(
             "created_at": now,
             "start": prediction.time[0],
             "end": prediction.time[1],
+            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
-        emotions_ref = prediction_ref.collection("emotions")
-        for emotion in prediction.emotions:
-            emotion_ref = emotions_ref.document(emotion.name)
-            batch.set(emotion_ref, emotion.to_dict())
-            count += 1
-            if count % 400 == 0:
-                batch.commit()
-                batch = db.batch()
+        if count % 400 == 0:
+            batch.commit()
+            batch = db.batch()
     batch.commit()
