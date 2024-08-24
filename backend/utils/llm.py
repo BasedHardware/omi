@@ -1,14 +1,15 @@
-import tiktoken
 import json
 from datetime import datetime
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
+import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from models.chat import Message
+from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
@@ -18,8 +19,140 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 llm_with_parser = llm.with_structured_output(Structured)
 
+encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
 
 # TODO: include caching layer, redis
+
+
+# **********************************************
+# ************* MEMORY PROCESSING **************
+# **********************************************
+
+class DiscardMemory(BaseModel):
+    discard: bool = Field(description="If the memory should be discarded or not")
+
+
+class SpeakerIdMatch(BaseModel):
+    speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+def should_discard_memory(transcript: str) -> bool:
+    if len(transcript.split(' ')) > 100:
+        return False
+
+    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
+    prompt = ChatPromptTemplate.from_messages([
+        '''
+    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
+    
+    Transcript: ```{transcript}```
+    
+    {format_instructions}'''.replace('    ', '').strip()
+    ])
+    chain = prompt | llm | parser
+    try:
+        response: DiscardMemory = chain.invoke({
+            'transcript': transcript.strip(),
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response.discard
+
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return False
+
+
+def get_transcript_structure(transcript: str, started_at: datetime, language_code: str) -> Structured:
+    prompt = ChatPromptTemplate.from_messages([(
+        'system',
+        '''Your task is to provide structure and clarity to the recording transcription of a conversation.
+        The conversation language is {language_code}. Use English for your response.
+        
+        For the title, use the main topic of the conversation.
+        For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+        For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
+        For the category, classify the conversation into one of the available categories.
+        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}.
+            
+        Transcript: ```{transcript}```
+
+        {format_instructions}'''.replace('    ', '').strip()
+    )])
+    chain = prompt | llm | parser
+
+    response = chain.invoke({
+        'transcript': transcript.strip(),
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+    })
+    return response
+
+
+def get_plugin_result(transcript: str, plugin: Plugin) -> str:
+    prompt = f'''
+    Your are an AI with the following characteristics:
+    Name: ${plugin.name}, 
+    Description: ${plugin.description},
+    Task: ${plugin.memory_prompt}
+
+    Note: It is possible that the conversation you are given, has nothing to do with your task, \
+    in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
+
+    Conversation: ```{transcript.strip()}```,
+
+    Output your response in plain text, without markdown.
+    Make sure to be concise and clear.
+    '''
+
+    response = llm.invoke(prompt)
+    content = response.content.replace('```json', '').replace('```', '')
+    if len(content) < 5:
+        return ''
+    return content
+
+
+# *******************************************
+# ************* POSTPROCESSING **************
+# *******************************************
+
+def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
+    prev_transcript_tokens = num_tokens_from_string(prev_transcript)
+    count_user_appears = prev_transcript.count('User:')
+    if count_user_appears == 0:
+        return -1
+    elif prev_transcript_tokens > 10000:
+        # if count_user_appears == 1: # most likely matching was a mistake
+        #     return -1
+        first_user_appears = new_transcript.index('User:')
+        # trim first user appears
+        prev_transcript = prev_transcript[first_user_appears:min(first_user_appears + 10000, len(prev_transcript))]
+        # new_transcript = new_transcript[first_user_appears:min(first_user_appears + 10000, len(new_transcript))]
+        # further improvement
+
+    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
+    prompt = f'''
+    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
+    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
+    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
+
+    Previous Transcript:
+    {prev_transcript}
+
+    Improved Transcript:
+    {new_transcript}
+    '''
+    with_parser = llm.with_structured_output(SpeakerIdMatch)
+    response: SpeakerIdMatch = with_parser.invoke(prompt)
+    return response.speaker_id
 
 
 def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
@@ -55,129 +188,6 @@ Transcript segments:
     with_parser = llm.with_structured_output(ImprovedTranscript)
     response: ImprovedTranscript = with_parser.invoke(prompt)
     return response.result
-
-
-class DiscardMemory(BaseModel):
-    discard: bool = Field(description="If the memory should be discarded or not")
-
-
-class SpeakerIdMatch(BaseModel):
-    speaker_id: int = Field(description="The speaker id assigned to the segment")
-
-
-# **********************************************
-# ************* MEMORY PROCESSING **************
-# **********************************************
-
-def should_discard_memory(transcript: str) -> bool:
-    if len(transcript.split(' ')) > 100:
-        return False
-
-    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
-    prompt = ChatPromptTemplate.from_messages([
-        '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
-    
-    Transcript: ```{transcript}```
-    
-    {format_instructions}'''.replace('    ', '').strip()
-    ])
-    chain = prompt | llm | parser
-    try:
-        response: DiscardMemory = chain.invoke({
-            'transcript': transcript.strip(),
-            'format_instructions': parser.get_format_instructions(),
-        })
-        return response.discard
-
-    except Exception as e:
-        print(f'Error determining memory discard: {e}')
-        return False
-
-
-def get_transcript_structure(transcript: str, started_at: datetime, language_code: str) -> Structured:
-    prompt = ChatPromptTemplate.from_messages([(
-        'system',
-        '''Your task is to provide structure and clarity to the recording transcription of a conversation.
-        The conversation language is {language_code}. Use English for your response.
-        
-        {force_process_str}
-
-        For the title, use the main topic of the conversation.
-        For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
-        For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
-        For the category, classify the conversation into one of the available categories.
-        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}.
-            
-        Transcript: ```{transcript}```
-
-        {format_instructions}'''.replace('    ', '').strip()
-    )])
-    chain = prompt | llm | parser
-
-    response = chain.invoke({
-        'transcript': transcript.strip(),
-        'format_instructions': parser.get_format_instructions(),
-        'language_code': language_code,
-        'force_process_str': '',
-        'started_at': started_at.isoformat(),
-    })
-    return response
-
-
-def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
-    prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = prev_transcript.count('User:')
-    if count_user_appears == 0:
-        return -1
-    elif prev_transcript_tokens > 10000:
-        # if count_user_appears == 1: # most likely matching was a mistake
-        #     return -1
-        first_user_appears = new_transcript.index('User:')
-        # trim first user appears
-        prev_transcript = prev_transcript[first_user_appears:min(first_user_appears + 10000, len(prev_transcript))]
-        # new_transcript = new_transcript[first_user_appears:min(first_user_appears + 10000, len(new_transcript))]
-        # further improvement
-
-    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
-    prompt = f'''
-    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
-    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
-    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
-
-    Previous Transcript:
-    {prev_transcript}
-
-    Improved Transcript:
-    {new_transcript}
-    '''
-    with_parser = llm.with_structured_output(SpeakerIdMatch)
-    response: SpeakerIdMatch = with_parser.invoke(prompt)
-    return response.speaker_id
-
-
-def get_plugin_result(transcript: str, plugin: Plugin) -> str:
-    prompt = f'''
-    Your are an AI with the following characteristics:
-    Name: ${plugin.name}, 
-    Description: ${plugin.description},
-    Task: ${plugin.memory_prompt}
-
-    Note: It is possible that the conversation you are given, has nothing to do with your task, \
-    in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
-
-    Conversation: ```{transcript.strip()}```,
-
-    Output your response in plain text, without markdown.
-    Make sure to be concise and clear.
-    '''
-
-    response = llm.invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
-    if len(content) < 5:
-        return ''
-    return content
 
 
 # **************************************
@@ -229,6 +239,25 @@ def summarize_experience_text(text: str) -> Structured:
     return llm_with_parser.invoke(prompt)
 
 
+def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
+    conversation_history = Memory.memories_to_string(memories)
+
+    prompt = f"""
+    The following are a list of ${user_name}'s memories from today, with the transcripts with its respective structuring, that ${user_name} had during his day.
+    ${user_name} wants to get a summary of the key action items he has to take based on his today's memories.
+
+    Remember ${user_name} is busy so this has to be very efficient and concise.
+    Respond in at most 50 words.
+  
+    Output your response in plain text, without markdown.
+    ```
+    ${conversation_history}
+    ```
+    """.replace('    ', '').strip()
+    print(prompt)
+    return llm.invoke(prompt).content
+
+
 def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
 
@@ -236,13 +265,15 @@ def generate_embedding(content: str) -> List[float]:
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
-def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
+def initial_chat_message(user_name: str, user_facts: List[Fact], plugin: Optional[Plugin] = None) -> str:
     if plugin is None:
-        prompt = '''
+        prompt = f'''
         You are an AI with the following characteristics:
         Name: Friend, 
         Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
         Task: Provide assistance, answer questions, and engage in meaningful conversations.
+        
+        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -255,6 +286,8 @@ def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
         Name: {plugin.name}, 
         Personality/Description: {plugin.chat_prompt},
         Task: {plugin.memory_prompt}
+        
+        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -265,24 +298,9 @@ def initial_chat_message(plugin: Optional[Plugin] = None) -> str:
     return llm.invoke(prompt).content
 
 
-import tiktoken
-
-encoding = tiktoken.encoding_for_model('gpt-4')
-
-
-def num_tokens_from_string(string: str) -> int:
-    """Returns the number of tokens in a text string."""
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
-
-# ***************************************************
-# ************* CHAT CURRENT APP LOGIC **************
-# ***************************************************
-
-
-class ContextOutput(BaseModel):
-    topics: List[str] = Field(default=[], description="List of topics.")
+# *********************************************
+# ************* RETRIEVAL + CHAT **************
+# *********************************************
 
 
 class RequiresContext(BaseModel):
@@ -310,10 +328,9 @@ def requires_context(messages: List[Message]) -> bool:
     return response.value
 
 
-# TODO: try query expansion, instead of topics / queries
-# TODO: include user name in prompt, and preferences.
+# TODO: try query expansion
 
-def retrieve_context_params(messages: List[Message]) -> List[str]:
+def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
     
@@ -349,64 +366,6 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     return response.dates_range
 
 
-def determine_requires_context(messages: List[Message]) -> Optional[Tuple[List[str], List[datetime]]]:
-    prompt = '''
-            Based on the current conversation an AI and a User are having, determine if the AI requires context outside the conversation to respond to the user's message.
-            More context could mean, user stored old conversations, notes, or information that seems very user-specific.
-    
-            - First determine if the conversation requires context, in the field "requires_context".
-            - Context could be 2 different things:
-              - A list of topics (each topic being 1 or 2 words, e.g. "Startups" "Funding" "Business Meeting" "Artificial Intelligence") that are going to be used to retrieve more context, in the field "topics". Leave an empty list if not context is needed.
-              - A dates range, if the context is time-based, in the field "dates_range". Leave an empty list if not context is needed. FYI if the user says today, today is {current_date}.
-    
-            Conversation:
-            {conversation}
-            
-            {format_instructions}
-        '''.replace('    ', '').strip()
-    parser = PydanticOutputParser(pydantic_object=TopicsContext)
-
-    prompt = PromptTemplate(
-        template=prompt,
-        input_variables=["current_date", "conversation"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-
-    conversation = Message.get_messages_as_string(messages)
-
-    prompt_and_model = prompt | llm
-    output = prompt_and_model.invoke({'current_date': datetime.now().isoformat(), 'conversation': conversation})
-
-    try:
-        parsed_output = parser.invoke(output)
-        topics = parsed_output.topics
-        dates = parsed_output.dates_range
-        print(f'topics: {topics}, dates: {dates}')
-        return (topics, dates) if parsed_output.requires_context else None
-    except Exception as e:
-        print(f'Error determining requires context: {e}')
-        return None
-
-
-def retrieve_memory_context_params(memory: Memory) -> List[str]:
-    transcript = memory.get_transcript(False)
-    if len(transcript) == 0:
-        return []
-
-    prompt = f'''
-    Based on the current transcript of a conversation.
-    
-    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
-    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
-
-    Conversation:
-    {transcript}
-    '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(ContextOutput)
-    response: ContextOutput = with_parser.invoke(prompt)
-    return response.topics
-
-
 class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
@@ -416,13 +375,13 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
-    
+
     Include the most relevant information about the topics, people mentioned, events, locations, facts, phrases, and any other relevant information.
     It is possible that the conversation doesn't have anything related to the topics, in that case, output an empty string.
-    
+
     Conversation:
     {content}
-    
+
     Topics: {topics}
     '''
     with_parser = llm.with_structured_output(SummaryOutput)
@@ -430,7 +389,9 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def qa_rag(
+        user_name: str, user_facts: List[Fact], context: str, messages: List[Message], plugin: Optional[Plugin] = None
+) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -440,13 +401,16 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
     prompt = f"""
-    You are an assistant for question-answering tasks. Use the following pieces of retrieved context and the conversation history to continue the conversation.
-    If you don't know the answer, just say that you didn't find any related information or you that don't know. Use three sentences maximum and keep the answer concise.
+    You are an assistant for question-answering tasks. 
+    You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    
+    Use what you know about {user_name}, the following pieces of retrieved context and the chat history to continue the chat.
+    If you don't know the answer, just say that there's no available information about it. Use three sentences maximum and keep the answer concise.
     If the message doesn't require context, it will be empty, so follow-up the conversation casually.
     If there's not enough information to provide a valuable answer, ask the user for clarification questions.
     {plugin_info}
     
-    Conversation History:
+    Chat History:
     {conversation_history}
 
     Context:
@@ -459,22 +423,108 @@ def qa_rag(context: str, messages: List[Message], plugin: Optional[Plugin] = Non
     return llm.invoke(prompt).content
 
 
-def qa_emotional_rag(context: str, memories: List[Memory], emotion: str) -> str:
-    conversation_history = Memory.memories_to_string(memories)
+# **************************************************
+# ************* RETRIEVAL (EMOTIONAL) **************
+# **************************************************
 
+def retrieve_memory_context_params(memory: Memory) -> List[str]:
+    transcript = memory.get_transcript(False)
+    if len(transcript) == 0:
+        return []
+
+    prompt = f'''
+    Based on the current transcript of a conversation.
+
+    Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
+    Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
+
+    Conversation:
+    {transcript}
+    '''.replace('    ', '').strip()
+
+    try:
+        with_parser = llm.with_structured_output(TopicsContext)
+        response: TopicsContext = with_parser.invoke(prompt)
+        return response.topics
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
+        return []
+
+
+def obtain_emotional_message(user_name: str, user_facts: List[Fact], memory: Memory, context: str, emotion: str) -> str:
+    transcript = memory.get_transcript(False)
     prompt = f"""
-    You are a thoughtful friend. Use the following pieces of retrieved context, the conversation history and user's emotions to share your thoughts and give the user positive advice.
-    Thoughts and positive advice should be like a chat message. Keep it short.
-    User's emotions:
-    {emotion}
-    Conversation History:
-    {conversation_history}
+    You are a thoughtful and encouraging Friend. 
+    Your best friend is {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    
+    {user_name} just finished a conversation where {user_name} experienced {emotion}.
+    
+    You will be given the conversation transcript, and context from previous related conversations of {user_name}.
+    
+    Remember, {user_name} is feeling {emotion}.
+    Use what you know about {user_name}, the transcript, and the related context, to share your thoughts and motivate {user_name} through a sweet, and emotionally-charged message.
+    
+    Make sure the message is short and sweet, no more than 20 words.
+    
+    Conversation Transcript:
+    {transcript}
 
     Context:
     ```
     {context}
     ```
-    Answer:
     """.replace('    ', '').strip()
-    print(prompt)
     return llm.invoke(prompt).content
+
+
+# **********************************
+# ************* FACTS **************
+# **********************************
+
+class Facts(BaseModel):
+    facts: List[Fact] = Field(
+        min_items=0,
+        max_items=3,
+        description="List of new user facts, preferences, interests, or topics.",
+    )
+
+
+def new_facts_extractor(
+        user_name: str, existing_facts: List[Fact], segments: List[TranscriptSegment]
+) -> List[Fact]:
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    if not content or len(content) < 100:  # less than 100 chars, probably nothing
+        return []
+    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
+    # TODO: include negative facts too? Things the user doesn't like?
+
+    prompt = f'''
+    You are an experienced detective, whose job is to create detailed profile personas based on conversations.
+
+    You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
+    Your task is to determine **new** facts, preferences, and interests about {user_name}, based on the transcript.
+
+    Make sure these facts are:
+    - Relevant, and are not repetitive or similar to the existing facts we know about {user_name}, in this case, is preferred to have breadth than too much depth on specifics.
+    - Use a format of "{user_name} likes to play tennis on weekends.".
+    - Contain one of the categories available.
+    - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
+
+    This way we can create a more accurate profile. 
+    Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+
+    Existing Facts: {Fact.get_facts_as_str(existing_facts)}
+
+    Conversation:
+    ```
+    {content}
+    ```
+    '''.replace('    ', '').strip()
+
+    try:
+        with_parser = llm.with_structured_output(Facts)
+        response: Facts = with_parser.invoke(prompt)
+        return response.facts
+    except Exception as e:
+        # print(f'Error extracting new facts: {e}')
+        return []
