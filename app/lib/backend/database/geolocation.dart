@@ -1,9 +1,6 @@
-import 'package:objectbox/objectbox.dart';
-
-@Entity()
 class Geolocation {
   // TODO: location should be the place the memory starts
-  @Id()
+
   int id = 0;
 
   double? latitude;
@@ -11,16 +8,11 @@ class Geolocation {
   double? altitude;
   double? accuracy;
 
-  @Property(type: PropertyType.date)
   DateTime? time;
 
   String? googlePlaceId;
   String? address;
   String? locationType;
-
-  // TODO: eventually locations could map to multiple memories
-  // @Backlink('memory')
-  // final memories = ToMany<Memory>();
 
   Geolocation({
     this.latitude,

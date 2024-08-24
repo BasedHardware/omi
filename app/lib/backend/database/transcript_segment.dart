@@ -1,11 +1,6 @@
-import 'dart:convert';
-
 import 'package:friend_private/backend/preferences.dart';
-import 'package:objectbox/objectbox.dart';
 
-@Entity()
 class TranscriptSegment {
-  @Id()
   int id = 0;
 
   String text;
@@ -125,7 +120,8 @@ class TranscriptSegment {
         (joinedSimilarSegments[0].start - segments.last.end < 30)) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       segments.last.end = joinedSimilarSegments[0].end;
-      if (joinedSimilarSegments[0].isUser) segments.last.isUser = true;
+      // let's not switch to user, if the 1st segment is not, it will be always the user basically.
+      // if (joinedSimilarSegments[0].isUser) segments.last.isUser = true;
       joinedSimilarSegments.removeAt(0);
     }
 
