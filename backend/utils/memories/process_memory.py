@@ -227,7 +227,8 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Save predictions
     if len(callback.predictions) > 0:
-        memories_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider, callback.predictions)
+        memories_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider,
+                                                           callback.predictions)
 
     # Memory
     memory_data = memories_db.get_memory(uid, task.memory_id)
@@ -239,6 +240,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Get prediction
     predictions = callback.predictions
+    print(predictions)
     if len(predictions) == 0 or len(predictions[0].emotions) == 0:
         print(f"Can not predict user's expression. Uid: {uid}")
         return
@@ -247,6 +249,8 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     users_frames = []
     for seg in filter(lambda seg: seg.is_user and 0 <= seg.start < seg.end, memory.transcript_segments):
         users_frames.append((seg.start, seg.end))
+    # print(users_frames)
+
     if len(users_frames) == 0:
         print(f"User time frames are empty. Uid: {uid}")
         return
@@ -254,6 +258,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     users_predictions = []
     for prediction in predictions:
         for uf in users_frames:
+            print(uf, prediction.time)
             if uf[0] <= prediction.time[0] and prediction.time[1] <= uf[1]:
                 users_predictions.append(prediction)
                 break
@@ -267,7 +272,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     for up in users_predictions:
         user_emotions += up.emotions
     emotions = HumeJobModelPredictionResponseModel.get_top_emotion_names(user_emotions, 1, 0.5)
-    print(emotions)
+    # print(emotions)
     if len(emotion_filters) > 0:
         emotions = filter(lambda emotion: emotion in emotion_filters, emotions)
     if len(emotions) == 0:
@@ -279,10 +284,10 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Ask llms about notification content
     title = "Omi"
-    context_str, memories = retrieve_rag_memory_context(uid, memory)
+    context_str, _ = retrieve_rag_memory_context(uid, memory)
 
     user_name, user_facts = get_prompt_data(uid)
-    response: str = obtain_emotional_message(user_name, user_facts, context_str, memories, emotion)
+    response: str = obtain_emotional_message(user_name, user_facts, memory, context_str, emotion)
     message = response
 
     print(title)

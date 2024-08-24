@@ -238,6 +238,7 @@ def summarize_experience_text(text: str) -> Structured:
     # return groq_llm_with_parser.invoke(prompt)
     return llm_with_parser.invoke(prompt)
 
+
 def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
     conversation_history = Memory.memories_to_string(memories)
 
@@ -255,6 +256,7 @@ def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
     """.replace('    ', '').strip()
     print(prompt)
     return llm.invoke(prompt).content
+
 
 def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]

@@ -1,12 +1,13 @@
 import uuid
-from typing import List
 from datetime import datetime
+from typing import List
+import json
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 import utils.other.hume as hume
+from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
@@ -137,7 +138,11 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
             batch = db.batch()
     batch.commit()
 
-def store_model_emotion_predictions_result(uid: str, memory_id: str, model_name: str, predictions: List[hume.HumeJobModelPredictionResponseModel]):
+
+def store_model_emotion_predictions_result(
+        uid: str, memory_id: str, model_name: str,
+        predictions: List[hume.HumeJobModelPredictionResponseModel]
+):
     now = datetime.now()
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
@@ -151,13 +156,9 @@ def store_model_emotion_predictions_result(uid: str, memory_id: str, model_name:
             "created_at": now,
             "start": prediction.time[0],
             "end": prediction.time[1],
+            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
-        emotions_ref = prediction_ref.collection("emotions")
-        for emotion in prediction.emotions:
-            emotion_ref = emotions_ref.document(emotion.name)
-            batch.set(emotion_ref, emotion.to_dict())
-            count += 1
-            if count % 400 == 0:
-                batch.commit()
-                batch = db.batch()
+        if count % 400 == 0:
+            batch.commit()
+            batch = db.batch()
     batch.commit()
