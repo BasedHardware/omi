@@ -18,9 +18,8 @@ from plotly.subplots import make_subplots
 # noinspection PyUnresolvedReferences
 from models.memory import Memory
 
-load_dotenv('../../.dev.env')
+load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-
 if os.getenv('PINECONE_API_KEY') is not None:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
     index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
