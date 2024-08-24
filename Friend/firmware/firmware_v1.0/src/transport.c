@@ -179,8 +179,7 @@ int accel_start() {
     return 0;
 	}
 
-    LOG_INF("A
-	    ccelerometer is ready for use \n");
+    LOG_INF("Accelerometer is ready for use \n");
     
     return 1;
 }
