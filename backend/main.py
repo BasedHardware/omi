@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 
@@ -5,9 +6,8 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi_utilities import repeat_at
 
-from modal import Image, App, asgi_app, Secret, Cron
-from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile, \
-    agents, facts
+from modal import Image, App, asgi_app, Secret
+from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile, agents
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -20,7 +20,6 @@ else:
 app = FastAPI()
 app.include_router(transcribe.router)
 app.include_router(memories.router)
-app.include_router(facts.router)
 app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
@@ -65,6 +64,7 @@ for path in paths:
         os.makedirs(path)
 
 
-@modal_app.function(image=image,schedule=Cron('* * * * *'))
-async def start_job():
-    await start_cron_job()
+@app.on_event('startup')
+@repeat_at(cron="* * * * *")
+def start_job():
+    asyncio.run(start_cron_job())

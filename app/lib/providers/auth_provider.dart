@@ -12,19 +12,19 @@ import 'package:url_launcher/url_launcher.dart';
 class AuthenticationProvider extends BaseProvider {
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
-      setLoadingState(true);
+      changeLoadingState();
       await signInWithGoogle();
       _signIn(onSignIn);
-      setLoadingState(false);
+      changeLoadingState();
     }
   }
 
   Future<void> onAppleSignIn(Function() onSignIn) async {
     if (!loading) {
-      setLoadingState(true);
+      changeLoadingState();
       await signInWithApple();
       _signIn(onSignIn);
-      setLoadingState(false);
+      changeLoadingState();
     }
   }
 

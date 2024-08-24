@@ -20,8 +20,8 @@ class NotificationOnKillService: Service() {
     private lateinit var description: String
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        title = intent?.getStringExtra("title") ?: ""
-        description = intent?.getStringExtra("description") ?: ""
+        title = intent?.getStringExtra("title") ?: "Default title"
+        description = intent?.getStringExtra("description") ?: "Default body"
 
         return START_STICKY
     }
@@ -29,14 +29,9 @@ class NotificationOnKillService: Service() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onTaskRemoved(rootIntent: Intent?) {
         try {
-            
-            if (title.isBlank() || description.isBlank()) {
-                Log.d("NotificationOnKillService", "Title or description is empty, notification will not be shown")
-                return
-            }
             val notificationIntent = packageManager.getLaunchIntentForPackage(packageName)
             val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
-    
+
             val notificationBuilder = NotificationCompat.Builder(this, "com.friend.ios")
                 .setSmallIcon(getSmallIconForNotification())
                 .setContentTitle(title)

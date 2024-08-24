@@ -1,12 +1,9 @@
 import uuid
-from datetime import datetime
 from typing import List
-import json
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-import utils.other.hume as hume
 from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
 from models.transcript_segment import TranscriptSegment
 from ._client import db
@@ -134,31 +131,6 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.dict())
         if i >= 400:
-            batch.commit()
-            batch = db.batch()
-    batch.commit()
-
-
-def store_model_emotion_predictions_result(
-        uid: str, memory_id: str, model_name: str,
-        predictions: List[hume.HumeJobModelPredictionResponseModel]
-):
-    now = datetime.now()
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    predictions_ref = memory_ref.collection(model_name)
-    batch = db.batch()
-    count = 1
-    for prediction in predictions:
-        prediction_id = str(uuid.uuid4())
-        prediction_ref = predictions_ref.document(prediction_id)
-        batch.set(prediction_ref, {
-            "created_at": now,
-            "start": prediction.time[0],
-            "end": prediction.time[1],
-            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
-        })
-        if count % 400 == 0:
             batch.commit()
             batch = db.batch()
     batch.commit()

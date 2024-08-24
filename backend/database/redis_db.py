@@ -89,15 +89,3 @@ def get_user_speech_profile_duration(uid: str) -> int:
     if not data:
         return 0
     return int(data)
-
-
-def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
-
-
-def get_cached_user_name(uid: str) -> str:
-    name = r.get(f'users:{uid}:name')
-    if not name:
-        return 'User'
-    return name.decode()

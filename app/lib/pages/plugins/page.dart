@@ -1,11 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,49 +19,84 @@ class PluginsPage extends StatefulWidget {
   const PluginsPage({super.key, this.filterChatOnly = false});
 
   @override
-  State<PluginsPage> createState() => _PluginsPageState();
+  _PluginsPageState createState() => _PluginsPageState();
 }
 
 class _PluginsPageState extends State<PluginsPage> {
   @override
   void initState() {
-    () {
-      context.read<PluginProvider>().initialize(widget.filterChatOnly);
-    }.withPostFrameCallback();
-
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<PluginProvider>().getPlugins();
+      if (mounted) {
+        if (widget.filterChatOnly) {
+          context.read<PluginProvider>().setChatFilterOnly();
+        }
+      }
+    });
     super.initState();
+  }
+
+  Future<void> _togglePlugin(String pluginId, bool isEnabled, int idx) async {
+    if (context.read<PluginProvider>().pluginLoading[idx]) return;
+    context.read<PluginProvider>().setPluginLoading(idx, true);
+    var prefs = SharedPreferencesUtil();
+    if (isEnabled) {
+      var enabled = await enablePluginServer(pluginId);
+      if (!enabled) {
+        showDialog(
+            context: context,
+            builder: (c) => getDialog(
+                  context,
+                  () => Navigator.pop(context),
+                  () => Navigator.pop(context),
+                  'Error activating the plugin',
+                  'If this is an integration plugin, make sure the setup is completed.',
+                  singleButton: true,
+                ));
+        context.read<PluginProvider>().setPluginLoading(idx, false);
+        return;
+      }
+      prefs.enablePlugin(pluginId);
+      MixpanelManager().pluginEnabled(pluginId);
+    } else {
+      await disablePluginServer(pluginId);
+      prefs.disablePlugin(pluginId);
+      MixpanelManager().pluginDisabled(pluginId);
+    }
+    context.read<PluginProvider>().setPluginLoading(idx, false);
+    context.read<PluginProvider>().getPlugins();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PluginProvider>(builder: (context, provider, child) {
-      return Scaffold(
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          automaticallyImplyLeading: true,
-          title: const Text('Plugins'),
-          centerTitle: true,
-          elevation: 0,
-          actions: [
-            TextButton(
-                onPressed: () {
-                  launchUrl(Uri.parse('https://basedhardware.com/plugins'));
-                },
-                child: const Row(
-                  children: [
-                    Text(
-                      'Create Yours',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    SizedBox(
-                      width: 8,
-                    ),
-                  ],
-                ))
-          ],
-        ),
-        body: GestureDetector(
+        automaticallyImplyLeading: true,
+        title: const Text('Plugins'),
+        centerTitle: true,
+        elevation: 0,
+        actions: [
+          TextButton(
+              onPressed: () {
+                launchUrl(Uri.parse('https://basedhardware.com/plugins'));
+              },
+              child: const Row(
+                children: [
+                  Text(
+                    'Create Yours',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  SizedBox(
+                    width: 8,
+                  ),
+                ],
+              ))
+        ],
+      ),
+      body: Consumer<PluginProvider>(builder: (context, provider, child) {
+        return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           child: CustomScrollView(
             slivers: [
@@ -85,7 +123,9 @@ class _PluginsPageState extends State<PluginsPage> {
                   ),
                   // TODO: reuse chat textfield
                   child: TextField(
-                    onChanged: provider.updateSearchQuery,
+                    onChanged: (value) {
+                      provider.filterPlugins(value);
+                    },
                     obscureText: false,
                     decoration: InputDecoration(
                       hintText: 'Find your plugin...',
@@ -100,7 +140,9 @@ class _PluginsPageState extends State<PluginsPage> {
                                 color: Color(0xFFF7F4F4),
                                 size: 28.0,
                               ),
-                              onPressed: () => provider.updateSearchQuery(''),
+                              onPressed: () {
+                                provider.clearSearchQuery();
+                              },
                             ),
                     ),
                     style: const TextStyle(
@@ -123,7 +165,9 @@ class _PluginsPageState extends State<PluginsPage> {
                       // ),
                       // const SizedBox(width: 16),
                       GestureDetector(
-                        onTap: provider.toggleFilterMemories,
+                        onTap: () {
+                          provider.setFilterMemories(!provider.filterMemories);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
@@ -141,7 +185,9 @@ class _PluginsPageState extends State<PluginsPage> {
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
-                        onTap: provider.toggleFilterChat,
+                        onTap: () {
+                          provider.setFilterChat(!provider.filterChat);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
@@ -159,7 +205,9 @@ class _PluginsPageState extends State<PluginsPage> {
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
-                        onTap: provider.toggleFilterExternal,
+                        onTap: () {
+                          provider.setFilterExternal(!provider.filterExternal);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
@@ -180,16 +228,28 @@ class _PluginsPageState extends State<PluginsPage> {
                 ),
               ),
               // const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              provider.filteredPlugins.isEmpty
+              provider.isLoading
+                  ? const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 64, left: 14, right: 14),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SliverToBoxAdapter(child: SizedBox(height: 1)),
+              provider.filteredPlugins.isEmpty && !provider.isLoading
                   ? SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
+                        padding: EdgeInsets.only(top: 64, left: 14, right: 14),
                         child: Center(
                           child: Text(
                             ConnectivityController().isConnected.value
                                 ? 'No plugins found'
                                 : 'Unable to fetch plugins :(\n\nPlease check your internet connection and try again.',
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            style: TextStyle(color: Colors.white, fontSize: 16),
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -211,7 +271,7 @@ class _PluginsPageState extends State<PluginsPage> {
                     child: ListTile(
                       onTap: () async {
                         await routeToPage(context, PluginDetailPage(plugin: plugin));
-                        provider.setPlugins();
+                        //  setState(() => plugins = SharedPreferencesUtil().pluginsList);
                       },
                       leading: CachedNetworkImage(
                         imageUrl: plugin.getImageUrl(),
@@ -326,7 +386,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                       () async {
                                         Navigator.pop(context);
                                         await routeToPage(context, PluginDetailPage(plugin: plugin));
-                                        provider.setPlugins();
+                                        //  setState(() => plugins = SharedPreferencesUtil().pluginsList);
                                       },
                                       'Authorize External Plugin',
                                       'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
@@ -334,7 +394,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                     ),
                                   );
                                 } else {
-                                  provider.togglePlugin(plugin.id.toString(), !plugin.enabled, index);
+                                  _togglePlugin(plugin.id.toString(), !plugin.enabled, index);
                                 }
                               },
                             ),
@@ -463,8 +523,8 @@ class _PluginsPageState extends State<PluginsPage> {
               // ),
             ],
           ),
-        ),
-      );
-    });
+        );
+      }),
+    );
   }
 }

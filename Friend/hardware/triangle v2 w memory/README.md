@@ -1,5 +1,3 @@
-> ⚠️ WARNING: For the proper function of the speaker, the circuit diagram and assembly steps have been slightly modified. If you possess a device assembled before August 23, 2024, you need to modify it. Please refer to the [Speaker function correction for earlier models](#speaker-function-correction-for-earlier-models) section for detailed instructions.
-
 > ⚠️ Disclaimer: This device is currently a developer version that has not been fully tested. Some new functionality may not be fully covered by the firmware.
 
 # Omi Triangle v2
@@ -32,7 +30,6 @@ Estimated Time: 50 min
    - [Step 9: Attach the Speaker to the Enclosure](#step-9-attach-the-speaker-to-the-enclosure)
    - [Step 10: Microphone Noise Isolation (Optional)](#step-10-microphone-noise-isolation-optional)
    - [Step 11: Assemble the Device](#step-11-assemble-the-device)
-4. [Speaker function correction for earlier models](#speaker-function-correction-for-earlier-models)
 
 ---
 
@@ -64,7 +61,6 @@ It is recommended to print both versions and choose the most appropriate one bas
 - **Precision tweezers**
 - **Craft knife**
 - **Cyanoacrylate glue (aka super glue)**
-- **Hot glue gun**
 - **Thin double-sided tape**
 - **Ruler or caliper**
 - **Isopropyl alcohol and cotton swabs**
@@ -152,7 +148,7 @@ It is recommended to print both versions and choose the most appropriate one bas
 
 ### Step 4: Solder board edges with wire
 
-1. Cut five pieces of solid-core wire, each at least 55 mm long.
+1. Cut six pieces of solid-core wire, each at least 55 mm long.
 
 2. Strip an equal amount of insulation from both ends of each wire, ensuring the unstripped length is exactly 34 mm.
 
@@ -160,31 +156,20 @@ It is recommended to print both versions and choose the most appropriate one bas
 
 ⚠️ Warning: Ensure the unstripped wire length is exactly 34 mm to fit properly in the case. Shortening or lengthening it by even 1 mm will prevent proper fitting.
 
-3. Cut an additional piece of wire with unstripped length of 5 mm. 
+3. Flip the boards. Insert the wires into the holes and bend the ends as shown.
 
-   ![Cut wires 2](pics/16_cut_wires_2.jpg)
+   ![Wire placement front](pics/17_wire_placement_front.jpg)
+   ![Wire placement back](pics/18_wire_placement_back.jpg)
 
-4. Insert the long wires into the holes and bend the ends as shown.
+4. Apply a small amount of flux to each hole you'll be soldering.
 
-   ![Long wire placement front](pics/17_long_wire_placement_front.jpg)
-   ![Long wire placement back](pics/18_long_wire_placement_back.jpg)
-
-5. Insert the short wire into the 5V and 3v3 holes (as shown in the photo). Allow 1-2 mm distance between the board and the wire (as not shown in the photo). Bend the ends.
-
-   ![Short wire placement](pics/18_short_wire_placement.jpg)
-   
-6. Apply a small amount of flux to each hole you'll be soldering.
-
-7. Solder the wires from the front side. Solder each wire end, starting from the top. Hold the iron on each joint for 2-3 seconds.
+5. Flip the boards one more time -- it's easier to solder them from the front side. Solder each wire end, starting from the top. Hold the iron on each joint for 2-3 seconds.
 
    ![Wires soldered front](pics/19_wires_soldered_front.jpg)
-   ![Wires soldered back](pics/19_wires_soldered_back.jpg)
-   ![Wires soldered side](pics/19_wires_soldered_side.jpg)
 
-8. Trim any excess wire flush with the board surface.
+6. Trim any excess wire flush with the board surface.
 
-   ![Trimmed wires front](pics/20_trimmed_wires_front.jpg)
-   ![Trimmed wires back](pics/20_trimmed_wires_back.jpg)
+   ![Trimmed wires](pics/20_trimmed_wires.jpg)
 
 
 ### Step 5: Solder the speaker
@@ -298,38 +283,10 @@ Allow the board to air dry completely before proceeding.
    b. Gently snap the cover into place, ensuring all edges are secure.
 
 3. If using the low-tolerance top cover:
-   a. Apply small dots of hot glue sparingly around the edge of the bottom part. Focus on corners and a few points along each side.
+   a. Apply a thin line of glue around the edge of the bottom part.
    b. Carefully place the top cover onto the bottom part.
-   c. Press gently and hold in place until the glue sets.
+   c. Hold in place until the glue sets.
 
-💡 Tip: Use just enough glue to secure the cover while allowing for potential future disassembly. Aim for a balance between a secure fit and ease of reopening if needed.
+4. Once assembled, gently shake the device to ensure no parts are loose inside.
 
-   ![Final result](pics/38_final_result.jpg)
-
----
-
-## Speaker function correction for earlier models
-
-> The 5V contact on the board, originally intended for speaker power, does not provide voltage when the device is battery-powered. In fact, there is no 5V signal available at all in battery mode. This modification creates a jumper to utilize the 3.3V supply from the board, which is sufficient to drive the speaker in all power states.
-
-
-For devices assembled before August 23, 2024, follow these steps to ensure proper speaker functionality:
-
-1. Remove the top cover.
-2. Extract the board assembly from the enclosure.
-3. Detach the battery from the board assembly, taking care not to damage the connections.
-4. Locate the wire closest to the USB port and cut it as shown in the image below.
-
-    ![Uncut wire near USB port](pics/99_uncut_wire_near_usb_port.jpg)
-    ![Cut wire near USB port](pics/99_cut_wire_near_usb_port.jpg)
-
-5. Using the cut wire, create a jumper between the designated board pads as illustrated.
-
-    ![Jumper wire](pics/99_jumper_wire.jpg)
-
-6. Solder the jumper wire securely between the 5V and 3v3 pads.
-
-    ![Soldered jumper wire](pics/99_soldered_jumper_wire.jpg)
-
-7. Ensure that the new jumper wire does not create any short circuits with surrounding components.
-8. Reassemble the device by following Steps 8 and 11 from the main assembly instructions.
+    ![Final result](pics/38_final_result.jpg)

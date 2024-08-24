@@ -26,14 +26,8 @@ def get_token(uid: str):
         return user_ref.get('fcm_token'), user_ref.get('time_zone')
     return None
 
-async def get_users_token_in_timezones(timezones: list[str]):
-    return await get_users_in_timezones(timezones, 'fcm_token')
 
-async def get_users_id_in_timezones(timezones: list[str]):
-    return await get_users_in_timezones(timezones, 'id')
-
-
-async def get_users_in_timezones(timezones: list[str], filter: str):
+async def get_users_in_timezones(timezones: list[str]):
     users = []
     users_ref = db.collection('users')
 
@@ -46,10 +40,7 @@ async def get_users_in_timezones(timezones: list[str], filter: str):
             try:
                 query = users_ref.where(filter=FieldFilter('time_zone', 'in', chunk))
                 for doc in query.stream():
-                    if(filter == 'fcm_token'):
-                        token = doc.get('fcm_token')
-                    else:
-                        token = doc.id, doc.get('fcm_token')
+                    token = doc.get('fcm_token')
                     if token:
                         chunk_users.append(token)
 

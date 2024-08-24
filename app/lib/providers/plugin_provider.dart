@@ -1,12 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/utils/alerts/app_dialog.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 
-class PluginProvider extends BaseProvider {
+class PluginProvider extends ChangeNotifier {
   List<Plugin> plugins = [];
+  List<Plugin> filteredPlugins = [];
+
+  bool isLoading = false;
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -20,99 +21,64 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void setLoading(bool value) {
+    isLoading = value;
+    notifyListeners();
+  }
+
+  void setChatFilterOnly() {
+    filterChat = true;
+    filterMemories = false;
+    filterExternal = false;
+    notifyListeners();
+  }
+
+  void setFilterChat(bool value) {
+    filterChat = value;
+    notifyListeners();
+  }
+
+  void setFilterMemories(bool value) {
+    filterMemories = value;
+    notifyListeners();
+  }
+
+  void setFilterExternal(bool value) {
+    filterExternal = value;
+    notifyListeners();
+  }
+
   void clearSearchQuery() {
     searchQuery = '';
     notifyListeners();
   }
 
-  Future getPlugins() async {
-    setLoadingState(true);
-    if (SharedPreferencesUtil().pluginsList.isEmpty) {
-      plugins = await retrievePlugins();
-      notifyListeners();
-    } else {
-      setPlugins();
-    }
-  }
-
-  void setPlugins() {
-    plugins = SharedPreferencesUtil().pluginsList;
-
-    notifyListeners();
-  }
-
-  void initialize(bool filterChatOnly) {
-    if (filterChatOnly) {
-      filterChat = true;
-      filterMemories = false;
-      filterExternal = false;
-    }
-    pluginLoading = List.filled(plugins.length, false);
-
-    getPlugins();
-  }
-
-  Future<void> togglePlugin(String pluginId, bool isEnabled, int idx) async {
-    if (pluginLoading[idx]) return;
-    pluginLoading[idx] = true;
-    notifyListeners();
-    var prefs = SharedPreferencesUtil();
-    if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
-      if (!enabled) {
-        AppDialog.show(
-          title: 'Error activating the plugin',
-          content: 'If this is an integration plugin, make sure the setup is completed.',
-          singleButton: true,
-        );
-
-        pluginLoading[idx] = false;
-        notifyListeners();
-
-        return;
-      }
-      prefs.enablePlugin(pluginId);
-      MixpanelManager().pluginEnabled(pluginId);
-    } else {
-      await disablePluginServer(pluginId);
-      prefs.disablePlugin(pluginId);
-      MixpanelManager().pluginDisabled(pluginId);
-    }
-    pluginLoading[idx] = false;
-    plugins = SharedPreferencesUtil().pluginsList;
-    notifyListeners();
-  }
-
-  List<Plugin> get filteredPlugins {
-    var pluginList = plugins
+  void filterPlugins(String searchQuery) {
+    this.searchQuery = searchQuery;
+    var plugins = this
+        .plugins
         .where((p) =>
             (p.worksWithChat() && filterChat) ||
             (p.worksWithMemories() && filterMemories) ||
             (p.worksExternally() && filterExternal))
         .toList();
 
-    return searchQuery.isEmpty
-        ? pluginList
-        : pluginList.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
-  }
-
-  void updateSearchQuery(String query) {
-    searchQuery = query;
+    filteredPlugins = searchQuery.isEmpty
+        ? plugins
+        : plugins.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
     notifyListeners();
   }
 
-  void toggleFilterChat() {
-    filterChat = !filterChat;
-    notifyListeners();
-  }
-
-  void toggleFilterMemories() {
-    filterMemories = !filterMemories;
-    notifyListeners();
-  }
-
-  void toggleFilterExternal() {
-    filterExternal = !filterExternal;
+  Future getPlugins() async {
+    setLoading(true);
+    if (SharedPreferencesUtil().pluginsList.isEmpty) {
+      plugins = await retrievePlugins();
+    } else {
+      plugins = SharedPreferencesUtil().pluginsList;
+    }
+    filteredPlugins = plugins;
+    pluginLoading = List.filled(plugins.length, false);
+    setLoading(false);
     notifyListeners();
   }
 }

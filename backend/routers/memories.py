@@ -1,6 +1,5 @@
-import asyncio
 import os
-import threading
+import asyncio
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -13,8 +12,7 @@ from utils.llm import transcript_user_speech_fix
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
-from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio
+from utils.other.storage import create_signed_postprocessing_audio_url, upload_postprocessing_audio, delete_postprocessing_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
@@ -66,8 +64,7 @@ def create_memory(
 
 @router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
 def postprocess_memory(
-        memory_id: str, file: Optional[UploadFile], emotional_feedback: Optional[bool] = False,
-        uid: str = Depends(auth.get_current_user_uid)
+    memory_id: str, file: Optional[UploadFile], emotional_feedback: Optional[bool] = False, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     The objective of this endpoint, is to get the best possible transcript from the audio file.
@@ -123,15 +120,12 @@ def postprocess_memory(
         #         profile_duration = profile_aseg.duration_seconds + separate_seconds
 
         signed_url = upload_postprocessing_audio(file_path)
-
-        # Ensure delete uploaded file in 15m
-        threads = threading.Thread(target=_delete_postprocessing_audio, args=(file_path,))
-        threads.start()
-
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count, aseg.duration_seconds)
         segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
         os.remove(file_path)
+
+        asyncio.run(_delete_postprocessing_audio(file_path))
 
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
@@ -178,10 +172,9 @@ def postprocess_memory(
     return result
 
 
-def _delete_postprocessing_audio(file_path):
+async def _delete_postprocessing_audio(file_path: str):
     time.sleep(900)  # 15m
     delete_postprocessing_audio(file_path)
-
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
     if not any(segment.is_user for segment in memory.transcript_segments):

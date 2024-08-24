@@ -71,4 +71,4 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## Licensing
 
-Omi is available under MIT License
+Friend is available under MIT License
