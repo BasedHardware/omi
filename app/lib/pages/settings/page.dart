@@ -89,14 +89,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(
                     height: 25,
                   ),
-                  _MockNotification(
-                    path: 'assets/images/emotional_feedback_2.png',
-                  ),
-                  const SizedBox(
-                    height: 25,
-                  ),
                   Text(
                     "Omi will send you feedback in real-time.",
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Color.fromRGBO(255, 255, 255, .8)),
                   ),
                   const SizedBox(
@@ -104,8 +99,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   Container(
                     padding: EdgeInsets.only(
-                      left: 111,
-                      right: 111,
+                      left: 8,
+                      right: 8,
                       top: 8,
                       bottom: 8,
                     ),
@@ -117,7 +112,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         alignment: Alignment.center,
                       ),
                       child: Text(
-                        "I understand!",
+                        "Ok, I understand",
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Color.fromRGBO(255, 255, 255, .8),
                           fontWeight: FontWeight.bold,

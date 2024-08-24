@@ -47,8 +47,6 @@ import UserNotifications
       notificationBodyOnKill = args["description"] as? String
     }
     
-    notificationTitleOnKill = notificationTitleOnKill ?? "Default title"
-    notificationBodyOnKill = notificationBodyOnKill ?? "Default body"
   }
     
 

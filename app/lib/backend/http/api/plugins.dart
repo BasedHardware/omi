@@ -5,7 +5,6 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<Plugin>> retrievePlugins() async {
   var response = await makeApiCall(
@@ -14,17 +13,18 @@ Future<List<Plugin>> retrievePlugins() async {
     body: '',
     method: 'GET',
   );
-  if (response?.statusCode == 200) {
-    try {
-      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
-      SharedPreferencesUtil().pluginsList = plugins;
-      return plugins;
-    } catch (e, stackTrace) {
-      debugPrint(e.toString());
-      CrashReporting.reportHandledCrash(e, stackTrace);
-      return SharedPreferencesUtil().pluginsList;
-    }
-  }
+  // if (response?.statusCode == 200) {
+  //   try {
+  //     log('plugins: ${response?.body}');
+  //     var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+  //     SharedPreferencesUtil().pluginsList = plugins;
+  //     return plugins;
+  //   } catch (e, stackTrace) {
+  //     debugPrint(e.toString());
+  //     CrashReporting.reportHandledCrash(e, stackTrace);
+  //     return SharedPreferencesUtil().pluginsList;
+  //   }
+  // }
   return SharedPreferencesUtil().pluginsList;
 }
 
