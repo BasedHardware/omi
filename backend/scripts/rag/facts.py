@@ -74,8 +74,3 @@ def script_migrate_users():
         print('STARTING CHUNK', i + 1)
         [t.start() for t in chunk]
         [t.join() for t in chunk]
-
-
-if __name__ == '__main__':
-    # get_preferences_from_memory()
-    script_migrate_users()
