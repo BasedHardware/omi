@@ -254,7 +254,7 @@ def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
     ${conversation_history}
     ```
     """.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
     return llm.invoke(prompt).content
 
 
@@ -356,6 +356,8 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     
     For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
     Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
+    
+    For context, today is {datetime.now().isoformat()}.
     
 
     Conversation:

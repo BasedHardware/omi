@@ -20,6 +20,7 @@ from models.memory import Memory
 
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
 if os.getenv('PINECONE_API_KEY') is not None:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
     index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
@@ -28,9 +29,9 @@ else:
 
 import database.memories as memories_db
 # noinspection PyUnresolvedReferences
-import database.facts as facts_db
+import database.facts as facts_d
 
-uid = 'DX8n89KAmUaG9O7Qvj8xTi81Zu12'
+uid = 'viUv7GtdoHXbK1UBCDlPuTDuPgJ2'
 
 openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
