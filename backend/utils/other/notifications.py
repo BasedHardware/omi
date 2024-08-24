@@ -11,15 +11,30 @@ from utils.llm import get_memory_summary
 
 
 async def start_cron_job():
-    print('start_cron_job')
-    await send_daily_notification()
-    await send_daily_summary_notification()
+    if should_run_job():
+        print('start_cron_job')
+        await send_daily_notification()
+        await send_daily_summary_notification()
+
+def should_run_job():
+    current_utc = datetime.now(pytz.utc)
+    target_hours = {8, 20, 22}
+
+    for tz in pytz.all_timezones:
+        local_time = current_utc.astimezone(pytz.timezone(tz))
+        if local_time.hour in target_hours and local_time.minute == 0:
+            return True
+
+    return False
 
 async def send_daily_summary_notification():
     try:
         daily_summary_target_time = "20:00"
         timezones_in_time = _get_timezones_at_time(daily_summary_target_time)
         user_in_time_zone =  await notification_db.get_users_id_in_timezones(timezones_in_time)
+        if not user_in_time_zone:
+            return None
+        
         await  _send_bulk_summary_notification(user_in_time_zone)
     except Exception as e:
         print(e)
@@ -78,6 +93,9 @@ async def send_daily_notification():
 
 async def _send_notification_for_time(target_time: str, title: str, body: str):
     user_in_time_zone = await _get_users_in_timezone(target_time)
+    if not user_in_time_zone:
+            print("No users found in time zone")
+            return None
     await send_bulk_notification(user_in_time_zone, title, body)
     return user_in_time_zone
 
