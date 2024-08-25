@@ -464,9 +464,10 @@ def obtain_emotional_message(user_name: str, user_facts: List[Fact], memory: Mem
     You will be given the conversation transcript, and context from previous related conversations of {user_name}.
     
     Remember, {user_name} is feeling {emotion}.
-    Use what you know about {user_name}, the transcript, and the related context, to share your thoughts and motivate {user_name} through a sweet, and emotionally-charged message.
+    Use what you know about {user_name}, the transcript, and the related context, to help {user_name} overcome this feeling \
+    (if bad), or celebrate (if good), by giving advice, encouragement, support, or suggesting the best action to take.
     
-    Make sure the message is short and sweet, no more than 20 words.
+    Make sure the message is nice and short, no more than 20 words.
     
     Conversation Transcript:
     {transcript}
