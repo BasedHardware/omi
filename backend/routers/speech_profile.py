@@ -1,12 +1,13 @@
 import os
 
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydub import AudioSegment
 
+from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
 from models.other import UploadProfile
 from utils.other import endpoints as auth
-from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
-from utils.other.storage import upload_profile_audio
+from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists
 
 router = APIRouter()
 
@@ -14,6 +15,14 @@ router = APIRouter()
 @router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': len(get_user_speech_profile(uid)) > 0}
+
+
+@router.get('/v4/speech-profile', tags=['v3'])
+def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+    file_path = get_profile_audio_if_exists(uid)
+    if file_path:
+        return FileResponse(path=file_path, filename=file_path.split("/")[-1], media_type='audio/mpeg')
+    raise HTTPException(status_code=404, detail="Speech profile not found")
 
 
 @router.post('/v3/upload-bytes', tags=['v3'])
