@@ -7,13 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
 
 import database.memories as memories_db
+from database.users import get_user_store_recording_permission
 from database.vector_db import delete_vector
 from models.memory import *
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, get_profile_audio_if_exists
+    delete_postprocessing_audio, get_profile_audio_if_exists, upload_memory_recording
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
@@ -112,6 +113,9 @@ def postprocess_memory(
         aseg = AudioSegment.from_wav(file_path)
         signed_url = upload_postprocessing_audio(file_path)
         threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
+
+        if get_user_store_recording_permission(uid):
+            upload_memory_recording(file_path, uid, memory_id)
 
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count)
