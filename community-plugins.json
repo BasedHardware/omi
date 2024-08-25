@@ -584,7 +584,7 @@
     "author": "Brady Anthony-Brumfield",
     "description": "Searches the web and provides additional reading for contentious statements",
     "prompt": "You will be given a transcription. First, understand that the transcription is of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for statements that need more evidence. For each of these statements, search the web for supporting and contradicting science-based evidence, and concisely summarize and link the evidence.",
-    "image": "/plugins/logos/source.png",
+    "image": "/plugins/logos/source.jpg",
     "memories": true,
     "chat": false,
     "capabilities": [
