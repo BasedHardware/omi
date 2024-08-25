@@ -2,7 +2,8 @@ name: friend_private
 description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.0.27+83
+
+version: 1.0.28+87
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -13,6 +14,7 @@ dependencies:
   
   # State management
   provider: ^6.1.2
+  flutter_provider_utilities: ^1.0.6
 
   flutter_localizations:
     sdk: flutter
@@ -20,7 +22,7 @@ dependencies:
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
-  flutter_blue_plus: ^1.32.7
+  flutter_blue_plus: ^1.32.12
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
   http: ^1.2.1

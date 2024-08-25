@@ -55,7 +55,7 @@ Future<http.Response?> makeApiCall({
       throw Exception('Unsupported HTTP method: $method');
     }
   } catch (e, stackTrace) {
-    debugPrint('HTTP request failed: $e');
+    debugPrint('HTTP request failed: $e, $stackTrace');
     CrashReporting.reportHandledCrash(
       e,
       stackTrace,

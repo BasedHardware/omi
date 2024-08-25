@@ -36,7 +36,6 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    await _register();
     listenForMessages();
   }
 
@@ -92,6 +91,7 @@ class NotificationService {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       _awesomeNotifications.requestPermissionToSendNotifications();
+      _register();
     }
   }
 
