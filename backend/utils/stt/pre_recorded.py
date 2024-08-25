@@ -37,8 +37,8 @@ def base64_to_file(base64_url, file_path):
 
 
 @timeit
-def fal_whisperx(audio_url: str, speakers_count: int = None, duration: int = None, attempts: int = 0) -> List[dict]:
-    print('fal_whisperx', audio_url, speakers_count, duration, attempts)
+def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) -> List[dict]:
+    print('fal_whisperx', audio_url, speakers_count, attempts)
 
     try:
         # TODO: this appear to be terrible at speech profile, without passing num_speakers
@@ -64,7 +64,7 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, duration: int = Non
         return words
     except Exception as e:
         print(e)
-        return fal_whisperx(audio_url, speakers_count, duration, attempts + 1) if attempts < 2 else []
+        return fal_whisperx(audio_url, speakers_count, attempts + 1) if attempts < 2 else []
 
 
 def _words_cleaning(words: List[dict]):
@@ -104,8 +104,8 @@ def _words_cleaning(words: List[dict]):
 
             words_cleaned[i]['speaker'] = speaker
 
-    for chunk in words_cleaned:
-        print(chunk)
+    # for chunk in words_cleaned:
+    #     print(chunk)
     return words_cleaned
 
 
@@ -125,7 +125,7 @@ def _retrieve_user_speaker_id(words: list, skip_n_seconds: int):
     return user_speaker_id
 
 
-def _words_into_segments(words: List[dict], skip_n_seconds: int, user_speaker_id: str):
+def _merge_segments(words: List[dict], skip_n_seconds: int, user_speaker_id: str):
     segments = []
     for word in words:
         if word['start'] < skip_n_seconds:
@@ -148,7 +148,6 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
-    print(starts_at)
     return [TranscriptSegment(
         text=str(segment['text']).strip().capitalize(),
         speaker=segment['speaker'],
@@ -158,11 +157,11 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
     ) for segment in segments]
 
 
-def fal_postprocessing(words: List[dict], duration: int, skip_n_seconds: int) -> List[TranscriptSegment]:
+def fal_postprocessing(
+        words: List[dict], duration: int, skip_n_seconds: int  # , merge_segments: bool = True
+) -> List[TranscriptSegment]:
     words: List[dict] = _words_cleaning(words)
     user_speaker_id = _retrieve_user_speaker_id(words, skip_n_seconds)
-    segments = _words_into_segments(words, skip_n_seconds, user_speaker_id)
+    segments = _merge_segments(words, skip_n_seconds, user_speaker_id)
     segments = _segments_as_objects(segments)
-    for segment in segments:
-        print(segment)
     return segments
