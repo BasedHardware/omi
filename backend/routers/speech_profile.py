@@ -10,7 +10,7 @@ from models.memory import Memory
 from models.other import UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_memory_recording_if_exists, \
-    upload_additional_profile_audio, delete_additional_profile_audio
+    upload_additional_profile_audio, delete_additional_profile_audio, get_additional_profile_recordings
 from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
@@ -19,14 +19,6 @@ router = APIRouter()
 @router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': len(get_user_speech_profile(uid)) > 0}
-
-
-@router.get('/v4/speech-profile', tags=['v3'])
-def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    file_path = get_profile_audio_if_exists(uid)
-    if file_path:
-        return FileResponse(path=file_path, filename=file_path.split("/")[-1], media_type='audio/wav')
-    raise HTTPException(status_code=404, detail="Speech profile not found")
 
 
 @router.post('/v3/upload-bytes', tags=['v3'])
@@ -98,7 +90,8 @@ def expand_speech_profile(memory_id: str, segment_idx: int, uid: str = Depends(a
     #     raise HTTPException(status_code=400, detail="Sample duration is too long")
 
     apply_vad_for_speech_profile(segment_recording_path)
-    return {"url": upload_additional_profile_audio(segment_recording_path, uid)}
+    upload_additional_profile_audio(segment_recording_path, uid)
+    return {"status": 'ok'}
 
 
 @router.delete('/v3/speech-profile/expand', tags=['v3'])
@@ -106,4 +99,12 @@ def delete_extra_speech_profile_sample(memory_id: str, segment_idx: int, uid: st
     delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
     return {'status': 'ok'}
 
-# @router.get()
+
+@router.get('/v3/speech-profile/expand', tags=['v3'])
+def get_extra_speech_profile_samples(uid: str = Depends(auth.get_current_user_uid)):
+    return get_additional_profile_recordings(uid)
+
+
+@router.get('/v4/speech-profile', tags=['v3'])
+def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return {'url': get_profile_audio_if_exists(uid, download=False)}
