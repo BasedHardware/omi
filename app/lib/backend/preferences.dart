@@ -96,6 +96,10 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
+  bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
+
+  set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
+
   bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
 
   set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
