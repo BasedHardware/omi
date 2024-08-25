@@ -158,7 +158,7 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
 
 
 def fal_postprocessing(
-        words: List[dict], duration: int, skip_n_seconds: int  # , merge_segments: bool = True
+        words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
 ) -> List[TranscriptSegment]:
     words: List[dict] = _words_cleaning(words)
     user_speaker_id = _retrieve_user_speaker_id(words, skip_n_seconds)

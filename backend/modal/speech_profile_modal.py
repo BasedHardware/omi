@@ -71,33 +71,29 @@ os.makedirs('_temp', exist_ok=True)
     image=image,
     keep_warm=1,
     memory=(1024, 2048),
-    allow_concurrent_inputs=4,
+    allow_concurrent_inputs=2,
     cpu=4,
     gpu=modal.gpu.T4(count=1),
     secrets=[Secret.from_name('huggingface-token')],
 )
 @web_endpoint(method='POST')
-async def endpoint(
-        profile_path: UploadFile = File(...),
-        audio_file: UploadFile = File(...),
-        segments: str = Form(...)
+def endpoint(
+        profile_path: UploadFile = File(...), audio_file: UploadFile = File(...), segments: str = Form(...)
 ) -> List[bool]:
-    profile_file_path = profile_path.filename
 
-    with open(profile_file_path, 'wb') as f:
+    with open(profile_path.filename, 'wb') as f:
         f.write(profile_path.file.read())
 
-    audio_file_path = audio_file.filename
-    with open(audio_file_path, 'wb') as f:
+    with open(audio_file.filename, 'wb') as f:
         f.write(audio_file.file.read())
 
     segments_data = json.loads(segments)
     transcript_segments = [TranscriptSegment(**segment) for segment in segments_data]
 
     try:
-        result = classify_segments(audio_file_path, transcript_segments, profile_file_path)
+        result = classify_segments(audio_file.filename, transcript_segments, profile_path.filename)
         return result
     finally:
         # Clean up temporary files
-        os.remove(profile_file_path)
-        os.remove(audio_file_path)
+        os.remove(profile_path.filename)
+        os.remove(audio_file.filename)
