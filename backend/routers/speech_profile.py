@@ -8,7 +8,7 @@ from database.redis_db import store_user_speech_profile, store_user_speech_profi
 from models.other import UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists
-from utils.stt.vad import vad_is_empty
+from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
 
@@ -38,31 +38,6 @@ def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-def _trim_speech_profile_audio(file_path: str):
-    voice_segments = vad_is_empty(file_path, return_segments=True)
-    if len(voice_segments) == 0:
-        raise HTTPException(status_code=400, detail="Audio is empty")
-
-    joined_segments = []
-    for i, segment in enumerate(voice_segments):
-        if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
-            joined_segments[-1]['end'] = segment['end']
-        else:
-            joined_segments.append(segment)
-
-    # trim silence out of file_path, but leave 1 sec of silence within chunks
-    trimmed_aseg = AudioSegment.empty()
-    for i, segment in enumerate(joined_segments):
-        start = segment['start'] * 1000
-        end = segment['end'] * 1000
-        trimmed_aseg += AudioSegment.from_wav(file_path)[start:end]
-        if i < len(joined_segments) - 1:  # is .silent better than adding 1 sec from audio, to make it more natural?
-            # trimmed_aseg += AudioSegment.silent(duration=1000)
-            trimmed_aseg += AudioSegment.from_wav(file_path)[end:end + 1000]
-
-    trimmed_aseg.export(file_path, format="wav")
-
-
 @router.post('/v3/upload-audio', tags=['v3'])
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
@@ -77,5 +52,5 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
         raise HTTPException(status_code=400, detail="Audio duration is invalid")
 
-    _trim_speech_profile_audio(file_path)
+    apply_vad_for_speech_profile(file_path)
     return {"url": upload_profile_audio(file_path, uid)}
