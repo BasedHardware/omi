@@ -14,7 +14,7 @@ from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, get_profile_audio_if_exists, upload_memory_recording
+    delete_postprocessing_audio, get_profile_audio_if_exists, upload_memory_recording, delete_additional_profile_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
@@ -79,7 +79,7 @@ def postprocess_memory(
     And improves the overall experience of the user.
 
     TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
-    TODO: USE soniox here? with speech profile and stuff?
+    That + pyannote diarization 3.1, is as good as it gets. Then is only hardware improvements.
     TODO: should consider storing non beautified segments, and beautify on read?
     TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
     """
@@ -214,3 +214,16 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
+
+
+@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/is_user', response_model=Memory, tags=['memories'])
+def update_memory_segment_is_user(
+        memory_id: str, segment_idx: int, value: bool, uid: str = Depends(auth.get_current_user_uid)
+):
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+    memory.transcript_segments[segment_idx].is_user = value
+    memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+    # in case the user selected this as post training.
+    delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
+    return memory
