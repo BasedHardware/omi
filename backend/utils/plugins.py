@@ -11,6 +11,7 @@ from models.memory import Memory, MemorySource
 from models.plugin import Plugin
 from utils.notifications import send_notification
 
+from models.notification_message import NotificationMessage
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     if not plugin_id:
@@ -160,14 +161,13 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
 
 
 def send_plugin_notification(token: str, plugin_id: str, message: str):
-    data = {
-        "text": message,
-        "plugin_id": plugin_id,
-        'id': str(uuid.uuid4()),
-        'created_at': datetime.now().isoformat(),
-        'sender': 'ai',
-        'type': 'text',
-        'from_integration': 'true',
-        'notification_type': 'plugin',
-    }
-    send_notification(token, plugin_id + ' says', message, data)
+
+    ai_message = NotificationMessage(
+        text=message,
+        plugin_id=plugin_id,
+        from_integration='true',
+        type='text',
+        notification_type='plugin',
+    )
+ 
+    send_notification(token, plugin_id + ' says', message, NotificationMessage.get_message_as_string(ai_message))
