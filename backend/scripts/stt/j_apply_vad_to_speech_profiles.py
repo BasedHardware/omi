@@ -8,7 +8,7 @@ from pydub import AudioSegment
 
 from utils.stt.vad import apply_vad_for_speech_profile
 
-load_dotenv('../../.dev.env')
+load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 from database._client import get_users_uid
@@ -41,7 +41,3 @@ def execute():
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]
         print('Chunk', i + 1, 'completed')
-
-
-if __name__ == '__main__':
-    execute()
