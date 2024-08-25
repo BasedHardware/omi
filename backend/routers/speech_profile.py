@@ -4,7 +4,7 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydub import AudioSegment
 
-from database.memories import get_memory
+from database.memories import get_memory, update_memory_segments
 from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
 from models.memory import Memory
 from models.other import UploadProfile
@@ -25,7 +25,7 @@ def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     file_path = get_profile_audio_if_exists(uid)
     if file_path:
-        return FileResponse(path=file_path, filename=file_path.split("/")[-1], media_type='audio/mpeg')
+        return FileResponse(path=file_path, filename=file_path.split("/")[-1], media_type='audio/wav')
     raise HTTPException(status_code=404, detail="Speech profile not found")
 
 
@@ -76,8 +76,9 @@ def expand_speech_profile(memory_id: str, segment_idx: int, uid: str = Depends(a
         raise HTTPException(status_code=404, detail="Memory not found")
 
     memory = Memory(**memory)
-    # TODO: update in db us_user = True
-    # memory.transcript_segments[segment_idx]
+    segments = memory.transcript_segments
+    segments[segment_idx].is_user = True
+    update_memory_segments(uid, memory_id, [segment.dict() for segment in segments])
 
     segment = memory.transcript_segments[segment_idx]
     aseg = AudioSegment.from_wav(memory_recording_path)
