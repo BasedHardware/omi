@@ -3,40 +3,31 @@ import 'dart:math';
 
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
-import 'package:objectbox/objectbox.dart';
 
 enum MemoryType { audio, image }
 
-@Entity()
 class Memory {
-  @Id()
   int id = 0;
 
-  @Index()
-  @Property(type: PropertyType.date)
   DateTime createdAt;
 
-  @Property(type: PropertyType.date)
   DateTime? startedAt;
 
-  @Property(type: PropertyType.date)
   DateTime? finishedAt;
 
   String transcript;
-  final transcriptSegments = ToMany<TranscriptSegment>();
-  final photos = ToMany<MemoryPhoto>();
+  final List<TranscriptSegment> transcriptSegments;
+  final List<MemoryPhoto> photos = [];
 
   String? recordingFilePath;
 
-  final structured = ToOne<Structured>();
+  Structured structured;
 
-  @Backlink('memory')
-  final pluginsResponse = ToMany<PluginResponse>();
+  List<PluginResponse> pluginsResponse = [];
 
-  @Index()
   bool discarded;
 
-  final geolocation = ToOne<Geolocation>();
+  Geolocation? geolocation;
 
   Memory(
     this.createdAt,
@@ -46,6 +37,8 @@ class Memory {
     this.recordingFilePath,
     this.startedAt,
     this.finishedAt,
+    required this.structured,
+    this.transcriptSegments = const [],
   });
 
   MemoryType get type => transcript.isNotEmpty ? MemoryType.audio : MemoryType.image;
@@ -53,11 +46,11 @@ class Memory {
   static String memoriesToString(List<Memory> memories, {bool includeTranscript = false}) => memories
       .map((e) => '''
       ${e.createdAt.toIso8601String().split('.')[0]}
-      Title: ${e.structured.target!.title}
-      Summary: ${e.structured.target!.overview}
-      ${e.structured.target!.actionItems.isNotEmpty ? 'Action Items:' : ''}
-      ${e.structured.target!.actionItems.map((item) => '  - ${item.description}').join('\n')}
-      Category: ${e.structured.target!.category}
+      Title: ${e.structured.title}
+      Summary: ${e.structured.overview}
+      ${e.structured.actionItems.isNotEmpty ? 'Action Items:' : ''}
+      ${e.structured.actionItems.map((item) => '  - ${item.description}').join('\n')}
+      Category: ${e.structured.category}
       ${includeTranscript ? 'Transcript:\n${e.transcript}' : ''}
       '''
           .replaceAll('      ', '')
@@ -72,8 +65,16 @@ class Memory {
       recordingFilePath: json['recordingFilePath'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt']) : null,
+      structured: Structured.fromJson(json['structured']),
+      transcriptSegments: json['transcriptSegments'] == null
+          ? []
+          : json['transcriptSegments']
+              .map<TranscriptSegment>((segment) => TranscriptSegment.fromJson(segment))
+              .toList(),
     );
-    memory.structured.target = Structured.fromJson(json['structured']);
+
+    // memory.structured = Structured.fromJson(json['structured']);
+
     if (json['pluginsResponse'] != null) {
       for (dynamic response in json['pluginsResponse']) {
         if (response.isEmpty) continue;
@@ -85,7 +86,7 @@ class Memory {
       }
     }
 
-    memory.geolocation.target = json['geoLocation'] == null ? null : Geolocation.fromJson(json['geoLocation']);
+    memory.geolocation = json['geoLocation'] == null ? null : Geolocation.fromJson(json['geoLocation']);
 
     if (json['transcriptSegments'] != null) {
       for (dynamic segment in json['transcriptSegments']) {
@@ -125,19 +126,17 @@ class Memory {
       'finishedAt': finishedAt?.toIso8601String(),
       'transcript': transcript,
       'recordingFilePath': recordingFilePath,
-      'structured': structured.target!.toJson(),
+      'structured': structured.toJson(),
       'pluginsResponse': pluginsResponse.map<Map<String, String?>>((response) => response.toJson()).toList(),
       'discarded': discarded,
       'transcriptSegments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
-      'geoLocation': geolocation.target?.toJson() ?? {},
+      'geoLocation': geolocation?.toJson() ?? {},
     };
   }
 }
 
-@Entity()
 class Structured {
-  @Id()
   int id = 0;
 
   String title;
@@ -145,11 +144,9 @@ class Structured {
   String emoji;
   String category;
 
-  @Backlink('structured')
-  final actionItems = ToMany<ActionItem>();
+  List<ActionItem> actionItems = [];
 
-  @Backlink('structured')
-  final events = ToMany<Event>();
+  List<Event> events = [];
 
   Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
 
@@ -222,14 +219,11 @@ class Structured {
   }
 }
 
-@Entity()
 class ActionItem {
-  @Id()
   int id = 0;
 
   String description;
   bool completed = false;
-  final structured = ToOne<Structured>();
 
   ActionItem(this.description, {this.id = 0, this.completed = false});
 
@@ -240,15 +234,11 @@ class ActionItem {
   toJson() => {'description': description, 'completed': completed};
 }
 
-@Entity()
 class PluginResponse {
-  @Id()
   int id = 0;
 
   String? pluginId;
   String content;
-
-  final memory = ToOne<Memory>();
 
   PluginResponse(this.content, {this.id = 0, this.pluginId});
 
@@ -259,9 +249,7 @@ class PluginResponse {
   }
 }
 
-@Entity()
 class Event {
-  @Id()
   int id = 0;
 
   String title;
@@ -270,8 +258,6 @@ class Event {
 
   String description;
   bool created = false;
-
-  final structured = ToOne<Structured>();
 
   Event(this.title, this.startsAt, this.duration, {this.description = '', this.created = false, this.id = 0});
 
@@ -286,14 +272,11 @@ class Event {
   }
 }
 
-@Entity()
 class MemoryPhoto {
-  @Id()
   int id = 0;
 
   String base64;
   String description;
-  final memory = ToOne<Memory>();
 
   MemoryPhoto(this.base64, this.description, {this.id = 0});
 

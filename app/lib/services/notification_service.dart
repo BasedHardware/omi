@@ -36,7 +36,6 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    unawaited(_register());
     listenForMessages();
   }
 
@@ -73,6 +72,7 @@ class NotificationService {
     Map<String, String?>? payload,
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
+    NotificationLayout layout = NotificationLayout.Default,
   }) {
     _awesomeNotifications.createNotification(
       content: NotificationContent(
@@ -82,6 +82,7 @@ class NotificationService {
         title: title,
         body: body,
         payload: payload,
+        notificationLayout: layout,
       ),
     );
   }
@@ -90,6 +91,7 @@ class NotificationService {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       _awesomeNotifications.requestPermissionToSendNotifications();
+      _register();
     }
   }
 
@@ -138,15 +140,47 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
+  Future<void> onNotificationTap() async {
+    final message = await FirebaseMessaging.instance.getInitialMessage();
+    if (message != null) {
+      _handleOnTap(message);
+    }
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
+  }
+
+  void _handleOnTap(RemoteMessage message) {
+    final data = message.data;
+    if (data.isNotEmpty) {
+      if (message.data['notification_type'] == 'daily_summary') {
+        SharedPreferencesUtil().pageToShowFromNotification = 2;
+        MyApp.navigatorKey.currentState
+            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+      }
+    }
+  }
 
   Future<void> listenForMessages() async {
+    onNotificationTap();
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
-      if (data.isEmpty) return;
-      if (data['notification_type'] == 'plugin') {
-        _showForegroundNotification(message.notification);
-        data['from_integration'] = data['from_integration'] == 'true';
-        _serverMessageStreamController.add(ServerMessage.fromJson(data));
+      final noti = message.notification;
+
+      // Plugin
+      if (data.isNotEmpty) {
+        if (noti != null) {
+          _showForegroundNotification(noti: noti);
+        }
+        final notificationType = data['notification_type'];
+        if (notificationType == 'plugin' || notificationType == 'daily_summary') {
+          data['from_integration'] = data['from_integration'] == 'true';
+          _serverMessageStreamController.add(ServerMessage.fromJson(data));
+        }
+      }
+
+      // Announcement likes
+      if (noti != null) {
+        _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
       }
     });
   }
@@ -155,11 +189,10 @@ class NotificationService {
 
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
-  Future<void> _showForegroundNotification(RemoteNotification? notification) async {
-    if (notification != null) {
-      final id = Random().nextInt(10000);
-      showNotification(id: id, title: notification.title!, body: notification.body!);
-    }
+  Future<void> _showForegroundNotification(
+      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default}) async {
+    final id = Random().nextInt(10000);
+    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
   }
 }
 

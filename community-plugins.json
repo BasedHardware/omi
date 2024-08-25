@@ -584,7 +584,7 @@
     "author": "Brady Anthony-Brumfield",
     "description": "Searches the web and provides additional reading for contentious statements",
     "prompt": "You will be given a transcription. First, understand that the transcription is of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for statements that need more evidence. For each of these statements, search the web for supporting and contradicting science-based evidence, and concisely summarize and link the evidence.",
-    "image": "/plugins/logos/source.png",
+    "image": "/plugins/logos/source.jpg",
     "memories": true,
     "chat": false,
     "capabilities": [
@@ -605,6 +605,20 @@
     ],
     "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
     "deleted": false
+   },
+     {
+   "id":"class-notes",
+   "name":"Class Notes",
+   "author":"Findirfin",
+   "description":"Takes notes optimised for classses and lectures",
+   "image":"/plugins/logos/class-notes.jpg",
+   "memories":true,
+   "chat":false,
+   "capabilities":[
+      "memories"
+   ],
+   "memory_prompt":"You will be given a transcript of a class or lecture. Your job is to accurately identify and extract these four key points of information. 1: An outline of the main points and subpoints of the lecture. 2: A list of Important facts and concepts that need to be remembered 3: A list of homework and other assigned tasks to be completed or worked on later 4: Any other important items mentioned that do not fit into the above categories. Do not output anything for them. Label these sections, 'Class Outline', 'Important Facts and Concepts', 'Homework', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading.",
+   "deleted":false
   },
   {
     "id": "zapier",
@@ -625,6 +639,20 @@
       "setup_completed_url": "https://based-hardware--plugins-api.modal.run/setup/zapier",
       "setup_instructions_file_path": "/plugins/instructions/zapier/README.md"
     },
+    "deleted": false
+  },
+  {
+    "id": "echosense",
+    "name": "EchoSense",
+    "author": "Luis Arano",
+    "description": "Analyzes the emotional tone and communication quality of a transcribed conversation. It identifies the speaker's emotional state, offers constructive feedback on their communication style, and encourages reflection on how their words might have been perceived. The goal is to help users connect more deeply with their emotions and improve their communication skills.",
+    "image": "/plugins/logos/your-plugin-logo.jpg",
+    "memories": true, 
+    "chat": false,
+    "capabilities": [
+      "chat"
+    ],
+    "memory_prompt": "Analyze for its emotional tone and communicative quality. Identify the emotional tone of the conversation. Determine whether the speaker(s) sounded angry, mad, upset, happy, content, neutral, or any other emotional state. Provide specific examples from the text to support your analysis. Offer constructive feedback on how the conversation was communicated. Highlight any patterns or phrases that contributed to the identified tone. Suggest ways to improve or maintain effective communication based on the emotional undertones detected. Encourage the speaker(s) to reflect on how their choice of words and tone might have impacted the conversation. Provide insights into how the conversation might have been perceived by others and how it could be adjusted for different outcomes. The goal of this analysis is to help the user connect more deeply with their words and emotions, and to better understand the impact of their communication style.",
     "deleted": false
   }
 ]

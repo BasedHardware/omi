@@ -1,19 +1,24 @@
+import asyncio
 import os
+import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
 
 import database.memories as memories_db
+from database.users import get_user_store_recording_permission
 from database.vector_db import delete_vector
 from models.memory import *
-from models.transcript_segment import TranscriptSegment
-from utils.other import endpoints as auth
-from utils.llm import transcript_user_speech_fix, num_tokens_from_string
 from utils.memories.location import get_google_maps_location
+from utils.memories.process_memory import process_memory, process_user_emotion
+from utils.other import endpoints as auth
+from utils.other.storage import upload_postprocessing_audio, \
+    delete_postprocessing_audio, get_profile_audio_if_exists, upload_memory_recording
 from utils.plugins import trigger_external_integrations
-from utils.memories.process_memory import process_memory
-from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio
-from utils.stt.pre_recorded import fal_whisperx
+from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.speech_profile import get_speech_profile_matching_predictions
+from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
 
@@ -61,8 +66,9 @@ def create_memory(
 
 
 @router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
-async def postprocess_memory(
-        memory_id: str, file: Optional[UploadFile], uid: str = Depends(auth.get_current_user_uid)
+def postprocess_memory(
+        memory_id: str, file: Optional[UploadFile], emotional_feedback: Optional[bool] = False,
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     The objective of this endpoint, is to get the best possible transcript from the audio file.
@@ -72,10 +78,10 @@ async def postprocess_memory(
     Which helps us create better vectors for the memory.
     And improves the overall experience of the user.
 
-    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs
-    https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
-
+    TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
     TODO: USE soniox here? with speech profile and stuff?
+    TODO: should consider storing non beautified segments, and beautify on read?
+    TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
     """
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
@@ -85,48 +91,53 @@ async def postprocess_memory(
     if memory.postprocessing is not None:
         raise HTTPException(status_code=400, detail="Memory can't be post-processed again")
 
-    # TODO: can do VAD and still keep segments? ~ should do something even with VAD start end?
     file_path = f"_temp/{memory_id}_{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
-    # TODO: try https://dev.hume.ai/reference/expression-measurement-api/batch/start-inference-job-from-local-file
+    try:
+        # Calling VAD to avoid processing empty parts and getting hallucinations from whisper.
+        vad_segments = vad_is_empty(file_path, return_segments=True)
+        if vad_segments:
+            start = vad_segments[0]['start']
+            end = vad_segments[-1]['end']
+            aseg = AudioSegment.from_wav(file_path)
+            aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+            aseg.export(file_path, format="wav")
+    except Exception as e:
+        print(e)
 
     try:
-        # Upload to GCP + remove file locally and cloud storage
-        url = upload_postprocessing_audio(file_path)
-        duration = AudioSegment.from_wav(file_path).duration_seconds
-        os.remove(file_path)
-        segments = fal_whisperx(url, duration)
-        delete_postprocessing_audio(file_path)
-        # TODO: should consider storing non beautified segments, and beautify on read?
+        aseg = AudioSegment.from_wav(file_path)
+        signed_url = upload_postprocessing_audio(file_path)
+        threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
+
+        if get_user_store_recording_permission(uid):
+            upload_memory_recording(file_path, uid, memory_id)
+
+        speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
+        words = fal_whisperx(signed_url, speakers_count)
+        segments = fal_postprocessing(words, aseg.duration_seconds)
+
+        if not segments:
+            memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
+            raise HTTPException(status_code=500, detail="FAL WhisperX failed to process audio")
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
-        count = len(''.join([segment.text for segment in memory.transcript_segments]))
-        new_count = len(''.join([segment.text for segment in segments]))
+        count = len(''.join([segment.text.strip() for segment in memory.transcript_segments]))
+        new_count = len(''.join([segment.text.strip() for segment in segments]))
+        print('Prev characters count:', count, 'New characters count:', new_count)
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-
-        # Fix user speaker_id matching
-        if any(segment.is_user for segment in memory.transcript_segments):
-            # TODO: speech profile here using better solutions, and using existing audio file. Speechbrain?
-            prev = TranscriptSegment.segments_as_string(memory.transcript_segments, False)
-            transcript_tokens = num_tokens_from_string(
-                TranscriptSegment.segments_as_string(memory.transcript_segments, False))
-            # should limit a few segments, like first and last 100?
-            if transcript_tokens < 40000:  # 40k tokens, costs about 10 usd per request
-                new = TranscriptSegment.segments_as_string(segments, False)
-                speaker_id: int = transcript_user_speech_fix(prev, new)
-            else:  # simple way (this in theory should work for all) ~ Not super accurate most likely
-                speaker_id: int = [segment.speaker_id for segment in memory.transcript_segments if segment.is_user][0]
-
-            for segment in segments:
-                if segment.speaker_id == speaker_id:
-                    segment.is_user = True
+        # should try doing something still if whisper-x fails.
+        profile_path = get_profile_audio_if_exists(uid) if aseg.frame_rate == 16000 else None
+        matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
+        for i, segment in enumerate(segments):
+            segment.is_user = matches[i]
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
@@ -136,6 +147,10 @@ async def postprocess_memory(
 
         # Reprocess memory with improved transcription
         result = process_memory(uid, memory.language, memory, force_process=True)
+
+        # Process users emotion, async
+        if emotional_feedback:
+            asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
@@ -143,6 +158,20 @@ async def postprocess_memory(
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     return result
+
+
+def _delete_postprocessing_audio(file_path):
+    time.sleep(300)  # 5 min
+    delete_postprocessing_audio(file_path)
+    os.remove(file_path)
+
+
+async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
+    if not any(segment.is_user for segment in memory.transcript_segments):
+        print(f"Users transcript segments is emty. uid: {uid}. memory: {memory.id}")
+        return
+
+    process_user_emotion(uid, language_code, memory, urls)
 
 
 @router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])

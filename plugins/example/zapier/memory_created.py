@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -98,7 +99,6 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
 
     if not subscriber.target_url or subscriber.target_url == "":
         raise HTTPException(status_code=400, detail='Target url is invalid.')
-        return
 
     # Validate user status
     status = get_zapier_user_status(uid)
@@ -108,6 +108,61 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     print({'uid': uid, 'target_url': subscriber.target_url})
     remove_zapier_subscribes(uid, subscriber.target_url)
     return {}
+
+
+@router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateMemory])
+async def get_trigger_memory_sample(request: Request, uid: str):
+    """
+    Get the latest memory or a sample to fullfill the triggers On memory created
+    """
+
+    if not uid:
+        raise HTTPException(status_code=400, detail='UID is required')
+
+    # Genrate sample
+    sample = ZapierCreateMemory(
+            icon={
+                "type": "emoji",
+                "emoji": "🧠",
+            },
+            title='Omi\'s sammple memory',
+            speakers=0,
+            category="other",
+            duration=300,
+            overview="Meet Omi today, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.",
+    )
+
+    # Get latest from Omi
+    ok = get_friend().get_latest_memory(uid)
+    print(ok)
+    if "error" in ok:
+        err = ok["error"]
+        print(err)
+        raise HTTPException(status_code=err["status"] if "status" in err else 500,
+                            detail='Can not create memory')
+
+    memory = ok["result"]
+    if memory is not None:
+        try:
+            emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
+        except UnicodeEncodeError:
+            emoji = memory.structured.emoji
+
+        sample = ZapierCreateMemory(
+            icon={
+                "type": "emoji",
+                "emoji": f"{emoji}"
+            },
+            title=f'{memory.structured.title}',
+            speakers=len(
+                set(map(lambda x: x.speaker, memory.transcript_segments))),
+            category=memory.structured.category,
+            duration=int((memory.finished_at -
+                          memory.started_at).total_seconds() if memory.finished_at is not None else 0),
+            overview=memory.structured.overview,
+        )
+
+    return [sample]
 
 
 @router.get('/zapier/me', tags=['zapier'], response_model=EndpointResponse)
@@ -202,7 +257,7 @@ def create_zapier_memory(uid: str, memory: Memory):
                 set(map(lambda x: x.speaker, memory.transcript_segments))),
             category=memory.structured.category,
             duration=int((memory.finished_at -
-                      memory.started_at).total_seconds() if memory.finished_at is not None else 0),
+                          memory.started_at).total_seconds() if memory.finished_at is not None else 0),
             overview=memory.structured.overview,
         )
         ok = get_zapier().send_hook_memory_created(target_url, data)

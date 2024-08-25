@@ -29,11 +29,11 @@ class _PermissionsPageState extends State<PermissionsPage> {
           // const SizedBox(height: 80),
           CheckboxListTile(
             value: switchValue,
-            onChanged: (s) {
+            onChanged: (s) async {
               setState(() {
                 switchValue = s!;
               });
-              NotificationService.instance.requestNotificationPermissions();
+              await NotificationService.instance.requestNotificationPermissions();
             },
             title: const Text(
               'Enable notification access for Friend\'s full experience.',
