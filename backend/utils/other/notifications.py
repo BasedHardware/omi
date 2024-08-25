@@ -1,21 +1,22 @@
 import asyncio
 import concurrent.futures
 from datetime import datetime, time
-import uuid
+from datetime import datetime
 import pytz
-import json
 import database.chat as chat_db
-import database.notifications as notification_db
 import database.memories as memories_db
-from utils.notifications import send_notification, send_bulk_notification
+import database.notifications as notification_db
 from utils.llm import get_memory_summary
 from models.notification_message import NotificationMessage
+from utils.notifications import send_notification, send_bulk_notification
+
 
 async def start_cron_job():
     if should_run_job():
         print('start_cron_job')
         await send_daily_notification()
         await send_daily_summary_notification()
+
 
 def should_run_job():
     current_utc = datetime.now(pytz.utc)
@@ -28,15 +29,16 @@ def should_run_job():
 
     return False
 
+
 async def send_daily_summary_notification():
     try:
         daily_summary_target_time = "22:00"
         timezones_in_time = _get_timezones_at_time(daily_summary_target_time)
-        user_in_time_zone =  await notification_db.get_users_id_in_timezones(timezones_in_time)
+        user_in_time_zone = await notification_db.get_users_id_in_timezones(timezones_in_time)
         if not user_in_time_zone:
             return None
-        
-        await  _send_bulk_summary_notification(user_in_time_zone)
+
+        await _send_bulk_summary_notification(user_in_time_zone)
     except Exception as e:
         print(e)
         print("Error sending message:", e)
@@ -47,10 +49,9 @@ def _send_summary_notification(user_data: tuple):
     user_id = user_data[0]
     fcm_token = user_data[1]
     daily_summary_title = "Here is your action plan for tomorrow"
-    msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁'
     memories = memories_db.filter_memories_by_date(user_id, datetime.combine(datetime.now().date(), time.min), datetime.now())  
     if not memories:       
-        summary = msg
+        return
     else:
         summary = get_memory_summary('This User', memories)
 
@@ -63,6 +64,7 @@ def _send_summary_notification(user_data: tuple):
     chat_db.add_summary_message(summary, user_id)
     send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_string(ai_message))
 
+
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -71,7 +73,6 @@ async def _send_bulk_summary_notification(users: list):
             for uid in users
         ]
         await asyncio.gather(*tasks)
-
 
 
 async def send_daily_notification():
@@ -93,8 +94,8 @@ async def send_daily_notification():
 async def _send_notification_for_time(target_time: str, title: str, body: str):
     user_in_time_zone = await _get_users_in_timezone(target_time)
     if not user_in_time_zone:
-            print("No users found in time zone")
-            return None
+        print("No users found in time zone")
+        return None
     await send_bulk_notification(user_in_time_zone, title, body)
     return user_in_time_zone
 
