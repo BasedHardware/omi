@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+from typing import List
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -28,40 +29,46 @@ def upload_profile_audio(file_path: str, uid: str):
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def get_profile_audio_if_exists(uid: str) -> str:
+def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     if blob.exists():
-        # download and return file path
-        file_path = f'_temp/{uid}_speech_profile.wav'
-        blob.download_to_filename(file_path)
-        return file_path
+        if download:
+            file_path = f'_temp/{uid}_speech_profile.wav'
+            blob.download_to_filename(file_path)
+            return file_path
+        return blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET")
 
     return None
 
 
-def upload_additional_profile_audio(file_path: str, uid: str):
+def upload_additional_profile_audio(file_path: str, uid: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/additional_profile_recordings/{file_path.split("/")[-1]}'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def delete_additional_profile_audio(uid: str, file_name: str):
+def delete_additional_profile_audio(uid: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
     blob.delete()
 
 
-def get_additional_profile_recordings(uid: str) -> list:
+def get_additional_profile_recordings(uid: str, download: bool = False) -> List[str]:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blobs = bucket.list_blobs(prefix=f'{uid}/additional_profile_recordings/')
-    recordings = []
-    for blob in blobs:
-        recordings.append(blob.name)
-    return recordings
+    if download:
+        paths = []
+        for blob in blobs:
+            file_path = f'_temp/{uid}_{blob.name.split("/")[-1]}'
+            blob.download_to_filename(file_path)
+            paths.append(file_path)
+        return paths
+
+    return [blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET") for blob in
+            blobs]
 
 
 # ********************************************
