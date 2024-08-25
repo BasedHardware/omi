@@ -146,11 +146,10 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     }
 
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
-      await memoryPostProcessing(file, memory.id).then((postProcessed) {
+      memoryPostProcessing(file, memory.id).then((postProcessed) {
         // use memory provider to update memory
         memoryProvider?.updateMemory(postProcessed);
       });
-      setMemoryCreating(false);
     }
 
     SharedPreferencesUtil().transcriptSegments = [];
@@ -255,8 +254,9 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
         // print(value);
+        print(value);
         value.removeRange(0, 3);
-        // TODO: if this is not removed, deepgram can't seem to be able to detect the audio.
+        // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (wsConnectionState == WebsocketConnectionStatus.connected) {
           websocketChannel?.sink.add(value);
