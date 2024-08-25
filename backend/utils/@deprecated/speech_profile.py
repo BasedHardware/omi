@@ -7,54 +7,6 @@
 # from pydub import AudioSegment
 # device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = 'cpu'
-import os
-from typing import List
-
-import torch
-from pydub import AudioSegment
-from speechbrain.inference.speaker import SpeakerRecognition
-
-from models.transcript_segment import TranscriptSegment
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = SpeakerRecognition.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    savedir="pretrained_models/spkrec-ecapa-voxceleb",
-    run_opts={"device": device},
-)
-
-
-def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> bool:
-    try:
-        score, prediction = model.verify_files(sample_audio, segment)
-        print(score, prediction)
-        # return bool(score[0] > 0.6)
-        return prediction[0]
-    except Exception as e:
-        return False
-
-
-def classify_segments(audio_file: str, transcript_segments: List[TranscriptSegment], profile_path: str):
-    print('classify_segments')
-    # TODO: for better performance probably use segments before merging them together
-    matches = [False] * len(transcript_segments)
-    if not profile_path:
-        return matches
-
-    for i, segment in enumerate(transcript_segments):
-        file_name = os.path.basename(audio_file)
-        temporal_file = f"_temp/{file_name}_{segment.start}_{segment.end}.wav"
-        # temporal_file = f"_temp/{i}.wav"
-        AudioSegment.from_wav(audio_file)[segment.start * 1000:segment.end * 1000].export(temporal_file, format="wav")
-
-        is_user = sample_same_speaker_as_segment(temporal_file, profile_path)
-        print('Matches', is_user, temporal_file)
-        matches[i] = is_user
-
-        os.remove(temporal_file)
-        # temporal_file = f'_temp/{i}-{is_user}.wav'
-        # AudioSegment.from_wav(audio_file)[segment.start * 1000:segment.end * 1000].export(temporal_file, format="wav")
-    return matches
 
 # def get_speaker_embedding(audio_path):
 #     # print('get_speaker_embedding', audio_path)
