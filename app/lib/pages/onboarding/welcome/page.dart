@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 
 class WelcomePage extends StatefulWidget {
   final VoidCallback goNext;
@@ -55,21 +57,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
             ),
             child: ElevatedButton(
               onPressed: () async {
-                bool permissionsAccepted = false;
-                if (Platform.isIOS) {
-                  PermissionStatus bleStatus = await Permission.bluetooth.request();
-                  debugPrint('bleStatus: $bleStatus');
-                  permissionsAccepted = bleStatus.isGranted;
-                } else {
-                  PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
-                  PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
-                  // PermissionStatus locationStatus = await Permission.location.request();
-
-                  permissionsAccepted =
-                      bleConnectStatus.isGranted && bleScanStatus.isGranted; // && locationStatus.isGranted;
-
-                  debugPrint('bleScanStatus: $bleScanStatus ~ bleConnectStatus: $bleConnectStatus');
-                }
+                bool permissionsAccepted = await context.read<DeviceProvider>().askForPermissions();
                 if (!permissionsAccepted) {
                   showDialog(
                     context: context,
