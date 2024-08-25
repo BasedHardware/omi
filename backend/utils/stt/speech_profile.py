@@ -3,6 +3,9 @@ import os
 from typing import List
 
 import requests
+from pydub import AudioSegment
+
+from utils.other.storage import get_profile_audio_if_exists, get_additional_profile_recordings
 
 
 def get_speech_profile_matching_predictions(audio_file_path: str, profile_path: str, segments: List) -> List[bool]:
@@ -26,3 +29,16 @@ def get_speech_profile_matching_predictions(audio_file_path: str, profile_path: 
     except Exception as e:
         print('get_speech_profile_matching_predictions', str(e))
         return [False] * len(segments)
+
+
+def get_speech_profile_expanded(uid: str):
+    main = get_profile_audio_if_exists(uid, download=True)
+    if not main:
+        return None
+    parts = get_additional_profile_recordings(uid, download=True)
+    aseg = AudioSegment.from_wav(main)
+    for part in parts:
+        aseg += AudioSegment.from_wav(part)
+    path = f'_temp/{uid}_complete_speech_profile.wav'
+    aseg.export(path, format='wav')
+    return path

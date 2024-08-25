@@ -14,10 +14,10 @@ from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, get_profile_audio_if_exists, upload_memory_recording, delete_additional_profile_audio
+    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
-from utils.stt.speech_profile import get_speech_profile_matching_predictions
+from utils.stt.speech_profile import get_speech_profile_matching_predictions, get_speech_profile_expanded
 from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
@@ -133,8 +133,8 @@ def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        # should try doing something still if whisper-x fails.
-        profile_path = get_profile_audio_if_exists(uid) if aseg.frame_rate == 16000 else None
+        # Speech profile matching using speechbrain
+        profile_path = get_speech_profile_expanded(uid) if aseg.frame_rate == 16000 else None
         matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
             segment.is_user = matches[i]
