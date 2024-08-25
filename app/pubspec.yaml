@@ -93,6 +93,8 @@ dependencies:
   webview_flutter: ^4.8.0
   flutter_sound: ^9.10.0
   audio_session:
+  audioplayers: ^6.0.0
+  just_audio: ^0.9.39
 
 
 dependency_overrides:
