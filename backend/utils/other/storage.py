@@ -1,5 +1,5 @@
-import json
 import datetime
+import json
 import os
 
 from google.cloud import storage
@@ -49,6 +49,7 @@ def delete_postprocessing_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
+
 
 def create_signed_postprocessing_audio_url(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
