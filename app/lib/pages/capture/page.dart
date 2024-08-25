@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -13,6 +14,7 @@ import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -29,11 +31,9 @@ import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
   final Function(ServerMemory) updateMemory;
-  final BTDeviceStruct? device;
 
   const CapturePage({
     super.key,
-    required this.device,
     required this.updateMemory,
   });
 
@@ -45,9 +45,6 @@ class CapturePageState extends State<CapturePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
   @override
   bool get wantKeepAlive => true;
-
-  // TODO: This should come from Device Provider implemented by @Becca-Saka
-  BTDeviceStruct? btDevice;
 
   /// ----
 
@@ -95,8 +92,9 @@ class CapturePageState extends State<CapturePage>
   String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
   Future<void> initiateFriendAudioStreaming() async {
-    if (btDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(btDevice!.id);
+    var provider = context.read<DeviceProvider>();
+    if (provider.connectedDevice == null) return;
+    BleAudioCodec codec = await getAudioCodec(provider.connectedDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       SharedPreferencesUtil().deviceCodec = codec;
       showDialog(
@@ -115,49 +113,51 @@ class CapturePageState extends State<CapturePage>
       return;
     }
 
-    await context.read<CaptureProvider>().streamAudioToWs(btDevice!.id, codec);
+    await context.read<CaptureProvider>().streamAudioToWs(provider.connectedDevice!.id, codec);
   }
 
   Future<void> startOpenGlass() async {
-    if (btDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
+    var provider = context.read<DeviceProvider>();
+    if (provider.connectedDevice == null) return;
+    isGlasses = await hasPhotoStreamingCharacteristic(provider.connectedDevice!.id);
     if (!isGlasses) return;
-    await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+    await openGlassProcessing(provider.connectedDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();
   }
 
   void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
     var provider = context.read<CaptureProvider>();
-    debugPrint('resetState: $restartBytesProcessing');
-    provider.closeBleStream();
-    provider.cancelMemoryCreationTimer();
-    if (!restartBytesProcessing && (provider.segments.isNotEmpty || photos.isNotEmpty)) {
-      var res = await provider.createMemory(forcedCreation: true);
-      if (res != null && !res) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Memory creation failed. It\' stored locally and will be retried soon.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        }
-      }
-    }
-
-    if (btDevice != null) setState(() => this.btDevice = btDevice);
-    if (restartBytesProcessing) {
-      startOpenGlass();
-      initiateFriendAudioStreaming();
-    }
+    // print('inside of resetState');
+    // debugPrint('resetState: $restartBytesProcessing');
+    // provider.closeBleStream();
+    // provider.cancelMemoryCreationTimer();
+    // if (!restartBytesProcessing && (provider.segments.isNotEmpty || photos.isNotEmpty)) {
+    //   var res = await provider.createMemory(forcedCreation: true);
+    //   if (res != null && !res) {
+    //     if (mounted) {
+    //       ScaffoldMessenger.of(context).showSnackBar(
+    //         const SnackBar(
+    //           content: Text(
+    //             'Memory creation failed. It\' stored locally and will be retried soon.',
+    //             style: TextStyle(color: Colors.white, fontSize: 14),
+    //           ),
+    //         ),
+    //       );
+    //     }
+    //   }
+    // }
+    // await provider.resetState(restartBytesProcessing: restartBytesProcessing, btDevice: btDevice);
+    // if (restartBytesProcessing) {
+    startOpenGlass();
+    initiateFriendAudioStreaming();
+    // }
   }
 
   void restartWebSocket() {
+    var provider = context.read<DeviceProvider>();
     debugPrint('restartWebSocket');
     closeWebSocket();
-    context.read<CaptureProvider>().streamAudioToWs(btDevice!.id, SharedPreferencesUtil().deviceCodec);
+    context.read<CaptureProvider>().streamAudioToWs(provider.connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
   }
 
   setHasTranscripts(bool hasTranscripts) {
@@ -198,7 +198,6 @@ class CapturePageState extends State<CapturePage>
 
   @override
   void initState() {
-    btDevice = widget.device;
     WavBytesUtil.clearTempWavFiles();
     startOpenGlass();
     initiateFriendAudioStreaming();
@@ -208,6 +207,11 @@ class CapturePageState extends State<CapturePage>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await context.read<CaptureProvider>().initiateWebsocket();
+      var shouldRestart = context.read<CaptureProvider>().restartAudioProcessing;
+      if (shouldRestart) {
+        startOpenGlass();
+        initiateFriendAudioStreaming();
+      }
       if (await LocationService().displayPermissionsDialog()) {
         await showDialog(
           context: context,
@@ -245,8 +249,6 @@ class CapturePageState extends State<CapturePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // context.read<CaptureProvider>().closeBleStream();
-    // context.read<CaptureProvider>().cancelMemoryCreationTimer();
     record.dispose();
     _internetListener.cancel();
     // websocketChannel
@@ -293,19 +295,41 @@ class CapturePageState extends State<CapturePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<CaptureProvider>(builder: (context, provider, child) {
-      return Stack(
-        children: [
-          ListView(children: [
-            speechProfileWidget(context, setState, restartWebSocket),
-            ...getConnectionStateWidgets(
-                context, provider.hasTranscripts, widget.device, wsConnectionState, _internetStatus),
-            getTranscriptWidget(provider.memoryCreating, provider.segments, photos, widget.device),
-            ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
-            const SizedBox(height: 16)
-          ]),
-          getPhoneMicRecordingButton(_recordingToggled, recordingState)
-        ],
+    return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+      return MessageListener<CaptureProvider>(
+        showError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                error,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          );
+        },
+        showInfo: (info) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                info,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          );
+        },
+        child: Stack(
+          children: [
+            ListView(children: [
+              speechProfileWidget(context, setState, restartWebSocket),
+              ...getConnectionStateWidgets(
+                  context, provider.hasTranscripts, deviceProvider.connectedDevice, wsConnectionState, _internetStatus),
+              getTranscriptWidget(provider.memoryCreating, provider.segments, photos, deviceProvider.connectedDevice),
+              ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
+              const SizedBox(height: 16)
+            ]),
+            getPhoneMicRecordingButton(_recordingToggled, recordingState)
+          ],
+        ),
       );
     });
   }

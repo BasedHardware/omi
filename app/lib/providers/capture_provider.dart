@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
@@ -15,6 +16,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
@@ -24,7 +26,7 @@ import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:uuid/uuid.dart';
 
-class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin {
+class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin, MessageNotifierMixin {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
 
@@ -33,11 +35,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     messageProvider = p;
   }
 
+  bool restartAudioProcessing = false;
+
   List<TranscriptSegment> segments = [];
   Geolocation? geolocation;
 
   bool hasTranscripts = false;
   bool memoryCreating = false;
+  bool webSocketConnected = false;
+  bool webSocketConnecting = false;
 
   static const quietSecondsForMemoryCreation = 120;
 
@@ -68,6 +74,16 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
   void setGeolocation(Geolocation? value) {
     geolocation = value;
+    notifyListeners();
+  }
+
+  void setWebSocketConnected(bool value) {
+    webSocketConnected = value;
+    notifyListeners();
+  }
+
+  void setWebSocketConnecting(bool value) {
+    webSocketConnecting = value;
     notifyListeners();
   }
 
@@ -160,6 +176,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     BleAudioCodec? audioCodec,
     int? sampleRate,
   ]) async {
+    setWebSocketConnecting(true);
     print('initiateWebsocket');
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
@@ -169,6 +186,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       includeSpeechProfile: false,
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
+        setWebSocketConnecting(false);
+        setWebSocketConnected(true);
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
@@ -227,6 +246,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
+    print('streamAudioToWs');
+    print('wsConnectionState: $wsConnectionState');
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       id,
@@ -242,6 +263,36 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         }
       },
     );
+    notifyListeners();
+  }
+
+  void setRestartAudioProcessing(bool value) {
+    restartAudioProcessing = value;
+    notifyListeners();
+  }
+
+  Future resetState(
+      {bool restartBytesProcessing = true,
+      BTDeviceStruct? btDevice,
+      required GlobalKey<CapturePageState> captureKey}) async {
+    print('inside of resetState');
+    debugPrint('resetState: $restartBytesProcessing');
+    closeBleStream();
+    cancelMemoryCreationTimer();
+
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
+      print('inside of resetState and createMemory');
+      var res = await createMemory(forcedCreation: true);
+      notifyListeners();
+      if (res != null && !res) {
+        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+      } else {
+        notifyInfo('Memory created successfully 🚀');
+      }
+    }
+    setRestartAudioProcessing(restartBytesProcessing);
+    captureKey.currentState?.resetState();
+    notifyListeners();
   }
 
   void closeBleStream() {
@@ -252,5 +303,12 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   void cancelMemoryCreationTimer() {
     _memoryCreationTimer?.cancel();
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _bleBytesStream?.cancel();
+    _memoryCreationTimer?.cancel();
+    super.dispose();
   }
 }

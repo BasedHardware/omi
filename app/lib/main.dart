@@ -18,6 +18,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -132,10 +133,8 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          ChangeNotifierProvider(create: (context) => OnboardingProvider()),
-          ListenableProvider(create: (context) => HomeProvider()),
+          // ChangeNotifierProvider(create: (context) => DeviceProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
-          ChangeNotifierProvider(create: (context) => MessageProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
             create: (context) => MessageProvider(),
@@ -147,6 +146,17 @@ class _MyAppState extends State<MyApp> {
             update: (BuildContext context, memory, message, CaptureProvider? previous) =>
                 (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
           ),
+          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+            create: (context) => DeviceProvider(),
+            update: (BuildContext context, value, DeviceProvider? previous) =>
+                (previous?..setProvider(value)) ?? DeviceProvider(),
+          ),
+          ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
+            create: (context) => OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) =>
+                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+          ),
+          ListenableProvider(create: (context) => HomeProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
