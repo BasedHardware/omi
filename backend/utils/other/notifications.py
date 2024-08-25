@@ -1,14 +1,15 @@
 import asyncio
 import concurrent.futures
-from datetime import datetime, timedelta
+from datetime import datetime, time
 import uuid
 import pytz
+import json
 import database.chat as chat_db
 import database.notifications as notification_db
 import database.memories as memories_db
 from utils.notifications import send_notification, send_bulk_notification
 from utils.llm import get_memory_summary
-
+from models.notification_message import NotificationMessage
 
 async def start_cron_job():
     if should_run_job():
@@ -47,22 +48,20 @@ def _send_summary_notification(user_data: tuple):
     fcm_token = user_data[1]
     daily_summary_title = "Here is your action plan for tomorrow"
     msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁'
-    memories = memories_db.get_memories(user_id)  
+    memories = memories_db.filter_memories_by_date(user_id, datetime.combine(datetime.now().date(), time.min), datetime.now())  
     if not memories:       
         summary = msg
     else:
         summary = get_memory_summary('This User', memories)
-    data = {
-        "text": summary,
-        'id': str(uuid.uuid4()),
-        'created_at': datetime.now().isoformat(),
-        'sender': 'ai',
-        'type': 'day_summary',
-        'from_integration': 'false',
-        'notification_type': 'daily_summary',
-    }
+
+    ai_message = NotificationMessage(
+        text=summary,
+        from_integration='false',
+        type='day_summary',
+        notification_type='daily_summary',
+    )
     chat_db.add_summary_message(summary, user_id)
-    send_notification(fcm_token, daily_summary_title, summary, data)
+    send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_string(ai_message))
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
