@@ -2,6 +2,8 @@ import os
 
 import requests
 import torch
+from fastapi import HTTPException
+from pydub import AudioSegment
 
 from utils.other.endpoints import timeit
 
@@ -50,3 +52,28 @@ def vad_is_empty(file_path, return_segments: bool = False):
     except Exception as e:
         print('vad_is_empty', e)
         return False
+
+
+def apply_vad_for_speech_profile(file_path: str):
+    voice_segments = vad_is_empty(file_path, return_segments=True)
+    if len(voice_segments) == 0:
+        raise HTTPException(status_code=400, detail="Audio is empty")
+
+    joined_segments = []
+    for i, segment in enumerate(voice_segments):
+        if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
+            joined_segments[-1]['end'] = segment['end']
+        else:
+            joined_segments.append(segment)
+
+    # trim silence out of file_path, but leave 1 sec of silence within chunks
+    trimmed_aseg = AudioSegment.empty()
+    for i, segment in enumerate(joined_segments):
+        start = segment['start'] * 1000
+        end = segment['end'] * 1000
+        trimmed_aseg += AudioSegment.from_wav(file_path)[start:end]
+        if i < len(joined_segments) - 1:
+            trimmed_aseg += AudioSegment.from_wav(file_path)[end:end + 1000]
+
+    # file_path.replace('.wav', '-cleaned.wav')
+    trimmed_aseg.export(file_path, format="wav")
