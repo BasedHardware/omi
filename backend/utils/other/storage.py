@@ -41,6 +41,29 @@ def get_profile_audio_if_exists(uid: str) -> str:
     return None
 
 
+def upload_additional_profile_audio(file_path: str, file_name: str, uid: str):
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    path = f'{uid}/additional_profile_recordings/{file_name}'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
+
+
+def delete_additional_profile_audio(uid: str, file_name: str):
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
+    blob.delete()
+
+
+def get_additional_profile_recordings(uid: str) -> list:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blobs = bucket.list_blobs(prefix=f'{uid}/additional_profile_recordings/')
+    recordings = []
+    for blob in blobs:
+        recordings.append(blob.name)
+    return recordings
+
+
 # ********************************************
 # ************* POST PROCESSING **************
 # ********************************************
