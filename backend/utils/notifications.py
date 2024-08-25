@@ -19,8 +19,6 @@ def send_notification(token: str, title: str, body: str, data: dict = None):
         error_message = str(e)
         if "Requested entity was not found" in error_message:
             notification_db.remove_token(token)
-        if "The registration token is not a valid FCM registration token" in error_message:
-            notification_db.remove_token(token)
      
         print("Error sending message:", e)
 
