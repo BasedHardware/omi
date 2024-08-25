@@ -16,7 +16,14 @@ import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -125,6 +132,30 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
         providers: [
+          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
+          // ChangeNotifierProvider(create: (context) => DeviceProvider()),
+          ChangeNotifierProvider(create: (context) => MemoryProvider()),
+          ListenableProvider(create: (context) => PluginProvider()),
+          ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
+            create: (context) => MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updatePluginProvider(value)) ?? MessageProvider(),
+          ),
+          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+            create: (context) => CaptureProvider(),
+            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
+          ),
+          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+            create: (context) => DeviceProvider(),
+            update: (BuildContext context, value, DeviceProvider? previous) =>
+                (previous?..setProvider(value)) ?? DeviceProvider(),
+          ),
+          ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
+            create: (context) => OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) =>
+                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+          ),
           ListenableProvider(create: (context) => HomeProvider()),
         ],
         builder: (context, child) {
