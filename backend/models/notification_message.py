@@ -1,6 +1,5 @@
 
 from typing import  Optional
-import json
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -10,7 +9,6 @@ from pydantic import BaseModel, Field
 class NotificationMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    created_at: str
     sender: str = Field(default='ai')
     plugin_id: Optional[str] = None
     from_integration: str
@@ -19,7 +17,7 @@ class NotificationMessage(BaseModel):
 
 
     @staticmethod
-    def get_message_as_string(
+    def get_message_as_dict(
             message: 'NotificationMessage',
     ) -> dict:
         

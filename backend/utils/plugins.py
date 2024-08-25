@@ -170,4 +170,4 @@ def send_plugin_notification(token: str, plugin_id: str, message: str):
         notification_type='plugin',
     )
  
-    send_notification(token, plugin_id + ' says', message, NotificationMessage.get_message_as_string(ai_message))
+    send_notification(token, plugin_id + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
