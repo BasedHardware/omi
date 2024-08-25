@@ -3,7 +3,6 @@ import os
 
 import firebase_admin
 from fastapi import FastAPI
-from fastapi_utilities import repeat_at
 
 from modal import Image, App, asgi_app, Secret, Cron
 from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile, \
@@ -65,6 +64,6 @@ for path in paths:
         os.makedirs(path)
 
 
-@modal_app.function(image=image,schedule=Cron('* * * * *'))
+@modal_app.function(image=image, schedule=Cron('* * * * *'))
 async def start_job():
     await start_cron_job()
