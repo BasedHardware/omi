@@ -103,10 +103,12 @@ class _FoundDevicesState extends State<FoundDevices> {
 
         return GestureDetector(
           onTap: !provider.isClicked
-              ? () => provider.handleTap(
+              ? () async {
+                  await provider.handleTap(
                     device: device,
                     goNext: widget.goNext,
-                  )
+                  );
+                }
               : null,
           child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

@@ -29,15 +29,19 @@ class PluginProvider extends BaseProvider {
     setLoadingState(true);
     if (SharedPreferencesUtil().pluginsList.isEmpty) {
       plugins = await retrievePlugins();
-      notifyListeners();
+      updatePrefPlugins();
     } else {
       setPlugins();
     }
+    notifyListeners();
+  }
+
+  void updatePrefPlugins() {
+    SharedPreferencesUtil().pluginsList = plugins;
   }
 
   void setPlugins() {
     plugins = SharedPreferencesUtil().pluginsList;
-
     notifyListeners();
   }
 
@@ -50,6 +54,7 @@ class PluginProvider extends BaseProvider {
     pluginLoading = List.filled(plugins.length, false);
 
     getPlugins();
+    notifyListeners();
   }
 
   Future<void> togglePlugin(String pluginId, bool isEnabled, int idx) async {

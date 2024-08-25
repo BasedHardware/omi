@@ -3,13 +3,10 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
@@ -19,6 +16,7 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
 import 'package:friend_private/providers/plugin_provider.dart';
@@ -27,9 +25,6 @@ import 'package:friend_private/scripts.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/scan.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
@@ -38,8 +33,23 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
-class HomePageWrapper extends StatelessWidget {
+GlobalKey<CapturePageState> capturePageKey = GlobalKey();
+
+class HomePageWrapper extends StatefulWidget {
   const HomePageWrapper({super.key});
+
+  @override
+  State<HomePageWrapper> createState() => _HomePageWrapperState();
+}
+
+class _HomePageWrapperState extends State<HomePageWrapper> {
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      context.read<DeviceProvider>().periodicConnect(capturePageKey);
+    });
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,13 +75,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
-  GlobalKey<CapturePageState> capturePageKey = GlobalKey();
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-  StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
-  StreamSubscription<List<int>>? _bleBatteryLevelListener;
-
-  int batteryLevel = -1;
-  BTDeviceStruct? _device;
+  // StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
+  // StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
 
@@ -134,9 +140,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
+      if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
+        // await scanAndConnectDevice().then((value) async {
+        //   print('Connected device: $value');
+        //   if (value != null) {
+        //     context.read<DeviceProvider>().setConnectedDevice(value);
+        //     // print('Connected device: ${context.read<DeviceProvider>().connectedDevice}');
+        //     await context.read<DeviceProvider>().initiateConnectionListener(capturePageKey);
+        //     // context.read<DeviceProvider>().initiateBleBatteryListener();
+        //     //  capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: value);
+        //   }
+        // });
+      }
       if (mounted) {
-        //TODO: already disposed
-        // await context.read<MessageProvider>().refreshMessages();
         await context.read<HomeProvider>().setupHasSpeakerProfile();
       }
     });
@@ -145,9 +161,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // _migrationScripts();
 
     authenticateGCP();
-    if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
-      scanAndConnectDevice().then(_onConnected);
-    }
 
     _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
@@ -169,59 +182,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       context.read<MessageProvider>().addMessage(message);
       chatPageKey.currentState?.scrollToBottom();
     });
-  }
-
-  Timer? _disconnectNotificationTimer;
-
-  _initiateConnectionListener() async {
-    if (_connectionStateListener != null) return;
-    _connectionStateListener?.cancel();
-    _connectionStateListener = getConnectionStateListener(
-        deviceId: _device!.id,
-        onDisconnected: () {
-          debugPrint('onDisconnected');
-          capturePageKey.currentState?.resetState(restartBytesProcessing: false);
-          setState(() => _device = null);
-          InstabugLog.logInfo('Friend Device Disconnected');
-          _disconnectNotificationTimer?.cancel();
-          _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-            NotificationService.instance.createNotification(
-              title: 'Friend Device Disconnected',
-              body: 'Please reconnect to continue using your Friend.',
-            );
-          });
-          MixpanelManager().deviceDisconnected();
-        },
-        onConnected: ((d) => _onConnected(d, initiateConnectionListener: false)));
-  }
-
-  _onConnected(BTDeviceStruct? connectedDevice, {bool initiateConnectionListener = true}) {
-    debugPrint('_onConnected: $connectedDevice');
-    if (connectedDevice == null) return;
-    _disconnectNotificationTimer?.cancel();
-    NotificationService.instance.clearNotification(1);
-    _device = connectedDevice;
-    if (initiateConnectionListener) _initiateConnectionListener();
-    _initiateBleBatteryListener();
-    capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
-    MixpanelManager().deviceConnected();
-    SharedPreferencesUtil().btDeviceStruct = _device!;
-    SharedPreferencesUtil().deviceName = _device!.name;
-    // if (mounted) {
-    //   setState(() {});
-    // }
-  }
-
-  _initiateBleBatteryListener() async {
-    _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(
-      _device!.id,
-      onBatteryLevelChange: (int value) {
-        setState(() {
-          batteryLevel = value;
-        });
-      },
-    );
   }
 
   _tabChange(int index) {
@@ -316,7 +276,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ),
                             CapturePage(
                               key: capturePageKey,
-                              device: _device,
                               updateMemory: (ServerMemory memory) {
                                 memProvider.updateMemory(memory);
                               },
@@ -454,75 +413,84 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _device != null && batteryLevel != -1
-                        ? GestureDetector(
-                            onTap: _device == null
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(MaterialPageRoute(
-                                        builder: (c) => ConnectedDevice(
-                                              device: _device!,
-                                              batteryLevel: batteryLevel,
-                                            )));
-                                    MixpanelManager().batteryIndicatorClicked();
-                                  },
-                            child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Colors.grey,
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: batteryLevel > 75
-                                            ? const Color.fromARGB(255, 0, 255, 8)
-                                            : batteryLevel > 20
-                                                ? Colors.yellow.shade700
-                                                : Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8.0),
-                                    Text(
-                                      '${batteryLevel.toString()}%',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                )),
-                          )
-                        : TextButton(
-                            onPressed: () async {
-                              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
-                                routeToPage(context, const ConnectDevicePage());
-                                MixpanelManager().connectFriendClicked();
-                              } else {
-                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
-                              }
-                              // setState(() {});
-                            },
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              backgroundColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
+                    Consumer<DeviceProvider>(builder: (context, deviceProvider, child) {
+                      if (deviceProvider.connectedDevice != null && deviceProvider.batteryLevel != -1) {
+                        return GestureDetector(
+                          onTap: deviceProvider.connectedDevice == null
+                              ? null
+                              : () {
+                                  Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (c) => ConnectedDevice(
+                                            device: deviceProvider.connectedDevice!,
+                                            batteryLevel: deviceProvider.batteryLevel,
+                                          )));
+                                  MixpanelManager().batteryIndicatorClicked();
+                                },
+                          child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(10),
-                                side: const BorderSide(color: Colors.white, width: 1),
+                                border: Border.all(
+                                  color: Colors.grey,
+                                  width: 1,
+                                ),
                               ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: deviceProvider.batteryLevel > 75
+                                          ? const Color.fromARGB(255, 0, 255, 8)
+                                          : deviceProvider.batteryLevel > 20
+                                              ? Colors.yellow.shade700
+                                              : Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8.0),
+                                  Text(
+                                    '${deviceProvider.batteryLevel.toString()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              )),
+                        );
+                      } else {
+                        print(deviceProvider.connectedDevice?.id);
+                        return TextButton(
+                          onPressed: () async {
+                            if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+                              routeToPage(context, const ConnectDevicePage());
+                              MixpanelManager().connectFriendClicked();
+                            } else {
+                              await routeToPage(
+                                  context,
+                                  ConnectedDevice(
+                                      device: deviceProvider.connectedDevice,
+                                      batteryLevel: deviceProvider.batteryLevel));
+                            }
+                            // setState(() {});
+                          },
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            backgroundColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: const BorderSide(color: Colors.white, width: 1),
                             ),
-                            child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                           ),
+                          child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                        );
+                      }
+                    }),
                     _controller!.index == 2
                         ? Consumer<PluginProvider>(builder: (context, provider, child) {
                             return Padding(
@@ -650,8 +618,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _connectionStateListener?.cancel();
-    _bleBatteryLevelListener?.cancel();
+    // _connectionStateListener?.cancel();
+    // _bleBatteryLevelListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     ForegroundUtil.stopForegroundTask();

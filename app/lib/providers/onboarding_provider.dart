@@ -7,12 +7,15 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/find.dart';
 
 class OnboardingProvider extends BaseProvider {
+  DeviceProvider? deviceProvider;
+
   bool isClicked = false;
   bool isConnected = false;
   int batteryPercentage = -1;
@@ -24,6 +27,10 @@ class OnboardingProvider extends BaseProvider {
   late Timer _didNotMakeItTimer;
   late Timer _findDevicesTimer;
   bool enableInstructions = false;
+
+  void setDeviceProvider(DeviceProvider provider) {
+    deviceProvider = provider;
+  }
 
   // TODO: improve this and find_device page.
   // TODO: include speech profile, once it's well tested, in a few days, rn current version works
@@ -66,11 +73,12 @@ class OnboardingProvider extends BaseProvider {
     await bleConnectDevice(device.id);
     deviceId = device.id;
     deviceName = device.name;
-    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
+    await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
     setBatteryPercentage(
       btDevice: device,
       goNext: goNext,
     );
+    notifyListeners();
   }
 
   void initiateConnectionListener({
@@ -92,15 +100,28 @@ class OnboardingProvider extends BaseProvider {
           connectingToDeviceId = null;
           notifyListeners();
           await Future.delayed(const Duration(seconds: 2));
+          SharedPreferencesUtil().btDeviceStruct = connectedDevice;
           goNext();
         }
       }
     });
   }
 
+  void deviceAlreadyUnpaired() {
+    batteryPercentage = -1;
+    isConnected = false;
+    deviceName = '';
+    deviceId = '';
+    notifyListeners();
+  }
+
   Future<void> scanDevices({
     required VoidCallback onShowDialog,
   }) async {
+    if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+      // it means the device has been unpaired
+      deviceAlreadyUnpaired();
+    }
     // check if bluetooth is enabled on Android
     if (Platform.isAndroid) {
       if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
@@ -115,7 +136,6 @@ class OnboardingProvider extends BaseProvider {
         }
       }
     }
-
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
       enableInstructions = true;
       notifyListeners();
@@ -140,7 +160,6 @@ class OnboardingProvider extends BaseProvider {
 
       // Convert the values of the map back to a list
       List<BTDeviceStruct> orderedDevices = foundDevicesMap.values.toList();
-
       if (orderedDevices.isNotEmpty) {
         deviceList = orderedDevices;
         notifyListeners();
@@ -151,6 +170,7 @@ class OnboardingProvider extends BaseProvider {
 
   @override
   void dispose() {
+    //TODO: This does not get called when the page is popped
     _findDevicesTimer.cancel();
     _didNotMakeItTimer.cancel();
     connectionStateTimer?.cancel();
