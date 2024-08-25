@@ -14,9 +14,12 @@ else:
 
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
-backups_bucket = os.getenv('BUCKET_BACKUPS')
+memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
 
 
+# *******************************************
+# ************* SPEECH PROFILE **************
+# *******************************************
 def upload_profile_audio(file_path: str, uid: str):
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/speech_profile.wav'
@@ -38,6 +41,9 @@ def get_profile_audio_if_exists(uid: str) -> str:
     return None
 
 
+# ********************************************
+# ************* POST PROCESSING **************
+# ********************************************
 def upload_postprocessing_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
@@ -61,3 +67,35 @@ def create_signed_postprocessing_audio_url(file_path: str):
     )
 
     return url
+
+
+# ************************************************
+# ************* MEMORIES RECORDINGS **************
+# ************************************************
+
+def upload_memory_recording(file_path: str, uid: str, memory_id: str):
+    bucket = storage_client.bucket(memories_recordings_bucket)
+    path = f'{uid}/{memory_id}.wav'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
+
+
+def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
+    bucket = storage_client.bucket(memories_recordings_bucket)
+    path = f'{uid}/{memory_id}.wav'
+    blob = bucket.blob(path)
+    if blob.exists():
+        file_path = f'_temp/{memory_id}.wav'
+        blob.download_to_filename(file_path)
+        return file_path
+    return None
+
+
+def delete_all_memory_recordings(uid: str):
+    if not uid:
+        return
+    bucket = storage_client.bucket(memories_recordings_bucket)
+    blobs = bucket.list_blobs(prefix=uid)
+    for blob in blobs:
+        blob.delete()
