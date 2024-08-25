@@ -50,7 +50,7 @@ def _send_summary_notification(user_data: tuple):
     fcm_token = user_data[1]
     daily_summary_title = "Here is your action plan for tomorrow"
     memories = memories_db.filter_memories_by_date(user_id, datetime.combine(datetime.now().date(), time.min), datetime.now())  
-    if not memories:       
+    if not memories:      
         return
     else:
         summary = get_memory_summary('This User', memories)
@@ -62,7 +62,7 @@ def _send_summary_notification(user_data: tuple):
         notification_type='daily_summary',
     )
     chat_db.add_summary_message(summary, user_id)
-    send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_string(ai_message))
+    send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
 
 
 async def _send_bulk_summary_notification(users: list):
