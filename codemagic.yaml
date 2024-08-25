@@ -1,134 +1,86 @@
 workflows:
-#  android-workflow:
-#    name: Android Workflow
-#    instance_type: mac_mini_m1
-#    max_build_duration: 120
-#    working_directory: app
-#    environment:
-#      android_signing:
-#        - keystore_reference
-#      groups:
-#        - google_play # <-- (Includes GCLOUD_SERVICE_ACCOUNT_CREDENTIALS)
-#      vars:
-#        PACKAGE_NAME: "com.friend.ios"
-#        GOOGLE_PLAY_TRACK: "alpha"
-#      flutter: stable
-#    scripts:
-#      - name: Set up local.properties
-#        script: |
-#          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
-#      - name: Get Flutter packages
-#        script: |
-#          flutter packages pub get
-#      - name: Flutter analyze
-#        script: |
-#          flutter analyze
-#      - name: Flutter unit tests
-#        script: |
-#          flutter test
-#        ignore_failure: true
-#      - name: Build AAB with Flutter
-#        script: |
-#          BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks="$GOOGLE_PLAY_TRACK") + 1))
-#          flutter build appbundle --release \
-#            --build-name=1.0.$BUILD_NUMBER \
-#            --build-number=$BUILD_NUMBER
-#    artifacts:
-#      - build/**/outputs/**/*.aab
-#      - build/**/outputs/**/mapping.txt
-#      - flutter_drive.log
-#    publishing:
-#      email:
-#        recipients:
-#          - joan@basedhardware.com
-#          - nik@basedhardware.com
-#        notify:
-#          success: true
-#          failure: false
-#      google_play:
-#        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-#        track: $GOOGLE_PLAY_TRACK
-#        submit_as_draft: true
-  ios-workflow:
-    name: iOS Workflow
+  android-prod-internal:
+    name: Release Android Product Internal
     instance_type: mac_mini_m1
     max_build_duration: 120
-    working_directory: app
-    integrations:
-      app_store_connect: codemagic
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.friend-app-with-wearable.ios12
-      vars:
-        APP_ID: 6502156163
-      flutter: stable
-      xcode: latest
-      cocoapods: default
+      android_signing:
+        - prod_android_upload_keystore
       groups:
-        - appstore_credentials
-        - firebase_credentials
+        - firebase
+        - google_credentials
+      vars:
+        PACKAGE_NAME: "com.friend.ios"
+        GOOGLE_PLAY_TRACK: "internal"
+      flutter: 3.22.3   # Define the channel name, version (e.g. v1.13.4), or fvm for Flutter Version Management
+      xcode: 15.4       # Define latest, edge or version (e.g. 11.2)
+      cocoapods: 1.15.2 # Define default or version
+      ndk: r27          # Define default or revision (e.g. r19c)
+      java: 17          # Define default, or platform version (e.g. 11)
+      #ruby: 2.7.2       # Define default or version
+      #node: 12.14.0     # Define default, latest, current, lts, carbon (or another stream), nightly or version
+      #npm: 6.13.7       # Define default, latest, next, lts or version
+    triggering:
+      events:
+        - push #TODO
+      branch_patterns:
+        - pattern: '*_codemagic_' # TODO
+          include: true
+          source: true
+    working_directory: app
     scripts:
-      - name: Set up code signing settings on Xcode project
+      - name: Hi @thinh here
         script: |
-          xcode-project use-profiles
+          pwd
+          which brew
+      - name: Install opus
+        script: |
+          brew install opus
+      - name: Set up .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          pwd
+          cat .env
+      - name: Set up flutterfire options
+        script: |
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > firebase_key.json
+          cat firebase_key.json
+
+          echo Install Firebase CLI
+          npm install -g firebase-tools
+          dart pub global activate flutterfire_cli
+
+          echo Set flutterfire options
+          flutterfire config --platforms="android,ios" --out=lib/firebase_options_prod.dart --ios-bundle-id=com.friend-app-with-wearable.ios12 --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/ --service-account="firebase_key.json" --project="based-hardware" --ios-target="Runner" --yes
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
       - name: Get Flutter packages
         script: |
           flutter packages pub get
-      - name: Install pods
+      - name: Run build runner
         script: |
-          find . -name "Podfile" -execdir pod install \;
-      - name: Flutter analyze
+          dart run build_runner build
+      - name: Build AAB with Flutter
         script: |
-          flutter analyze
-#      - name: Flutter unit tests
-#        script: |
-#          flutter test
-        ignore_failure: true
-      - name: Load Firebase configuration
-        script: |
-          #!/usr/bin/env sh
-          set -e # exit on first failed command
-          
-          echo $ANDROID_FIREBASE_SECRET > $CM_BUILD_DIR/android/app/google-services.json
-          echo $IOS_FIREBASE_SECRET > $CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist
-      - name: Flutter build ipa and automatic versioning
-        script: |
-          # See the following link about getting the latest App Store or TestFlight version - https://docs.codemagic.io/knowledge-codemagic/build-versioning/#app-store-or-testflight-latest-build-number
-          flutter build ipa --release \
-            --build-name=1.0.20 \
-            --build-number=$(($(app-store-connect get-latest-testflight-build-number "$APP_ID") + 1)) \
-            --export-options-plist=/Users/builder/export_options.plist
+          BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks="$GOOGLE_PLAY_TRACK") + 1))      
+          flutter build appbundle --release \
+            --build-name=1.0.$BUILD_NUMBER \
+            --build-number=$BUILD_NUMBER
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
       - flutter_drive.log
     publishing:
-      # See the following link for details about email publishing - https://docs.codemagic.io/publishing-yaml/distribution/#email
       email:
         recipients:
-          - joan@ebasedhardware.com
-          - nik@basedhardware.com
+          - ngocthinhdp@gmail.com
         notify:
-          success: true # To receive a notification when a build succeeds
-          failure: false # To not receive a notification when a build fails
-      slack:
-        # See the following link about how to connect your Slack account - https://docs.codemagic.io/publishing-yaml/distribution/#slack
-        channel: "#builds"
-        notify_on_build_start: true # To receive a notification when a build starts
-        notify:
-          success: true # To receive a notification when a build succeeds
-          failure: false # To not receive a notification when a build fails
-      app_store_connect:
-        auth: integration
-
-        # Configuration related to TestFlight (optional)
-        # Note: This action is performed during post-processing.
-        submit_to_testflight: true
-        beta_groups: # Specify the names of beta tester groups that will get access to the build once it has passed beta review.
-          - Discord Folks
-          - Internal 2
-
-        # Configuration related to App Store (optional)
-        # Note: This action is performed during post-processing.
-        submit_to_app_store: false
+          success: true
+          failure: false
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: true
