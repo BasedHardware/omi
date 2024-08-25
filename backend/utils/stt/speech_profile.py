@@ -16,6 +16,9 @@ def get_speech_profile_matching_predictions(audio_file_path: str, profile_path: 
         data={'segments': json.dumps(segments)},
         files=files
     )
+    if response.status_code != 200:
+        print('get_speech_profile_matching_predictions', response.text)
+        return [False] * len(segments)
     try:
         result = response.json()
         print('get_speech_profile_matching_predictions', result)

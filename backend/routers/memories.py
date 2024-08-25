@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 import time
 
@@ -79,6 +80,7 @@ def postprocess_memory(
     TODO: Try Nvidia Nemo ASR as suggested by @jhonnycombs https://huggingface.co/spaces/hf-audio/open_asr_leaderboard
     TODO: USE soniox here? with speech profile and stuff?
     TODO: should consider storing non beautified segments, and beautify on read?
+    TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
     """
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
@@ -108,19 +110,12 @@ def postprocess_memory(
 
     try:
         aseg = AudioSegment.from_wav(file_path)
-        profile_duration = 0
-
         signed_url = upload_postprocessing_audio(file_path)
-
-        # Ensure delete uploaded file in 5m
-        threads = threading.Thread(target=_delete_postprocessing_audio, args=(file_path,))
-        threads.start()
+        threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
 
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count)
-        segments = fal_postprocessing(words, aseg.duration_seconds, profile_duration)
-
-        # os.remove(file_path)
+        segments = fal_postprocessing(words, aseg.duration_seconds)
 
         if not segments:
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
@@ -134,12 +129,12 @@ def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
+        # should try doing something still if whisper-x fails.
         profile_path = get_profile_audio_if_exists(uid) if aseg.frame_rate == 16000 else None
         matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
             segment.is_user = matches[i]
 
-        # TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', segments)
@@ -164,6 +159,7 @@ def postprocess_memory(
 def _delete_postprocessing_audio(file_path):
     time.sleep(300)  # 5 min
     delete_postprocessing_audio(file_path)
+    os.remove(file_path)
 
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
