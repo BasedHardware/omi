@@ -10,7 +10,9 @@ import opuslib
 
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.streaming import process_audio_dg, send_initial_file
-from utils.stt.vad import VADIterator, model, is_speech_present
+from utils.stt.vad import VADIterator, model
+
+# import opuslib
 
 router = APIRouter()
 
@@ -50,9 +52,6 @@ async def _websocket_util(
     transcript_socket2 = None
     websocket_active = True
     duration = 0
-    is_speech_active = False
-    speech_timeout = 2.0 # Good for now (who doesnt like integer) but better dynamically adjust it by user behaviour, just idea: Increase as active time passes but until certain threshold, but not needed yet.
-    last_speech_time = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
             speech_profile = get_user_speech_profile(uid)
@@ -74,8 +73,7 @@ async def _websocket_util(
         await websocket.close()
         return
 
-    threshold = 0.7
-    vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
+    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
     if codec == 'opus':
         decoder = opuslib.Decoder(sample_rate, channels)
@@ -92,7 +90,12 @@ async def _websocket_util(
         prespeech_audio = deque(maxlen=int(byte_rate * 0.5)) # Queue of audio that will included to beginning of data (sent to DG) when is_speech_active become True
             
         timer_start = time.time()
-        audio_cursor = 0 # For sleep realtime logic
+        # speech_state = SpeechState.no_speech
+        voice_found, not_voice = 0, 0
+        # path = 'scripts/vad/audio_bytes.txt'
+        # if os.path.exists(path):
+        #     os.remove(path)
+        # audio_file = open(path, "a")
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
@@ -170,6 +173,7 @@ async def _websocket_util(
         try:
             while websocket_active:
                 await asyncio.sleep(30)
+                # print('send_heartbeat')
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_json({"type": "ping"})
                 else:
