@@ -133,7 +133,7 @@ def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        # Speech profile matching using speechbrain
+        # Speech profile matching using speechbrain # TODO: if fal fails, still should use speech profile for deepgram.
         profile_path = get_speech_profile_expanded(uid) if aseg.frame_rate == 16000 else None
         matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):

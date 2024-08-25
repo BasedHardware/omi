@@ -115,8 +115,8 @@ class DeviceProvider extends ChangeNotifier {
 
   Future periodicConnect(GlobalKey<CapturePageState> capturePageKey) async {
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (timer) async {
-      print('seconds: $connectionCheckSeconds');
-      print('triggered timer at ${DateTime.now()}');
+      // print('seconds: $connectionCheckSeconds');
+      // print('triggered timer at ${DateTime.now()}');
       if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
         return;
       }
