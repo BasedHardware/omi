@@ -41,9 +41,9 @@ def get_profile_audio_if_exists(uid: str) -> str:
     return None
 
 
-def upload_additional_profile_audio(file_path: str, file_name: str, uid: str):
+def upload_additional_profile_audio(file_path: str, uid: str):
     bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/additional_profile_recordings/{file_name}'
+    path = f'{uid}/additional_profile_recordings/{file_path.split("/")[-1]}'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'

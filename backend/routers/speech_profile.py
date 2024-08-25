@@ -61,6 +61,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
 @router.post('/v3/speech-profile/expand', tags=['v3'])
 def expand_speech_profile(memory_id: str, segment_idx: int, uid: str = Depends(auth.get_current_user_uid)):
+    print('expand_speech_profile', memory_id, segment_idx, uid)
     profile_path = get_profile_audio_if_exists(uid)
     if not profile_path:
         raise HTTPException(status_code=404, detail="Speech profile not found")
@@ -89,8 +90,8 @@ def expand_speech_profile(memory_id: str, segment_idx: int, uid: str = Depends(a
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
-    if aseg.duration_seconds < 5:
-        raise HTTPException(status_code=400, detail="Audio duration is too short")
+    # if aseg.duration_seconds < 5:
+    #     raise HTTPException(status_code=400, detail="Audio duration is too short")
 
     # if aseg.duration_seconds > 30:
     #     raise HTTPException(status_code=400, detail="Sample duration is too long")
