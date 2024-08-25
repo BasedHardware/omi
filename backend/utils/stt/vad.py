@@ -5,8 +5,6 @@ import torch
 from fastapi import HTTPException
 from pydub import AudioSegment
 
-from utils.other.endpoints import timeit
-
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
@@ -28,7 +26,6 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
     return False
 
 
-@timeit
 def is_audio_empty(file_path, sample_rate=8000):
     wav = read_audio(file_path)
     timestamps = get_speech_timestamps(wav, model, sampling_rate=sample_rate)
@@ -65,7 +62,7 @@ def apply_vad_for_speech_profile(file_path: str):
             joined_segments[-1]['end'] = segment['end']
         else:
             joined_segments.append(segment)
-
+    print('joined_segments', joined_segments)
     # trim silence out of file_path, but leave 1 sec of silence within chunks
     trimmed_aseg = AudioSegment.empty()
     for i, segment in enumerate(joined_segments):

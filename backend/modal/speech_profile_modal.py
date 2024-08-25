@@ -14,6 +14,7 @@ from speechbrain.inference.speaker import SpeakerRecognition
 class TranscriptSegment(BaseModel):
     start: float
     end: float
+    text: str
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -27,7 +28,7 @@ model = SpeakerRecognition.from_hparams(
 def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> bool:
     try:
         score, prediction = model.verify_files(sample_audio, segment)
-        print(score, prediction)
+        # print(score, prediction)
         # return bool(score[0] > 0.6)
         return bool(prediction[0])
     except Exception as e:
@@ -35,22 +36,37 @@ def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> bool:
         return False
 
 
-def classify_segments(audio_file: str, transcript_segments: List[TranscriptSegment], profile_path: str):
+def classify_segments(audio_file_path: str, transcript_segments: List[TranscriptSegment], profile_path: str):
     print('classify_segments')
     matches = [False] * len(transcript_segments)
     if not profile_path:
         return matches
 
-    for i, segment in enumerate(transcript_segments):
-        file_name = os.path.basename(audio_file)
-        temporal_file = f"_temp/{file_name}_{segment.start}_{segment.end}.wav"
-        AudioSegment.from_wav(audio_file)[segment.start * 1000:segment.end * 1000].export(temporal_file, format="wav")
+    # TODO: do per segment cleaning later. 1 by 1, maybe running pyannote VAD here (gpu), or using silero
+    # cleaning start, end doesn't do anything, cause segments are already pointing that
 
-        is_user = sample_same_speaker_as_segment(temporal_file, profile_path)
-        print('Matches', is_user, temporal_file)
+    print('Duration:', AudioSegment.from_wav(audio_file_path).duration_seconds)
+
+    file_name = os.path.basename(audio_file_path)
+    for i, segment in enumerate(transcript_segments):
+
+        duration = segment.end - segment.start
+        by_chunk_matches = []
+
+        for j in range(0, int(duration), 30):
+            start = segment.start + j
+            end = min(segment.end, start + 30)
+
+            temporal_file = f"_temp/{file_name}_{start}_{end}.wav"
+            AudioSegment.from_wav(audio_file_path)[start * 1000:end * 1000].export(temporal_file, format="wav")
+            is_user = sample_same_speaker_as_segment(temporal_file, profile_path)
+            by_chunk_matches.append(is_user)
+            os.remove(temporal_file)
+
+        is_user = sum(by_chunk_matches) / len(by_chunk_matches) > 0.5
+        print('Matches', by_chunk_matches, i + 1, is_user)
         matches[i] = is_user
 
-        os.remove(temporal_file)
     return matches
 
 
@@ -74,13 +90,12 @@ os.makedirs('_temp', exist_ok=True)
     allow_concurrent_inputs=2,
     cpu=4,
     gpu=modal.gpu.T4(count=1),
-    secrets=[Secret.from_name('huggingface-token')],
+    secrets=[Secret.from_name('huggingface-token'), Secret.from_name('envs')],
 )
 @web_endpoint(method='POST')
 def endpoint(
         profile_path: UploadFile = File(...), audio_file: UploadFile = File(...), segments: str = Form(...)
 ) -> List[bool]:
-
     with open(profile_path.filename, 'wb') as f:
         f.write(profile_path.file.read())
 
