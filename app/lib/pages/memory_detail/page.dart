@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
@@ -43,6 +44,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   TabController? _controller;
 
   bool canDisplaySeconds = true;
+  bool hasAudioRecording = false;
 
   List<MemoryPhoto> photos = [];
 
@@ -59,6 +61,11 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       getMemoryPhotos(widget.memory.id).then((value) {
         photos = value;
         setState(() {}); // TODO: if left before this closes, fails
+      });
+    } else if (widget.memory.source == MemorySource.friend) {
+      hasMemoryRecording(widget.memory.id).then((value) {
+        hasAudioRecording = value;
+        setState(() {});
       });
     }
     super.initState();
@@ -224,6 +231,96 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: canDisplaySeconds,
+              isMemoryDetail: true,
+              editSegment: (segmentIdx) {
+                print('editSegment');
+                showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                    ),
+                    builder: (ctx) {
+                      bool isUserSegment = widget.memory.transcriptSegments[segmentIdx].isUser;
+                      bool useForProfileTraining = false;
+                      return StatefulBuilder(builder: (BuildContext context, StateSetter setModalState) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade800,
+                            borderRadius:
+                                const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                          ),
+                          height: 280,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                child: Text('Edit Segment', style: Theme.of(context).textTheme.titleLarge),
+                              ),
+                              CheckboxListTile(
+                                value: isUserSegment,
+                                onChanged: (v) {
+                                  setModalState(() {
+                                    isUserSegment = v!;
+                                  });
+                                },
+                                checkboxShape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.all(Radius.circular(4)),
+                                ),
+                                title: const Text('Is this speech segment yours?'),
+                              ),
+                              isUserSegment && hasAudioRecording
+                                  ? CheckboxListTile(
+                                      value: useForProfileTraining,
+                                      onChanged: (v) {
+                                        setModalState(() {
+                                          useForProfileTraining = v!;
+                                        });
+                                      },
+                                      checkboxShape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.all(Radius.circular(4)),
+                                      ),
+                                      title:
+                                          const Text('Should we train your speech profile further with this segment?'),
+                                    )
+                                  : const SizedBox(),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: TextButton(
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: Theme.of(context).colorScheme.primary,
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                                      ),
+                                    ),
+                                    onPressed: () async {
+                                      widget.memory.transcriptSegments[segmentIdx].isUser = isUserSegment;
+                                      setMemoryTranscriptSegmentIsUser(widget.memory.id, segmentIdx, isUserSegment);
+                                      if (useForProfileTraining) expandProfileSample(widget.memory.id, segmentIdx);
+
+                                      Navigator.pop(context);
+                                      setState(() {});
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                        vertical: 4,
+                                      ),
+                                      child: Text(
+                                        'Save',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    )),
+                              ),
+                            ],
+                          ),
+                        );
+                      });
+                    });
+              },
             ),
       const SizedBox(height: 32)
     ];
