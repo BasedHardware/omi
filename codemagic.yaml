@@ -18,14 +18,9 @@ workflows:
         - app_store_connect
       vars:
         APP_ID: 6502156163
-      flutter: 3.22.3   # Define the channel name, version (e.g. v1.13.4), or fvm for Flutter Version Management
-      xcode: 15.4       # Define latest, edge or version (e.g. 11.2)
-      cocoapods: 1.15.2 # Define default or version
-      #java: 17          # Define default, or platform version (e.g. 11)
-      #ndk: r27          # Define default or revision (e.g. r19c)
-      #ruby: 2.7.2       # Define default or version
-      #node: 12.14.0     # Define default, latest, current, lts, carbon (or another stream), nightly or version
-      #npm: 6.13.7       # Define default, latest, next, lts or version
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
     triggering:
       events:
         - push #TODO
@@ -35,14 +30,6 @@ workflows:
           source: true
     working_directory: app
     scripts:
-      - name: Hi @thinhs here
-        script: |
-          pwd
-          cd $(pwd)/ios
-          pwd
-          ls $(pwd)
-          ls $(pwd)/Podfile
-
       - name: Installing Opus
         script: |
           brew install opus
@@ -120,31 +107,22 @@ workflows:
             --release \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-          #--build-name=1.0.0 \
-          #  --build-number=$(($(app-store-connect get-latest-testflight-build-number "$APP_ID") + 1)) \
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
     publishing:
-      # See the following link for details about email publishing - https://docs.codemagic.io/publishing-yaml/distribution/#email
       email:
         recipients:
           - ngocthinhdp@gmail.com
         notify:
-          success: true # To receive a notification when a build succeeds
-          failure: false # To not receive a notification when a build fails
+          success: true
+          failure: false
       app_store_connect:
         auth: integration
-        
-        # Configuration related to TestFlight (optional)
-        # Note: This action is performed during post-processing.
         submit_to_testflight: true
-        beta_groups: # Specify the names of beta tester groups that will get access to the build once it has passed beta review.
+        beta_groups:
           - Internal
-
-        # Configuration related to App Store (optional)
-        # Note: This action is performed during post-processing.
         submit_to_app_store: false
 
   android-prod-internal:
@@ -161,14 +139,10 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         GOOGLE_PLAY_TRACK: "internal"
-      flutter: 3.22.3   # Define the channel name, version (e.g. v1.13.4), or fvm for Flutter Version Management
-      xcode: 15.4       # Define latest, edge or version (e.g. 11.2)
-      cocoapods: 1.15.2 # Define default or version
-      java: 17          # Define default, or platform version (e.g. 11)
-      #ndk: r27          # Define default or revision (e.g. r19c)
-      #ruby: 2.7.2       # Define default or version
-      #node: 12.14.0     # Define default, latest, current, lts, carbon (or another stream), nightly or version
-      #npm: 6.13.7       # Define default, latest, next, lts or version
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+      java: 17
     cache:
       cache_paths:
         - $HOME/opt
@@ -288,8 +262,6 @@ workflows:
           flutter build appbundle \
             --release \
             --flavor prod
-          # --build-name="$BUILD_VERSION" \
-          # --build-number=$BUILD_NUMBER
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
