@@ -77,7 +77,8 @@ def _words_cleaning(words: List[dict]):
             'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
             'speaker': w['speaker'],
             'text': str(w['text']).strip(),
-            'is_user': False
+            'is_user': False,
+            'person_id': None,
         })
 
     for i, word in enumerate(words_cleaned):
@@ -152,6 +153,7 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
         text=str(segment['text']).strip().capitalize(),
         speaker=segment['speaker'],
         is_user=segment['is_user'],
+        person_id=None,
         start=round(segment['start'] - starts_at, 2),
         end=round(segment['end'] - starts_at, 2),
     ) for segment in segments]

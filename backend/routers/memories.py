@@ -14,7 +14,8 @@ from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio
+    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio, \
+    get_memory_recording_if_exists, delete_user_person_speech_sample
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions, get_speech_profile_expanded
@@ -114,7 +115,7 @@ def postprocess_memory(
         signed_url = upload_postprocessing_audio(file_path)
         threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
 
-        if get_user_store_recording_permission(uid):
+        if aseg.frame_rate == 16000 and get_user_store_recording_permission(uid):
             upload_memory_recording(file_path, uid, memory_id)
 
         speakers_count = len(set([segment.speaker for segment in memory.transcript_segments]))
@@ -133,11 +134,12 @@ def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        # Speech profile matching using speechbrain
+        # Speech profile matching using speechbrain # TODO: if fal fails, still should use speech profile for deepgram.
         profile_path = get_speech_profile_expanded(uid) if aseg.frame_rate == 16000 else None
         matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
-            segment.is_user = matches[i]
+            segment.is_user = matches[i]['is_user']
+            segment.person_id = matches[i]['person_id']
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
@@ -216,6 +218,12 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     return {"status": "Ok"}
 
 
+@router.get("/v1/memories/{memory_id}/recording", response_model=dict, tags=['memories'])
+def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
+
+
 @router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/is_user', response_model=Memory, tags=['memories'])
 def update_memory_segment_is_user(
         memory_id: str, segment_idx: int, value: bool, uid: str = Depends(auth.get_current_user_uid)
@@ -225,5 +233,25 @@ def update_memory_segment_is_user(
     memory.transcript_segments[segment_idx].is_user = value
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
     # in case the user selected this as post training.
-    delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
+    if not value:
+        delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
+    return memory
+
+
+@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/person_id', response_model=Memory, tags=['memories'])
+def update_memory_segment_person_id(
+        memory_id: str, segment_idx: int, person_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)
+):
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+
+    prev_person_id = memory.transcript_segments[segment_idx].person_id
+    if prev_person_id == person_id:
+        return memory
+
+    memory.transcript_segments[segment_idx].person_id = person_id
+    memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+
+    if prev_person_id:
+        delete_user_person_speech_sample(uid, prev_person_id, f'{memory_id}_segment_{segment_idx}.wav')
     return memory

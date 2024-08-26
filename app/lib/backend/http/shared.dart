@@ -51,6 +51,8 @@ Future<http.Response?> makeApiCall({
       return await client.get(Uri.parse(url), headers: headers);
     } else if (method == 'DELETE') {
       return await client.delete(Uri.parse(url), headers: headers);
+    } else if (method == 'PATCH') {
+      return await client.patch(Uri.parse(url), headers: headers);
     } else {
       throw Exception('Unsupported HTTP method: $method');
     }
