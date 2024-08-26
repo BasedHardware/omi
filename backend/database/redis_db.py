@@ -101,3 +101,16 @@ def get_cached_user_name(uid: str) -> str:
     if not name:
         return 'User'
     return name.decode()
+
+
+# TODO: cache facts if speed improves dramatically
+def cache_facts(uid: str, facts: List[dict]):
+    r.set(f'users:{uid}:facts', str(facts))
+    r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
+
+
+def get_cached_facts(uid: str) -> List[dict]:
+    facts = r.get(f'users:{uid}:facts')
+    if not facts:
+        return []
+    return eval(facts)
