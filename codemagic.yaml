@@ -1,134 +1,290 @@
 workflows:
-#  android-workflow:
-#    name: Android Workflow
-#    instance_type: mac_mini_m1
-#    max_build_duration: 120
-#    working_directory: app
-#    environment:
-#      android_signing:
-#        - keystore_reference
-#      groups:
-#        - google_play # <-- (Includes GCLOUD_SERVICE_ACCOUNT_CREDENTIALS)
-#      vars:
-#        PACKAGE_NAME: "com.friend.ios"
-#        GOOGLE_PLAY_TRACK: "alpha"
-#      flutter: stable
-#    scripts:
-#      - name: Set up local.properties
-#        script: |
-#          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
-#      - name: Get Flutter packages
-#        script: |
-#          flutter packages pub get
-#      - name: Flutter analyze
-#        script: |
-#          flutter analyze
-#      - name: Flutter unit tests
-#        script: |
-#          flutter test
-#        ignore_failure: true
-#      - name: Build AAB with Flutter
-#        script: |
-#          BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks="$GOOGLE_PLAY_TRACK") + 1))
-#          flutter build appbundle --release \
-#            --build-name=1.0.$BUILD_NUMBER \
-#            --build-number=$BUILD_NUMBER
-#    artifacts:
-#      - build/**/outputs/**/*.aab
-#      - build/**/outputs/**/mapping.txt
-#      - flutter_drive.log
-#    publishing:
-#      email:
-#        recipients:
-#          - joan@basedhardware.com
-#          - nik@basedhardware.com
-#        notify:
-#          success: true
-#          failure: false
-#      google_play:
-#        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-#        track: $GOOGLE_PLAY_TRACK
-#        submit_as_draft: true
-  ios-workflow:
-    name: iOS Workflow
+  ios-prod-testflight:
+    name: Release iOS to Testflight
     instance_type: mac_mini_m1
     max_build_duration: 120
-    working_directory: app
     integrations:
-      app_store_connect: codemagic
+      app_store_connect: codemagic_v2
     environment:
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.friend-app-with-wearable.ios12
+        provisioning_profiles:
+          - codemagic_v2
+          - codemagic_v2_OneSignalNotificationServiceExten
+        certificates:
+          - codemagic_v2
+      groups:
+        - app_env
+        - firebase
       vars:
         APP_ID: 6502156163
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      groups:
-        - appstore_credentials
-        - firebase_credentials
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-ios-cm'
+          include: true
+        - pattern: 'v*-mobile-cm'
+          include: true
+    working_directory: app
     scripts:
-      - name: Set up code signing settings on Xcode project
+      - name: Installing Opus
         script: |
-          xcode-project use-profiles
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Set up Google Service Info
+        script: |
+          # TODO: check why we need this ?
+          echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/ios/Runner/GoogleService-Info.plist"
+
       - name: Get Flutter packages
         script: |
-          flutter packages pub get
-      - name: Install pods
+          flutter pub get
+
+      - name: Run build runner
         script: |
-          find . -name "Podfile" -execdir pod install \;
-      - name: Flutter analyze
+          dart run build_runner build
+
+      - name: Instals pod
         script: |
-          flutter analyze
-#      - name: Flutter unit tests
-#        script: |
-#          flutter test
-        ignore_failure: true
-      - name: Load Firebase configuration
+          cd ios && pod install --repo-update
+
+      - name: Flutter build ipa
         script: |
-          #!/usr/bin/env sh
-          set -e # exit on first failed command
-          
-          echo $ANDROID_FIREBASE_SECRET > $CM_BUILD_DIR/android/app/google-services.json
-          echo $IOS_FIREBASE_SECRET > $CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist
-      - name: Flutter build ipa and automatic versioning
-        script: |
-          # See the following link about getting the latest App Store or TestFlight version - https://docs.codemagic.io/knowledge-codemagic/build-versioning/#app-store-or-testflight-latest-build-number
-          flutter build ipa --release \
-            --build-name=1.0.20 \
-            --build-number=$(($(app-store-connect get-latest-testflight-build-number "$APP_ID") + 1)) \
-            --export-options-plist=/Users/builder/export_options.plist
+          # Set up code signing settings on Xcode project
+          # -> $HOME/export_options.plist
+          xcode-project use-profiles
+
+          # Build
+          flutter build ipa \
+            --release \
+            --flavor prod \
+            --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
     publishing:
-      # See the following link for details about email publishing - https://docs.codemagic.io/publishing-yaml/distribution/#email
       email:
         recipients:
-          - joan@ebasedhardware.com
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
           - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
         notify:
-          success: true # To receive a notification when a build succeeds
-          failure: false # To not receive a notification when a build fails
-      slack:
-        # See the following link about how to connect your Slack account - https://docs.codemagic.io/publishing-yaml/distribution/#slack
-        channel: "#builds"
-        notify_on_build_start: true # To receive a notification when a build starts
-        notify:
-          success: true # To receive a notification when a build succeeds
-          failure: false # To not receive a notification when a build fails
+          success: true
+          failure: false
       app_store_connect:
         auth: integration
-
-        # Configuration related to TestFlight (optional)
-        # Note: This action is performed during post-processing.
         submit_to_testflight: true
-        beta_groups: # Specify the names of beta tester groups that will get access to the build once it has passed beta review.
-          - Discord Folks
-          - Internal 2
-
-        # Configuration related to App Store (optional)
-        # Note: This action is performed during post-processing.
+        beta_groups:
+          - Internal
         submit_to_app_store: false
+
+  android-prod-internal:
+    name: Release Android Internal Production
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    environment:
+      android_signing:
+        - prod_android_upload_keystore
+      groups:
+        - app_env
+        - firebase
+        - google_play
+      vars:
+        PACKAGE_NAME: "com.friend.ios"
+        GOOGLE_PLAY_TRACK: "internal"
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+      java: 17
+    cache:
+      cache_paths:
+        - $HOME/opt
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-android-cm'
+          include: true
+        - pattern: 'v*-mobile-cm'
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Android SDK
+        script: |
+          export ANDROID_HOME="$HOME/opt/android-sdk"
+          if [ ! -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does not exist. Installing..."
+         
+            mkdir -p $ANDROID_HOME
+
+            # Install cmdline-tools 11076708; NDK: 27.0.12077973
+            cd "$HOME/opt" && \
+            curl --fail --show-error --silent --connect-timeout 10.00 --max-time 120.00 \
+              --output commandlinetools-mac-11076708_latest.zip \
+              https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip && \
+            7z -bd x commandlinetools-mac-11076708_latest.zip && \
+            mkdir -p $ANDROID_HOME && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "tools" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "cmdline-tools;latest" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;27.0.12077973" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --licenses  && \
+            cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --list
+          fi
+
+          if [ -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does exist. Setting up env..."
+
+            # PATH
+            export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools
+
+            # Override ENV
+            echo ANDROID_HOME="$ANDROID_HOME" >> $CM_ENV
+            echo ANDROID_SDK_ROOT="$ANDROID_HOME" >> $CM_ENV
+            echo PATH="$PATH" >> $CM_ENV
+          fi
+
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
+          echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run build runner
+        script: |
+          dart run build_runner build
+      - name: Build AAB with Flutter
+        script: | 
+          # TODO: Don't tricky
+          # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
+          echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
+
+          # Should use bump version automatically by CI
+          flutter build appbundle \
+            --release \
+            --flavor prod
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: true
