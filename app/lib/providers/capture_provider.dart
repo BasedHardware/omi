@@ -146,10 +146,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     }
 
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
-      memoryPostProcessing(file, memory.id).then((postProcessed) {
-        // use memory provider to update memory
-        memoryProvider?.updateMemory(postProcessed);
-      });
+      setMemoryCreating(false);
+      try {
+        memoryPostProcessing(file, memory.id).then((postProcessed) {
+          // use memory provider to update memory
+          memoryProvider?.updateMemory(postProcessed);
+        });
+      } catch (e) {
+        print('Error occurred during memory post-processing: $e');
+      }
     }
 
     SharedPreferencesUtil().transcriptSegments = [];
@@ -231,6 +236,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         );
         triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
           // use message provider to send message to chat
+          messageProvider?.addMessage(v);
         });
         SharedPreferencesUtil().transcriptSegments = segments;
         setHasTranscripts(true);
@@ -274,6 +280,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       {bool restartBytesProcessing = true,
       BTDeviceStruct? btDevice,
       required GlobalKey<CapturePageState> captureKey}) async {
+    //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
     print('inside of resetState');
     debugPrint('resetState: $restartBytesProcessing');
     closeBleStream();
