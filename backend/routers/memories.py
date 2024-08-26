@@ -138,7 +138,8 @@ def postprocess_memory(
         profile_path = get_speech_profile_expanded(uid) if aseg.frame_rate == 16000 else None
         matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
-            segment.is_user = matches[i]
+            segment.is_user = matches[i]['is_user']
+            segment.person_id = matches[i]['person_id']
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
