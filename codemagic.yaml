@@ -1,6 +1,6 @@
 workflows:
   android-prod-internal:
-    name: Release Android Product Internal
+    name: Release Android Internal Production
     instance_type: mac_mini_m1
     max_build_duration: 120
     environment:
@@ -9,7 +9,7 @@ workflows:
       groups:
         - app_env
         - firebase
-        - google_credentials
+        - google_play
       vars:
         PACKAGE_NAME: "com.friend.ios"
         GOOGLE_PLAY_TRACK: "internal"
@@ -36,9 +36,6 @@ workflows:
           source: true
     working_directory: app
     scripts:
-      - name: Hi @thinh here
-        script: |
-          pwd
       - name: Instaling Android SDK
         script: |
           export ANDROID_HOME="$HOME/opt/android-sdk"
