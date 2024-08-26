@@ -9,6 +9,7 @@ class TranscriptSegment(BaseModel):
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
+    person_id: Optional[str] = None
     start: float
     end: float
 

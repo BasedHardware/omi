@@ -73,6 +73,39 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
 
 
 # ********************************************
+# ************* PEOPLE PROFILES **************
+# ********************************************
+
+def upload_user_person_speech_sample(file_path: str, uid: str, person_id: str) -> None:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    path = f'{uid}/people_profiles/{person_id}/{file_path.split("/")[-1]}'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+
+
+def delete_user_person_speech_sample(uid: str, person_id: str, file_name: str) -> None:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blob = bucket.blob(f'{uid}/people_profiles/{person_id}/{file_name}')
+    if blob.exists():
+        blob.delete()
+
+
+def get_user_person_speech_samples(uid: str, person_id: str, download: bool = False) -> List[str]:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/{person_id}/')
+    if download:
+        paths = []
+        for blob in blobs:
+            file_path = f'_temp/{uid}_person_{blob.name.split("/")[-1]}'
+            blob.download_to_filename(file_path)
+            paths.append(file_path)
+        return paths
+
+    return [blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET") for blob in
+            blobs]
+
+
+# ********************************************
 # ************* POST PROCESSING **************
 # ********************************************
 def upload_postprocessing_audio(file_path: str):

@@ -24,3 +24,4 @@ class Person(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted: bool = False
+    speech_samples: List[str] = []
