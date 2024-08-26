@@ -15,7 +15,6 @@ workflows:
       groups:
         - app_env
         - firebase
-        - app_store_connect
       vars:
         APP_ID: 6502156163
       flutter: 3.22.3
