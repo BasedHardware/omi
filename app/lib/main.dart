@@ -197,7 +197,7 @@ class _MyAppState extends State<MyApp> {
               themeMode: ThemeMode.dark,
               home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
                   ? const HomePageWrapper()
-                  : const HomePageWrapper(),
+                  : const OnboardingWrapper(),
             ),
           );
         });
