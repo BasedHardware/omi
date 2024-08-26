@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.28+88
+version: 1.0.28+89
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -69,6 +69,8 @@ dependencies:
   record: ^5.1.2
   onesignal_flutter: ^5.1.2
   flutter_background_service: ^5.0.7
+  flutter_background_service_android: 6.2.4
+  flutter_background_service_platform_interface: 5.1.1
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
