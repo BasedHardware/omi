@@ -9,10 +9,14 @@ from database.redis_db import cache_user_name
 from database.users import *
 from models.other import Person, CreatePerson
 from utils.other import endpoints as auth
-from utils.other.storage import delete_all_memory_recordings
+from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples
 
 router = APIRouter()
 
+
+# *************************************************
+# ************* RECORDING PERMISSION **************
+# *************************************************
 
 @router.post('/v1/users/store-recording-permission', tags=['v1'])
 def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
@@ -32,7 +36,11 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
     return {'status': 'ok'}
 
 
-@router.patch('/v1/users/name', tags=['users'])  # TODO: shouldn't need params, instead shuold retrieve auth values
+# **********************************
+# ************* OTHER **************
+# **********************************
+
+@router.patch('/v1/users/name', tags=['users'])  # TODO: shouldn't need params, instead should retrieve auth values
 def edit_user_name_in_facts(prev: str, new: str, uid: str = Depends(auth.get_current_user_uid)):
     if len(new.split(' ')) > 1:
         raise HTTPException(status_code=400, detail='Name must be a single word')
@@ -47,11 +55,13 @@ def edit_user_name_in_facts(prev: str, new: str, uid: str = Depends(auth.get_cur
         fact['content'] = text.replace(f'The User', f'{new.capitalize()}').replace(f'User', f'{new.capitalize()}')
 
     facts_db.save_facts(uid, facts)
-
     return {'status': 'ok'}
 
 
-# New endpoints for Person CRUD operations
+# ****************************************
+# ************* PEOPLE CRUD **************
+# ****************************************
+
 # TODO: consider adding person photo.
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
@@ -66,16 +76,24 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
-def get_single_person(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_single_person(
+        person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
+):
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    if include_speech_samples:
+        person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
     return person
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(uid: str = Depends(auth.get_current_user_uid)):
-    return get_people(uid)
+def get_all_people(include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)):
+    people = get_people(uid)
+    if include_speech_samples:
+        for person in people:
+            person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+    return people
 
 
 @router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=Person)
