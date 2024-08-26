@@ -20,13 +20,19 @@ workflows:
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
     triggering:
       events:
-        - push #TODO
-      branch_patterns:
-        - pattern: '*_codemagic_*' # TODO
+        - tag
+      tag_patterns:
+        - pattern: 'v*-ios-cm'
           include: true
-          source: true
+        - pattern: 'v*-mobile-cm'
+          include: true
     working_directory: app
     scripts:
       - name: Installing Opus
@@ -114,6 +120,8 @@ workflows:
       email:
         recipients:
           - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
         notify:
           success: true
           failure: false
@@ -147,14 +155,14 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-        - $HOME/Library/Caches/CocoaPods
     triggering:
       events:
-        - push #TODO
-      branch_patterns:
-        - pattern: '*_codemagic-non-_*' # TODO
+        - tag
+      tag_patterns:
+        - pattern: 'v*-android-cm'
           include: true
-          source: true
+        - pattern: 'v*-mobile-cm'
+          include: true
     working_directory: app
     scripts:
       - name: Installing Android SDK
@@ -269,6 +277,8 @@ workflows:
       email:
         recipients:
           - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
         notify:
           success: true
           failure: false
