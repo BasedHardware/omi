@@ -122,6 +122,7 @@ workflows:
           - ngocthinhdp@gmail.com
           - joan@basedhardware.com
           - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
         notify:
           success: true
           failure: false
@@ -279,6 +280,7 @@ workflows:
           - ngocthinhdp@gmail.com
           - joan@basedhardware.com
           - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
         notify:
           success: true
           failure: false
