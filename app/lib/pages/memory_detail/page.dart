@@ -64,7 +64,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       });
     } else if (widget.memory.source == MemorySource.friend) {
       hasMemoryRecording(widget.memory.id).then((value) {
-        print('VALUE $value');
         hasAudioRecording = value;
         setState(() {});
       });

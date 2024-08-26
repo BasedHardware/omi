@@ -53,7 +53,8 @@ def upload_additional_profile_audio(file_path: str, uid: str) -> None:
 def delete_additional_profile_audio(uid: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
-    blob.delete()
+    if blob.exists():
+        blob.delete()
 
 
 def get_additional_profile_recordings(uid: str, download: bool = False) -> List[str]:
