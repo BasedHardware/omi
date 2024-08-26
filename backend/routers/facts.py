@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.facts as facts_db
 from database.redis_db import cache_user_name
@@ -30,8 +32,4 @@ def edit_fact(fact_id: str, value: str, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.patch('/v1/users/name', tags=['users'])
-def edit_user_name_in_facts(prev: str, new: str, uid: str = Depends(auth.get_current_user_uid)):
-    # NOTIMPLEMENTED
-    cache_user_name(uid, new.capitalize())
-    return {'status': 'ok'}
+

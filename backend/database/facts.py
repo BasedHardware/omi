@@ -7,7 +7,6 @@ from ._client import db
 
 
 def get_facts(uid: str, limit: int = 100, offset: int = 0):
-    # TODO: cache this
     facts_ref = db.collection('users').document(uid).collection('facts')
     facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING).where(
         filter=FieldFilter('deleted', '==', False))
