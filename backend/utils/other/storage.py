@@ -90,6 +90,12 @@ def delete_user_person_speech_sample(uid: str, person_id: str, file_name: str) -
         blob.delete()
 
 
+def get_user_people_ids(uid: str) -> List[str]:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
+    return [blob.name.split("/")[-2] for blob in blobs]
+
+
 def get_user_person_speech_samples(uid: str, person_id: str, download: bool = False) -> List[str]:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/{person_id}/')
