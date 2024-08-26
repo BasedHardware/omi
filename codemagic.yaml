@@ -117,7 +117,6 @@ workflows:
 
           # Build
           shorebird release ios \
-            --release \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
     artifacts:
@@ -284,7 +283,6 @@ workflows:
 
           # Should use bump version automatically by CI
           shorebird release android \
-            --release \
             --flavor prod
     artifacts:
       - build/**/outputs/**/*.aab
@@ -423,7 +421,6 @@ workflows:
 
           # Build
           shorebird patch ios \
-            --release \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
     artifacts:
@@ -583,7 +580,6 @@ workflows:
 
           # Should use bump version automatically by CI
           shorebird patch android \
-            --release \
             --flavor prod
     artifacts:
       - build/**/outputs/**/*.aab
