@@ -38,8 +38,8 @@ Future<http.Response?> makeApiCall({
       return null;
     }
     if (url.contains(Env.apiBaseUrl!)) {
-      // headers['Authorization'] = await getAuthHeader();
-      headers['Authorization'] = '123caLCFj7IisV85UX9XrrV1aVf3pk1'; // set admin key + uid here for testing
+      headers['Authorization'] = await getAuthHeader();
+      // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = InstabugHttpClient();
