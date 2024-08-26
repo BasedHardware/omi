@@ -8,6 +8,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/speaker_id/samples.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
@@ -270,7 +271,24 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
           ),
           actions: [
             !widget.onbording
-                ? const SizedBox()
+                ? IconButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'How to take a good sample?',
+                          '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in it\'s natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.',
+                          singleButton: true,
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.question_mark,
+                      size: 20,
+                    ))
                 : TextButton(
                     onPressed: () {
                       routeToPage(context, const HomePageWrapper(), replace: true);
@@ -301,7 +319,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                     const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
                     !startedRecording
                         ? const SizedBox(height: 0)
-                        : Text(
+                        : const Text(
                             'Tell your Friend\nabout yourself',
                             style:
                                 TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
@@ -376,59 +394,72 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 48),
                 child: !startedRecording
-                    ? MaterialButton(
-                        onPressed: () async {
-                          BleAudioCodec codec;
-                          try {
-                            codec = await getAudioCodec(_device!.id);
-                          } catch (e) {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (c) => getDialog(
-                                context,
-                                () {
-                                  Navigator.of(context).pop();
-                                  Navigator.of(context).pop();
-                                },
-                                () => {},
-                                'Device Disconnected',
-                                'Please make sure your device is turned on and nearby, and try again.',
-                                singleButton: true,
-                              ),
-                            );
-                            return;
-                          }
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          MaterialButton(
+                            onPressed: () async {
+                              BleAudioCodec codec;
+                              try {
+                                codec = await getAudioCodec(_device!.id);
+                              } catch (e) {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (c) => getDialog(
+                                    context,
+                                    () {
+                                      Navigator.of(context).pop();
+                                      Navigator.of(context).pop();
+                                    },
+                                    () => {},
+                                    'Device Disconnected',
+                                    'Please make sure your device is turned on and nearby, and try again.',
+                                    singleButton: true,
+                                  ),
+                                );
+                                return;
+                              }
 
-                          if (codec != BleAudioCodec.opus) {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  Navigator.pop(context);
-                                  launchUrl(
-                                      Uri.parse('https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
-                                },
-                                'Firmware Update Required',
-                                'Please update your device firmware to set-up your speech profile.',
-                                okButtonText: 'Do now',
-                              ),
-                              barrierDismissible: false,
-                            );
-                            return;
-                          }
+                              if (codec != BleAudioCodec.opus) {
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.pop(context),
+                                    () {
+                                      Navigator.pop(context);
+                                      launchUrl(Uri.parse(
+                                          'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
+                                    },
+                                    'Firmware Update Required',
+                                    'Please update your device firmware to set-up your speech profile.',
+                                    okButtonText: 'Do now',
+                                  ),
+                                  barrierDismissible: false,
+                                );
+                                return;
+                              }
 
-                          initiateWebsocket();
-                          // 1.5 minutes seems reasonable
-                          _forceCompletionTimer = Timer(Duration(seconds: maxDuration), finalize);
-                          setState(() => startedRecording = true);
-                        },
-                        color: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                        child: const Text('Get Started', style: TextStyle(color: Colors.black)),
+                              initiateWebsocket();
+                              // 1.5 minutes seems reasonable
+                              _forceCompletionTimer = Timer(Duration(seconds: maxDuration), finalize);
+                              setState(() => startedRecording = true);
+                            },
+                            color: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                            child: const Text('Get Started', style: TextStyle(color: Colors.black)),
+                          ),
+                          TextButton(
+                              onPressed: () {
+                                routeToPage(context, const ProfileSamples());
+                              },
+                              child: const Text(
+                                'Listen to existing samples ➡️',
+                                style: TextStyle(color: Colors.white),
+                              ))
+                        ],
                       )
                     : profileCompleted
                         ? Container(

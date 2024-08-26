@@ -1,6 +1,3 @@
-import 'dart:math';
-
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -8,16 +5,16 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/settings/recordings.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
-import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:gradient_borders/gradient_borders.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -178,47 +175,51 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
                   ...getPreferencesWidgets(
-                    onOptInAnalytics: () {
-                      setState(() {
-                        optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-                      });
-                    },
-                    onOptInEmotionalFeedback: () {
-                      var enabled = !SharedPreferencesUtil().optInEmotionalFeedback;
-                      SharedPreferencesUtil().optInEmotionalFeedback = enabled;
+                      onOptInAnalytics: () {
+                        setState(() {
+                          optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
+                        });
+                      },
+                      onOptInEmotionalFeedback: () {
+                        var enabled = !SharedPreferencesUtil().optInEmotionalFeedback;
+                        SharedPreferencesUtil().optInEmotionalFeedback = enabled;
 
-                      setState(() {
-                        optInEmotionalFeedback = enabled;
-                      });
+                        setState(() {
+                          optInEmotionalFeedback = enabled;
+                        });
 
-                      // Show a mockup notifications to help user understand about Omi Feedback
-                      if (enabled) {
-                        _showMockupOmiFeebackNotification();
-                      }
-                    },
-                    viewPrivacyDetails: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                      MixpanelManager().privacyDetailsPageOpened();
-                    },
-                    optInEmotionalFeedback: optInEmotionalFeedback,
-                    optInAnalytics: optInAnalytics,
-                    devModeEnabled: devModeEnabled,
-                    onDevModeClicked: () {
-                      setState(() {
-                        if (devModeEnabled) {
-                          devModeEnabled = false;
-                          SharedPreferencesUtil().devModeEnabled = false;
-                          MixpanelManager().developerModeDisabled();
-                        } else {
-                          devModeEnabled = true;
-                          MixpanelManager().developerModeEnabled();
-                          SharedPreferencesUtil().devModeEnabled = true;
+                        // Show a mockup notifications to help user understand about Omi Feedback
+                        if (enabled) {
+                          _showMockupOmiFeebackNotification();
                         }
-                      });
-                    },
-                  ),
+                      },
+                      viewPrivacyDetails: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                        MixpanelManager().privacyDetailsPageOpened();
+                      },
+                      optInEmotionalFeedback: optInEmotionalFeedback,
+                      optInAnalytics: optInAnalytics,
+                      devModeEnabled: devModeEnabled,
+                      onDevModeClicked: () {
+                        setState(() {
+                          if (devModeEnabled) {
+                            devModeEnabled = false;
+                            SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
+                          } else {
+                            devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
+                            SharedPreferencesUtil().devModeEnabled = true;
+                          }
+                        });
+                      },
+                      authorizeSavingRecordings: SharedPreferencesUtil().permissionStoreRecordingsEnabled,
+                      onAuthorizeSavingRecordingsClicked: () async {
+                        await routeToPage(context, const AuthorizeRecordingsPage());
+                        setState(() {});
+                      }),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),

@@ -75,11 +75,14 @@ class Structured(BaseModel):
     )
 
     def __str__(self):
-        result = f"{self.emoji} {self.title} ({self.category})\n\nSummary: {self.overview}\n\n"
+        result = (f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
+                  f"{str(self.overview).capitalize()}\n")
+
         if self.action_items:
             result += "Action Items:\n"
             for item in self.action_items:
                 result += f"- {item.description}\n"
+
         if self.events:
             result += "Events:\n"
             for event in self.events:
@@ -146,7 +149,7 @@ class Memory(BaseModel):
         result = []
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
-                memory = Memory(**memory)          
+                memory = Memory(**memory)
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"

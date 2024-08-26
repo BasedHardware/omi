@@ -204,6 +204,8 @@ getPreferencesWidgets({
   required bool optInEmotionalFeedback,
   required VoidCallback onDevModeClicked,
   required bool devModeEnabled,
+  required VoidCallback onAuthorizeSavingRecordingsClicked,
+  required bool authorizeSavingRecordings,
 }) {
   return [
     const Align(
@@ -361,6 +363,45 @@ getPreferencesWidgets({
         ),
       ),
     ),
+    Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+      child: InkWell(
+        onTap: onAuthorizeSavingRecordingsClicked,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Authorize saving recordings',
+                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: authorizeSavingRecordings
+                      ? const Color.fromARGB(255, 150, 150, 150)
+                      : Colors.transparent, // Fill color when checked
+                  border: Border.all(
+                    color: const Color.fromARGB(255, 150, 150, 150),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                width: 22,
+                height: 22,
+                child: authorizeSavingRecordings // Show the icon only when checked
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.white, // Tick color
+                        size: 18,
+                      )
+                    : null, // No icon when unchecked
+              ),
+            ],
+          ),
+        ),
+      ),
+    )
   ];
 }
 
