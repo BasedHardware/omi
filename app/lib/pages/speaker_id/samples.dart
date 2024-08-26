@@ -120,7 +120,7 @@ class _ProfileSamplesState extends State<ProfileSamples> {
                         onPressed: () => _playPause(index),
                       ),
                       // TODO: explain people here, they can add if they enable permission
-                      title: Text(index == 0 ? 'Speech Profile' : 'Extra Sample $index'),
+                      title: Text(index == 0 ? 'Speech Profile' : 'Additional Sample $index'),
                       // _getFileNameFromUrl(samplesUrl[index])
                       subtitle: FutureBuilder<Duration?>(
                         future: AudioPlayer().setUrl(samplesUrl[index]),
@@ -132,6 +132,23 @@ class _ProfileSamplesState extends State<ProfileSamples> {
                           }
                         },
                       ),
+                      // TODO: view memory source and segment on tap
+                      trailing: index == 0
+                          ? const SizedBox()
+                          : IconButton(
+                              onPressed: () {
+                                String name = _getFileNameFromUrl(samplesUrl[index]);
+                                var parts = name.split('_segment_');
+                                deleteProfileSample(parts[0], int.tryParse(parts[1])!);
+                                samplesUrl.removeAt(index);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    content: Text(
+                                  'Additional Speech Sample Removed',
+                                )));
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.delete, size: 20),
+                            ),
                     ),
                     index == 0 ? SizedBox(height: 8) : const SizedBox(),
                     index == 0

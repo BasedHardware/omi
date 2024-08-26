@@ -6,7 +6,6 @@ import 'package:friend_private/backend/database/geolocation.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
@@ -163,4 +162,31 @@ Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
     return (jsonDecode(response.body) as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList();
   }
   return [];
+}
+
+Future<bool> hasMemoryRecording(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/recording',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('getMemoryPhotos: ${response.body}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body)['has_recording'] ?? false;
+  }
+  return false;
+}
+
+Future<bool> setMemoryTranscriptSegmentIsUser(String memoryId, int segmentIdx, bool value) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/segments/$segmentIdx/is_user?value=$value',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryTranscriptSegmentIsUser: ${response.body}');
+  return response.statusCode == 200;
 }

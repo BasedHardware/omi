@@ -26,13 +26,16 @@ class _AuthorizeRecordingsPageState extends State<AuthorizeRecordingsPage> {
     final permission = await getStoreRecordingPermission();
     setState(() {
       _hasPermission = permission;
+      if (permission != null) {
+        SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: const Text('Authorize Saving Recordings'),
