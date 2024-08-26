@@ -559,7 +559,7 @@ workflows:
       - name: Run build runner
         script: |
           dart run build_runner build
-      - name: Build AAB with Flutter
+      - name: Patch Android app with Shorebird
         script: | 
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
