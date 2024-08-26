@@ -271,7 +271,24 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
           ),
           actions: [
             !widget.onbording
-                ? const SizedBox()
+                ? IconButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'How to take a good sample?',
+                          '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in it\'s natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.',
+                          singleButton: true,
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.question_mark,
+                      size: 20,
+                    ))
                 : TextButton(
                     onPressed: () {
                       routeToPage(context, const HomePageWrapper(), replace: true);
@@ -439,8 +456,8 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                 routeToPage(context, const ProfileSamples());
                               },
                               child: const Text(
-                                'Listen to existing samples ✅',
-                                style: TextStyle(color: Colors.white, decoration: TextDecoration.underline),
+                                'Listen to existing samples ➡️',
+                                style: TextStyle(color: Colors.white),
                               ))
                         ],
                       )
