@@ -180,11 +180,6 @@ class _MyAppState extends State<MyApp> {
                     secondary: Colors.deepPurple,
                     surface: Colors.black38,
                   ),
-                  // dialogTheme: const DialogTheme(
-                  //   backgroundColor: Colors.black,
-                  //   titleTextStyle: TextStyle(fontSize: 18, color: Colors.white),
-                  //   contentTextStyle: TextStyle(fontSize: 16, color: Colors.white),
-                  // ),
                   snackBarTheme: SnackBarThemeData(
                     backgroundColor: Colors.grey.shade900,
                     contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
@@ -202,29 +197,9 @@ class _MyAppState extends State<MyApp> {
               themeMode: ThemeMode.dark,
               home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
                   ? const HomePageWrapper()
-                  : const OnboardingWrapper(),
+                  : const HomePageWrapper(),
             ),
           );
         });
   }
 }
-
-// void _setupAudioSession() {
-//   AudioSession.instance.then((audioSession) async {
-//     await audioSession.configure(const AudioSessionConfiguration(
-//       avAudioSessionCategory: AVAudioSessionCategory.playback,
-//       avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.mixWithOthers,
-//       avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-//       avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
-//       avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-//       androidAudioAttributes: AndroidAudioAttributes(
-//         contentType: AndroidAudioContentType.speech,
-//         flags: AndroidAudioFlags.none,
-//         usage: AndroidAudioUsage.assistant,
-//       ),
-//       androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-//       androidWillPauseWhenDucked: true,
-//     ));
-//     audioSession.setActive(true);
-//   });
-// }

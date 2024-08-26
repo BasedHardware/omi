@@ -14,7 +14,8 @@ from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio
+    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio, \
+    get_memory_recording_if_exists
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions, get_speech_profile_expanded
@@ -225,5 +226,12 @@ def update_memory_segment_is_user(
     memory.transcript_segments[segment_idx].is_user = value
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
     # in case the user selected this as post training.
-    delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
+    if not value:
+        delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
     return memory
+
+
+@router.get("/v1/memories/{memory_id}/recording", response_model=dict, tags=['memories'])
+def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
