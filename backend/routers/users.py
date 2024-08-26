@@ -1,8 +1,13 @@
+import uuid
+from datetime import datetime
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.facts as facts_db
 from database.redis_db import cache_user_name
-from database.users import set_user_store_recording_permission, get_user_store_recording_permission
+from database.users import *
+from models.other import Person, CreatePerson
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings
 
@@ -46,3 +51,40 @@ def edit_user_name_in_facts(prev: str, new: str, uid: str = Depends(auth.get_cur
     return {'status': 'ok'}
 
 
+# New endpoints for Person CRUD operations
+# TODO: consider adding person photo.
+@router.post('/v1/users/people', tags=['v1'], response_model=Person)
+def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
+    data = {
+        'id': str(uuid.uuid4()),
+        'name': data.name,
+        'created_at': datetime.utcnow(),
+        'updated_at': datetime.utcnow()
+    }
+    result = create_person(uid, data)
+    return result
+
+
+@router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
+def get_single_person(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    person = get_person(uid, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person
+
+
+@router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
+def get_all_people(uid: str = Depends(auth.get_current_user_uid)):
+    return get_people(uid)
+
+
+@router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=Person)
+def update_person_name(person_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+    update_person(uid, person_id, value)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
+def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    delete_person(uid, person_id)
+    return {'status': 'ok'}
