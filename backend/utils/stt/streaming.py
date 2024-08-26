@@ -10,7 +10,6 @@ from starlette.websockets import WebSocket
 
 import database.notifications as notification_db
 from utils.plugins import trigger_realtime_integrations
-import numpy as np
 
 headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
@@ -104,7 +103,8 @@ async def process_audio_dg(
                     'start': word.start - preseconds,
                     'end': word.end - preseconds,
                     'text': word.punctuated_word,
-                    'is_user': is_user
+                    'is_user': is_user,
+                    'person_id': None,
                 })
             else:
                 last_segment = segments[-1]
@@ -117,7 +117,8 @@ async def process_audio_dg(
                         'start': word.start,
                         'end': word.end,
                         'text': word.punctuated_word,
-                        'is_user': is_user
+                        'is_user': is_user,
+                        'person_id': None,
                     })
 
         asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
