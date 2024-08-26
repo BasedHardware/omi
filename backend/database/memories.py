@@ -1,7 +1,7 @@
+import json
 import uuid
 from datetime import datetime
 from typing import List
-import json
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -73,17 +73,6 @@ def filter_memories_by_date(uid, start_date, end_date):
 # print(len(result))
 
 
-def get_memories_batch_operation():
-    batch = db.batch()
-    return batch
-
-
-def add_memory_to_batch(batch, uid, memory_data):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_data['id'])
-    batch.set(memory_ref, memory_data)
-
-
 def get_memories_by_id(uid, memory_ids):
     user_ref = db.collection('users').document(uid)
     memories_ref = user_ref.collection('memories')
@@ -145,6 +134,13 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
             batch.commit()
             batch = db.batch()
     batch.commit()
+
+
+def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'transcript_segments': segments})
+    # TODO: update also fal_whisperx? nah..?
 
 
 def store_model_emotion_predictions_result(

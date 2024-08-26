@@ -261,7 +261,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         audioStorage!.storeFramePacket(value);
         // print(value);
         value.removeRange(0, 3);
-        // TODO: if this is not removed, deepgram can't seem to be able to detect the audio.
+        // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (wsConnectionState == WebsocketConnectionStatus.connected) {
           websocketChannel?.sink.add(value);

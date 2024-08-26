@@ -19,9 +19,8 @@ import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
-import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/scripts.dart';
+import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
@@ -76,11 +75,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-  // StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
-  // StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
-
   bool scriptsInProgress = false;
 
   Future<void> _initiatePlugins() async {
@@ -108,7 +104,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   _migrationScripts() async {
     setState(() => scriptsInProgress = true);
-    await scriptMigrateMemoriesToBack();
+    // await scriptMigrateMemoriesToBack();
     if (mounted) {
       await context.read<mp.MemoryProvider>().getInitialMemories();
     }
@@ -116,9 +112,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   ///Screens with respect to subpage
-  final Map<String, Widget> screensWithRespectToPath = {
-    '/settings': const SettingsPage(),
-  };
+  final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
   ConnectivityController connectivityController = ConnectivityController();
   bool? previousConnection;
 
@@ -140,26 +134,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
-      if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) {
-        // await scanAndConnectDevice().then((value) async {
-        //   print('Connected device: $value');
-        //   if (value != null) {
-        //     context.read<DeviceProvider>().setConnectedDevice(value);
-        //     // print('Connected device: ${context.read<DeviceProvider>().connectedDevice}');
-        //     await context.read<DeviceProvider>().initiateConnectionListener(capturePageKey);
-        //     // context.read<DeviceProvider>().initiateBleBatteryListener();
-        //     //  capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: value);
-        //   }
-        // });
-      }
       if (mounted) {
         await context.read<HomeProvider>().setupHasSpeakerProfile();
       }
     });
 
-    //TODO: Should this run everytime?
-    // _migrationScripts();
-
+    // _migrationScripts(); not for now, we don't have scripts
     authenticateGCP();
 
     _listenToMessagesFromNotification();
