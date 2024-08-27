@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SaveFcmTokenRequest(BaseModel):
@@ -15,7 +15,7 @@ class UploadProfile(BaseModel):
 
 
 class CreatePerson(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=40)
 
 
 class Person(BaseModel):

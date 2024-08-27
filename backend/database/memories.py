@@ -113,12 +113,16 @@ def get_memory_photos(uid: str, memory_id: str):
 # POST PROCESSING
 
 def set_postprocessing_status(
-        uid: str, memory_id: str, status: PostProcessingStatus,
+        uid: str, memory_id: str, status: PostProcessingStatus, fail_reason: str = None,
         model: PostProcessingModel = PostProcessingModel.fal_whisperx
 ):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
+    memory_ref.update({
+        'postprocessing.status': status,
+        'postprocessing.model': model,
+        'postprocessing.fail_reason': fail_reason
+    })
 
 
 def store_model_segments_result(uid: str, memory_id: str, model_name: str, segments: List[TranscriptSegment]):

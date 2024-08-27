@@ -33,13 +33,15 @@ model = SpeakerRecognition.from_hparams(
 )
 
 
-def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> bool:
+def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> float:
     try:
         score, prediction = model.verify_files(sample_audio, segment)
-        return bool(prediction[0])
+        if bool(prediction[0]):
+            return float(score[0])
+        return 0
     except Exception as e:
         print(e)
-        return False
+        return 0
 
 
 def classify_segments(
@@ -58,7 +60,7 @@ def classify_segments(
     for i, segment in enumerate(segments):
 
         duration = segment.end - segment.start
-        by_chunk_matches = defaultdict(int)
+        by_chunk_matches = defaultdict(float)
 
         for j in range(0, int(duration), 30):
             start = segment.start + j
@@ -75,7 +77,7 @@ def classify_segments(
 
         if not by_chunk_matches:
             continue
-
+        print(by_chunk_matches)
         max_match = max(by_chunk_matches, key=by_chunk_matches.get)
         matches[i] = {'is_user': max_match == 'user', 'person_id': None if max_match == 'user' else max_match}
 
