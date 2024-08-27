@@ -2,6 +2,7 @@ import asyncio
 import os
 import threading
 import time
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
@@ -10,12 +11,13 @@ import database.memories as memories_db
 from database.users import get_user_store_recording_permission
 from database.vector_db import delete_vector
 from models.memory import *
+from routers.speech_profile import expand_speech_profile
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other import endpoints as auth
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, upload_memory_recording, delete_additional_profile_audio, \
-    get_memory_recording_if_exists, delete_user_person_speech_sample
+    delete_postprocessing_audio, upload_memory_recording, get_memory_recording_if_exists, \
+    delete_additional_profile_audio, delete_speech_sample_for_people
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions, get_speech_profile_expanded
@@ -224,34 +226,36 @@ def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_curre
     return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
 
 
-@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/is_user', response_model=Memory, tags=['memories'])
-def update_memory_segment_is_user(
-        memory_id: str, segment_idx: int, value: bool, uid: str = Depends(auth.get_current_user_uid)
-):
-    memory = _get_memory_by_id(uid, memory_id)
-    memory = Memory(**memory)
-    memory.transcript_segments[segment_idx].is_user = value
-    memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
-    # in case the user selected this as post training.
-    if not value:
-        delete_additional_profile_audio(uid, f'{memory_id}_segment_{segment_idx}.wav')
-    return memory
-
-
-@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/person_id', response_model=Memory, tags=['memories'])
-def update_memory_segment_person_id(
-        memory_id: str, segment_idx: int, person_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)
+@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory, tags=['memories'])
+def set_assignee_memory_segment(
+        memory_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
+        use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
 ):
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
 
-    prev_person_id = memory.transcript_segments[segment_idx].person_id
-    if prev_person_id == person_id:
-        return memory
+    if value == 'null':
+        value = None
 
-    memory.transcript_segments[segment_idx].person_id = person_id
+    is_unassigning = value is None or value is False
+
+    if assign_type == 'is_user':
+        memory.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
+        memory.transcript_segments[segment_idx].person_id = None
+    elif assign_type == 'person_id':
+        memory.transcript_segments[segment_idx].is_user = False
+        memory.transcript_segments[segment_idx].person_id = value
+    else:
+        raise HTTPException(status_code=400, detail="Invalid assign type")
+
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
 
-    if prev_person_id:
-        delete_user_person_speech_sample(uid, prev_person_id, f'{memory_id}_segment_{segment_idx}.wav')
+    if use_for_speech_training and not is_unassigning:
+        person_id = value if assign_type == 'person_id' else None
+        expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    else:
+        path = f'{memory_id}_segment_{segment_idx}.wav'
+        delete_additional_profile_audio(uid, path)
+        delete_speech_sample_for_people(uid, path)
+
     return memory
