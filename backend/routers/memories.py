@@ -132,16 +132,16 @@ def postprocess_memory(
         count = len(''.join([segment.text.strip() for segment in memory.transcript_segments]))
         new_count = len(''.join([segment.text.strip() for segment in segments]))
         print('Prev characters count:', count, 'New characters count:', new_count)
+
         if new_count < (count * 0.9):
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        # Speech profile matching using speechbrain # TODO: if fal fails, still should use speech profile for deepgram.
-        profile_path = get_speech_profile_expanded(uid) if aseg.frame_rate == 16000 else None
-        matches = get_speech_profile_matching_predictions(file_path, profile_path, [s.dict() for s in segments])
-        for i, segment in enumerate(segments):
-            segment.is_user = matches[i]['is_user']
-            segment.person_id = matches[i]['person_id']
+        if aseg.frame_rate == 16000:
+            matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
+            for i, segment in enumerate(segments):
+                segment.is_user = matches[i]['is_user']
+                segment.person_id = matches[i]['person_id']
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)

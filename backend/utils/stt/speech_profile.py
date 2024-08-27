@@ -9,14 +9,13 @@ from utils.other.storage import get_profile_audio_if_exists, get_additional_prof
     get_user_person_speech_samples
 
 
-def get_speech_profile_matching_predictions(audio_file_path: str, profile_path: str, segments: List) -> List[dict]:
+def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
     print('get_speech_profile_matching_predictions')
     files = [
         ('audio_file', (os.path.basename(audio_file_path), open(audio_file_path, 'rb'), 'audio/wav')),
-        ('profile_path', (os.path.basename(profile_path), open(profile_path, 'rb'), 'audio/wav'))
     ]
     response = requests.post(
-        os.getenv('HOSTED_SPEECH_PROFILE_API_URL'),
+        os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}',
         data={'segments': json.dumps(segments)},
         files=files
     )
