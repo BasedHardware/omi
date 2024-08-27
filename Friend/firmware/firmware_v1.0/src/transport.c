@@ -37,10 +37,6 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 //
 // Service and Characteristic
 //
-
-
-
-
 // Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
@@ -73,10 +69,6 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
-
-
-
-
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -478,7 +470,6 @@ int transport_start()
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-
     if (err)
     {
         LOG_ERR("Transport advertising failed to start (err %d)", err);
