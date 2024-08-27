@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/users.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
 
 class UserPeoplePage extends StatefulWidget {
@@ -10,20 +11,7 @@ class UserPeoplePage extends StatefulWidget {
 }
 
 class _UserPeoplePageState extends State<UserPeoplePage> {
-  List<Person> people = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPeople();
-  }
-
-  Future<void> _loadPeople() async {
-    final p = await getAllPeople(includeSpeechSamples: true);
-    setState(() {
-      people = p;
-    });
-  }
+  List<Person> people = SharedPreferencesUtil().cachedPeople;
 
   Future<void> _showPersonDialog({Person? person}) async {
     final nameController = TextEditingController(text: person?.name ?? '');
@@ -64,29 +52,27 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                   final newPerson = await createPerson(nameController.text);
                   if (newPerson != null) {
                     setState(() {
+                      SharedPreferencesUtil().cachedPeople = people;
                       people.add(newPerson);
                     });
                   } else {
                     _showErrorSnackBar('Failed to create person');
                   }
                 } else {
-                  final success = await updatePersonName(person.id, nameController.text);
-                  if (success) {
-                    setState(() {
-                      final index = people.indexWhere((p) => p.id == person.id);
-                      if (index != -1) {
-                        people[index] = Person(
-                          id: person.id,
-                          name: nameController.text,
-                          createdAt: person.createdAt,
-                          updatedAt: DateTime.now(),
-                          speechSamples: person.speechSamples,
-                        );
-                      }
-                    });
-                  } else {
-                    _showErrorSnackBar('Failed to update person');
-                  }
+                  updatePersonName(person.id, nameController.text);
+                  setState(() {
+                    final index = people.indexWhere((p) => p.id == person.id);
+                    if (index != -1) {
+                      people[index] = Person(
+                        id: person.id,
+                        name: nameController.text,
+                        createdAt: person.createdAt,
+                        updatedAt: DateTime.now(),
+                        speechSamples: person.speechSamples,
+                      );
+                      SharedPreferencesUtil().replaceCachedPerson(people[index]);
+                    }
+                  });
                 }
                 Navigator.pop(context);
               }
@@ -120,14 +106,9 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     );
 
     if (confirmed == true) {
-      final success = await deletePerson(person.id);
-      if (success) {
-        setState(() {
-          people.remove(person);
-        });
-      } else {
-        _showErrorSnackBar('Failed to delete person');
-      }
+      deletePerson(person.id);
+      people.remove(person);
+      SharedPreferencesUtil().cachedPeople = people;
     }
   }
 
