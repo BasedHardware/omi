@@ -11,7 +11,7 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/settings/recordings.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
@@ -289,7 +289,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                                 () => Navigator.pop(context),
                                 () {
                                   Navigator.pop(context);
-                                  routeToPage(context, const AuthorizeRecordingsPage());
+                                  routeToPage(context, const RecordingsStoragePermission());
                                 },
                                 'Can\'t be used for speech training',
                                 'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
