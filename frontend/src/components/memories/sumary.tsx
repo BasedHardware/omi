@@ -1,5 +1,6 @@
 import { Memory } from '@/src/types/memory.types';
 import ActionItems from './action-items';
+import MemoryEvents from './events/memory-events';
 
 interface SummaryProps {
   memory: Memory;
@@ -13,6 +14,7 @@ export default function Summary({ memory }: SummaryProps) {
         <p className="mt-3 text-lg">{memory.structured.overview}</p>
       </div>
       <ActionItems items={memory.structured.action_items} />
+      <MemoryEvents events={memory.structured.events} />
     </div>
   );
 }
