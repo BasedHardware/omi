@@ -11,13 +11,13 @@ export default function Transcription({ transcript }: TranscriptionProps) {
   );
   return (
     <div>
-      <h3 className="mt-10 text-2xl font-semibold">Transcription</h3>
-      <span className="text-base font-light text-gray-400">
+      <h3 className="mt-10 text-xl md:text-2xl font-semibold">Transcription</h3>
+      <span className="text-sm md:text-base font-light text-gray-400">
         Total Speakers: {uniqueSpeakers.length}
       </span>
       <ul className="mt-4">
-        {transcript.map((segment) => (
-          <TranscriptionSegment key={segment.speaker_id} segment={segment} />
+        {transcript.map((segment, index) => (
+          <TranscriptionSegment key={index} segment={segment} />
         ))}
       </ul>
     </div>
