@@ -94,20 +94,6 @@ Future<List<String>> getExpandedProfileSamples() async {
 }
 
 // DELETE v3/speech-profile/expand?memory_id&segment_idx
-// POST v3/speech-profile/expand?memory_id&segment_idx
-
-Future<bool> expandProfileSample(String memoryId, int segmentIdx) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$memoryId&segment_idx=$segmentIdx',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  debugPrint('expandProfileSample: ${response.body}');
-  if (response.statusCode == 200) return true;
-  return false;
-}
 
 Future<bool> deleteProfileSample(String memoryId, int segmentIdx) async {
   var response = await makeApiCall(

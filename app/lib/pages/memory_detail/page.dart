@@ -5,13 +5,15 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/database/memory.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -210,6 +212,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   void editSegment(int segmentIdx) {
+    List<Person> people = SharedPreferencesUtil().cachedPeople;
+
     showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -218,79 +222,156 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
         ),
         builder: (ctx) {
           bool isUserSegment = widget.memory.transcriptSegments[segmentIdx].isUser;
-          bool useForProfileTraining = false;
+          String? personId = widget.memory.transcriptSegments[segmentIdx].personId;
           return StatefulBuilder(builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade800,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
               ),
-              height: 280,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              height: 320,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              child: ListView(
                 children: [
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text('Edit Segment', style: Theme.of(context).textTheme.titleLarge),
-                  ),
-                  CheckboxListTile(
-                    value: isUserSegment,
-                    onChanged: (v) {
-                      setModalState(() {
-                        isUserSegment = v!;
-                      });
-                    },
-                    checkboxShape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(4)),
-                    ),
-                    title: const Text('Is this speech segment yours?'),
-                  ),
-                  isUserSegment && hasAudioRecording
-                      ? CheckboxListTile(
-                          value: useForProfileTraining,
-                          onChanged: (v) {
+                    child: Row(
+                      children: [
+                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                            widget.memory.transcriptSegments[segmentIdx].personId = null;
+                            assignMemoryTranscriptSegment(widget.memory.id, segmentIdx);
                             setModalState(() {
-                              useForProfileTraining = v!;
+                              personId = null;
+                              isUserSegment = false;
                             });
+                            setState(() {});
+                            Navigator.pop(context);
                           },
-                          checkboxShape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(4)),
-                          ),
-                          title: const Text('Should we train your speech profile further with this segment?'),
-                        )
-                      : const SizedBox(),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(12)),
-                          ),
+                          child: const Text('Un-assign',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                decoration: TextDecoration.underline,
+                              )),
                         ),
-                        onPressed: () async {
-                          widget.memory.transcriptSegments[segmentIdx].isUser = isUserSegment;
-                          setMemoryTranscriptSegmentIsUser(widget.memory.id, segmentIdx, isUserSegment);
-                          if (useForProfileTraining) expandProfileSample(widget.memory.id, segmentIdx);
-
-                          Navigator.pop(context);
-                          setState(() {});
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            'Save',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        )),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    title: const Text('Yours'),
+                    value: isUserSegment,
+                    checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                    onChanged: (bool? value) {
+                      widget.memory.transcriptSegments[segmentIdx].isUser = true;
+                      widget.memory.transcriptSegments[segmentIdx].personId = null;
+                      assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, isUser: true);
+                      setModalState(() {
+                        personId = null;
+                        isUserSegment = true;
+                      });
+                      setState(() {});
+                      Navigator.pop(context);
+                    },
+                  ),
+                  for (var person in people)
+                    CheckboxListTile(
+                      title: Text('${person.name[0].toUpperCase()}${person.name.substring(1).split(' ')[0]}\'s'),
+                      value: personId == person.id,
+                      checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                      onChanged: (bool? value) {
+                        assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, personId: person.id);
+                        widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                        widget.memory.transcriptSegments[segmentIdx].personId = person.id;
+                        setModalState(() {
+                          personId = person.id;
+                          isUserSegment = false;
+                        });
+                        setState(() {});
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ListTile(
+                    title: const Text('Someone else\'s'),
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.add),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      routeToPage(context, const UserPeoplePage());
+                    },
                   ),
                 ],
               ),
+              // child: Column(
+              //   crossAxisAlignment: CrossAxisAlignment.start,
+              //   children: [
+              //     const SizedBox(height: 8),
+              //     Padding(
+              //       padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              //       child: Text('Edit Segment', style: Theme.of(context).textTheme.titleLarge),
+              //     ),
+              //     CheckboxListTile(
+              //       value: isUserSegment,
+              //       onChanged: (v) {
+              //         setModalState(() {
+              //           isUserSegment = v!;
+              //         });
+              //       },
+              //       checkboxShape: const RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.all(Radius.circular(4)),
+              //       ),
+              //       title: const Text('Is this speech segment yours?'),
+              //     ),
+              //     isUserSegment && hasAudioRecording
+              //         ? CheckboxListTile(
+              //             value: useForProfileTraining,
+              //             onChanged: (v) {
+              //               setModalState(() {
+              //                 useForProfileTraining = v!;
+              //               });
+              //             },
+              //             checkboxShape: const RoundedRectangleBorder(
+              //               borderRadius: BorderRadius.all(Radius.circular(4)),
+              //             ),
+              //             title: const Text('Should we train your speech profile further with this segment?'),
+              //           )
+              //         : const SizedBox(),
+              //     Padding(
+              //       padding: const EdgeInsets.all(16),
+              //       child: TextButton(
+              //           style: TextButton.styleFrom(
+              //             backgroundColor: Theme.of(context).colorScheme.primary,
+              //             shape: const RoundedRectangleBorder(
+              //               borderRadius: BorderRadius.all(Radius.circular(12)),
+              //             ),
+              //           ),
+              //           onPressed: () async {
+              //             widget.memory.transcriptSegments[segmentIdx].isUser = isUserSegment;
+              //             setMemoryTranscriptSegmentIsUser(widget.memory.id, segmentIdx, isUserSegment);
+              //             if (useForProfileTraining) expandProfileSample(widget.memory.id, segmentIdx);
+              //
+              //             Navigator.pop(context);
+              //             setState(() {});
+              //           },
+              //           child: const Padding(
+              //             padding: EdgeInsets.symmetric(
+              //               horizontal: 24,
+              //               vertical: 4,
+              //             ),
+              //             child: Text(
+              //               'Save',
+              //               style: TextStyle(color: Colors.white),
+              //             ),
+              //           )),
+              //     ),
+              //   ],
+              // ),
             );
           });
         });

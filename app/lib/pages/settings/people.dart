@@ -13,6 +13,17 @@ class UserPeoplePage extends StatefulWidget {
 class _UserPeoplePageState extends State<UserPeoplePage> {
   List<Person> people = SharedPreferencesUtil().cachedPeople;
 
+  @override
+  void initState() {
+    super.initState();
+    getAllPeople().then((value) {
+      setState(() {
+        people = value;
+        SharedPreferencesUtil().cachedPeople = people;
+      });
+    });
+  }
+
   Future<void> _showPersonDialog({Person? person}) async {
     final nameController = TextEditingController(text: person?.name ?? '');
     final formKey = GlobalKey<FormState>();
@@ -52,8 +63,8 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                   final newPerson = await createPerson(nameController.text);
                   if (newPerson != null) {
                     setState(() {
-                      SharedPreferencesUtil().cachedPeople = people;
                       people.add(newPerson);
+                      SharedPreferencesUtil().addCachedPerson(newPerson);
                     });
                   } else {
                     _showErrorSnackBar('Failed to create person');
@@ -109,6 +120,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
       deletePerson(person.id);
       people.remove(person);
       SharedPreferencesUtil().cachedPeople = people;
+      setState(() {});
     }
   }
 
@@ -121,8 +133,10 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         title: const Text('People'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -135,6 +149,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final person = people[index];
+          print(person.speechSamples);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
