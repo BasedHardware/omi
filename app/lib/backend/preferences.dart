@@ -5,6 +5,7 @@ import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -190,6 +191,41 @@ class SharedPreferencesUtil {
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+  }
+
+  List<Person> get cachedPeople {
+    final List<String> people = getStringList('cachedPeople') ?? [];
+    return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
+  }
+
+  set cachedPeople(List<Person> value) {
+    final List<String> people = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedPeople', people);
+  }
+
+  addCachedPerson(Person person) {
+    final List<Person> people = cachedPeople;
+    people.add(person);
+    cachedPeople = people;
+  }
+
+  removeCachedPerson(String personId) {
+    final List<Person> people = cachedPeople;
+    Person? person = people.firstWhereOrNull((p) => p.id == personId);
+    if (person != null) {
+      people.remove(person);
+      cachedPeople = people;
+    }
+  }
+
+  replaceCachedPerson(Person person) {
+    final List<Person> people = cachedPeople;
+    Person? oldPerson = people.firstWhereOrNull((p) => p.id == person.id);
+    if (oldPerson != null) {
+      people.remove(oldPerson);
+      people.add(person);
+      cachedPeople = people;
+    }
   }
 
   addFailedMemory(ServerMemory memory) {
