@@ -7,7 +7,6 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'mic_background_service.dart';
