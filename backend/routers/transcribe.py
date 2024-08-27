@@ -56,7 +56,10 @@ router = APIRouter()
 #
 
 class DirtyReceiveException(Exception):
-    pass
+    def __init__(self, message="Dirty receive detected"):
+        self.message = message
+        super().__init__(self.message)
+
 
 class WebSocketWrapper(WebSocket):
     async def accept(
@@ -64,19 +67,18 @@ class WebSocketWrapper(WebSocket):
         subprotocol: str | None = None,
         headers: typing.Iterable[tuple[bytes, bytes]] | None = None,
     ) -> None:
-        if super.client_state == WebSocketState.CONNECTING:
+        if self.client_state == WebSocketState.CONNECTING:
             try:
-                await super.receive()
+                await self.receive()
             except RuntimeError as e:
                 if 'Expected ASGI message "websocket.connect"' not in str(e):
                     raise e
-                raise DirtyReceiveException()
+                raise DirtyReceiveException() from e
 
-        await super.send(
+        await self.send(
             {"type": "websocket.accept", "subprotocol": subprotocol, "headers": headers}
         )
 
-        return
 
 async def _websocket_util(
         websocket: WebSocketWrapper, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
@@ -85,8 +87,8 @@ async def _websocket_util(
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile)
     try:
         await websocket.accept()
-    except DirtyReceiveException:
-        message = "Can not accept new socket, cause DirtyReceive"
+    except DirtyReceiveException as e:
+        message = f"Can not accept new socket. error: {str(e)}"
         print(message)
 
         # Force close
