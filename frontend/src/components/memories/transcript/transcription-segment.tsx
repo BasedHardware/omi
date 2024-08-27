@@ -14,7 +14,7 @@ export default function TranscriptionSegment({
       <UserCircle className="mt-1 min-w-min text-sm" color={color} />
       <div>
         <p className="text-lg font-semibold">Speaker {segment.speaker_id}</p>
-        <p className="font-extralight">
+        <p className="font-extralight text-lg leading-9">
           {segment.text
             .replace(`Speaker ${segment.speaker_id}:`, '')
             .charAt(0)
