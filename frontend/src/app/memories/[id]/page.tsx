@@ -5,8 +5,6 @@ export default async function MemoryPage({ params, searchParams }) {
   const memoryId = params.id;
   const memory = await getMemory(memoryId);
   return (
-    <div>
-      <Memory memory={memory} searchParams={searchParams} />
-    </div>
+    <Memory memory={memory} searchParams={searchParams} />
   );
 }
