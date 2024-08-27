@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
 
 import 'device_settings.dart';
 
@@ -152,6 +154,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     if (widget.device != null) {
                       await bleDisconnectDevice(widget.device!);
                     }
+                    context.read<DeviceProvider>().setIsConnected(false);
+                    context.read<DeviceProvider>().setConnectedDevice(null);
+                    context.read<DeviceProvider>().updateConnectingStatus(false);
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
                     SharedPreferencesUtil().deviceName = '';

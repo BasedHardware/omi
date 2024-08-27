@@ -133,7 +133,6 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          // ChangeNotifierProvider(create: (context) => DeviceProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(

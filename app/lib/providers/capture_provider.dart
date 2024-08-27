@@ -16,14 +16,16 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
-import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin, MessageNotifierMixin {
@@ -34,6 +36,9 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     memoryProvider = mp;
     messageProvider = p;
   }
+
+  BTDeviceStruct? connectedDevice;
+  bool isGlasses = false;
 
   bool restartAudioProcessing = false;
 
@@ -48,6 +53,9 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   static const quietSecondsForMemoryCreation = 120;
 
   StreamSubscription? _bleBytesStream;
+
+  var record = AudioRecorder();
+  RecordingState recordingState = RecordingState.stop;
 
 // -----------------------
 // Memory creation variables
@@ -84,6 +92,12 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
   void setWebSocketConnecting(bool value) {
     webSocketConnecting = value;
+    notifyListeners();
+  }
+
+  void updateConnectedDevice(BTDeviceStruct? device) {
+    debugPrint('connected device changed from ${connectedDevice?.id} to ${device?.id}');
+    connectedDevice = device;
     notifyListeners();
   }
 
@@ -143,6 +157,9 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     if (memory != null) {
       // use memory provider to add memory
       memoryProvider?.addMemory(memory);
+      if (memoryProvider?.memories.isEmpty ?? false) {
+        memoryProvider?.getMoreMemoriesFromServer();
+      }
     }
 
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
@@ -235,7 +252,6 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
           toAddSeconds: secondsMissedOnReconnect ?? 0,
         );
         triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
-          // use message provider to send message to chat
           messageProvider?.addMessage(v);
         });
         SharedPreferencesUtil().transcriptSegments = segments;
@@ -252,7 +268,6 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     print('streamAudioToWs');
-    print('wsConnectionState: $wsConnectionState');
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       id,
@@ -276,18 +291,13 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     notifyListeners();
   }
 
-  Future resetState(
-      {bool restartBytesProcessing = true,
-      BTDeviceStruct? btDevice,
-      required GlobalKey<CapturePageState> captureKey}) async {
+  Future resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
     //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
-    print('inside of resetState');
     debugPrint('resetState: $restartBytesProcessing');
     closeBleStream();
     cancelMemoryCreationTimer();
 
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      print('inside of resetState and createMemory');
       var res = await createMemory(forcedCreation: true);
       notifyListeners();
       if (res != null && !res) {
@@ -297,7 +307,45 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       }
     }
     setRestartAudioProcessing(restartBytesProcessing);
-    captureKey.currentState?.resetState();
+    startOpenGlass();
+    initiateFriendAudioStreaming();
+    notifyListeners();
+  }
+
+  processCachedTranscript() async {
+    // TODO: only applies to friend, not openglass, fix it
+    var segments = SharedPreferencesUtil().transcriptSegments;
+    if (segments.isEmpty) return;
+    processTranscriptContent(
+      segments: segments,
+      sendMessageToChat: null,
+      triggerIntegrations: false,
+      language: SharedPreferencesUtil().recordingsLanguage,
+    );
+    SharedPreferencesUtil().transcriptSegments = [];
+    // TODO: include created at and finished at for this cached transcript
+  }
+
+  Future<void> startOpenGlass() async {
+    if (connectedDevice == null) return;
+    isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
+    if (!isGlasses) return;
+    await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
+    closeWebSocket();
+    notifyListeners();
+  }
+
+  Future<void> initiateFriendAudioStreaming() async {
+    if (connectedDevice == null) return;
+    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != codec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
+      SharedPreferencesUtil().deviceCodec = codec;
+      notifyInfo('FIM_CHANGE');
+    } else {
+      streamAudioToWs(connectedDevice!.id, codec);
+    }
+
     notifyListeners();
   }
 
@@ -316,5 +364,29 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     super.dispose();
+  }
+
+  void updateRecordingState(RecordingState state) {
+    recordingState = state;
+    notifyListeners();
+  }
+
+  startStreamRecording() async {
+    await Permission.microphone.request();
+    var stream = await record.startStream(
+      const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1),
+    );
+    updateRecordingState(RecordingState.record);
+    stream.listen((data) async {
+      if (wsConnectionState == WebsocketConnectionStatus.connected) {
+        websocketChannel?.sink.add(data);
+      }
+    });
+  }
+
+  stopStreamRecording() async {
+    if (await record.isRecording()) await record.stop();
+    updateRecordingState(RecordingState.stop);
+    notifyListeners();
   }
 }
