@@ -7,7 +7,6 @@ export default function TranscriptionSegment({
 }: {
   segment: TranscriptSegment;
 }) {
-
   const color = predefinedColors[segment.speaker_id % predefinedColors.length];
 
   return (
