@@ -118,7 +118,10 @@ def expand_speech_profile(
 def delete_extra_speech_profile_sample(
         memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    print('delete_extra_speech_profile_sample', memory_id, segment_idx, person_id, uid)
     file_name = f'{memory_id}_segment_{segment_idx}.wav'
+    if person_id == 'null':
+        person_id = None
 
     if person_id:
         delete_user_person_speech_sample(uid, person_id, file_name)
