@@ -24,6 +24,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -133,7 +134,6 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          // ChangeNotifierProvider(create: (context) => DeviceProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
@@ -157,6 +157,11 @@ class _MyAppState extends State<MyApp> {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
+          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
+            create: (context) => SpeechProfileProvider(),
+            update: (BuildContext context, value, SpeechProfileProvider? previous) =>
+                (previous?..setProvider(value)) ?? SpeechProfileProvider(),
+          ),
         ],
         builder: (context, child) {
           return WithForegroundTask(
