@@ -8,8 +8,8 @@ interface ActionsItemsProps {
 export default function ActionItems({ items }: ActionsItemsProps) {
   return (
     <div>
-      <h3 className="text-2xl font-semibold">Action Items</h3>
-      <ul className="mt-3">
+      <h3 className="text-xl md:text-2xl font-semibold">Action Items</h3>
+      <ul className="mt-3 text-base md:text-lg">
         {items.map((item, index) => (
           <li key={index} className="my-5 flex items-start gap-3 first:mt-0">
             {item.completed ? (
