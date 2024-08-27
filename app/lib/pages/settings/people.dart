@@ -7,6 +7,7 @@ import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:uuid/uuid.dart';
@@ -206,6 +207,11 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
   }
 
   Future<void> _showPersonDialog(BuildContext context, {Person? person}) async {
+    if (!ConnectivityController().isConnected.value) {
+      ConnectivityController.showNoInternetDialog(context);
+      return;
+    }
+
     final nameController = TextEditingController(text: person?.name ?? '');
     final formKey = GlobalKey<FormState>();
 
@@ -232,6 +238,10 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
   }
 
   Future<void> _confirmDeleteSample(int peopleIdx, String url) async {
+    if (!ConnectivityController().isConnected.value) {
+      ConnectivityController.showNoInternetDialog(context);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => getDialog(
