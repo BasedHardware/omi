@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/env/env.dart';
 
 Future<bool> setRecordingPermission(bool value) async {
@@ -42,4 +43,76 @@ Future<bool> deletePermissionAndRecordings() async {
   if (response == null) return false;
   debugPrint('deletePermissionAndRecordings response: ${response.body}');
   return response.statusCode == 200;
+}
+
+/**/
+
+Future<Person?> createPerson(String name) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'name': name}),
+  );
+  if (response == null) return null;
+  debugPrint('createPerson response: ${response.body}');
+  if (response.statusCode == 200) {
+    return Person.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<Person?> getSinglePerson(String personId, {bool includeSpeechSamples = false}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId?include_speech_samples=$includeSpeechSamples',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getSinglePerson response: ${response.body}');
+  if (response.statusCode == 200) {
+    return Person.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<List<Person>> getAllPeople({bool includeSpeechSamples = false}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getAllPeople response: ${response.body}');
+  if (response.statusCode == 200) {
+    List<dynamic> peopleJson = jsonDecode(response.body);
+    return peopleJson.map((json) => Person.fromJson(json)).toList();
+  }
+  return [];
+}
+
+Future<bool> updatePersonName(String personId, String newName) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId/name?value=$newName',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('updatePersonName response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> deletePerson(String personId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deletePerson response: ${response.body}');
+  return response.statusCode == 204;
 }
