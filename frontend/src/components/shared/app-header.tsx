@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 export default function AppHeader() {
   const [scrollPosition, setScrollPosition] = useState(0);
@@ -18,7 +18,11 @@ export default function AppHeader() {
   }, []);
 
   return (
-    <header className={`flex items-center justify-between p-4 text-white sticky top-0 backdrop-blur-md transition-all duration-500 ${scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''}`}>
+    <header
+      className={`sticky top-0 flex items-center justify-between p-4 text-white backdrop-blur-md transition-all duration-500 ${
+        scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''
+      }`}
+    >
       <h1 className="text-xl">Base Hardware</h1>
       <nav>
         <ul className="flex space-x-4">
