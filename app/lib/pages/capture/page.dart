@@ -260,7 +260,7 @@ class CapturePageState extends State<CapturePage>
               ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
               const SizedBox(height: 16)
             ]),
-            getPhoneMicRecordingButton(_recordingToggled(provider), provider.recordingState),
+            getPhoneMicRecordingButton(() => _recordingToggled(provider), provider.recordingState),
           ],
         ),
       );
