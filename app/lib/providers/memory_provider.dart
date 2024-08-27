@@ -35,7 +35,7 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void initFilteredMemories() {
-    filteredMemories = memories;
+    filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();
   }
