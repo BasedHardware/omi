@@ -325,7 +325,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+#ifdef CONFIG_ACCELEROMETER
      k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+#endif
     is_connected = true;
 }
 
@@ -566,7 +568,7 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
-
+#ifdef CONFIG_ACCELEROMETER
     err = accel_start();
 
     if (!err) {
@@ -575,7 +577,7 @@ int transport_start()
     else {
         bt_gatt_service_register(&accel_service);
     }
-
+#endif
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
