@@ -4,14 +4,16 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
-from database.memories import get_memory, update_memory_segments
+from database.memories import get_memory
 from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
+from database.users import get_person
 from models.memory import Memory
 from models.other import UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_memory_recording_if_exists, \
     upload_additional_profile_audio, delete_additional_profile_audio, get_additional_profile_recordings, \
-    upload_user_person_speech_sample, delete_user_person_speech_sample, get_user_person_speech_samples
+    upload_user_person_speech_sample, delete_user_person_speech_sample, get_user_person_speech_samples, \
+    delete_speech_sample_for_people
 from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
@@ -68,7 +70,20 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ************* SPEECH SAMPLES FROM MEMORY *************
 # ******************************************************
 
-def _validate(uid, memory_id):
+
+def expand_speech_profile(
+        memory_id: str, uid: str, segment_idx: int, assign_type: str, person_id: Optional[str] = None
+):
+    print('expand_speech_profile', memory_id, uid, segment_idx, assign_type, person_id)
+    if assign_type == 'is_user':
+        profile_path = get_profile_audio_if_exists(uid)
+        if not profile_path:  # TODO: validate this in front
+            raise HTTPException(status_code=404, detail="Speech profile not found")
+        os.remove(profile_path)
+    else:
+        if not get_person(uid, person_id):
+            raise HTTPException(status_code=404, detail="Person not found")
+
     memory_recording_path = get_memory_recording_if_exists(uid, memory_id)
     if not memory_recording_path:
         raise HTTPException(status_code=404, detail="Memory recording not found")
@@ -77,32 +92,7 @@ def _validate(uid, memory_id):
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    return memory, memory_recording_path
-
-
-@router.post('/v3/speech-profile/expand', tags=['v3'])
-def expand_speech_profile(
-        memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    print('expand_speech_profile', memory_id, segment_idx, person_id, uid)
-
-    if person_id is None:
-        profile_path = get_profile_audio_if_exists(uid)
-        if not profile_path:  # TODO: validate this in front
-            raise HTTPException(status_code=404, detail="Speech profile not found")
-        os.remove(profile_path)
-
-    memory, memory_recording_path = _validate(uid, memory_id)
-
     memory = Memory(**memory)
-    segments = memory.transcript_segments
-    if person_id:
-        segments[segment_idx].person_id = person_id
-    else:
-        segments[segment_idx].is_user = True
-
-    update_memory_segments(uid, memory_id, [segment.dict() for segment in segments])
-
     segment = memory.transcript_segments[segment_idx]
     aseg = AudioSegment.from_wav(memory_recording_path)
     segment_aseg = aseg[segment.start * 1000:segment.end * 1000]
@@ -112,7 +102,12 @@ def expand_speech_profile(
     segment_aseg.export(segment_recording_path, format='wav')
 
     apply_vad_for_speech_profile(segment_recording_path)
-    if person_id:
+
+    # remove file in all people + user profile
+    delete_additional_profile_audio(uid, segment_recording_path.split('/')[-1])
+    delete_speech_sample_for_people(uid, segment_recording_path.split('/')[-1])
+
+    if assign_type == 'person_id':
         upload_user_person_speech_sample(segment_recording_path, uid, person_id)
     else:
         upload_additional_profile_audio(segment_recording_path, uid)
