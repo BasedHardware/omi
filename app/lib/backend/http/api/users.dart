@@ -88,7 +88,10 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
   debugPrint('getAllPeople response: ${response.body}');
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
-    return peopleJson.map((json) => Person.fromJson(json)).toList();
+    List<Person> people = peopleJson.map((json) => Person.fromJson(json)).toList();
+    // sort by name
+    people.sort((a, b) => a.name.compareTo(b.name));
+    return people;
   }
   return [];
 }
