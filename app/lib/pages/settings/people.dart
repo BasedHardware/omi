@@ -36,6 +36,19 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         SharedPreferencesUtil().cachedPeople = people;
       });
     });
+    _setupAudioPlayerListeners();
+  }
+
+  void _setupAudioPlayerListeners() {
+    _audioPlayer.playerStateStream.listen((playerState) {
+      if (playerState.processingState == ProcessingState.completed) {
+        setState(() {
+          _currentPlayingPersonIndex = null;
+          _currentPlayingIndex = null;
+          _isPlaying = false;
+        });
+      }
+    });
   }
 
   Future<void> _playPause(int personIdx, int sampleIdx, String fileUrl) async {
