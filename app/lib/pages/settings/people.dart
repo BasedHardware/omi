@@ -3,81 +3,40 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/providers/people_provider.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:uuid/uuid.dart';
+import 'package:provider/provider.dart';
 
-class UserPeoplePage extends StatefulWidget {
+class UserPeoplePage extends StatelessWidget {
   const UserPeoplePage({super.key});
 
   @override
-  State<UserPeoplePage> createState() => _UserPeoplePageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => PeopleProvider(),
+      child: const _UserPeoplePage(),
+    );
+  }
 }
 
-class _UserPeoplePageState extends State<UserPeoplePage> {
-  List<Person> people = SharedPreferencesUtil().cachedPeople;
-  Map<String, List<String>> samplesUrl = {};
-  bool loading = true;
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  int? _currentPlayingPersonIndex;
-  int? _currentPlayingIndex;
-  bool _isPlaying = false;
+class _UserPeoplePage extends StatefulWidget {
+  const _UserPeoplePage({super.key});
 
   @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
-  }
+  State<_UserPeoplePage> createState() => _UserPeoplePageState();
+}
 
+class _UserPeoplePageState extends State<_UserPeoplePage> {
   @override
   void initState() {
     super.initState();
-    getAllPeople().then((value) {
-      setState(() {
-        people = value;
-        SharedPreferencesUtil().cachedPeople = people;
-      });
-    });
-    _setupAudioPlayerListeners();
-  }
-
-  void _setupAudioPlayerListeners() {
-    _audioPlayer.playerStateStream.listen((playerState) {
-      if (playerState.processingState == ProcessingState.completed) {
-        setState(() {
-          _currentPlayingPersonIndex = null;
-          _currentPlayingIndex = null;
-          _isPlaying = false;
-        });
-      }
-    });
-  }
-
-  Future<void> _playPause(int personIdx, int sampleIdx, String fileUrl) async {
-    if (_currentPlayingPersonIndex == personIdx && _currentPlayingIndex == sampleIdx) {
-      if (_isPlaying) {
-        _audioPlayer.pause();
-        _isPlaying = false;
-      } else {
-        _audioPlayer.play();
-        _isPlaying = true;
-      }
-    } else {
-      _audioPlayer.stop();
-      await _audioPlayer.setUrl(fileUrl);
-      setState(() {
-        _currentPlayingPersonIndex = personIdx;
-        _currentPlayingIndex = sampleIdx;
-        _isPlaying = true;
-      });
-      await _audioPlayer.play();
-    }
-    setState(() {});
+    () {
+      context.read<PeopleProvider>().initialize();
+    }.withPostFrameCallback();
   }
 
   Widget _showPersonDialogForm(formKey, nameController) {
@@ -134,51 +93,16 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     return null;
   }
 
-  List<Widget> _showPersonDialogActions(BuildContext context, formKey, nameController, {Person? person}) {
+  List<Widget> _showPersonDialogActions(
+    BuildContext context,
+    formKey,
+    nameController,
+    PeopleProvider provider, {
+    Person? person,
+  }) {
     onPressed() async {
       if (formKey.currentState!.validate()) {
-        String name = nameController.text.toString()[0].toUpperCase() + nameController.text.toString().substring(1);
-
-        if (person == null) {
-          String newPersonTemporalId = const Uuid().v4();
-          createPerson(nameController.text).then((p) {
-            if (p != null) {
-              final index = people.indexWhere((p) => p.id == newPersonTemporalId);
-              if (index != -1) {
-                people[index] = p;
-                SharedPreferencesUtil().replaceCachedPerson(p);
-                setState(() {});
-              }
-            }
-          });
-          Person newPerson = Person(
-              id: newPersonTemporalId,
-              name: name,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-              speechSamples: []);
-          setState(() {
-            people.add(newPerson);
-            people.sort((a, b) => a.name.compareTo(b.name));
-            SharedPreferencesUtil().cachedPeople = people;
-          });
-        } else {
-          updatePersonName(person.id, name);
-          setState(() {
-            final index = people.indexWhere((p) => p.id == person.id);
-            if (index != -1) {
-              people[index] = Person(
-                id: person.id,
-                name: name,
-                createdAt: person.createdAt,
-                updatedAt: DateTime.now(),
-                speechSamples: person.speechSamples,
-              );
-              people.sort((a, b) => a.name.compareTo(b.name));
-              SharedPreferencesUtil().cachedPeople = people;
-            }
-          });
-        }
+        provider.addOrUpdatePersonProvider(person, nameController);
         Navigator.pop(context);
       }
     }
@@ -206,7 +130,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
           ];
   }
 
-  Future<void> _showPersonDialog(BuildContext context, {Person? person}) async {
+  Future<void> _showPersonDialog(BuildContext context, PeopleProvider provider, {Person? person}) async {
     if (!ConnectivityController().isConnected.value) {
       ConnectivityController.showNoInternetDialog(context);
       return;
@@ -221,23 +145,17 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
           ? CupertinoAlertDialog(
               title: Text(person == null ? 'Add New Person' : 'Edit Person'),
               content: _showPersonDialogForm(formKey, nameController),
-              actions: _showPersonDialogActions(context, formKey, nameController, person: person),
+              actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             )
           : AlertDialog(
               title: Text(person == null ? 'Add New Person' : 'Edit Person'),
               content: _showPersonDialogForm(formKey, nameController),
-              actions: _showPersonDialogActions(context, formKey, nameController, person: person),
+              actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             ),
     );
   }
 
-  String _getFileNameFromUrl(String url) {
-    Uri uri = Uri.parse(url);
-    String fileName = uri.pathSegments.last;
-    return fileName.split('.').first;
-  }
-
-  Future<void> _confirmDeleteSample(int peopleIdx, String url) async {
+  Future<void> _confirmDeleteSample(int peopleIdx, Person person, String url, PeopleProvider provider) async {
     if (!ConnectivityController().isConnected.value) {
       ConnectivityController.showNoInternetDialog(context);
       return;
@@ -249,25 +167,17 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         () => Navigator.pop(context, false),
         () => Navigator.pop(context, true),
         'Delete Sample?',
-        'Are you sure you want to delete ${people[peopleIdx].name}\'s sample?',
+        'Are you sure you want to delete ${person.name}\'s sample?',
         okButtonText: 'Confirm',
       ),
     );
 
     if (confirmed == true) {
-      String name = _getFileNameFromUrl(url);
-      var parts = name.split('_segment_');
-      String memoryId = parts[0];
-      int segmentIdx = int.parse(parts[1]);
-      deleteProfileSample(memoryId, segmentIdx, personId: people[peopleIdx].id);
-      setState(() {
-        people[peopleIdx].speechSamples!.remove(url);
-        SharedPreferencesUtil().replaceCachedPerson(people[peopleIdx]);
-      });
+      provider.deletePersonSample(peopleIdx, url);
     }
   }
 
-  Future<void> _confirmDeletePerson(Person person) async {
+  Future<void> _confirmDeletePerson(Person person, PeopleProvider provider) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => getDialog(
@@ -280,117 +190,119 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
       ),
     );
 
-    if (confirmed == true) {
-      deletePerson(person.id);
-      people.remove(person);
-      SharedPreferencesUtil().cachedPeople = people;
-      setState(() {});
-    }
+    if (confirmed == true) provider.deletePersonProvider(person);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
-        title: const Text('People'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showPersonDialog(context),
-          ),
-          people.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.question_mark),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context, false),
-                        () => Navigator.pop(context, true),
-                        'How it works?',
-                        'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
-                        okButtonText: 'Got it',
-                      ),
-                    );
-                  })
-              : const SizedBox(),
-        ],
-      ),
-      body: people.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(Icons.question_mark, size: 40),
-                  SizedBox(height: 24),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text('Create a new person and train Omi to recognize their speech too!',
-                        style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
-                  ),
-                  SizedBox(height: 64),
-                ],
+    return Consumer<PeopleProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: AppBar(
+            title: const Text('People'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () => _showPersonDialog(context, provider),
               ),
-            )
-          : ListView.separated(
-              itemCount: people.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final person = people[index];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ListTile(
-                      title: Text(person.name),
-                      onTap: () => _showPersonDialog(context, person: person),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, size: 20),
-                        onPressed: () => _confirmDeletePerson(person),
-                      ),
-                    ),
-                    if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+              provider.people.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.question_mark),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (c) => getDialog(
+                            context,
+                            () => Navigator.pop(context),
+                            () => Navigator.pop(context),
+                            singleButton: true,
+                            'How it works?',
+                            'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
+                            okButtonText: 'Got it',
+                          ),
+                        );
+                      })
+                  : const SizedBox(),
+            ],
+          ),
+          body: provider.people.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(Icons.question_mark, size: 40),
+                      SizedBox(height: 24),
                       Padding(
-                        padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: IconButton(
-                                    padding: const EdgeInsets.all(0),
-                                    icon: Icon(
-                                      _currentPlayingPersonIndex == index && _currentPlayingIndex == j && _isPlaying
-                                          ? Icons.pause
-                                          : Icons.play_arrow,
-                                    ),
-                                    onPressed: () => _playPause(index, j, sample),
-                                  ),
-                                  title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
-                                  onTap: () => _confirmDeleteSample(index, sample),
-                                  subtitle: FutureBuilder<Duration?>(
-                                    future: AudioPlayer().setUrl(sample),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.hasData) {
-                                        return Text('${snapshot.data!.inSeconds} seconds');
-                                      } else {
-                                        return const Text('Loading duration...');
-                                      }
-                                    },
-                                  ),
-                                )),
-                          ],
-                        ),
+                        padding: EdgeInsets.symmetric(horizontal: 32),
+                        child: Text('Create a new person and train Omi to recognize their speech too!',
+                            style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
                       ),
-                  ],
-                );
-              },
-            ),
+                      SizedBox(height: 64),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: provider.people.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final person = provider.people[index];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          title: Text(person.name),
+                          onTap: () => _showPersonDialog(context, provider, person: person),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, size: 20),
+                            onPressed: () => _confirmDeletePerson(person, provider),
+                          ),
+                        ),
+                        if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: IconButton(
+                                        padding: const EdgeInsets.all(0),
+                                        icon: Icon(
+                                          provider.currentPlayingPersonIndex == index &&
+                                                  provider.currentPlayingIndex == j &&
+                                                  provider.isPlaying
+                                              ? Icons.pause
+                                              : Icons.play_arrow,
+                                        ),
+                                        onPressed: () => provider.playPause(index, j, sample),
+                                      ),
+                                      title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                                      onTap: () => _confirmDeleteSample(index, person, sample, provider),
+                                      subtitle: FutureBuilder<Duration?>(
+                                        future: AudioPlayer().setUrl(sample),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.hasData) {
+                                            return Text('${snapshot.data!.inSeconds} seconds');
+                                          } else {
+                                            return const Text('Loading duration...');
+                                          }
+                                        },
+                                      ),
+                                    )),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+        );
+      },
     );
   }
 }
