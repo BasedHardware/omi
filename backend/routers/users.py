@@ -9,7 +9,8 @@ from database.redis_db import cache_user_name
 from database.users import *
 from models.other import Person, CreatePerson
 from utils.other import endpoints as auth
-from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples
+from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
+    delete_user_person_speech_samples
 
 router = APIRouter()
 
@@ -69,7 +70,8 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.utcnow(),
-        'updated_at': datetime.utcnow()
+        'updated_at': datetime.utcnow(),
+        'deleted': False,
     }
     result = create_person(uid, data)
     return result
@@ -96,13 +98,14 @@ def get_all_people(include_speech_samples: bool = False, uid: str = Depends(auth
     return people
 
 
-@router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=Person)
+@router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
 def update_person_name(person_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
     update_person(uid, person_id, value)
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
+@router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
+    delete_user_person_speech_samples(uid, person_id)
     return {'status': 'ok'}
