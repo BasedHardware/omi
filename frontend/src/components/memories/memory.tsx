@@ -2,7 +2,7 @@ import { Memory as MemoryType } from '@/src/types/memory.types';
 import moment from 'moment';
 import Summary from './sumary';
 import Tabs from './tabs';
-import Transcription from './transcription';
+import Transcription from './transcript/transcription';
 
 interface MemoryProps {
   memory: MemoryType;
@@ -12,7 +12,7 @@ interface MemoryProps {
 export default function Memory({ memory, searchParams }: MemoryProps) {
   const currentTab = searchParams.tab ?? 'sum';
   return (
-    <div className="mx-auto mt-12 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-12 text-white">
+    <div className="mx-auto my-12 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-12 text-white">
       <div className="px-12">
         <h2 className="text-3xl font-bold">{memory.structured.title}</h2>
         <p className="my-2 text-gray-500">

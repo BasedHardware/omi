@@ -1,6 +1,24 @@
+'use client';
+
+import { useEffect, useState } from "react";
+
 export default function AppHeader() {
+  const [scrollPosition, setScrollPosition] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollPosition(window.scrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
   return (
-    <header className="flex items-center justify-between p-4 text-white">
+    <header className={`flex items-center justify-between p-4 text-white sticky top-0 backdrop-blur-md transition-all duration-500 ${scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''}`}>
       <h1 className="text-xl">Base Hardware</h1>
       <nav>
         <ul className="flex space-x-4">
