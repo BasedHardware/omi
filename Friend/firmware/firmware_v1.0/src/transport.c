@@ -221,7 +221,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+#ifdef CONFIG_ENABLE_BUTTON
+#define
     activate_button_work();
+#endif
     is_connected = true;
 }
 
@@ -463,10 +466,15 @@ int transport_start()
     }
     LOG_INF("Transport bluetooth initialized");
 
-    err = button_init();
+
+#ifdef CONFIG_ENABLE_BUTTON
+#define
+     err = button_init();
+     register_button_service();
+#endif
+   
     // Start advertising
     
-    register_button_service();
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
