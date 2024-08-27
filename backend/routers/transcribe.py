@@ -39,13 +39,36 @@ router = APIRouter()
 # def get(request: Request):
 #     return templates.TemplateResponse("index.html", {"request": request})
 
+#
+# Q: Why do we need try-catch around websocket.accept?
+# A: When a modal (modal app) timeout occurs, it allows a new request to be made, and a new WebSocket is initiated. Everything seems fine, right?
+#    But what if the receive[1], which belongs to the old request, is still lingering somewhere in the application?
+#    Yes, you know that if the app doesn’t manage the receive well, the new socket may receive messages from the existing receive. That’s why when a modal timeout happens, you might see various RuntimeErrors like:
+#    - Expected ASGI message "websocket.connect" but got "websocket.receive"
+#    - Expected ASGI message "websocket.connect" but got "websocket.disconnect"
+#    These messages are from the old receive. I called it Dirty Receive.
+#
+#    Because modal don't open their proto source code yet. So to deal with that kind of modal app error, lets support the grateful accept.
+#
+#    [1] receive in the WebSocket init function
+#    class WebSocket(HTTPConnection):
+#       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
+#
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True,
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile)
-    await websocket.accept()
+
+    # Check: Why do we need try-catch around websocket.accept?
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e)
+        await websocket.close()
+        return
+
     transcript_socket2 = None
     websocket_active = True
     duration = 0
