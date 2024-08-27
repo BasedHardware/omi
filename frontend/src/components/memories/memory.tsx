@@ -12,10 +12,12 @@ interface MemoryProps {
 export default function Memory({ memory, searchParams }: MemoryProps) {
   const currentTab = searchParams.tab ?? 'sum';
   return (
-    <div className="mx-3 md:mx-auto my-10 md:my-28 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 md:py-12 text-white">
+    <div className="mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 text-white md:mx-auto md:my-28 md:py-12">
       <div className="px-4 md:px-12">
-        <h2 className="text-2xl line-clamp-2 md:text-3xl font-bold">{memory.structured.title}</h2>
-        <p className="my-2 text-gray-500 md:text-base text-sm">
+        <h2 className="line-clamp-2 text-2xl font-bold md:text-3xl">
+          {memory.structured.title}
+        </h2>
+        <p className="my-2 text-sm text-gray-500 md:text-base">
           {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
         </p>
         <span className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm">
