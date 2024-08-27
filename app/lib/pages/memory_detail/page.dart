@@ -13,6 +13,7 @@ import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/recordings.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -224,6 +225,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   void editSegment(int segmentIdx) {
+    if (!ConnectivityController().isConnected.value) {
+      ConnectivityController.showNoInternetDialog(context);
+      return;
+    }
     List<Person> people = SharedPreferencesUtil().cachedPeople;
 
     showModalBottomSheet(
