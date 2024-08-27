@@ -22,19 +22,24 @@ export default function AppHeader() {
 
   return (
     <header
-      className={`sticky top-0 flex items-center justify-between p-4 text-white backdrop-blur-md transition-all duration-500 px-12 ${
+      className={`sticky top-0 flex items-center justify-between p-4 text-white backdrop-blur-md transition-all duration-500 px-4 md:px-12 ${
         scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''
       }`}
     >
-      <h1 className="text-xl flex gap-2 items-center">
+      <h1 className="text-xl gap-2 flex items-center">
         <Image src={'/logo.webp'} alt="Based Hardware Logo" width={25} height={30} />
-        Based Hardware</h1>
+        <span className='hidden md:inline'>
+          Based Hardware
+        </span>
+      </h1>
       <nav>
-        <ul className="flex space-x-4">
+        <ul className="flex gap-3 md:gap-4 md:text-base text-sm">
           <li>
-            <button className='flex gap-2 items-center border border-solid border-zinc-600 p-1.5 px-3.5 rounded-md hover:bg-zinc-800 transition-colors'>
+            <button className='flex gap-2 items-center border border-solid border-zinc-600 p-1.5 md:p-1.5 md:px-3.5 rounded-md hover:bg-zinc-800 transition-colors'>
               <ShareIos className='text-xs'/>
-              Share
+              <span className='hidden md:inline'>
+                Share
+              </span>
             </button>
           </li>
           <li>
