@@ -52,6 +52,7 @@ def vad_is_empty(file_path, return_segments: bool = False):
 
 
 def apply_vad_for_speech_profile(file_path: str):
+    print('apply_vad_for_speech_profile', file_path)
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:
         raise HTTPException(status_code=400, detail="Audio is empty")

@@ -94,6 +94,7 @@ def expand_speech_profile(
 
     memory = Memory(**memory)
     segment = memory.transcript_segments[segment_idx]
+    print('expand_speech_profile', segment)
     aseg = AudioSegment.from_wav(memory_recording_path)
     segment_aseg = aseg[segment.start * 1000:segment.end * 1000]
     os.remove(memory_recording_path)

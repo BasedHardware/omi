@@ -51,6 +51,12 @@ def postprocess_memory(
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
+    aseg = AudioSegment.from_wav(file_path)
+    if aseg.duration_seconds < 10:
+        # TODO: fix app, sometimes audio uploaded is wrong, is too short.
+        print('postprocess_memory: Audio duration is too short, seems wrong.')
+        raise HTTPException(status_code=500, detail="Audio duration is too short, seems wrong.")
+
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
@@ -98,6 +104,7 @@ def postprocess_memory(
 
         memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
         if fal_failed:
+            # TODO: FAL fails too much and is fucking expensive. Remove it.
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
             # TODO: consider doing reprocessing, if any segment still matched to user or people
@@ -126,7 +133,7 @@ def _delete_postprocessing_audio(file_path):
 
 async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
     if not any(segment.is_user for segment in memory.transcript_segments):
-        print(f"Users transcript segments is emty. uid: {uid}. memory: {memory.id}")
+        print(f"_process_user_emotion skipped for {memory.id}")
         return
 
     process_user_emotion(uid, language_code, memory, urls)
