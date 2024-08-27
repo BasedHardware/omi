@@ -11,6 +11,7 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/recordings.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -50,6 +51,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   List<MemoryPhoto> photos = [];
 
+  // TODO: use later for onboarding transcript segment edits
+  // late AnimationController _animationController;
+  // late Animation<double> _opacityAnimation;
+
   @override
   void initState() {
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(widget.memory.transcriptSegments);
@@ -70,6 +75,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
         setState(() {});
       });
     }
+    // _animationController = AnimationController(
+    //   vsync: this,
+    //   duration: const Duration(seconds: 60),
+    // )..repeat(reverse: true);
+    //
+    // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
+
     super.initState();
   }
 
@@ -261,6 +273,45 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                       ],
                     ),
                   ),
+                  !hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  !hasAudioRecording
+                      ? GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  routeToPage(context, const AuthorizeRecordingsPage());
+                                },
+                                'Can\'t be used for speech training',
+                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                okButtonText: 'View Permissions',
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text('Can\'t be used for speech training',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(decoration: TextDecoration.underline)),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),
@@ -269,7 +320,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     onChanged: (bool? value) {
                       widget.memory.transcriptSegments[segmentIdx].isUser = true;
                       widget.memory.transcriptSegments[segmentIdx].personId = null;
-                      assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, isUser: true);
+                      assignMemoryTranscriptSegment(
+                        widget.memory.id,
+                        segmentIdx,
+                        isUser: true,
+                        useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
+                      );
                       setModalState(() {
                         personId = null;
                         isUserSegment = true;
@@ -280,7 +336,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   ),
                   for (var person in people)
                     CheckboxListTile(
-                      title: Text('${person.name[0].toUpperCase()}${person.name.substring(1).split(' ')[0]}\'s'),
+                      title: Text('${person.name}\'s'),
                       value: personId == person.id,
                       checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                       onChanged: (bool? value) {
@@ -308,70 +364,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   ),
                 ],
               ),
-              // child: Column(
-              //   crossAxisAlignment: CrossAxisAlignment.start,
-              //   children: [
-              //     const SizedBox(height: 8),
-              //     Padding(
-              //       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              //       child: Text('Edit Segment', style: Theme.of(context).textTheme.titleLarge),
-              //     ),
-              //     CheckboxListTile(
-              //       value: isUserSegment,
-              //       onChanged: (v) {
-              //         setModalState(() {
-              //           isUserSegment = v!;
-              //         });
-              //       },
-              //       checkboxShape: const RoundedRectangleBorder(
-              //         borderRadius: BorderRadius.all(Radius.circular(4)),
-              //       ),
-              //       title: const Text('Is this speech segment yours?'),
-              //     ),
-              //     isUserSegment && hasAudioRecording
-              //         ? CheckboxListTile(
-              //             value: useForProfileTraining,
-              //             onChanged: (v) {
-              //               setModalState(() {
-              //                 useForProfileTraining = v!;
-              //               });
-              //             },
-              //             checkboxShape: const RoundedRectangleBorder(
-              //               borderRadius: BorderRadius.all(Radius.circular(4)),
-              //             ),
-              //             title: const Text('Should we train your speech profile further with this segment?'),
-              //           )
-              //         : const SizedBox(),
-              //     Padding(
-              //       padding: const EdgeInsets.all(16),
-              //       child: TextButton(
-              //           style: TextButton.styleFrom(
-              //             backgroundColor: Theme.of(context).colorScheme.primary,
-              //             shape: const RoundedRectangleBorder(
-              //               borderRadius: BorderRadius.all(Radius.circular(12)),
-              //             ),
-              //           ),
-              //           onPressed: () async {
-              //             widget.memory.transcriptSegments[segmentIdx].isUser = isUserSegment;
-              //             setMemoryTranscriptSegmentIsUser(widget.memory.id, segmentIdx, isUserSegment);
-              //             if (useForProfileTraining) expandProfileSample(widget.memory.id, segmentIdx);
-              //
-              //             Navigator.pop(context);
-              //             setState(() {});
-              //           },
-              //           child: const Padding(
-              //             padding: EdgeInsets.symmetric(
-              //               horizontal: 24,
-              //               vertical: 4,
-              //             ),
-              //             child: Text(
-              //               'Save',
-              //               style: TextStyle(color: Colors.white),
-              //             ),
-              //           )),
-              //     ),
-              //   ],
-              // ),
             );
           });
         });
