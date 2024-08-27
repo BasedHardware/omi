@@ -111,6 +111,12 @@ os.makedirs('_temp', exist_ok=True)
 )
 @web_endpoint(method='POST')
 def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(...)) -> List[ResponseItem]:
+    """
+    This endpoint obtains the user (speech profile + samples) + all user people speech samples
+    and every segment from the transcript from the stt model, and classifies each segment to a person or to the user.
+
+    :return: List of ResponseItem with is_user and person_id.
+    """
     profile_path = get_speech_profile_expanded(uid)
     default = [{'is_user': False}] * len(json.loads(segments))
 
