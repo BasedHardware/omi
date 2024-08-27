@@ -66,7 +66,8 @@ async def _websocket_util(
         await websocket.accept()
     except RuntimeError as e:
         print(e)
-        await websocket.close()
+        # Should not close here, maybe used by deepgram
+        # await websocket.close()
         return
 
     transcript_socket2 = None
