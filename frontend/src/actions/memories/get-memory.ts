@@ -15,10 +15,10 @@ export default async function getMemory(id: string) {
       },
     });
     if (!response.ok) {
-      throw new Error('Failed to fetch memory');
+      return undefined;
     }
     return (await response.json()) as Memory;
   } catch (err) {
-    throw new Error(err.message);
+    return undefined;
   }
 }
