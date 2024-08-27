@@ -9,4 +9,7 @@ config OFFLINE_STORAGE
 	bool "Offline SD Card Storage Support"
 	default n
 
+config ENABLE_BUTTON
+    bool "Button support on Devkit2"
+    default n
 endmenu
