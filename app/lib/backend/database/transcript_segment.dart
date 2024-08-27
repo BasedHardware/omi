@@ -7,9 +7,7 @@ class TranscriptSegment {
   String? speaker;
   late int speakerId;
   bool isUser;
-
-  // @Property(type: PropertyType.date)
-  // DateTime? createdAt;
+  String? personId;
   double start;
   double end;
 
@@ -17,12 +15,11 @@ class TranscriptSegment {
     required this.text,
     required this.speaker,
     required this.isUser,
+    required this.personId,
     required this.start,
     required this.end,
-    // this.createdAt,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
-    // createdAt ??= DateTime.now(); // TODO: -30 seconds + start time ? max(now, (now-30)
   }
 
   @override
@@ -42,9 +39,9 @@ class TranscriptSegment {
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: (json['is_user'] ?? false) as bool,
+      personId: json['person_id'],
       start: json['start'] as double,
       end: json['end'] as double,
-      // createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
     );
   }
 
