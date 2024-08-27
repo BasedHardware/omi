@@ -1,9 +1,15 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:uuid/uuid.dart';
 
 class UserPeoplePage extends StatefulWidget {
   const UserPeoplePage({super.key});
@@ -73,95 +79,191 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     setState(() {});
   }
 
-  Future<void> _showPersonDialog({Person? person}) async {
+  Widget _showPersonDialogForm(formKey, nameController) {
+    return Platform.isIOS
+        ? Material(
+            color: Colors.transparent,
+            child: Theme(
+              data: ThemeData(
+                textSelectionTheme: const TextSelectionThemeData(
+                  cursorColor: Colors.white,
+                  selectionColor: Colors.white24,
+                  selectionHandleColor: Colors.white,
+                ),
+              ),
+              child: Form(
+                key: formKey,
+                child: CupertinoTextFormFieldRow(
+                  padding: const EdgeInsets.only(top: 16),
+                  controller: nameController,
+                  placeholder: 'Name',
+                  placeholderStyle: const TextStyle(color: Colors.white60),
+                  style: const TextStyle(color: Colors.white),
+                  validator: _nameValidator,
+                ),
+              ),
+            ),
+          )
+        : Form(
+            key: formKey,
+            child: TextFormField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: 'Name',
+                labelStyle: const TextStyle(color: Colors.white),
+                focusColor: Colors.white,
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
+              ),
+              validator: _nameValidator,
+            ),
+          );
+  }
+
+  String? _nameValidator(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter a name';
+    }
+    if (value.length < 2 || value.length > 40) {
+      return 'Name must be between 2 and 40 characters';
+    }
+    if (value.contains(' ')) {
+      return 'Name cannot contain spaces';
+    }
+    return null;
+  }
+
+  List<Widget> _showPersonDialogActions(BuildContext context, formKey, nameController, {Person? person}) {
+    onPressed() async {
+      if (formKey.currentState!.validate()) {
+        if (person == null) {
+          String newPersonTemporalId = const Uuid().v4();
+          createPerson(nameController.text).then((p) {
+            if (p != null) {
+              final index = people.indexWhere((p) => p.id == newPersonTemporalId);
+              if (index != -1) {
+                people[index] = p;
+                SharedPreferencesUtil().replaceCachedPerson(p);
+                setState(() {});
+              }
+            }
+          });
+          Person newPerson = Person(
+              id: newPersonTemporalId,
+              name: nameController.text,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              speechSamples: []);
+          setState(() {
+            people.add(newPerson);
+            people.sort((a, b) => a.name.compareTo(b.name));
+            SharedPreferencesUtil().cachedPeople = people;
+          });
+        } else {
+          updatePersonName(person.id, nameController.text);
+          setState(() {
+            final index = people.indexWhere((p) => p.id == person.id);
+            if (index != -1) {
+              people[index] = Person(
+                id: person.id,
+                name: nameController.text,
+                createdAt: person.createdAt,
+                updatedAt: DateTime.now(),
+                speechSamples: person.speechSamples,
+              );
+              people.sort((a, b) => a.name.compareTo(b.name));
+              SharedPreferencesUtil().cachedPeople = people;
+            }
+          });
+        }
+        Navigator.pop(context);
+      }
+    }
+
+    return Platform.isIOS
+        ? [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: const TextStyle(color: Colors.white)),
+            ),
+            CupertinoDialogAction(
+              onPressed: onPressed,
+              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+            ),
+          ]
+        : [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: onPressed,
+              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+            ),
+          ];
+  }
+
+  Future<void> _showPersonDialog(BuildContext context, {Person? person}) async {
     final nameController = TextEditingController(text: person?.name ?? '');
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(person == null ? 'Add New Person' : 'Edit Person'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: nameController,
-            decoration: const InputDecoration(labelText: 'Name'),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a name';
-              }
-              if (value.length < 2 || value.length > 40) {
-                return 'Name must be between 2 and 40 characters';
-              }
-              if (value.contains(' ')) {
-                return 'Name cannot contain spaces';
-              }
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                if (person == null) {
-                  final newPerson = await createPerson(nameController.text);
-                  if (newPerson != null) {
-                    setState(() {
-                      people.add(newPerson);
-                      SharedPreferencesUtil().addCachedPerson(newPerson);
-                    });
-                  } else {
-                    _showErrorSnackBar('Failed to create person');
-                  }
-                } else {
-                  updatePersonName(person.id, nameController.text);
-                  setState(() {
-                    final index = people.indexWhere((p) => p.id == person.id);
-                    if (index != -1) {
-                      people[index] = Person(
-                        id: person.id,
-                        name: nameController.text,
-                        createdAt: person.createdAt,
-                        updatedAt: DateTime.now(),
-                        speechSamples: person.speechSamples,
-                      );
-                      SharedPreferencesUtil().replaceCachedPerson(people[index]);
-                    }
-                  });
-                }
-                Navigator.pop(context);
-              }
-            },
-            child: Text(person == null ? 'Add' : 'Update'),
-          ),
-        ],
+      builder: (BuildContext context) => Platform.isIOS
+          ? CupertinoAlertDialog(
+              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              content: _showPersonDialogForm(formKey, nameController),
+              actions: _showPersonDialogActions(context, formKey, nameController, person: person),
+            )
+          : AlertDialog(
+              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              content: _showPersonDialogForm(formKey, nameController),
+              actions: _showPersonDialogActions(context, formKey, nameController, person: person),
+            ),
+    );
+  }
+
+  String _getFileNameFromUrl(String url) {
+    Uri uri = Uri.parse(url);
+    String fileName = uri.pathSegments.last;
+    return fileName.split('.').first;
+  }
+
+  Future<void> _confirmDeleteSample(int peopleIdx, String url) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context, false),
+        () => Navigator.pop(context, true),
+        'Delete Sample?',
+        'Are you sure you want to delete ${people[peopleIdx].name}\'s sample?',
+        okButtonText: 'Confirm',
       ),
     );
+
+    if (confirmed == true) {
+      String name = _getFileNameFromUrl(url);
+      var parts = name.split('_segment_');
+      String memoryId = parts[0];
+      int segmentIdx = int.parse(parts[1]);
+      deleteProfileSample(memoryId, segmentIdx, personId: people[peopleIdx].id);
+      setState(() {
+        people[peopleIdx].speechSamples!.remove(url);
+        SharedPreferencesUtil().replaceCachedPerson(people[peopleIdx]);
+      });
+    }
   }
 
   Future<void> _confirmDeletePerson(Person person) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Deletion'),
-        content: Text(
-            'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context, false),
+        () => Navigator.pop(context, true),
+        'Confirm Deletion',
+        'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.',
+        okButtonText: 'Confirm',
       ),
     );
 
@@ -171,12 +273,6 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
       SharedPreferencesUtil().cachedPeople = people;
       setState(() {});
     }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   @override
@@ -189,7 +285,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _showPersonDialog(),
+            onPressed: () => _showPersonDialog(context),
           ),
         ],
       ),
@@ -203,7 +299,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             children: [
               ListTile(
                 title: Text(person.name),
-                onTap: () => _showPersonDialog(person: person),
+                onTap: () => _showPersonDialog(context, person: person),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, size: 20),
                   onPressed: () => _confirmDeletePerson(person),
@@ -228,6 +324,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                               onPressed: () => _playPause(index, j, sample),
                             ),
                             title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                            onTap: () => _confirmDeleteSample(index, sample),
                             subtitle: FutureBuilder<Duration?>(
                               future: AudioPlayer().setUrl(sample),
                               builder: (context, snapshot) {

@@ -67,6 +67,14 @@ def create_memory(
     return CreateMemoryResponse(memory=memory, messages=messages)
 
 
+def _handle_segment_embedding_matching(uid: str, file_path: str, segments: List[TranscriptSegment], aseg: AudioSegment):
+    if aseg.frame_rate == 16000:
+        matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
+        for i, segment in enumerate(segments):
+            segment.is_user = matches[i]['is_user']
+            segment.person_id = matches[i]['person_id']
+
+
 @router.post("/v1/memories/{memory_id}/post-processing", response_model=Memory, tags=['memories'])
 def postprocess_memory(
         memory_id: str, file: Optional[UploadFile], emotional_feedback: Optional[bool] = False,
@@ -136,11 +144,8 @@ def postprocess_memory(
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
             raise HTTPException(status_code=500, detail="Post-processed transcript is too short")
 
-        if aseg.frame_rate == 16000:
-            matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
-            for i, segment in enumerate(segments):
-                segment.is_user = matches[i]['is_user']
-                segment.person_id = matches[i]['person_id']
+        # TODO: store deepgram and fal even if fal fails, so we can compare and improve fal, but not assign to memory
+        _handle_segment_embedding_matching(uid, file_path, segments, aseg)
 
         # Store previous and new segments in DB as collection.
         memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
