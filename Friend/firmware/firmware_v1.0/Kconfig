@@ -8,5 +8,7 @@ config CODEC_OPUS
 config OFFLINE_STORAGE
 	bool "Offline SD Card Storage Support"
 	default n
-
+config ACCELEROMETER
+    bool "Accelerometer Support"
+    default n
 endmenu
