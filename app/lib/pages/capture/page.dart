@@ -6,35 +6,28 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
-  final Function(ServerMemory) updateMemory;
-
   const CapturePage({
     super.key,
-    required this.updateMemory,
   });
 
   @override
@@ -88,94 +81,17 @@ class CapturePageState extends State<CapturePage>
   InternetStatus? _internetStatus;
 
   late StreamSubscription<InternetStatus> _internetListener;
-  bool isGlasses = false;
-  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
 
-  Future<void> initiateFriendAudioStreaming() async {
-    var provider = context.read<DeviceProvider>();
-    if (provider.connectedDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(provider.connectedDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      SharedPreferencesUtil().deviceCodec = codec;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => getDialog(
-          context,
-          () => routeToPage(context, const HomePageWrapper(), replace: true),
-          () => {},
-          'Firmware change detected!',
-          'You are currently using a different firmware version than the one you were using before. Please restart the app to apply the changes.',
-          singleButton: true,
-          okButtonText: 'Restart',
-        ),
-      );
-      return;
-    }
-
-    await context.read<CaptureProvider>().streamAudioToWs(provider.connectedDevice!.id, codec);
-  }
-
-  Future<void> startOpenGlass() async {
-    var provider = context.read<DeviceProvider>();
-    if (provider.connectedDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(provider.connectedDevice!.id);
-    if (!isGlasses) return;
-    await openGlassProcessing(provider.connectedDevice!, (p) => setState(() {}), setHasTranscripts);
-    closeWebSocket();
-  }
-
-  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
-    var provider = context.read<CaptureProvider>();
-    // print('inside of resetState');
-    // debugPrint('resetState: $restartBytesProcessing');
-    // provider.closeBleStream();
-    // provider.cancelMemoryCreationTimer();
-    // if (!restartBytesProcessing && (provider.segments.isNotEmpty || photos.isNotEmpty)) {
-    //   var res = await provider.createMemory(forcedCreation: true);
-    //   if (res != null && !res) {
-    //     if (mounted) {
-    //       ScaffoldMessenger.of(context).showSnackBar(
-    //         const SnackBar(
-    //           content: Text(
-    //             'Memory creation failed. It\' stored locally and will be retried soon.',
-    //             style: TextStyle(color: Colors.white, fontSize: 14),
-    //           ),
-    //         ),
-    //       );
-    //     }
-    //   }
-    // }
-    // await provider.resetState(restartBytesProcessing: restartBytesProcessing, btDevice: btDevice);
-    // if (restartBytesProcessing) {
-    startOpenGlass();
-    initiateFriendAudioStreaming();
-    // }
-  }
-
-  void restartWebSocket() {
-    var provider = context.read<DeviceProvider>();
-    debugPrint('restartWebSocket');
-    closeWebSocket();
-    context.read<CaptureProvider>().streamAudioToWs(provider.connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
-  }
+  // void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
+  //   var provider = context.read<CaptureProvider>();
+  //   // if (restartBytesProcessing) {
+  //   startOpenGlass();
+  //   initiateFriendAudioStreaming();
+  //   // }
+  // }
 
   setHasTranscripts(bool hasTranscripts) {
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
-  }
-
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments: segments,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
   }
 
   void _onReceiveTaskData(dynamic data) {
@@ -199,18 +115,15 @@ class CapturePageState extends State<CapturePage>
   @override
   void initState() {
     WavBytesUtil.clearTempWavFiles();
-    startOpenGlass();
-    initiateFriendAudioStreaming();
-    processCachedTranscript();
 
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      await context.read<CaptureProvider>().processCachedTranscript();
+      // Should we start the websocket even if no device is connected?
       await context.read<CaptureProvider>().initiateWebsocket();
-      var shouldRestart = context.read<CaptureProvider>().restartAudioProcessing;
-      if (shouldRestart) {
-        startOpenGlass();
-        initiateFriendAudioStreaming();
+      if (context.read<DeviceProvider>().connectedDevice != null) {
+        context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
       if (await LocationService().displayPermissionsDialog()) {
         await showDialog(
@@ -249,7 +162,7 @@ class CapturePageState extends State<CapturePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    record.dispose();
+    // record.dispose();
     _internetListener.cancel();
     // websocketChannel
     closeWebSocket();
@@ -297,22 +210,42 @@ class CapturePageState extends State<CapturePage>
     super.build(context);
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
+        showInfo: (info) {
+          if (info == 'FIM_CHANGE') {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (c) => getDialog(
+                context,
+                () async {
+                  context.read<CaptureProvider>().closeWebSocket();
+                  var connectedDevice = deviceProvider.connectedDevice;
+                  var codec = await getAudioCodec(connectedDevice!.id);
+                  context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
+                  context.read<CaptureProvider>().initiateWebsocket(codec);
+                  Navigator.pop(context);
+                  // We can just restart the socket and not the whole app
+                  // Navigator.pushAndRemoveUntil(
+                  //   context,
+                  //   MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+                  //   (route) => false,
+                  // );
+                },
+                () => {},
+                'Firmware change detected!',
+                'You are currently using a different firmware version than the one you were using before. Please restart the app to apply the changes.',
+                singleButton: true,
+                okButtonText: 'Restart',
+              ),
+            );
+          }
+        },
         showError: (error) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
                 error,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        },
-        showInfo: (info) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                info,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );
@@ -320,28 +253,29 @@ class CapturePageState extends State<CapturePage>
         child: Stack(
           children: [
             ListView(children: [
-              speechProfileWidget(context, setState, restartWebSocket),
+              speechProfileWidget(context),
               ...getConnectionStateWidgets(
                   context, provider.hasTranscripts, deviceProvider.connectedDevice, wsConnectionState, _internetStatus),
               getTranscriptWidget(provider.memoryCreating, provider.segments, photos, deviceProvider.connectedDevice),
               ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
               const SizedBox(height: 16)
             ]),
-            getPhoneMicRecordingButton(_recordingToggled, recordingState)
+            getPhoneMicRecordingButton(_recordingToggled(provider), provider.recordingState),
           ],
         ),
       );
     });
   }
 
-  _recordingToggled() async {
+  _recordingToggled(CaptureProvider provider) async {
+    var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
       if (Platform.isAndroid) {
         stopStreamRecordingOnAndroid();
       } else {
-        await stopStreamRecording(wsConnectionState, websocketChannel);
+        provider.stopStreamRecording();
       }
-      setState(() => recordingState = RecordingState.stop);
+      provider.updateRecordingState(RecordingState.stop);
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().createMemory();
     } else if (recordingState == RecordingState.initialising) {
@@ -353,15 +287,16 @@ class CapturePageState extends State<CapturePage>
           context,
           () => Navigator.pop(context),
           () async {
-            Navigator.pop(context);
-            setState(() => recordingState = RecordingState.initialising);
-            closeWebSocket();
-            //   await initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            provider.updateRecordingState(RecordingState.initialising);
+            //  setState(() => recordingState = RecordingState.initialising);
+            provider.closeWebSocket();
+            await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
             } else {
-              await startStreamRecording(wsConnectionState, websocketChannel);
+              await provider.startStreamRecording();
             }
+            Navigator.pop(context);
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
