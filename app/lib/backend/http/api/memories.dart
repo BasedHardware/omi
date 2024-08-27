@@ -179,14 +179,22 @@ Future<bool> hasMemoryRecording(String memoryId) async {
   return false;
 }
 
-Future<bool> setMemoryTranscriptSegmentIsUser(String memoryId, int segmentIdx, bool value) async {
+Future<bool> assignMemoryTranscriptSegment(
+  String memoryId,
+  int segmentIdx, {
+  bool? isUser,
+  String? personId,
+  bool useForSpeechTraining = true,
+}) async {
+  String assignType = isUser != null ? 'is_user' : 'person_id';
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/segments/$segmentIdx/is_user?value=$value',
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
+        '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
     headers: {},
     method: 'PATCH',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setMemoryTranscriptSegmentIsUser: ${response.body}');
+  debugPrint('assignMemoryTranscriptSegment: ${response.body}');
   return response.statusCode == 200;
 }

@@ -198,6 +198,10 @@ class SharedPreferencesUtil {
     return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
   }
 
+  Person? getPersonById(String id) {
+    return cachedPeople.firstWhereOrNull((element) => element.id == id);
+  }
+
   set cachedPeople(List<Person> value) {
     final List<String> people = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedPeople', people);
