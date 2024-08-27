@@ -100,7 +100,11 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
 
 
 @router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
-def update_person_name(person_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+def update_person_name(
+        person_id: str,
+        value: str,  # = Field(min_length=2, max_length=40),
+        uid: str = Depends(auth.get_current_user_uid),
+):
     update_person(uid, person_id, value)
     return {'status': 'ok'}
 
