@@ -4,7 +4,7 @@ import './globals.css';
 
 const inter = Mulish({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['200', '400', '500', '600', '700'],
   style: ['italic', 'normal'],
 });
 
