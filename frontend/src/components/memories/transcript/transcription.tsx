@@ -11,8 +11,8 @@ export default function Transcription({ transcript }: TranscriptionProps) {
   );
   return (
     <div>
-      <h3 className="mt-10 text-xl md:text-2xl font-semibold">Transcription</h3>
-      <span className="text-sm md:text-base font-light text-gray-400">
+      <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
+      <span className="text-sm font-light text-gray-400 md:text-base">
         Total Speakers: {uniqueSpeakers.length}
       </span>
       <ul className="mt-4">
