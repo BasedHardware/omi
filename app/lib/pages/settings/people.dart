@@ -1,7 +1,9 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:just_audio/just_audio.dart';
 
 class UserPeoplePage extends StatefulWidget {
   const UserPeoplePage({super.key});
@@ -12,6 +14,18 @@ class UserPeoplePage extends StatefulWidget {
 
 class _UserPeoplePageState extends State<UserPeoplePage> {
   List<Person> people = SharedPreferencesUtil().cachedPeople;
+  Map<String, List<String>> samplesUrl = {};
+  bool loading = true;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  int? _currentPlayingPersonIndex;
+  int? _currentPlayingIndex;
+  bool _isPlaying = false;
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -22,6 +36,28 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         SharedPreferencesUtil().cachedPeople = people;
       });
     });
+  }
+
+  Future<void> _playPause(int personIdx, int sampleIdx, String fileUrl) async {
+    if (_currentPlayingPersonIndex == personIdx && _currentPlayingIndex == sampleIdx) {
+      if (_isPlaying) {
+        _audioPlayer.pause();
+        _isPlaying = false;
+      } else {
+        _audioPlayer.play();
+        _isPlaying = true;
+      }
+    } else {
+      _audioPlayer.stop();
+      await _audioPlayer.setUrl(fileUrl);
+      setState(() {
+        _currentPlayingPersonIndex = personIdx;
+        _currentPlayingIndex = sampleIdx;
+        _isPlaying = true;
+      });
+      await _audioPlayer.play();
+    }
+    setState(() {});
   }
 
   Future<void> _showPersonDialog({Person? person}) async {
@@ -149,7 +185,6 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final person = people[index];
-          print(person.speechSamples);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,21 +192,39 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                 title: Text(person.name),
                 onTap: () => _showPersonDialog(person: person),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: const Icon(Icons.delete, size: 20),
                   onPressed: () => _confirmDeletePerson(person),
                 ),
               ),
               if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                  padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Speech Samples:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       const SizedBox(height: 4),
-                      ...person.speechSamples!.map((sample) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(sample, style: const TextStyle(fontSize: 12)),
+                      ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: IconButton(
+                              padding: const EdgeInsets.all(0),
+                              icon: Icon(
+                                _currentPlayingPersonIndex == index && _currentPlayingIndex == j && _isPlaying
+                                    ? Icons.pause
+                                    : Icons.play_arrow,
+                              ),
+                              onPressed: () => _playPause(index, j, sample),
+                            ),
+                            title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                            subtitle: FutureBuilder<Duration?>(
+                              future: AudioPlayer().setUrl(sample),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  return Text('${snapshot.data!.inSeconds} seconds');
+                                } else {
+                                  return const Text('Loading duration...');
+                                }
+                              },
+                            ),
                           )),
                     ],
                   ),
