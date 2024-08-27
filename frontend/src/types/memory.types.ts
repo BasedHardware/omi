@@ -31,8 +31,21 @@ export interface Structured {
   overview: string;
   emoji: string;
   category: string;
-  action_items: any[];
-  events: any[];
+  action_items: ActionItems[];
+  events: Events[];
+}
+
+export interface ActionItems {
+  completed: boolean;
+  description: string;
+}
+
+export interface Events {
+  created: boolean;
+  description: string;
+  duration: number;
+  start: Date;
+  title: string;
 }
 
 export interface TranscriptSegment {
