@@ -6,7 +6,7 @@ import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
-import 'package:friend_private/pages/settings/recordings.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
@@ -218,7 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                       authorizeSavingRecordings: SharedPreferencesUtil().permissionStoreRecordingsEnabled,
                       onAuthorizeSavingRecordingsClicked: () async {
-                        await routeToPage(context, const AuthorizeRecordingsPage());
+                        await routeToPage(context, const RecordingsStoragePermission());
                         setState(() {});
                       }),
                   const SizedBox(height: 16),

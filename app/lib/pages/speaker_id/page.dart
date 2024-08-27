@@ -5,7 +5,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/speaker_id/samples.dart';
+import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -314,7 +314,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                               ),
                               TextButton(
                                   onPressed: () {
-                                    routeToPage(context, const ProfileSamples());
+                                    routeToPage(context, const UserSpeechSamples());
                                   },
                                   child: const Text(
                                     'Listen to existing samples ➡️',
