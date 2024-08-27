@@ -1,9 +1,12 @@
-export default function MemoryPage({ params }) {
-  const memoryId = params.id;
+import getMemory from "@/src/actions/memories/get-memory";
+import Memory from "@/src/components/memories/memory";
 
+export default async function MemoryPage({ params }) {
+  const memoryId = params.id;
+  const memory = await getMemory(memoryId);
   return (
-    <main className="">
-      Memory page {memoryId}
-    </main>
+    <div>
+      <Memory memory={memory} />
+    </div>
   );
 }
