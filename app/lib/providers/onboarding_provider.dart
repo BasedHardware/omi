@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
@@ -13,9 +14,8 @@ import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/find.dart';
 
-class OnboardingProvider extends BaseProvider {
+class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   DeviceProvider? deviceProvider;
-
   bool isClicked = false;
   bool isConnected = false;
   int batteryPercentage = -1;
@@ -27,6 +27,17 @@ class OnboardingProvider extends BaseProvider {
   late Timer _didNotMakeItTimer;
   late Timer _findDevicesTimer;
   bool enableInstructions = false;
+  Map<String, BTDeviceStruct> foundDevicesMap = {};
+
+  void stopFindDeviceTimer() {
+    if (_findDevicesTimer != null && _findDevicesTimer.isActive) {
+      _findDevicesTimer.cancel();
+    }
+    if (connectionStateTimer?.isActive ?? false) {
+      connectionStateTimer?.cancel();
+    }
+    notifyListeners();
+  }
 
   void setDeviceProvider(DeviceProvider provider) {
     deviceProvider = provider;
@@ -73,11 +84,28 @@ class OnboardingProvider extends BaseProvider {
     await bleConnectDevice(device.id);
     deviceId = device.id;
     deviceName = device.name;
-    await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
-    setBatteryPercentage(
-      btDevice: device,
-      goNext: goNext,
-    );
+    //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
+    // become same and the app won't transcribe at all because inherently there's a mismatch in the
+    //codec for websocket and the codec for the device
+    // await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
+    await deviceProvider?.scanAndConnectToDevice();
+    var connectedDevice = deviceProvider!.connectedDevice;
+    batteryPercentage = deviceProvider!.batteryLevel;
+    isConnected = true;
+    isClicked = false; // Allow clicks again after finishing the operation
+    connectingToDeviceId = null; // Reset the connecting device
+    notifyListeners();
+    stopFindDeviceTimer();
+    await Future.delayed(const Duration(seconds: 2));
+    SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
+    SharedPreferencesUtil().deviceName = connectedDevice.name;
+    foundDevicesMap.clear();
+    deviceList.clear();
+    notifyInfo('DEVICE_CONNECTED');
+    // setBatteryPercentage(
+    //   btDevice: device,
+    //   goNext: goNext,
+    // );
     notifyListeners();
   }
 
@@ -98,10 +126,15 @@ class OnboardingProvider extends BaseProvider {
           isConnected = true;
           isClicked = false;
           connectingToDeviceId = null;
-          notifyListeners();
+          //  notifyListeners();
           await Future.delayed(const Duration(seconds: 2));
           SharedPreferencesUtil().btDeviceStruct = connectedDevice;
-          goNext();
+          connectionStateTimer?.cancel();
+          foundDevicesMap.clear();
+          deviceList.clear();
+          stopFindDeviceTimer();
+          notifyInfo('DEVICE_CONNECTED');
+          //  goNext();
         }
       }
     });
@@ -140,8 +173,6 @@ class OnboardingProvider extends BaseProvider {
       enableInstructions = true;
       notifyListeners();
     });
-    // Update foundDevicesMap with new devices and remove the ones not found anymore
-    Map<String, BTDeviceStruct> foundDevicesMap = {};
 
     _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       List<BTDeviceStruct> foundDevices = await bleFindDevices();
