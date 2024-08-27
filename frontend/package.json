@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.0",
+    "iconoir-react": "^7.8.0",
     "moment": "^2.30.1",
     "next": "14.2.6",
     "react": "^18",

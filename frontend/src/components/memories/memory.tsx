@@ -2,8 +2,15 @@ import { Memory as MemoryType } from '@/src/types/memory.types';
 import moment from 'moment';
 import Summary from './sumary';
 import Tabs from './tabs';
+import Transcription from './transcription';
 
-export default function Memory({ memory }: { memory: MemoryType }) {
+interface MemoryProps {
+  memory: MemoryType;
+  searchParams: any;
+}
+
+export default function Memory({ memory, searchParams }: MemoryProps) {
+  const currentTab = searchParams.tab ?? 'sum';
   return (
     <div className="mx-auto mt-12 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-12 text-white">
       <div className="px-12">
@@ -15,9 +22,13 @@ export default function Memory({ memory }: { memory: MemoryType }) {
           {memory.structured.emoji} {memory.structured.category}
         </span>
       </div>
-      <Tabs currentTab="sum" />
+      <Tabs currentTab={currentTab} />
       <div className="px-12">
-        <Summary memory={memory} />
+        {currentTab === 'sum' ? (
+          <Summary memory={memory} />
+        ) : (
+          <Transcription transcript={memory.transcript_segments} />
+        )}
       </div>
     </div>
   );
