@@ -109,6 +109,24 @@ def set_assignee_memory_segment(
         memory_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
         use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Another complex endpoint.
+
+    Modify the assignee of a segment in the transcript of a memory.
+    But,
+    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
+
+    Speech training of whom?
+
+    If `assign_type` is 'is_user', the segment will be used for the user speech training.
+    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
+
+    What is required for a segment to be used for speech training?
+    1. The segment must have more than 5 words.
+    2. The memory audio file shuold be already stored in the user's bucket.
+
+    :return: The updated memory.
+    """
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
 
@@ -129,6 +147,7 @@ def set_assignee_memory_segment(
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
     segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
 
+    # TODO: can do this async
     if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
         person_id = value if assign_type == 'person_id' else None
         expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
