@@ -55,7 +55,7 @@ def apply_vad_for_speech_profile(file_path: str):
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:
         raise HTTPException(status_code=400, detail="Audio is empty")
-
+    print(voice_segments)
     joined_segments = []
     for i, segment in enumerate(voice_segments):
         if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
