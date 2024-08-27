@@ -1,11 +1,9 @@
 import asyncio
 import time
-import typing
 
 from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from starlette.websockets import WebSocketState
-from starlette.types import Receive, Scope, Send
 
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.streaming import process_audio_dg, send_initial_file
@@ -41,58 +39,34 @@ router = APIRouter()
 # def get(request: Request):
 #     return templates.TemplateResponse("index.html", {"request": request})
 
-# When a modal (modal app) timeout occurs, it allows a new request to be made, and a new WebSocket is initiated. Everything seems fine, right?
-# But what if the receive[1], which belongs to the old request, is still lingering somewhere in the application?
-# Yes, you know that if the app doesn’t manage the receive well, the new socket may receive messages from the existing receive. That’s why when a modal timeout happens, you might see various RuntimeErrors like:
-# - Expected ASGI message "websocket.connect" but got "websocket.receive"
-# - Expected ASGI message "websocket.connect" but got "websocket.disconnect"
-# These messages are from the old receive. I called it DirtyReceive.
 #
-# Because modal don't open their proto source code yet. So to deal with that kind of modal app error, lets support the grateful accept.
+# Q: Why do we need try-catch around websocket.accept?
+# A: When a modal (modal app) timeout occurs, it allows a new request to be made, and a new WebSocket is initiated. Everything seems fine, right?
+#    But what if the receive[1], which belongs to the old request, is still lingering somewhere in the application?
+#    Yes, you know that if the app doesn’t manage the receive well, the new socket may receive messages from the existing receive. That’s why when a modal timeout happens, you might see various RuntimeErrors like:
+#    - Expected ASGI message "websocket.connect" but got "websocket.receive"
+#    - Expected ASGI message "websocket.connect" but got "websocket.disconnect"
+#    These messages are from the old receive. I called it Dirty Receive.
 #
-# [1] receive in the WebSocket init function
-# class WebSocket(HTTPConnection):
-#    def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
+#    Because modal don't open their proto source code yet. So to deal with that kind of modal app error, lets support the grateful accept.
 #
-
-class DirtyReceiveException(Exception):
-    def __init__(self, message="Dirty receive detected"):
-        self.message = message
-        super().__init__(self.message)
-
-
-class WebSocketWrapper(WebSocket):
-    async def accept(
-        self,
-        subprotocol: str | None = None,
-        headers: typing.Iterable[tuple[bytes, bytes]] | None = None,
-    ) -> None:
-        if self.client_state == WebSocketState.CONNECTING:
-            try:
-                await self.receive()
-            except RuntimeError as e:
-                if 'Expected ASGI message "websocket.connect"' not in str(e):
-                    raise e
-                raise DirtyReceiveException() from e
-
-        await self.send(
-            {"type": "websocket.accept", "subprotocol": subprotocol, "headers": headers}
-        )
-
+#    [1] receive in the WebSocket init function
+#    class WebSocket(HTTPConnection):
+#       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
+#
 
 async def _websocket_util(
-        websocket: WebSocketWrapper, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True,
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile)
+
+    # Check: Why do we need try-catch around websocket.accept?
     try:
         await websocket.accept()
-    except DirtyReceiveException as e:
-        message = f"Can not accept new socket. error: {str(e)}"
-        print(message)
-
-        # Force close
-        websocket.close(1000, message)
+    except RuntimeError as e:
+        print(e)
+        await websocket.close()
         return
 
     transcript_socket2 = None
