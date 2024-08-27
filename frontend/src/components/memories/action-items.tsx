@@ -11,21 +11,17 @@ export default function ActionItems({ items }: ActionsItemsProps) {
       <h3 className="text-2xl font-semibold">Action Items</h3>
       <ul className="mt-3">
         {items.map((item, index) => (
-          <li key={index} className="my-5 flex gap-3 items-start">
+          <li key={index} className="my-5 flex items-start gap-3 first:mt-0">
             {item.completed ? (
-              <div className='mt-1'>
+              <div className="mt-1">
                 <CheckCircle className="min-w-min text-sm text-green-400" />
               </div>
             ) : (
-              <div className='mt-1'>
+              <div className="mt-1">
                 <CheckCircle className="min-w-min text-sm text-zinc-600" />
               </div>
-            )
-
-            }
-            <p>
-              {item.description}
-            </p>
+            )}
+            <p>{item.description}</p>
           </li>
         ))}
       </ul>
