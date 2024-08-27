@@ -222,7 +222,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 #ifdef CONFIG_ENABLE_BUTTON
-#define
+
     activate_button_work();
 #endif
     is_connected = true;
@@ -468,8 +468,8 @@ int transport_start()
 
 
 #ifdef CONFIG_ENABLE_BUTTON
-#define
-     err = button_init();
+
+     button_init();
      register_button_service();
 #endif
    
