@@ -1,9 +1,8 @@
 'use client';
-
-import { ShareIos } from 'iconoir-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import ShareButton from '../memories/share-button';
 
 export default function AppHeader() {
   const [scrollPosition, setScrollPosition] = useState(0);
@@ -39,10 +38,7 @@ export default function AppHeader() {
       <nav>
         <ul className="flex gap-3 text-sm md:gap-4 md:text-base">
           <li>
-            <button className="flex items-center gap-2 rounded-md border border-solid border-zinc-600 p-1.5 transition-colors hover:bg-zinc-800 md:p-1.5 md:px-3.5">
-              <ShareIos className="text-xs" />
-              <span className="hidden md:inline">Share</span>
-            </button>
+            <ShareButton />
           </li>
           <li>
             <Link
