@@ -6,24 +6,19 @@ export interface Memory {
   source: string;
   language: string;
   structured: Structured;
-  transcript_segments: any[];
-  geolocation: Geolocation;
+  transcript_segments: TranscriptSegment[];
+  geolocation: null;
   photos: any[];
-  plugins_results: any[];
-  external_data: ExternalData;
+  plugins_results: PluginsResult[];
+  external_data: null;
   postprocessing: Postprocessing;
   discarded: boolean;
   deleted: boolean;
 }
 
-export interface ExternalData {}
-
-export interface Geolocation {
-  google_place_id: string;
-  latitude: number;
-  longitude: number;
-  address: string;
-  location_type: string;
+export interface PluginsResult {
+  plugin_id: string;
+  content: string;
 }
 
 export interface Postprocessing {
@@ -38,4 +33,14 @@ export interface Structured {
   category: string;
   action_items: any[];
   events: any[];
+}
+
+export interface TranscriptSegment {
+  text: string;
+  speaker: string;
+  speaker_id: number;
+  is_user: boolean;
+  person_id: null;
+  start: number;
+  end: number;
 }
