@@ -27,7 +27,7 @@ export default function AppHeader() {
       }`}
     >
       <h1 className="text-xl gap-2 flex items-center">
-        <Image src={'/logo.webp'} alt="Based Hardware Logo" width={25} height={30} />
+        <Image src={'/logo.webp'} alt="Based Hardware Logo" width={68} height={64} className='h-auto w-[25px]'/>
         <span className='hidden md:inline'>
           Based Hardware
         </span>
