@@ -136,6 +136,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.startForegroundTask();
       if (mounted) {
         await context.read<HomeProvider>().setupHasSpeakerProfile();
+        await context.read<HomeProvider>().setUserPeople();
       }
     });
 

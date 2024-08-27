@@ -1,3 +1,5 @@
+from google.cloud.firestore_v1 import FieldFilter
+
 from ._client import db
 
 
@@ -25,7 +27,10 @@ def get_person(uid: str, person_id: str):
 
 
 def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
+    people_ref = (
+        db.collection('users').document(uid).collection('people')
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
     people = people_ref.stream()
     return [person.to_dict() for person in people]
 
@@ -38,4 +43,3 @@ def update_person(uid: str, person_id: str, name: str):
 def delete_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'deleted': True})
-
