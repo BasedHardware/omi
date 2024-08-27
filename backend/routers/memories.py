@@ -127,6 +127,7 @@ def set_assignee_memory_segment(
 
     :return: The updated memory.
     """
+    print('set_assignee_memory_segment', memory_id, segment_idx, assign_type, value, use_for_speech_training, uid)
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
 
@@ -142,6 +143,7 @@ def set_assignee_memory_segment(
         memory.transcript_segments[segment_idx].is_user = False
         memory.transcript_segments[segment_idx].person_id = value
     else:
+        print(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
