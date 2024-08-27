@@ -3,14 +3,14 @@ import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
-class AuthorizeRecordingsPage extends StatefulWidget {
-  const AuthorizeRecordingsPage({super.key});
+class RecordingsStoragePermission extends StatefulWidget {
+  const RecordingsStoragePermission({super.key});
 
   @override
-  State<AuthorizeRecordingsPage> createState() => _AuthorizeRecordingsPageState();
+  State<RecordingsStoragePermission> createState() => _RecordingsStoragePermissionState();
 }
 
-class _AuthorizeRecordingsPageState extends State<AuthorizeRecordingsPage> {
+class _RecordingsStoragePermissionState extends State<RecordingsStoragePermission> {
   bool? _hasPermission;
   bool loading = false;
 
