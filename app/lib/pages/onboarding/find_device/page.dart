@@ -29,6 +29,12 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
     });
   }
 
+  @override
+  dispose() {
+    // context.read<OnboardingProvider>().dispose();
+    super.dispose();
+  }
+
   Future<void> _scanDevices() async {
     Provider.of<OnboardingProvider>(context, listen: false).scanDevices(
       onShowDialog: () {

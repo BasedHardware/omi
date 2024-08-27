@@ -45,7 +45,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      context.read<DeviceProvider>().periodicConnect(capturePageKey);
+      context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
     });
     super.initState();
   }
@@ -257,9 +257,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ),
                             CapturePage(
                               key: capturePageKey,
-                              updateMemory: (ServerMemory memory) {
-                                memProvider.updateMemory(memory);
-                              },
                             ),
                             ChatPage(
                               key: chatPageKey,
@@ -522,7 +519,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         // TODO: this fails like 10 times, connects reconnects, until it finally works.
                         if (language != SharedPreferencesUtil().recordingsLanguage ||
                             hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
-                          capturePageKey.currentState?.restartWebSocket();
+                          context.read<DeviceProvider>().restartWebSocket();
                         }
                       },
                     )
