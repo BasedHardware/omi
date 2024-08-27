@@ -646,7 +646,8 @@
     "name": "EchoSense",
     "author": "Luis Arano",
     "description": "Analyzes the emotional tone and communication quality of a transcribed conversation. It identifies the speaker's emotional state, offers constructive feedback on their communication style, and encourages reflection on how their words might have been perceived. The goal is to help users connect more deeply with their emotions and improve their communication skills.",
-    "image": "/plugins/logos/your-plugin-logo.jpg",
+    "image": "/plugins/logos/echo.png",
+    "prompt": "",
     "memories": true, 
     "chat": false,
     "capabilities": [
