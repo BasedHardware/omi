@@ -93,7 +93,6 @@ def get_single_person(
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
-    print(people)
     if include_speech_samples:
         for person in people:
             person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])

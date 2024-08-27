@@ -14,7 +14,6 @@ class Person {
   });
 
   factory Person.fromJson(Map<String, dynamic> json) {
-    print(json);
     return Person(
       id: json['id'],
       name: json['name'],
