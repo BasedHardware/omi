@@ -23,7 +23,7 @@ export default function AppHeader() {
         scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''
       }`}
     >
-      <h1 className="text-xl">Base Hardware</h1>
+      <h1 className="text-xl">Based Hardware</h1>
       <nav>
         <ul className="flex space-x-4">
           <li>
