@@ -2,7 +2,6 @@ import asyncio
 import os
 import threading
 import time
-from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydub import AudioSegment
@@ -20,7 +19,7 @@ from utils.other.storage import upload_postprocessing_audio, \
     delete_additional_profile_audio, delete_speech_sample_for_people
 from utils.plugins import trigger_external_integrations
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
-from utils.stt.speech_profile import get_speech_profile_matching_predictions, get_speech_profile_expanded
+from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
