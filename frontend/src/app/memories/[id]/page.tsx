@@ -33,12 +33,13 @@ export async function generateMetadata(
 }
 
 interface MemoryPageProps {
-  params: ParamsTypes
+  params: ParamsTypes;
   searchParams: SearchParamsTypes;
 }
 
 export default async function MemoryPage({ params, searchParams }: MemoryPageProps) {
   const memoryId = params.id;
   const memory = await getMemory(memoryId);
+  if (!memory) throw new Error();
   return <Memory memory={memory} searchParams={searchParams} />;
 }

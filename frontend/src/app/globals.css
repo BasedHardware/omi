@@ -22,6 +22,12 @@
   }
 } */
 
+::selection {
+  background-color: #ffffff;
+  /* Color de fondo de la selección */
+  color: #000000;
+  /* Color del texto seleccionado */
+}
 body {
   background: #0f0f0f;
   color: rgba(var(--foreground-rgb), 1);
