@@ -35,7 +35,7 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void initFilteredMemories() {
-    filteredMemories = memories;
+    filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();
   }
@@ -95,6 +95,7 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(true);
     var newMemories = await getMemories(offset: memories.length);
     memories.addAll(newMemories);
+    filterMemories('');
     setLoadingMemories(false);
     notifyListeners();
   }
@@ -120,6 +121,8 @@ class MemoryProvider extends ChangeNotifier {
 
   void deleteMemory(ServerMemory memory, int index) {
     memories.removeAt(index);
+    deleteMemoryServer(memory.id);
+    filterMemories('');
     notifyListeners();
   }
 

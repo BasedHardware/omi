@@ -15,8 +15,21 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class DeveloperSettingsPage extends StatelessWidget {
+class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
+
+  @override
+  State<DeveloperSettingsPage> createState() => _DeveloperSettingsPageState();
+}
+
+class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    });
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
