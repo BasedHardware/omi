@@ -21,11 +21,15 @@ export default function ShareButton() {
   return (
     <button
       onClick={handleCopy}
-      className={`flex items-center gap-2 rounded-md border border-solid border-zinc-600 p-1.5 transition-all duration-300 ${isCopied ? 'bg-green-500 !border-green-500 p-1.5 px-3.5' : 'hover:bg-zinc-800 p-1.5'} md:p-1.5 md:px-3.5`}
+      className={`flex items-center gap-2 rounded-md border border-solid border-zinc-600 p-1.5 transition-all duration-300 ${
+        isCopied
+          ? '!border-green-500 bg-green-500 p-1.5 px-3.5'
+          : 'p-1.5 hover:bg-zinc-800'
+      } md:p-1.5 md:px-3.5`}
     >
       {isCopied ? (
         <CheckCircle className={`text-xs`} />
-      ): (
+      ) : (
         <ShareIos className="text-xs" />
       )}
       <span className={`${isCopied ? '' : 'hidden md:inline'}`}>
