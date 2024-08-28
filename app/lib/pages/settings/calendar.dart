@@ -1,31 +1,35 @@
-import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/providers/calendar_provider.dart';
+import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
 
-class CalendarPage extends StatefulWidget {
+class CalendarPage extends StatelessWidget {
   const CalendarPage({super.key});
 
   @override
-  State<CalendarPage> createState() => _CalendarPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => CalenderProvider(),
+      child: const _CalendarPage(),
+    );
+  }
 }
 
-class _CalendarPageState extends State<CalendarPage> {
-  List<Calendar> calendars = [];
-  bool calendarEnabled = false;
-
-  _getCalendars() {
-    CalendarUtil().getCalendars().then((value) {
-      setState(() => calendars = value);
-    });
-  }
+class _CalendarPage extends StatefulWidget {
+  const _CalendarPage({super.key});
 
   @override
+  State<_CalendarPage> createState() => __CalendarPageState();
+}
+
+class __CalendarPageState extends State<_CalendarPage> {
+  @override
   void initState() {
-    calendarEnabled = SharedPreferencesUtil().calendarEnabled;
-    if (calendarEnabled) _getCalendars();
+    () {
+      Provider.of<CalenderProvider>(context, listen: false).initialize();
+    }.withPostFrameCallback();
     super.initState();
   }
 
@@ -38,78 +42,70 @@ class _CalendarPageState extends State<CalendarPage> {
         elevation: 0,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: ListView(
-        children: [
-          Container(
-            margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
+      body: Consumer<CalenderProvider>(
+        builder: (context, provider, child) {
+          return ListView(
+            children: [
+              Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.edit_calendar),
-                    SizedBox(width: 16),
-                    Text(
-                      'Enable integration',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
+                    const Row(
+                      children: [
+                        Icon(Icons.edit_calendar),
+                        SizedBox(width: 16),
+                        Text(
+                          'Enable integration',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: provider.calendarEnabled,
+                      onChanged: provider.onCalendarSwitchChanged,
                     ),
                   ],
                 ),
-                Switch(
-                  value: calendarEnabled,
-                  onChanged: _onSwitchChanged,
+              ),
+              const Text(
+                'Friend can automatically schedule events from your conversations, or ask for your confirmation first.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (provider.calendarEnabled) ...[
+                RadioListTile(
+                  title: const Text('Automatic'),
+                  subtitle: const Text('AI Will automatically scheduled your events.'),
+                  value: 'auto',
+                  groupValue: SharedPreferencesUtil().calendarType,
+                  onChanged: provider.onCalendarTypeChanged,
+                ),
+                RadioListTile(
+                  title: const Text('Manual'),
+                  subtitle: const Text('Your events will be drafted, but you will have to confirm their creation.'),
+                  value: 'manual',
+                  groupValue: SharedPreferencesUtil().calendarType,
+                  onChanged: provider.onCalendarTypeChanged,
                 ),
               ],
-            ),
-          ),
-          const Text(
-            'Friend can automatically schedule events from your conversations, or ask for your confirmation first.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 24),
-          if (calendarEnabled) ..._calendarType(),
-          const SizedBox(height: 24),
-          if (calendarEnabled) ..._displayCalendars(),
-        ],
+              const SizedBox(height: 24),
+              if (provider.calendarEnabled) ..._displayCalendars(provider),
+            ],
+          );
+        },
       ),
     );
   }
 
-  _calendarType() {
-    return [
-      RadioListTile(
-        title: const Text('Automatic'),
-        subtitle: const Text('AI Will automatically scheduled your events.'),
-        value: 'auto',
-        groupValue: SharedPreferencesUtil().calendarType,
-        onChanged: (v) {
-          SharedPreferencesUtil().calendarType = v!;
-          MixpanelManager().calendarTypeChanged(v);
-          setState(() {});
-        },
-      ),
-      RadioListTile(
-        title: const Text('Manual'),
-        subtitle: const Text('Your events will be drafted, but you will have to confirm their creation.'),
-        value: 'manual',
-        groupValue: SharedPreferencesUtil().calendarType,
-        onChanged: (v) {
-          SharedPreferencesUtil().calendarType = v!;
-          MixpanelManager().calendarTypeChanged(v);
-          setState(() {});
-        },
-      ),
-    ];
-  }
-
-  _displayCalendars() {
+  _displayCalendars(CalenderProvider provider) {
     return [
       const SizedBox(height: 16),
       Container(
@@ -145,42 +141,15 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
       ),
       const SizedBox(height: 16),
-      for (var calendar in calendars)
+      for (var calendar in provider.calendars)
         RadioListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 24),
           title: Text(calendar.name!),
           subtitle: Text(calendar.accountName!),
           value: calendar.id!,
           groupValue: SharedPreferencesUtil().calendarId,
-          onChanged: (String? value) {
-            SharedPreferencesUtil().calendarId = value!;
-            setState(() {});
-            MixpanelManager().calendarSelected();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Calendar ${calendar.name} selected.'),
-                duration: const Duration(seconds: 1),
-              ),
-            );
-          },
-        )
+          onChanged: (v) => provider.selectCalendar(v, calendar),
+        ),
     ];
-  }
-
-  _onSwitchChanged(s) async {
-    // TODO: what if user didn't enable permissions?
-    if (s) {
-      _getCalendars();
-      SharedPreferencesUtil().calendarEnabled = s;
-      MixpanelManager().calendarEnabled();
-    } else {
-      SharedPreferencesUtil().calendarEnabled = s;
-      SharedPreferencesUtil().calendarId = '';
-      SharedPreferencesUtil().calendarType = 'auto';
-      MixpanelManager().calendarDisabled();
-    }
-    setState(() {
-      calendarEnabled = s;
-    });
   }
 }

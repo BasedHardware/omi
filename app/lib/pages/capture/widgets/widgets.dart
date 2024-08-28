@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,7 +32,7 @@ getConnectionStateWidgets(
   if (device == null) {
     return [
       const DeviceAnimationWidget(sizeMultiplier: 0.7),
-      SharedPreferencesUtil().deviceId.isEmpty
+      SharedPreferencesUtil().btDeviceStruct.id == ''
           ? _getNoFriendConnectedYet(context)
           : const ScanningUI(
               string1: 'Looking for Friend wearable',
@@ -204,7 +206,7 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
+speechProfileWidget(BuildContext context) {
   return !SharedPreferencesUtil().hasSpeakerProfile
       ? Stack(
           children: [
@@ -214,8 +216,9 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function restart
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
-                  // setState(() {});
-                  restartWebSocket();
+                  if (context.mounted) {
+                    context.read<DeviceProvider>().restartWebSocket();
+                  }
                 }
               },
               child: Container(
@@ -335,7 +338,7 @@ connectionStatusWidgets(
 }
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().deviceId.isNotEmpty) return const SizedBox.shrink();
+  if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
     visible: true,
     child: Padding(

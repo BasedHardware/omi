@@ -14,7 +14,7 @@ import 'package:friend_private/utils/ble/errors.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 
-Future<int> retrieveBatteryLevel(String deviceId) async {
+Future<int> retrieveBatteryLevel(String deviceId) async { 
   final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
   if (batteryService == null) {
     logServiceNotFoundError('Battery', deviceId);
@@ -47,6 +47,7 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     logCharacteristicNotFoundError('Battery level', deviceId);
     return null;
   }
+
 
   var currValue = await batteryLevelCharacteristic.read();
   if (currValue.isNotEmpty) {
@@ -200,6 +201,7 @@ Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
   return imageCaptureControlCharacteristic != null;
 }
+
 
 Future<StreamSubscription?> getBleImageBytesListener(
   String deviceId, {

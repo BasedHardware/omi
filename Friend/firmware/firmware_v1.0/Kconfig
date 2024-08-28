@@ -10,5 +10,7 @@ config OFFLINE_STORAGE
 	default n
 config ACCELEROMETER
     bool "Accelerometer Support"
+config ENABLE_BUTTON
+    bool "Button support on Devkit2"
     default n
 endmenu

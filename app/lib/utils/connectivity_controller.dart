@@ -1,4 +1,5 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 class ConnectivityController {
@@ -32,5 +33,20 @@ class ConnectivityController {
       isConnected.value = true;
       return true;
     }
+  }
+
+  static showNoInternetDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () => Navigator.pop(context),
+        'No Internet Connection',
+        'You need an internet connection to execute this action. Please check your connection and try again.',
+        singleButton: true,
+        okButtonText: 'Ok',
+      ),
+    );
   }
 }
