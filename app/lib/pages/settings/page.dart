@@ -29,8 +29,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool optInAnalytics;
   late bool optInEmotionalFeedback;
   late bool devModeEnabled;
-  late bool postMemoryNotificationIsChecked;
-  late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
 
@@ -40,8 +38,6 @@ class _SettingsPageState extends State<SettingsPage> {
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     optInEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
-    reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();

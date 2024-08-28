@@ -21,7 +21,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
   bool loading = false;
   BTDeviceStruct? device;
 
-  final targetWordsCount = 45;
+  final targetWordsCount = 70;
   final maxDuration = 90;
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
