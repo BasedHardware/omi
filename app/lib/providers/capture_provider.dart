@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/database/geolocation.dart';
@@ -14,6 +16,7 @@ import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -306,6 +309,14 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         notifyInfo('Memory created successfully 🚀');
       }
     }
+    if (restartBytesProcessing) {
+      if (webSocketConnected) {
+        closeWebSocket();
+        initiateWebsocket();
+      } else {
+        initiateWebsocket();
+      }
+    }
     setRestartAudioProcessing(restartBytesProcessing);
     startOpenGlass();
     initiateFriendAudioStreaming();
@@ -384,9 +395,39 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     });
   }
 
+  streamRecordingOnAndroid() async {
+    await Permission.microphone.request();
+    updateRecordingState(RecordingState.initialising);
+    await initializeMicBackgroundService();
+    startBackgroundService();
+    await listenToBackgroundService();
+  }
+
+  listenToBackgroundService() async {
+    if (await FlutterBackgroundService().isRunning()) {
+      FlutterBackgroundService().on('audioBytes').listen((event) {
+        Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
+        if (wsConnectionState == WebsocketConnectionStatus.connected) websocketChannel?.sink.add(convertedList);
+      });
+      FlutterBackgroundService().on('stateUpdate').listen((event) {
+        if (event!['state'] == 'recording') {
+          updateRecordingState(RecordingState.record);
+        } else if (event['state'] == 'initializing') {
+          updateRecordingState(RecordingState.initialising);
+        } else if (event['state'] == 'stopped') {
+          updateRecordingState(RecordingState.stop);
+        }
+      });
+    }
+  }
+
   stopStreamRecording() async {
     if (await record.isRecording()) await record.stop();
     updateRecordingState(RecordingState.stop);
     notifyListeners();
+  }
+
+  stopStreamRecordingOnAndroid() {
+    stopBackgroundService();
   }
 }
