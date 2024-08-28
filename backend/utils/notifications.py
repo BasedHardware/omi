@@ -2,6 +2,8 @@ import asyncio
 from firebase_admin import messaging
 import math
 
+import database.notifications as notification_db
+
 def send_notification(token: str, title: str, body: str, data: dict = None):
     print('send_notification', token, title, body, data)
     notification = messaging.Notification(title=title, body=body)
@@ -14,6 +16,10 @@ def send_notification(token: str, title: str, body: str, data: dict = None):
         response = messaging.send(message)
         print("Successfully sent message:", response)
     except Exception as e:
+        error_message = str(e)
+        if "Requested entity was not found" in error_message:
+            notification_db.remove_token(token)
+     
         print("Error sending message:", e)
 
 
