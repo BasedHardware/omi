@@ -130,6 +130,7 @@ async def get_trigger_memory_sample(request: Request, uid: str):
             category="other",
             duration=300,
             overview="Meet Omi today, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.",
+            transcript="User: Meet Omi today.",
     )
 
     # Get latest from Omi
@@ -160,6 +161,7 @@ async def get_trigger_memory_sample(request: Request, uid: str):
             duration=int((memory.finished_at -
                           memory.started_at).total_seconds() if memory.finished_at is not None else 0),
             overview=memory.structured.overview,
+            transcript=memory.get_transcript(),
         )
 
     return [sample]
@@ -259,6 +261,7 @@ def create_zapier_memory(uid: str, memory: Memory):
             duration=int((memory.finished_at -
                           memory.started_at).total_seconds() if memory.finished_at is not None else 0),
             overview=memory.structured.overview,
+            transcript=memory.get_transcript(),
         )
         ok = get_zapier().send_hook_memory_created(target_url, data)
         # with graceful error
