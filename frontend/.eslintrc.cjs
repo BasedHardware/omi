@@ -25,6 +25,7 @@ module.exports = {
     node: true,
   },
   extends: [
+    'next',
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:react/recommended',
