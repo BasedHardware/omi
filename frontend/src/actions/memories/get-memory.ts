@@ -13,7 +13,7 @@ export default async function getMemory(id: string) {
         'Content-Type': 'application/json',
         Authorization: `Bearer 123${process.env.TEST_ID}`,
       },
-      next: { revalidate: 60 * 60* 24 }
+      next: { revalidate: 60 * 60 * 24 },
     });
     if (!response.ok) {
       return undefined;
