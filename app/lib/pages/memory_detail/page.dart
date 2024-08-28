@@ -259,6 +259,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                         const Spacer(),
                         TextButton(
                           onPressed: () {
+                            MixpanelManager().unassignedSegment();
                             widget.memory.transcriptSegments[segmentIdx].isUser = false;
                             widget.memory.transcriptSegments[segmentIdx].personId = null;
                             assignMemoryTranscriptSegment(widget.memory.id, segmentIdx);
@@ -323,6 +324,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     value: isUserSegment,
                     checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                     onChanged: (bool? value) {
+                      MixpanelManager().assignedSegment('User');
                       widget.memory.transcriptSegments[segmentIdx].isUser = true;
                       widget.memory.transcriptSegments[segmentIdx].personId = null;
                       assignMemoryTranscriptSegment(
@@ -345,6 +347,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                       value: personId == person.id,
                       checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                       onChanged: (bool? value) {
+                        MixpanelManager().assignedSegment('User Person');
                         assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, personId: person.id);
                         widget.memory.transcriptSegments[segmentIdx].isUser = false;
                         widget.memory.transcriptSegments[segmentIdx].personId = person.id;

@@ -101,22 +101,6 @@ class SharedPreferencesUtil {
 
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
-  bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
-
-  set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
-
-  bool get postMemoryNotificationIsChecked => getBool('postMemoryNotificationIsChecked') ?? true;
-
-  set postMemoryNotificationIsChecked(bool value) => saveBool('postMemoryNotificationIsChecked', value);
-
-  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
-
-  set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
-
-  List<String> get recordingPaths => getStringList('recordingPaths') ?? [];
-
-  set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
-
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
