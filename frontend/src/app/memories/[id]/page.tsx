@@ -12,7 +12,7 @@ export async function generateMetadata(
   const memory = await getMemory(params.id);
 
   const title = memory?.structured?.title
-    ? `${memory.structured.title} | Based Hardware`
+    ? memory.structured.title
     : 'Memory not found';
 
   return {
@@ -22,6 +22,9 @@ export async function generateMetadata(
     robots: {
       follow: true,
       index: true,
+    },
+    twitter: {
+      card: 'summary_large_image',
     },
     openGraph: {
       title: title,
