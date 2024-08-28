@@ -24,14 +24,6 @@ class DeveloperSettingsPage extends StatefulWidget {
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
-  void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
-    });
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (context) => DeveloperModeProvider(),
@@ -48,6 +40,14 @@ class _DeveloperSettingsPage extends StatefulWidget {
 }
 
 class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    });
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
