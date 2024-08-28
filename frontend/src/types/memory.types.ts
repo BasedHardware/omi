@@ -8,7 +8,7 @@ export interface Memory {
   structured: Structured;
   transcript_segments: TranscriptSegment[];
   geolocation: null;
-  photos: any[];
+  photos: string[];
   plugins_results: PluginsResult[];
   external_data: null;
   postprocessing: Postprocessing;

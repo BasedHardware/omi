@@ -3,10 +3,11 @@ import moment from 'moment';
 import Summary from './sumary';
 import Tabs from './tabs';
 import Transcription from './transcript/transcription';
+import { SearchParamsTypes } from '@/src/types/params.types';
 
 interface MemoryProps {
   memory: MemoryType;
-  searchParams: any;
+  searchParams: SearchParamsTypes;
 }
 
 export default function Memory({ memory, searchParams }: MemoryProps) {
