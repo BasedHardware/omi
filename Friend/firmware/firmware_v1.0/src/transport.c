@@ -18,6 +18,9 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 
+struct bt_conn *current_connection = NULL;
+uint16_t current_mtu = 0;
+uint16_t current_package_index = 0; 
 //
 // Internal
 //
@@ -34,7 +37,6 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 //
 // Service and Characteristic
 //
-
 // Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
@@ -85,9 +87,6 @@ static const struct bt_data bt_sd[] = {
 // State and Characteristics
 //
 
-struct bt_conn *current_connection = NULL;
-uint16_t current_mtu = 0;
-uint16_t current_package_index = 0;
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -170,11 +169,12 @@ K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 void broadcast_battery_level(struct k_work *work_item) {
     uint16_t battery_millivolt;
     uint8_t battery_percentage;
-
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
-        LOG_INF("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+
+        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
+
 
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
@@ -203,6 +203,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         return;
     }
 
+    LOG_INF("bluetooth activated");
+
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
     LOG_INF("Transport connected");
@@ -211,7 +213,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+#ifdef CONFIG_ENABLE_BUTTON
 
+    activate_button_work();
+#endif
     is_connected = true;
 }
 
@@ -453,7 +458,15 @@ int transport_start()
     }
     LOG_INF("Transport bluetooth initialized");
 
+
+#ifdef CONFIG_ENABLE_BUTTON
+
+     button_init();
+     register_button_service();
+#endif
+   
     // Start advertising
+    
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
