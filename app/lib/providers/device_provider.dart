@@ -125,6 +125,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
   Future periodicConnect(String printer) async {
     if (timer != null) return;
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
+      if (timer == null) return;
       print(printer);
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
@@ -139,7 +140,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
         }
         await scanAndConnectToDevice();
       } else {
-        timer.cancel();
+        t.cancel();
       }
     });
   }
@@ -175,19 +176,23 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
       await initiateBleBatteryListener();
     }
     captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    // if (captureProvider?.webSocketConnected == false) {
+    //   restartWebSocket();
+    // }
     if (statusSubscription == null) {
       await initiateConnectionListener();
     }
 
-    if (captureProvider?.webSocketConnected == false) {
-      restartWebSocket();
-    }
     notifyListeners();
   }
 
   void restartWebSocket() {
     debugPrint('restartWebSocket');
+
     closeWebSocket();
+    if (connectedDevice == null) {
+      return;
+    }
     captureProvider?.streamAudioToWs(connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
     notifyListeners();
   }

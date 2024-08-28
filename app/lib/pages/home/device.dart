@@ -4,7 +4,6 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';

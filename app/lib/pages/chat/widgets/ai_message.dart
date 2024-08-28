@@ -60,14 +60,10 @@ class _AIMessageState extends State<AIMessage> {
         widget.pluginSender != null
             ? CachedNetworkImage(
                 imageUrl: widget.pluginSender!.getImageUrl(),
-                imageBuilder: (context, imageProvider) => Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: DecorationImage(
-                      image: imageProvider,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                imageBuilder: (context, imageProvider) => CircleAvatar(
+                  backgroundColor: Colors.white,
+                  radius: 16,
+                  backgroundImage: imageProvider,
                 ),
                 placeholder: (context, url) => const CircularProgressIndicator(),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
