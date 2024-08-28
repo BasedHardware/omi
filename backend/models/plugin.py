@@ -45,6 +45,7 @@ class Plugin(BaseModel):
     rating_count: int = 0
     enabled: bool = False
     deleted: bool = False
+    trigger_workflow_memories: bool = True  # default true
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -68,4 +69,4 @@ class Plugin(BaseModel):
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
 
     def get_image_url(self) -> str:
-        return f'https://raw.githubusercontent.com/BasedHardware/Friend/main{self.image}'
+        return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
