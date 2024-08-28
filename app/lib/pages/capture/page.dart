@@ -16,13 +16,11 @@ import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
-import 'logic/phone_recorder_mixin.dart';
 import 'logic/websocket_mixin.dart';
 
 class CapturePage extends StatefulWidget {
@@ -35,7 +33,7 @@ class CapturePage extends StatefulWidget {
 }
 
 class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, WebSocketMixin, OpenGlassMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -82,14 +80,6 @@ class CapturePageState extends State<CapturePage>
 
   late StreamSubscription<InternetStatus> _internetListener;
 
-  // void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
-  //   var provider = context.read<CaptureProvider>();
-  //   // if (restartBytesProcessing) {
-  //   startOpenGlass();
-  //   initiateFriendAudioStreaming();
-  //   // }
-  // }
-
   setHasTranscripts(bool hasTranscripts) {
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
   }
@@ -120,8 +110,11 @@ class CapturePageState extends State<CapturePage>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await context.read<CaptureProvider>().processCachedTranscript();
-      // Should we start the websocket even if no device is connected?
-      await context.read<CaptureProvider>().initiateWebsocket();
+      // Should we start the websocket even if no device is connected? Websocket starts when a device is connected
+      // if (context.read<DeviceProvider>().connectedDevice != null) {
+      //   await context.read<CaptureProvider>().initiateWebsocket();
+      // }
+
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
@@ -271,7 +264,7 @@ class CapturePageState extends State<CapturePage>
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
       if (Platform.isAndroid) {
-        stopStreamRecordingOnAndroid();
+        provider.stopStreamRecordingOnAndroid();
       } else {
         provider.stopStreamRecording();
       }
@@ -288,11 +281,10 @@ class CapturePageState extends State<CapturePage>
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            //  setState(() => recordingState = RecordingState.initialising);
             provider.closeWebSocket();
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
-              await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+              await provider.streamRecordingOnAndroid();
             } else {
               await provider.startStreamRecording();
             }
