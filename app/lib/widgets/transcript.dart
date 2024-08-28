@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
   final bool horizontalMargin;
   final bool topMargin;
   final bool canDisplaySeconds;
+  final bool isMemoryDetail;
+  final Function(int)? editSegment;
 
   const TranscriptWidget({
     super.key,
@@ -16,6 +19,8 @@ class TranscriptWidget extends StatefulWidget {
     this.horizontalMargin = true,
     this.topMargin = true,
     this.canDisplaySeconds = true,
+    this.isMemoryDetail = false,
+    this.editSegment,
   });
 
   @override
@@ -47,30 +52,41 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Image.asset(data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
-                      width: 26, height: 26),
-                  const SizedBox(width: 12),
-                  Text(
-                    data.isUser
-                        ? SharedPreferencesUtil().givenName.isNotEmpty
-                            ? SharedPreferencesUtil().givenName
-                            : 'You'
-                        : 'Speaker ${data.speakerId}',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  widget.canDisplaySeconds ? const SizedBox(width: 12) : const SizedBox(),
-                  // pad as start-end as hours:minutes:seconds e.g. 01:23:45
-                  widget.canDisplaySeconds
-                      ? Text(
-                          data.getTimestampString(),
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        )
-                      : const SizedBox(),
-                ],
+              GestureDetector(
+                onTap: () {
+                  widget.editSegment?.call(idx - 1);
+                  MixpanelManager().assignSheetOpened();
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      width: 26,
+                      height: 26,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      data.isUser
+                          ? SharedPreferencesUtil().givenName.isNotEmpty
+                              ? SharedPreferencesUtil().givenName
+                              : 'You'
+                          : data.personId != null
+                              ? SharedPreferencesUtil().getPersonById(data.personId!)?.name ?? 'Deleted Person'
+                              : 'Speaker ${data.speakerId}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                    widget.canDisplaySeconds ? const SizedBox(width: 12) : const SizedBox(),
+                    // pad as start-end as hours:minutes:seconds e.g. 01:23:45
+                    widget.canDisplaySeconds
+                        ? Text(
+                            data.getTimestampString(),
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          )
+                        : const SizedBox(),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               Align(

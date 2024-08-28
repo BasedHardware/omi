@@ -1,12 +1,11 @@
-import 'dart:async';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
   final List<BTDeviceStruct> deviceList;
@@ -19,169 +18,166 @@ class FoundDevices extends StatefulWidget {
   });
 
   @override
-  _FoundDevicesState createState() => _FoundDevicesState();
+  State<FoundDevices> createState() => _FoundDevicesState();
 }
 
 class _FoundDevicesState extends State<FoundDevices> {
-  bool _isClicked = false;
-  bool _isConnected = false;
-  int batteryPercentage = -1;
-  String deviceName = '';
-  String deviceId = '';
-  String? _connectingToDeviceId;
-
-  Future<void> setBatteryPercentage(BTDeviceStruct btDevice) async {
-    try {
-      var battery = await retrieveBatteryLevel(btDevice.id);
-      setState(() {
-        batteryPercentage = battery;
-        _isConnected = true;
-        _isClicked = false; // Allow clicks again after finishing the operation
-        _connectingToDeviceId = null; // Reset the connecting device
-      });
-      await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().deviceId = btDevice.id;
-      SharedPreferencesUtil().deviceName = btDevice.name;
-      widget.goNext();
-    } catch (e) {
-      print("Error fetching battery level: $e");
-      setState(() {
-        _isClicked = false; // Allow clicks again if an error occurs
-        _connectingToDeviceId = null; // Reset the connecting device
-      });
-    }
-  }
-
-  // Method to handle taps on devices
-  Future<void> handleTap(BTDeviceStruct device) async {
-    if (_isClicked) return; // if any item is clicked, don't do anything
-    setState(() {
-      _isClicked = true; // Prevent further clicks
-      _connectingToDeviceId = device.id; // Mark this device as being connected to
-    });
-    await bleConnectDevice(device.id);
-    deviceId = device.id;
-    deviceName = device.name;
-    getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
-    setBatteryPercentage(device);
+  @override
+  void initState() {
+    //TODO: Already we have a listner in DeviceProvider, so we can remove this
+    // _initiateConnectionListener();
+    super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        !_isConnected
-            ? Text(
-                widget.deviceList.isEmpty
-                    ? 'Searching for devices...'
-                    : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                  color: Color(0x66FFFFFF),
-                ),
-              )
-            : const Text(
-                'PAIRING SUCCESSFUL',
-                style: TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                  color: Color(0x66FFFFFF),
-                ),
+    return Consumer<OnboardingProvider>(builder: (context, provider, child) {
+      return MessageListener<OnboardingProvider>(
+        showError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red,
+          ));
+        },
+        showInfo: (info) {
+          if (info == "DEVICE_CONNECTED") {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => const HomePageWrapper(),
               ),
-        if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
-        if (!_isConnected) ..._devicesList(),
-        if (_isConnected)
-          Text(
-            '$deviceName (${BTDeviceStruct.shortId(deviceId)})',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 18,
-              color: Color(0xCCFFFFFF),
-            ),
-          ),
-        if (_isConnected)
-          Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text(
-                '🔋 ${batteryPercentage.toString()}%',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 18,
-                  color: batteryPercentage <= 25
-                      ? Colors.red
-                      : batteryPercentage > 25 && batteryPercentage <= 50
-                          ? Colors.orange
-                          : Colors.green,
-                ),
-              ))
-      ],
-    );
-  }
-
-  _devicesList() {
-    return (widget.deviceList.mapIndexed((index, device) {
-      bool isConnecting = _connectingToDeviceId == device.id;
-
-      return GestureDetector(
-        onTap: !_isClicked ? () => handleTap(device) : null,
-        child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              border: const GradientBoxBorder(
-                gradient: LinearGradient(colors: [
-                  Color.fromARGB(127, 208, 208, 208),
-                  Color.fromARGB(127, 188, 99, 121),
-                  Color.fromARGB(127, 86, 101, 182),
-                  Color.fromARGB(127, 126, 190, 236)
-                ]),
-                width: 1,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Stack(
-                      children: [
-                        Align(
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${device.name} (${device.getShortId()})',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 18,
-                              color: Color(0xCCFFFFFF),
-                            ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: isConnecting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const SizedBox.shrink(), // Show loading indicator if connecting
-                        )
-                      ],
+              (route) => false,
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(info),
+              backgroundColor: Colors.green,
+            ));
+          }
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            !provider.isConnected
+                ? Text(
+                    widget.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                      color: Color(0x66FFFFFF),
+                    ),
+                  )
+                : const Text(
+                    'PAIRING SUCCESSFUL',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      color: Color(0x66FFFFFF),
                     ),
                   ),
+            if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
+            if (!provider.isConnected) ..._devicesList(provider),
+            if (provider.isConnected)
+              Text(
+                '${provider.deviceName} (${BTDeviceStruct.shortId(provider.deviceId)})',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: Color(0xCCFFFFFF),
                 ),
-              ],
-            )),
+              ),
+            if (provider.isConnected)
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    '🔋 ${provider.batteryPercentage.toString()}%',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                      color: provider.batteryPercentage <= 25
+                          ? Colors.red
+                          : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
+                              ? Colors.orange
+                              : Colors.green,
+                    ),
+                  ))
+          ],
+        ),
       );
-    }).toList());
+    });
+  }
+
+  _devicesList(OnboardingProvider provider) {
+    return (widget.deviceList.mapIndexed(
+      (index, device) {
+        bool isConnecting = provider.connectingToDeviceId == device.id;
+
+        return GestureDetector(
+          onTap: !provider.isClicked
+              ? () async {
+                  await provider.handleTap(
+                    device: device,
+                  );
+                }
+              : null,
+          child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Stack(
+                        children: [
+                          Align(
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${device.name} (${device.getShortId()})',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 18,
+                                color: Color(0xCCFFFFFF),
+                              ),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: isConnecting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(), // Show loading indicator if connecting
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )),
+        );
+      },
+    ).toList());
   }
 }
