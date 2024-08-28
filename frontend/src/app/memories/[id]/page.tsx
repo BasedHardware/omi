@@ -11,9 +11,7 @@ export async function generateMetadata(
   const prevData = (await parent) as Metadata;
   const memory = await getMemory(params.id);
 
-  const title = memory?.structured?.title
-    ? memory.structured.title
-    : 'Memory not found';
+  const title = memory?.structured?.title ? memory.structured.title : 'Memory not found';
 
   return {
     title: title,
