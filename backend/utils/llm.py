@@ -239,12 +239,16 @@ def summarize_experience_text(text: str) -> Structured:
     return llm_with_parser.invoke(prompt)
 
 
-def get_memory_summary(user_name: str, memories: List[Memory]) -> str:
+def get_memory_summary(user_name: str, user_facts: List[Fact], memories: List[Memory]) -> str:
     conversation_history = Memory.memories_to_string(memories)
 
     prompt = f"""
-    The following are a list of ${user_name}'s memories from today, with the transcripts with its respective structuring, that ${user_name} had during his day.
-    ${user_name} wants to get a summary of the key action items he has to take based on his today's memories.
+    You are an experienced mentor, that helps people achieve their goals and improve their lives.
+    You are advising {user_name} right now, this is what you know about {user_name}: {Fact.get_facts_as_str(user_facts)}
+    
+    
+    The following are a list of ${user_name}'s conversations from today, with the transcripts and a slight summary of each, that ${user_name} had during his day.
+    {user_name} wants to get a summary of the key action items {user_name} has to take based on today's conversations.
 
     Remember ${user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.

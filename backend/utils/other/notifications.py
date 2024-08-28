@@ -1,13 +1,16 @@
 import asyncio
 import concurrent.futures
-from datetime import datetime, time
 from datetime import datetime
+from datetime import time
+
 import pytz
+
 import database.chat as chat_db
 import database.memories as memories_db
 import database.notifications as notification_db
-from utils.llm import get_memory_summary
 from models.notification_message import NotificationMessage
+from utils.llm import get_memory_summary
+from utils.memories.facts import get_prompt_data
 from utils.notifications import send_notification, send_bulk_notification
 
 
@@ -46,14 +49,17 @@ async def send_daily_summary_notification():
 
 
 def _send_summary_notification(user_data: tuple):
-    user_id = user_data[0]
+    uid = user_data[0]
     fcm_token = user_data[1]
-    daily_summary_title = "Here is your action plan for tomorrow"
-    memories = memories_db.filter_memories_by_date(user_id, datetime.combine(datetime.now().date(), time.min), datetime.now())  
-    if not memories:      
+    daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
+    memories = memories_db.filter_memories_by_date(
+        uid, datetime.combine(datetime.now().date(), time.min), datetime.now()
+    )
+    if not memories:
         return
     else:
-        summary = get_memory_summary('This User', memories)
+        user_name, user_facts = get_prompt_data(uid)
+        summary = get_memory_summary(user_name, user_facts, memories)
 
     ai_message = NotificationMessage(
         text=summary,
@@ -61,7 +67,7 @@ def _send_summary_notification(user_data: tuple):
         type='day_summary',
         notification_type='daily_summary',
     )
-    chat_db.add_summary_message(summary, user_id)
+    chat_db.add_summary_message(summary, uid)
     send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
 
 
@@ -81,9 +87,8 @@ async def send_daily_notification():
         morning_alert_body = "Wear your friend and capture your memories today."
         morning_target_time = "08:00"
 
-     
         await  _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
-      
+
 
     except Exception as e:
         print(e)
