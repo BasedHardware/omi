@@ -1,11 +1,14 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -62,7 +65,11 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               leading: CircleAvatar(
                 backgroundColor: Colors.white,
                 maxRadius: 28,
-                backgroundImage: NetworkImage(widget.plugin.getImageUrl()),
+                child: CachedNetworkImage(
+                  imageUrl: widget.plugin.getImageUrl(),
+                  placeholder: (context, url) => const CircularProgressIndicator(),
+                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                ),
               ),
               title: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
@@ -117,6 +124,12 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         color: widget.plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
+                        if (!ConnectivityController().isConnected.value) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text("Can't enable plugin without internet connection."),
+                          ));
+                          return;
+                        }
                         if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
                           showDialog(
                             context: context,
@@ -152,7 +165,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.plugin.memoryPrompt ?? '',
+                      (widget.plugin.memoryPrompt ?? '').decodeSting,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -307,23 +320,29 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
                 maxRating: 5.0,
                 onRatingUpdate: (rating) {
-                  reviewPlugin(widget.plugin.id, rating);
-                  bool hadReview = widget.plugin.userReview != null;
-                  if (!hadReview) widget.plugin.ratingCount += 1;
-                  widget.plugin.userReview = PluginReview(
-                    uid: SharedPreferencesUtil().uid,
-                    ratedAt: DateTime.now(),
-                    review: '',
-                    score: rating,
-                  );
-                  var pluginsList = SharedPreferencesUtil().pluginsList;
-                  var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
-                  pluginsList[index] = widget.plugin;
-                  SharedPreferencesUtil().pluginsList = pluginsList;
-                  MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
-                  debugPrint('Refreshed plugins list.');
-                  // TODO: refresh ratings on plugin
-                  setState(() {});
+                  if (ConnectivityController().isConnected.value) {
+                    reviewPlugin(widget.plugin.id, rating);
+                    bool hadReview = widget.plugin.userReview != null;
+                    if (!hadReview) widget.plugin.ratingCount += 1;
+                    widget.plugin.userReview = PluginReview(
+                      uid: SharedPreferencesUtil().uid,
+                      ratedAt: DateTime.now(),
+                      review: '',
+                      score: rating,
+                    );
+                    var pluginsList = SharedPreferencesUtil().pluginsList;
+                    var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
+                    pluginsList[index] = widget.plugin;
+                    SharedPreferencesUtil().pluginsList = pluginsList;
+                    MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
+                    debugPrint('Refreshed plugins list.');
+                    // TODO: refresh ratings on plugin
+                    setState(() {});
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text("Can't rate plugin without internet connection."),
+                    ));
+                  }
                 },
               ),
             ),
@@ -338,16 +357,20 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
     if (isEnabled) {
       var enabled = await enablePluginServer(pluginId);
       if (!enabled) {
-        showDialog(
+        if (mounted) {
+          showDialog(
             context: context,
             builder: (c) => getDialog(
-                  context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  'Error activating the plugin',
-                  'If this is an integration plugin, make sure the setup is completed.',
-                  singleButton: true,
-                ));
+              context,
+              () => Navigator.pop(context),
+              () => Navigator.pop(context),
+              'Error activating the plugin',
+              'If this is an integration plugin, make sure the setup is completed.',
+              singleButton: true,
+            ),
+          );
+        }
+
         setState(() => pluginLoading = false);
         return;
       }

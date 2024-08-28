@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
+import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:provider/provider.dart';
 
-import 'device.dart';
 import 'support.dart';
 
 class DeviceSettings extends StatelessWidget {
@@ -106,8 +108,12 @@ class DeviceSettings extends StatelessWidget {
                 child: TextButton(
                   onPressed: () {
                     if (device != null) bleDisconnectDevice(device!);
-                    SharedPreferencesUtil().deviceId = '';
+                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
                     SharedPreferencesUtil().deviceName = '';
+                    context.read<DeviceProvider>().setIsConnected(false);
+                    context.read<DeviceProvider>().setConnectedDevice(null);
+                    context.read<DeviceProvider>().updateConnectingStatus(false);
+                    context.read<OnboardingProvider>().stopFindDeviceTimer();
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(

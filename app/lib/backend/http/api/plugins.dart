@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
@@ -16,6 +17,7 @@ Future<List<Plugin>> retrievePlugins() async {
   );
   if (response?.statusCode == 200) {
     try {
+      log('plugins: ${response?.body}');
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
       SharedPreferencesUtil().pluginsList = plugins;
       return plugins;

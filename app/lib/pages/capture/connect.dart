@@ -40,7 +40,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             const DeviceAnimationWidget(),
             FindDevicesPage(
               goNext: () {
-                debugPrint('onConnected');
+                debugPrint('onConnected from FindDevicesPage');
                 routeToPage(context, const HomePageWrapper(), replace: true);
               },
               includeSkip: false,
