@@ -29,7 +29,8 @@ def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[
     add_message(uid, ai_message.dict())
     return ai_message
 
-def add_summary_message(text: str, uid: str,) -> Message:
+
+def add_summary_message(text: str, uid: str) -> Message:
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
