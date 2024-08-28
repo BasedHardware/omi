@@ -45,7 +45,6 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     return null;
   }
 
-  debugPrint('IVE BEEN CALLED');
 
   var currValue = await batteryLevelCharacteristic.read();
   if (currValue.isNotEmpty) {
@@ -202,94 +201,6 @@ Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   return imageCaptureControlCharacteristic != null;
 }
 
-Future<int> retrieveButtonState(String deviceId) async {
-  final buttonService = await getServiceByUuid(deviceId, buttonDataStreamCharacteristicUuid);
-  if (buttonService == null) {
-    logServiceNotFoundError('Button no good', deviceId);
-    return -1;
-  }
-  var buttonStateCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
-  if (buttonStateCharacteristic == null) {
-    logCharacteristicNotFoundError('Button level', deviceId);
-    return -1;
-  }
-
-  var currValue = await buttonStateCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    return currValue[0];
-  }
-
-  return -1;
-}
-
-Future<StreamSubscription<List<int>>?> getBleButtonStateListener(
-  String deviceId, {
-  void Function(int)? onButtonStateChange,
-}) async {
-  final buttonService = await getServiceByUuid(deviceId,buttonDataStreamCharacteristicUuid);
-  if (buttonService == null) {
-    logServiceNotFoundError('Button isnt working', deviceId);
-    return null;
-  }
-
-  var buttonStateCharacteristic = getCharacteristicByUuid(buttonService, buttonTriggerCharacteristicUuid);
-  if (buttonStateCharacteristic == null) {
-    logCharacteristicNotFoundError('Button level', deviceId);
-    return null;
-  }
-
-  var currValue = await buttonStateCharacteristic.read();
-
-  if (currValue.isNotEmpty) {
-    debugPrint('Button level: ${currValue[0]}');
-    onButtonStateChange!(currValue[0]);
-  }
-
-  try {
-    await buttonStateCharacteristic.setNotifyValue(true);
-  } catch (e, stackTrace) {
-    logSubscribeError('Button level', deviceId, e, stackTrace);
-    return null;
-  }
-
-  var listener = buttonStateCharacteristic.lastValueStream.listen((value) {
-    // debugPrint('Battery level listener: $value');
-    if (value.isNotEmpty) {
-      if (value.length > 1) {
-      onButtonStateChange!(value[0]);
-     // debugPrint('Button level at the end: ${value[0]}');
-
-      if (value[0] == 1) {
-        debugPrint('Button tapped');
-      }
-      else if (value[0]  == 2) {
-        debugPrint('Button double tapped');
-      }
-      else if (value[0]  == 3) {
-        debugPrint('Button long pressed');
-      }
-      else if (value[0]  == 4) {
-      debugPrint('Button pressed');
-      }
-      else if (value[0]  == 5) {
-        debugPrint('Button released');
-      }
-      else {
-        debugPrint('invalid command');
-      }
-     // var result = value[4] | (value[5] << 8) | (value[6] << 16) | (value[7] << 24);
-    //  debugPrint('Timer: $result');
-      }
-    }
-  });
-
-  final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
-
-
-
-  return listener;
-}
 
 Future<StreamSubscription?> getBleImageBytesListener(
   String deviceId, {

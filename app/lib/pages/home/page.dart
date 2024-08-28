@@ -65,10 +65,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
   StreamSubscription<OnConnectionStateChangedEvent>? _connectionStateListener;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
 
-  StreamSubscription<List<int>>? _bleButtonStateListener;
 
   int batteryLevel = -1;
-  int buttonState = -1;
   BTDeviceStruct? _device;
 
   List<Plugin> plugins = [];
@@ -294,27 +292,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     _device = connectedDevice;
     if (initiateConnectionListener) _initiateConnectionListener();
     _initiateBleBatteryListener();
-    _initiateBleButtonListener();
     capturePageKey.currentState?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     MixpanelManager().deviceConnected();
     SharedPreferencesUtil().deviceId = _device!.id;
     SharedPreferencesUtil().deviceName = _device!.name;
     setState(() {});
   }
-
-   _initiateBleButtonListener() async {
-    _bleButtonStateListener?.cancel();
-    _bleButtonStateListener = await getBleButtonStateListener(
-      _device!.id,
-      onButtonStateChange: (int value) {
-        setState(() {
-          buttonState = value;
-        });
-
-        //INSERT CODE HERE
-      },
-    );
-   }
 
   _initiateBleBatteryListener() async {
     _bleBatteryLevelListener?.cancel();
@@ -588,8 +571,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                     Navigator.of(context).push(MaterialPageRoute(
                                         builder: (c) => ConnectedDevice(
                                               device: _device!,
-                                              batteryLevel: batteryLevel,
-                                              buttonState: buttonState
+                                              batteryLevel: batteryLevel
                                             )));
                                     MixpanelManager().batteryIndicatorClicked();
                                   },
@@ -636,7 +618,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                 routeToPage(context, const ConnectDevicePage());
                                 MixpanelManager().connectFriendClicked();
                               } else {
-                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0,buttonState: 0));
+                                await routeToPage(context, const ConnectedDevice(device: null, batteryLevel: 0));
                               }
                               setState(() {});
                             },
@@ -783,7 +765,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
-    _bleButtonStateListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     super.dispose();
