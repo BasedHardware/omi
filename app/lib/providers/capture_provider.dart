@@ -21,6 +21,7 @@ import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -159,6 +160,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
     if (memory != null) {
       // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory);
       memoryProvider?.addMemory(memory);
       if (memoryProvider?.memories.isEmpty ?? false) {
         memoryProvider?.getMoreMemoriesFromServer();
