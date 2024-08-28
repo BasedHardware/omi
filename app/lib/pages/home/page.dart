@@ -221,6 +221,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                       }),
                     ),
+
                   );
 
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -513,6 +514,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
+
                         MixpanelManager().settingsOpened();
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
