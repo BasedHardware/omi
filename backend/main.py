@@ -50,13 +50,10 @@ image = (
     memory=(512, 1024),
     cpu=2,
     allow_concurrent_inputs=10,
-    # timeout=24 * 60 * 60,  # avoid timeout with websocket, but then containers do not die
-    # can decrease memory and cpu size?
     timeout=60 * 10,
 )
 @asgi_app()
 def api():
-    print('api')
     return app
 
 

@@ -87,7 +87,7 @@ async def send_daily_notification():
         morning_alert_body = "Wear your friend and capture your memories today."
         morning_target_time = "08:00"
 
-        await  _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
+        await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
 
 
     except Exception as e:
