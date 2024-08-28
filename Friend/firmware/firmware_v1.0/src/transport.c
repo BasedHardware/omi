@@ -14,6 +14,9 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 
+
+#include <zephyr/drivers/sensor.h>
+
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
@@ -26,7 +29,7 @@ uint16_t current_package_index = 0;
 //
 
 static struct bt_conn_cb _callback_references;
-
+struct bt_conn *current_connection = NULL;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
@@ -69,7 +72,119 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
+//Acceleration data
+//this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
+//
+typedef struct sensors{
 
+	struct sensor_value a_x;
+	struct sensor_value a_y;
+	struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
+
+};
+static struct sensors mega_sensor;
+static struct device *lsm6dsl_dev;
+//Arbritrary uuid, feel free to change
+static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403790,0x0000,0x1000,0x7450,0xBF445E5829A2));
+static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403791,0x0000,0x1000,0x7450,0xBF445E5829A2));
+
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+
+static struct bt_gatt_attr accel_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&accel_uuid),//primary description
+    BT_GATT_CHARACTERISTIC(&accel_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, accel_data_read_characteristic, NULL, NULL),//data type
+    BT_GATT_CCC(accel_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),//scheduler
+};
+static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr);
+
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    LOG_INF("Acceleration data read characteristic");
+    int axis_mode = 6; //3 for accel, 6 for (also) gyro
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &axis_mode, sizeof(axis_mode));
+}
+
+
+#define ACCEL_REFRESH_INTERVAL 1000 // 0.5 seconds
+
+void broadcast_accel(struct k_work *work_item);
+K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
+
+void broadcast_accel(struct k_work *work_item) {
+
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+
+   //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
+    int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
+    if (err) {
+       LOG_ERR("Error updating Accelerometer data");
+    }
+    k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+}
+
+
+//use d4,d5
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+        if (value == BT_GATT_CCC_NOTIFY)
+    {
+        LOG_INF("Client subscribed for notifications");
+    }
+    else if (value == 0)
+    {
+        LOG_INF("Client unsubscribed from notifications");
+    }
+    else
+    {
+        LOG_ERR("Invalid CCC value: %u", value);
+    }
+}
+
+int accel_start() {
+    struct sensor_value odr_attr;
+    lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
+    k_msleep(50);
+    if (lsm6dsl_dev == NULL) {
+        LOG_ERR("Could not get LSM6DSL device");
+        return 0;
+	}
+    if (!device_is_ready(lsm6dsl_dev)) {
+		LOG_ERR("LSM6DSL: not ready");
+		return 0;
+	}
+    odr_attr.val1 = 52;
+	odr_attr.val2 = 0;
+
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+		return 0;
+	}
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
+		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	LOG_ERR("Cannot set sampling frequency for gyro.");
+	    return 0;
+	}
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
+    LOG_ERR("Sensor sample update error");
+    return 0;
+	}
+
+    LOG_INF("Accelerometer is ready for use \n");
+    
+    return 1;
+}
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -86,7 +201,6 @@ static const struct bt_data bt_sd[] = {
 //
 // State and Characteristics
 //
-
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -213,8 +327,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+#ifdef CONFIG_ACCELEROMETER
+     k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+#endif
 #ifdef CONFIG_ENABLE_BUTTON
-
     activate_button_work();
 #endif
     is_connected = true;
@@ -296,7 +412,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     tx_buffer_2[1] = (size >> 8) & 0xFF;
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
-    // Write to ring buffer
+    // Write to ring buffer 
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
@@ -457,14 +573,21 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
-
+#ifdef CONFIG_ACCELEROMETER
+    err = accel_start();
+    if (!err) {
+        LOG_INF("Accelerometer failed to activate\n");
+    }
+    else {
+        bt_gatt_service_register(&accel_service);
+    }
+#endif
 
 #ifdef CONFIG_ENABLE_BUTTON
 
      button_init();
      register_button_service();
 #endif
-   
     // Start advertising
     
     bt_gatt_service_register(&audio_service);
