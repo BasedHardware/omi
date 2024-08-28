@@ -76,7 +76,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-
+  
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
@@ -221,6 +221,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                       }),
                     ),
+
                   );
 
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -513,6 +514,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
+
                         MixpanelManager().settingsOpened();
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
@@ -597,8 +599,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // _connectionStateListener?.cancel();
-    // _bleBatteryLevelListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     ForegroundUtil.stopForegroundTask();

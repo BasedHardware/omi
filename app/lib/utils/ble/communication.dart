@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/errors.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
 
-Future<int> retrieveBatteryLevel(String deviceId) async {
+import 'package:friend_private/utils/ble/gatt_utils.dart';
+import 'package:friend_private/utils/other/notifications.dart';
+import 'package:friend_private/utils/ble/errors.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
+
+
+Future<int> retrieveBatteryLevel(String deviceId) async { 
   final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
   if (batteryService == null) {
     logServiceNotFoundError('Battery', deviceId);
@@ -40,6 +47,7 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
     logCharacteristicNotFoundError('Battery level', deviceId);
     return null;
   }
+
 
   var currValue = await batteryLevelCharacteristic.read();
   if (currValue.isNotEmpty) {
@@ -194,6 +202,7 @@ Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
   return imageCaptureControlCharacteristic != null;
 }
 
+
 Future<StreamSubscription?> getBleImageBytesListener(
   String deviceId, {
   required void Function(List<int>) onImageBytesReceived,
@@ -229,6 +238,86 @@ Future<StreamSubscription?> getBleImageBytesListener(
   // due to a race with discoverServices() that triggers
   // a bug in the device firmware.
   // if (Platform.isAndroid) await device.requestMtu(512);
+
+  return listener;
+}
+
+Future<StreamSubscription<List<int>>?> getAccelListener(
+  String deviceId, {
+  void Function(int)? onAccelChange,
+}) async {
+  final accelService = await getServiceByUuid(deviceId, accelDataStreamServiceUuid);
+  if (accelService == null) {
+    logServiceNotFoundError('Accelerometer', deviceId);
+    return null;
+  }
+
+  var accelCharacteristic = getCharacteristicByUuid(accelService, accelDataStreamCharacteristicUuid);
+  if (accelCharacteristic == null) {
+    logCharacteristicNotFoundError('Accelerometer', deviceId);
+    return null;
+  }
+
+  var currValue = await accelCharacteristic.read();
+  if (currValue.isNotEmpty) {
+    debugPrint('Accelerometer level: ${currValue[0]}');
+    onAccelChange!(currValue[0]);
+  }
+
+  try {
+    await accelCharacteristic.setNotifyValue(true);
+  } catch (e, stackTrace) {
+    logSubscribeError('Accelerometer level', deviceId, e, stackTrace);
+    return null;
+  }
+
+  var listener = accelCharacteristic.lastValueStream.listen((value) {
+    // debugPrint('Battery level listener: $value');
+
+    if (value.length > 4) { //for some reason, the very first reading is four bytes
+
+
+    if (value.isNotEmpty) {
+       List<double> accelerometerData = [];
+       onAccelChange!(value[0]);
+
+      for (int i = 0; i < 6; i++) {
+        int baseIndex = i * 8;
+        var result = ((value[baseIndex] | (value[baseIndex + 1] << 8) | (value[baseIndex + 2] << 16) | (value[baseIndex + 3] << 24)) & 0xFFFFFFFF as int).toSigned(32);
+        var temp = ((value[baseIndex + 4] | (value[baseIndex + 5] << 8) | (value[baseIndex + 6] << 16) | (value[baseIndex + 7] << 24)) & 0xFFFFFFFF as int).toSigned(32);
+        double axisValue = result + (temp / 1000000);
+        accelerometerData.add(axisValue);
+      }
+      debugPrint('Accelerometer x direction: ${accelerometerData[0]}');
+      debugPrint('Gyroscope x direction: ${accelerometerData[3]}\n');
+
+      debugPrint('Accelerometer y direction: ${accelerometerData[1]}');
+      debugPrint('Gyroscope y direction: ${accelerometerData[4]}\n');
+
+      debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
+      debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
+      //simple threshold fall calcaultor
+      var fall_number = sqrt( pow(accelerometerData[0],2) + pow(accelerometerData[1],2) + pow(accelerometerData[2],2) );
+     if(fall_number > 30.0) {
+      AwesomeNotifications().createNotification(
+    content: NotificationContent(
+      id: 6,
+      channelKey: 'channel',
+      actionType: ActionType.Default,
+      title: 'ouch',
+      body: 'did you fall?',
+      wakeUpScreen: true,
+    ),
+  );
+     }
+      
+      
+      }
+    }
+    });
+
+  final device = BluetoothDevice.fromId(deviceId);
+  device.cancelWhenDisconnected(listener);
 
   return listener;
 }
