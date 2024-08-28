@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import List, Optional, Dict
 
@@ -36,41 +36,41 @@ class PluginResult(BaseModel):
 
 class TranscriptSegment(BaseModel):
     text: str
-    speaker: str
-    speaker_id: int
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
     is_user: bool
+    person_id: Optional[str] = None
     start: float
     end: float
 
-    @staticmethod
-    def get_timestamp_string(start: float, end: float) -> str:
-        def format_duration(seconds: float) -> str:
-            total_seconds = int(seconds)
-            hours = total_seconds // 3600
-            minutes = (total_seconds % 3600) // 60
-            remaining_seconds = total_seconds % 60
-            return f"{hours:02}:{minutes:02}:{remaining_seconds:02}"
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
 
-        start_str = format_duration(start)
-        end_str = format_duration(end)
-
-        return f"{start_str} - {end_str}"
+    def get_timestamp_string(self):
+        start_duration = timedelta(seconds=int(self.start))
+        end_duration = timedelta(seconds=int(self.end))
+        return f'{str(start_duration).split(".")[0]} - {str(end_duration).split(".")[0]}'
 
     @staticmethod
-    def segments_as_string(segments: List[Dict]) -> str:
+    def segments_as_string(segments, include_timestamps=False, user_name: str = None):
+        if not user_name:
+            user_name = 'User'
         transcript = ''
-
+        include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
-            segment_text = segment['text'].strip()
-            timestamp_str = f"[{TranscriptSegment.get_timestamp_string(segment['start'], segment['end'])}]"
-            if segment.get('is_user', False):
-                transcript += f"{timestamp_str} User: {segment_text} "
-            else:
-                transcript += f"{timestamp_str} Speaker {segment.get('speaker_id', '')}: {segment_text} "
-            transcript += '\n\n'
-
+            segment_text = segment.text.strip()
+            timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
+            transcript += f'{timestamp_str}{user_name if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
         return transcript.strip()
 
+    @staticmethod
+    def can_display_seconds(segments):
+        for i in range(len(segments)):
+            for j in range(i + 1, len(segments)):
+                if segments[i].start > segments[j].end or segments[i].end > segments[j].start:
+                    return False
+        return True
 
 class Memory(BaseModel):
     created_at: datetime
@@ -84,9 +84,9 @@ class Memory(BaseModel):
     plugins_results: List[PluginResult] = []
     discarded: bool
 
-    def get_transcript(self) -> str:
-        return TranscriptSegment.segments_as_string(list(map(lambda x: x.dict(), self.transcript_segments)))
-
+    def get_transcript(self, include_timestamps: bool = False) -> str:
+        # Warn: missing transcript for workflow source
+        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
