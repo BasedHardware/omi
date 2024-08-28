@@ -48,13 +48,15 @@ def vad_is_empty(file_path, return_segments: bool = False):
             return len(segments) == 0  # but also check likelyhood of silence if only 1 segment?
     except Exception as e:
         print('vad_is_empty', e)
+        if return_segments:
+            return []
         return False
 
 
 def apply_vad_for_speech_profile(file_path: str):
     print('apply_vad_for_speech_profile', file_path)
     voice_segments = vad_is_empty(file_path, return_segments=True)
-    if len(voice_segments) == 0:
+    if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
         raise HTTPException(status_code=400, detail="Audio is empty")
     joined_segments = []
     for i, segment in enumerate(voice_segments):
