@@ -1,12 +1,17 @@
-import { ShareIos } from 'iconoir-react';
+import { CheckCircle, ShareIos } from 'iconoir-react';
+import { useState } from 'react';
 
 export default function ShareButton() {
+  const [isCopied, setIsCopied] = useState(false);
+
   const handleCopy = () => {
     const url = window.location.href;
     navigator.clipboard
       .writeText(url)
       .then(() => {
         console.log('URL copied to clipboard');
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 3000);
       })
       .catch((err) => {
         console.error('Failed to copy URL: ', err);
@@ -16,10 +21,16 @@ export default function ShareButton() {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-2 rounded-md border border-solid border-zinc-600 p-1.5 transition-colors hover:bg-zinc-800 md:p-1.5 md:px-3.5"
+      className={`flex items-center gap-2 rounded-md border border-solid border-zinc-600 p-1.5 transition-all duration-300 ${isCopied ? 'bg-green-500 !border-green-500 p-1.5 px-3.5' : 'hover:bg-zinc-800 p-1.5'} md:p-1.5 md:px-3.5`}
     >
-      <ShareIos className="text-xs" />
-      <span className="hidden md:inline">Share</span>
+      {isCopied ? (
+        <CheckCircle className={`text-xs`} />
+      ): (
+        <ShareIos className="text-xs" />
+      )}
+      <span className={`${isCopied ? '' : 'hidden md:inline'}`}>
+        {isCopied ? 'Link Copied!' : 'Share'}
+      </span>
     </button>
   );
 }
