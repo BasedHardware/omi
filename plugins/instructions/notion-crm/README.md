@@ -1,4 +1,4 @@
-1. Authenticate [Notion x Friend](https://josancamon19--plugins-examples-plugins-app.modal.run/setup-notion-crm).
+1. Authenticate [Notion x Friend](https://based-hardware--plugins-api.modal.run/setup-notion-crm).
 
 ![Explanation GIF](assets/explanation.gif)
 

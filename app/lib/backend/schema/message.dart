@@ -1,6 +1,17 @@
 enum MessageSender { ai, human }
 
-enum MessageType { text, daySummary }
+enum MessageType {
+  text('text'),
+  daySummary('day_summary'),
+  ;
+
+  final String value;
+  const MessageType(this.value);
+
+  static MessageType valuesFromString(String value) {
+    return MessageType.values.firstWhere((e) => e.value == value);
+  }
+}
 
 class MessageMemoryStructured {
   String title;
@@ -73,7 +84,7 @@ class ServerMessage {
       DateTime.parse(json['created_at']),
       json['text'],
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
-      MessageType.values.firstWhere((e) => e.toString().split('.').last == json['type']),
+      MessageType.valuesFromString(json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),

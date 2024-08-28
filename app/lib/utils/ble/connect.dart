@@ -7,7 +7,6 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
-    // TODO: for android seems like the reconnect or resetState is not working
     if (!autoConnect) return await device.connect(autoConnect: false, mtu: null);
 
     // Step 1: Connect with autoConnect
@@ -25,7 +24,7 @@ Future<void> bleConnectDevice(String deviceId, {bool autoConnect = true}) async 
 Future bleDisconnectDevice(BTDeviceStruct btDevice) async {
   final device = BluetoothDevice.fromId(btDevice.id);
   try {
-    await device.disconnect();
+    await device.disconnect(queue: false);
   } catch (e) {
     debugPrint('bleDisconnectDevice failed: $e');
   }

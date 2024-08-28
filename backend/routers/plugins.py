@@ -4,9 +4,9 @@ import requests
 from fastapi import APIRouter, HTTPException, Depends
 
 from models.plugin import Plugin
-from utils import auth
+from utils.other import endpoints as auth
 from utils.plugins import get_plugins_data, get_plugin_by_id
-from utils.redis_utils import set_plugin_review, enable_plugin, disable_plugin
+from database.redis_db import set_plugin_review, enable_plugin, disable_plugin
 
 router = APIRouter()
 
