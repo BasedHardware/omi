@@ -64,5 +64,5 @@ for path in paths:
 
 
 @modal_app.function(image=image, schedule=Cron('* * * * *'))
-async def start_job():
+async def notifications_cronjob():
     await start_cron_job()
