@@ -4,13 +4,6 @@ title: Backend Setup
 nav_order: 2
 ---
 
-
----
-layout: default
-title: Backend Setup
-nav_order: 2
----
-
 # Backend Setup 🚀
 
 Welcome to the Omi backend setup guide! Omi is an innovative, multimodal AI assistant that combines cutting-edge technologies to provide a seamless user experience. This guide will help you set up the backend infrastructure that powers Omi's intelligent capabilities.
@@ -25,9 +18,9 @@ Before you start, make sure you have the following:
     - **Deepgram:** For speech-to-text ([deepgram.com](https://deepgram.com/))
     - **Redis:** Upstash is recommended ([upstash.com](https://upstash.com/))
     - **Pinecone:** For vector database; use "text-embedding-3-large" model ([pinecone.io](https://www.pinecone.io/))
-    - **Modal:**  For serverless deployment ([modal.com](https://modal.com/))
+    - **Modal: [optional]**  For serverless deployment ([modal.com](https://modal.com/))
     - **Hugging Face:** For voice activity detection ([huggingface.co](https://huggingface.co/))
-    - **GitHub:** For firmware updates ([github.com](https://github.com/))
+    - **GitHub:[optional]** For firmware updates ([github.com](https://github.com/))
 - **Google Maps API Key:** 🗺️ (Optional) For location features
 
 ## I. Setting Up Google Cloud & Firebase ☁️
@@ -165,3 +158,4 @@ If you're stuck, have questions, or just want to chat about Omi:
 - **Documentation: 📚** Check out our [full documentation](https://docs.basedhardware.com/) for in-depth guides
 
 Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.
+
