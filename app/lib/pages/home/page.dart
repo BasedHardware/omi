@@ -76,7 +76,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-
+  
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
@@ -599,8 +599,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // _connectionStateListener?.cancel();
-    // _bleBatteryLevelListener?.cancel();
     connectivityController.isConnected.dispose();
     _controller?.dispose();
     ForegroundUtil.stopForegroundTask();
