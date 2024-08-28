@@ -4,13 +4,16 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,9 +27,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late String _selectedLanguage;
   late bool optInAnalytics;
+  late bool optInEmotionalFeedback;
   late bool devModeEnabled;
-  late bool postMemoryNotificationIsChecked;
-  late bool reconnectNotificationIsChecked;
   String? version;
   String? buildVersion;
 
@@ -34,9 +36,8 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     _selectedLanguage = SharedPreferencesUtil().recordingsLanguage;
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
+    optInEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
-    postMemoryNotificationIsChecked = SharedPreferencesUtil().postMemoryNotificationIsChecked;
-    reconnectNotificationIsChecked = SharedPreferencesUtil().reconnectNotificationIsChecked;
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -49,6 +50,82 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> _showMockupOmiFeebackNotification() async {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            elevation: 5.0,
+            backgroundColor: Colors.black,
+            child: Container(
+              padding: EdgeInsets.all(20.0),
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MockNotification(
+                    path: 'assets/images/emotional_feedback_1.png',
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  Text(
+                    "Omi will send you feedback in real-time.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color.fromRGBO(255, 255, 255, .8)),
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  Container(
+                    padding: EdgeInsets.only(
+                      left: 8,
+                      right: 8,
+                      top: 8,
+                      bottom: 8,
+                    ),
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size(50, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        alignment: Alignment.center,
+                      ),
+                      child: Text(
+                        "Ok, I understand",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color.fromRGBO(255, 255, 255, .8),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return PopScope(
         canPop: true,
         child: Scaffold(
@@ -95,33 +172,51 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                   }, _selectedLanguage),
                   ...getPreferencesWidgets(
-                    onOptInAnalytics: () {
-                      setState(() {
-                        optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                        optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-                      });
-                    },
-                    viewPrivacyDetails: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
-                      MixpanelManager().privacyDetailsPageOpened();
-                    },
-                    optInAnalytics: optInAnalytics,
-                    devModeEnabled: devModeEnabled,
-                    onDevModeClicked: () {
-                      setState(() {
-                        if (devModeEnabled) {
-                          devModeEnabled = false;
-                          SharedPreferencesUtil().devModeEnabled = false;
-                          MixpanelManager().developerModeDisabled();
-                        } else {
-                          devModeEnabled = true;
-                          MixpanelManager().developerModeEnabled();
-                          SharedPreferencesUtil().devModeEnabled = true;
+                      onOptInAnalytics: () {
+                        setState(() {
+                          optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
+                          optInAnalytics ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
+                        });
+                      },
+                      onOptInEmotionalFeedback: () {
+                        var enabled = !SharedPreferencesUtil().optInEmotionalFeedback;
+                        SharedPreferencesUtil().optInEmotionalFeedback = enabled;
+
+                        setState(() {
+                          optInEmotionalFeedback = enabled;
+                        });
+
+                        // Show a mockup notifications to help user understand about Omi Feedback
+                        if (enabled) {
+                          _showMockupOmiFeebackNotification();
                         }
-                      });
-                    },
-                  ),
+                      },
+                      viewPrivacyDetails: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PrivacyInfoPage()));
+                        MixpanelManager().privacyDetailsPageOpened();
+                      },
+                      optInEmotionalFeedback: optInEmotionalFeedback,
+                      optInAnalytics: optInAnalytics,
+                      devModeEnabled: devModeEnabled,
+                      onDevModeClicked: () {
+                        setState(() {
+                          if (devModeEnabled) {
+                            devModeEnabled = false;
+                            SharedPreferencesUtil().devModeEnabled = false;
+                            MixpanelManager().developerModeDisabled();
+                          } else {
+                            devModeEnabled = true;
+                            MixpanelManager().developerModeEnabled();
+                            SharedPreferencesUtil().devModeEnabled = true;
+                          }
+                        });
+                      },
+                      authorizeSavingRecordings: SharedPreferencesUtil().permissionStoreRecordingsEnabled,
+                      onAuthorizeSavingRecordingsClicked: () async {
+                        await routeToPage(context, const RecordingsStoragePermission());
+                        setState(() {});
+                      }),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
@@ -164,7 +259,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  getItemAddOn('-Developer Mode', () async {
+                  getItemAddOn('People', () {
+                    routeToPage(context, const UserPeoplePage());
+                  }, icon: Icons.people),
+                  getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
@@ -233,5 +331,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ));
+  }
+}
+
+class _MockNotification extends StatelessWidget {
+  const _MockNotification({super.key, required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    // Forgive me, should be a goog dynamic layout but not static image, btw I have no time.
+    return Image.asset(
+      path,
+      fit: BoxFit.fitWidth,
+    );
   }
 }

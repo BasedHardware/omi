@@ -30,6 +30,21 @@ def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[
     return ai_message
 
 
+def add_summary_message(text: str, uid: str) -> Message:
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.utcnow(),
+        sender='ai',
+        plugin_id=None,
+        from_external_integration=False,
+        type='day_summary',
+        memories_id=[],
+    )
+    add_message(uid, ai_message.dict())
+    return ai_message
+
+
 def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (

@@ -38,115 +38,6 @@ getLanguageName(String code) {
   return availableLanguages.entries.firstWhere((element) => element.value == code).key;
 }
 
-getNotificationsWidgets(
-  StateSetter setState,
-  bool postMemoryNotificationIsChecked,
-  bool reconnectNotificationIsChecked,
-) {
-  return [
-    const Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        'NOTIFICATIONS',
-        style: TextStyle(color: Colors.white, fontSize: 16),
-        textAlign: TextAlign.start,
-      ),
-    ),
-    InkWell(
-      onTap: () {
-        setState(() {
-          if (postMemoryNotificationIsChecked) {
-            postMemoryNotificationIsChecked = false;
-            SharedPreferencesUtil().postMemoryNotificationIsChecked = false;
-          } else {
-            postMemoryNotificationIsChecked = true;
-            SharedPreferencesUtil().postMemoryNotificationIsChecked = true;
-          }
-        });
-      },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 16, 8.0, 0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Post memory analysis',
-              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: postMemoryNotificationIsChecked
-                    ? const Color.fromARGB(255, 150, 150, 150)
-                    : Colors.transparent, // Fill color when checked
-                border: Border.all(
-                  color: const Color.fromARGB(255, 150, 150, 150),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              width: 22,
-              height: 22,
-              child: postMemoryNotificationIsChecked // Show the icon only when checked
-                  ? const Icon(
-                      Icons.check,
-                      color: Colors.white, // Tick color
-                      size: 18,
-                    )
-                  : null, // No icon when unchecked
-            ),
-          ],
-        ),
-      ),
-    ),
-    InkWell(
-      onTap: () {
-        setState(() {
-          if (reconnectNotificationIsChecked) {
-            reconnectNotificationIsChecked = false;
-            SharedPreferencesUtil().reconnectNotificationIsChecked = false;
-          } else {
-            reconnectNotificationIsChecked = true;
-            SharedPreferencesUtil().reconnectNotificationIsChecked = true;
-          }
-        });
-      },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 12, 8.0, 0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Reminder to reconnect',
-              style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: reconnectNotificationIsChecked
-                    ? const Color.fromARGB(255, 150, 150, 150)
-                    : Colors.transparent, // Fill color when checked
-                border: Border.all(
-                  color: const Color.fromARGB(255, 150, 150, 150),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              width: 22,
-              height: 22,
-              child: reconnectNotificationIsChecked // Show the icon only when checked
-                  ? const Icon(
-                      Icons.check,
-                      color: Colors.white, // Tick color
-                      size: 18,
-                    )
-                  : null, // No icon when unchecked
-            ),
-          ],
-        ),
-      ),
-    ),
-    const SizedBox(height: 32)
-  ];
-}
 
 getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguage) {
   return [
@@ -198,10 +89,14 @@ getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguag
 
 getPreferencesWidgets({
   required VoidCallback onOptInAnalytics,
+  required VoidCallback onOptInEmotionalFeedback,
   required VoidCallback viewPrivacyDetails,
   required bool optInAnalytics,
+  required bool optInEmotionalFeedback,
   required VoidCallback onDevModeClicked,
   required bool devModeEnabled,
+  required VoidCallback onAuthorizeSavingRecordingsClicked,
+  required bool authorizeSavingRecordings,
 }) {
   return [
     const Align(
@@ -260,45 +155,66 @@ getPreferencesWidgets({
         ),
       ),
     ),
-    // Padding(
-    //   padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-    //   child: InkWell(
-    //     onTap: onBackupsClicked,
-    //     child: Padding(
-    //       padding: const EdgeInsets.symmetric(vertical: 12.0),
-    //       child: Row(
-    //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    //         children: [
-    //           const Text(
-    //             'Automatic Cloud Backups',
-    //             style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-    //           ),
-    //           Container(
-    //             decoration: BoxDecoration(
-    //               color: backupsEnabled
-    //                   ? const Color.fromARGB(255, 150, 150, 150)
-    //                   : Colors.transparent, // Fill color when checked
-    //               border: Border.all(
-    //                 color: const Color.fromARGB(255, 150, 150, 150),
-    //                 width: 2,
-    //               ),
-    //               borderRadius: BorderRadius.circular(12),
-    //             ),
-    //             width: 22,
-    //             height: 22,
-    //             child: backupsEnabled // Show the icon only when checked
-    //                 ? const Icon(
-    //                     Icons.check,
-    //                     color: Colors.white, // Tick color
-    //                     size: 18,
-    //                   )
-    //                 : null, // No icon when unchecked
-    //           ),
-    //         ],
-    //       ),
-    //     ),
-    //   ),
-    // ),
+    Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+      child: InkWell(
+        onTap: (SharedPreferencesUtil().hasSpeakerProfile || optInEmotionalFeedback) ? onOptInEmotionalFeedback : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Enable Omi Feedback',
+                    style: TextStyle(
+                      color: Color.fromARGB(255, 150, 150, 150),
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: optInEmotionalFeedback
+                          ? const Color.fromARGB(255, 150, 150, 150)
+                          : Colors.transparent, // Fill color when checked
+                      border: Border.all(
+                        color: const Color.fromARGB(255, 150, 150, 150),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    width: 22,
+                    height: 22,
+                    child: optInEmotionalFeedback // Show the icon only when checked
+                        ? const Icon(
+                            Icons.check,
+                            color: Colors.white, // Tick color
+                            size: 18,
+                          )
+                        : null, // No icon when unchecked
+                  ),
+                ],
+              ),
+              !SharedPreferencesUtil().hasSpeakerProfile
+                  ? const Text(
+                      'Set-up your speech profile to enable Omi Feedback',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const SizedBox(),
+            ],
+          ),
+        ),
+      ),
+    ),
     Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
       child: InkWell(
@@ -338,6 +254,45 @@ getPreferencesWidgets({
         ),
       ),
     ),
+    Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+      child: InkWell(
+        onTap: onAuthorizeSavingRecordingsClicked,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Authorize saving recordings',
+                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: authorizeSavingRecordings
+                      ? const Color.fromARGB(255, 150, 150, 150)
+                      : Colors.transparent, // Fill color when checked
+                  border: Border.all(
+                    color: const Color.fromARGB(255, 150, 150, 150),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                width: 22,
+                height: 22,
+                child: authorizeSavingRecordings // Show the icon only when checked
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.white, // Tick color
+                        size: 18,
+                      )
+                    : null, // No icon when unchecked
+              ),
+            ],
+          ),
+        ),
+      ),
+    )
   ];
 }
 

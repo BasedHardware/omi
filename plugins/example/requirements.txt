@@ -57,7 +57,7 @@ orjson==3.10.6
 packaging==23.2
 portalocker==2.10.1
 posthog==3.5.0
-protobuf==3.19.4
+protobuf==4.25.4
 psutil==5.9.8
 pydantic==2.8.2
 pydantic-settings==2.3.4

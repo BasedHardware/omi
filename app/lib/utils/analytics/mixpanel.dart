@@ -1,4 +1,3 @@
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
@@ -29,15 +28,13 @@ class MixpanelManager {
 
   setPeopleValues() {
     setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
-    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    setUserProperty('Plugins Enabled Count', _preferences.pluginsList.map((p) => p.id).toSet().length);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Backups Enabled', _preferences.backupsEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
-
-    // setUserProperty('Memories Count', MemoryProvider().getMemoriesCount());
-    // setUserProperty('Useful Memories Count', MemoryProvider().getNonDiscardedMemoriesCount());
-    // setUserProperty('Messages Count', MessageProvider().getMessagesCount());
+    setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+    setUserProperty('Emotional Notifications Enabled', _preferences.optInEmotionalFeedback);
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
@@ -169,22 +166,16 @@ class MixpanelManager {
 
   void memoryDeleted(ServerMemory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
 
-  void memoryEdited(ServerMemory memory, {required String fieldEdited}) {
-    var properties = getMemoryEventProperties(memory);
-    properties['field_edited'] = fieldEdited;
-    track('Memory Edited', properties: properties);
-  }
-
   void chatMessageSent(String message) => track('Chat Message Sent',
       properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
-  void speechProfileStarted() => track('Speech Profile Started');
-
-  void speechProfileStartedOnboarding() => track('Speech Profile Started Onboarding');
-
-  void speechProfileCompleted() => track('Speech Profile Completed');
+  // void speechProfileStarted() => track('Speech Profile Started');
+  //
+  // void speechProfileStartedOnboarding() => track('Speech Profile Started Onboarding');
+  //
+  // void speechProfileCompleted() => track('Speech Profile Completed');
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
@@ -205,16 +196,6 @@ class MixpanelManager {
 
   void reProcessMemory(ServerMemory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
-  void backupsEnabled() {
-    track('Backups Enabled');
-    setUserProperty('Backups Enabled', true);
-  }
-
-  void backupsDisabled() {
-    track('Backups Disabled');
-    setUserProperty('Backups Enabled', false);
-  }
-
   void developerModeEnabled() {
     track('Developer Mode Enabled');
     setUserProperty('Dev Mode Enabled', true);
@@ -232,8 +213,6 @@ class MixpanelManager {
   void importMemories() => track('Dev Mode Import Memories');
 
   void importedMemories() => track('Dev Mode Imported Memories');
-
-  void backupsPasswordSet() => track('Backups Password Set');
 
   void supportContacted() => track('Support Contacted');
 
@@ -268,9 +247,15 @@ class MixpanelManager {
 
   void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
 
-  void firmwareUpdateButtonClick() => track('Firmware Update Clicked');
+  // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 
-  void firstTranscriptMade() => track('First Transcript Made');
+  void addedPerson() => track('Added Person');
 
-// void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
+  void removedPerson() => track('Removed Person');
+
+  void assignSheetOpened() => track('Assign Sheet Opened');
+
+  void assignedSegment(String assignType) => track('Assigned Segment $assignType');
+
+  void unassignedSegment() => track('Unassigned Segment');
 }

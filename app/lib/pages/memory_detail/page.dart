@@ -7,10 +7,15 @@ import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -43,8 +48,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   TabController? _controller;
 
   bool canDisplaySeconds = true;
+  bool hasAudioRecording = false;
 
   List<MemoryPhoto> photos = [];
+
+  // TODO: use later for onboarding transcript segment edits
+  // late AnimationController _animationController;
+  // late Animation<double> _opacityAnimation;
 
   @override
   void initState() {
@@ -60,7 +70,19 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
         photos = value;
         setState(() {}); // TODO: if left before this closes, fails
       });
+    } else if (widget.memory.source == MemorySource.friend) {
+      hasMemoryRecording(widget.memory.id).then((value) {
+        hasAudioRecording = value;
+        setState(() {});
+      });
     }
+    // _animationController = AnimationController(
+    //   vsync: this,
+    //   duration: const Duration(seconds: 60),
+    // )..repeat(reverse: true);
+    //
+    // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
+
     super.initState();
   }
 
@@ -202,6 +224,159 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     );
   }
 
+  void editSegment(int segmentIdx) {
+    if (!ConnectivityController().isConnected.value) {
+      ConnectivityController.showNoInternetDialog(context);
+      return;
+    }
+    List<Person> people = SharedPreferencesUtil().cachedPeople;
+
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+        ),
+        builder: (ctx) {
+          bool isUserSegment = widget.memory.transcriptSegments[segmentIdx].isUser;
+          String? personId = widget.memory.transcriptSegments[segmentIdx].personId;
+          return StatefulBuilder(builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+              ),
+              height: 320,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              child: ListView(
+                children: [
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      children: [
+                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            MixpanelManager().unassignedSegment();
+                            widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                            widget.memory.transcriptSegments[segmentIdx].personId = null;
+                            assignMemoryTranscriptSegment(widget.memory.id, segmentIdx);
+                            setModalState(() {
+                              personId = null;
+                              isUserSegment = false;
+                            });
+                            setState(() {});
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Un-assign',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                decoration: TextDecoration.underline,
+                              )),
+                        ),
+                      ],
+                    ),
+                  ),
+                  !hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  !hasAudioRecording
+                      ? GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  routeToPage(context, const RecordingsStoragePermission());
+                                },
+                                'Can\'t be used for speech training',
+                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                okButtonText: 'View Permissions',
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text('Can\'t be used for speech training',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(decoration: TextDecoration.underline)),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    title: const Text('Yours'),
+                    value: isUserSegment,
+                    checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                    onChanged: (bool? value) {
+                      MixpanelManager().assignedSegment('User');
+                      widget.memory.transcriptSegments[segmentIdx].isUser = true;
+                      widget.memory.transcriptSegments[segmentIdx].personId = null;
+                      assignMemoryTranscriptSegment(
+                        widget.memory.id,
+                        segmentIdx,
+                        isUser: true,
+                        useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
+                      );
+                      setModalState(() {
+                        personId = null;
+                        isUserSegment = true;
+                      });
+                      setState(() {});
+                      Navigator.pop(context);
+                    },
+                  ),
+                  for (var person in people)
+                    CheckboxListTile(
+                      title: Text('${person.name}\'s'),
+                      value: personId == person.id,
+                      checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                      onChanged: (bool? value) {
+                        MixpanelManager().assignedSegment('User Person');
+                        assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, personId: person.id);
+                        widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                        widget.memory.transcriptSegments[segmentIdx].personId = person.id;
+                        setModalState(() {
+                          personId = person.id;
+                          isUserSegment = false;
+                        });
+                        setState(() {});
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ListTile(
+                    title: const Text('Someone else\'s'),
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.add),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      routeToPage(context, const UserPeoplePage());
+                    },
+                  ),
+                ],
+              ),
+            );
+          });
+        });
+  }
+
   List<Widget> _getTranscriptWidgets() {
     String decodedRawText = widget.memory.externalIntegration?.text ?? '';
     try {
@@ -224,6 +399,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: canDisplaySeconds,
+              isMemoryDetail: true,
+              editSegment: editSegment,
             ),
       const SizedBox(height: 32)
     ];
