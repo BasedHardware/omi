@@ -46,6 +46,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+      await context.read<mp.MemoryProvider>().getInitialMemories();
     });
     super.initState();
   }

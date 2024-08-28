@@ -22,10 +22,7 @@ class PluginsPage extends StatefulWidget {
 class _PluginsPageState extends State<PluginsPage> {
   @override
   void initState() {
-    () {
-      context.read<PluginProvider>().initialize(widget.filterChatOnly);
-    }.withPostFrameCallback();
-
+    context.read<PluginProvider>().initialize(widget.filterChatOnly);
     super.initState();
   }
 

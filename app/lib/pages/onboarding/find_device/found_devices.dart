@@ -121,7 +121,6 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? () async {
                   await provider.handleTap(
                     device: device,
-                    goNext: widget.goNext,
                   );
                 }
               : null,
