@@ -10,19 +10,19 @@ export default function Home() {
           alt="Based Hardware Logo"
           width={100}
           height={64}
-          className="h-auto w-[50px] mx-auto"
+          className="mx-auto h-auto w-[50px]"
         />
-        <h2 className='text-xl md:text-2xl mt-2 text-center'>
+        <h2 className="mt-2 text-center text-xl md:text-2xl">
           We are working in this feature
         </h2>
-        <p className='text-center max-w-xl mt-10'>
-        For now, you can order Omi wearable. Remember
-        everything you want to remember with Omi.
+        <p className="mt-10 max-w-xl text-center">
+          For now, you can order Omi wearable. Remember everything you want to remember
+          with Omi.
         </p>
         <Link
           href={`https://basedhardware.com/`}
           target="_blank"
-          className="flex items-center gap-2 rounded-md w-fit mx-auto bg-white/90 mt-10 p-1.5 px-3.5 text-black transition-colors hover:bg-white"
+          className="mx-auto mt-10 flex w-fit items-center gap-2 rounded-md bg-white/90 p-1.5 px-3.5 text-black transition-colors hover:bg-white"
         >
           Order now
         </Link>
