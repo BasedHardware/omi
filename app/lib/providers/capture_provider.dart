@@ -326,6 +326,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       } else {
         initiateWebsocket();
       }
+    } else {
+      closeWebSocket();
     }
     setRestartAudioProcessing(restartBytesProcessing);
     startOpenGlass();
