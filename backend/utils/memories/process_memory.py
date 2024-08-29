@@ -99,6 +99,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
 def _trigger_plugins(uid: str, memory: Memory):
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
+    memory.plugins_results = []
     threads = []
 
     def execute_plugin(plugin):
@@ -127,7 +128,7 @@ def _extract_facts(uid: str, memory: Memory):
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
-                   force_process: bool = False):
+                   force_process: bool = False) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
 

@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';

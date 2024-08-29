@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -54,6 +55,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               GestureDetector(
                 onTap: () {
                   widget.editSegment?.call(idx - 1);
+                  MixpanelManager().assignSheetOpened();
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,

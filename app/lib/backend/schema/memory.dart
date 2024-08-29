@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -35,6 +35,26 @@ class MemoryExternalData {
   Map<String, dynamic> toJson() => {'text': text};
 }
 
+enum MemoryPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
+
+enum MemoryPostProcessingModel { fal_whisperx, custom_whisperx }
+
+class MemoryPostProcessing {
+  final MemoryPostProcessingStatus status;
+  final MemoryPostProcessingModel? model;
+
+  MemoryPostProcessing({required this.status, required this.model});
+
+  factory MemoryPostProcessing.fromJson(Map<String, dynamic> json) {
+    return MemoryPostProcessing(
+      status: MemoryPostProcessingStatus.values.asNameMap()[json['status']] ?? MemoryPostProcessingStatus.in_progress,
+      model: MemoryPostProcessingModel.values.asNameMap()[json['model']] ?? MemoryPostProcessingModel.fal_whisperx,
+    );
+  }
+
+  toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
+}
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
@@ -51,6 +71,7 @@ class ServerMemory {
   final String? language; // applies to Friend only
 
   final MemoryExternalData? externalIntegration;
+  MemoryPostProcessing? postprocessing;
 
   bool discarded;
   final bool deleted;
@@ -76,6 +97,7 @@ class ServerMemory {
     this.source,
     this.language,
     this.externalIntegration,
+    this.postprocessing,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -99,7 +121,20 @@ class ServerMemory {
       failed: json['failed'] ?? false,
       retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
+      postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
     );
+  }
+
+  bool isPostprocessing() {
+    int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
+    return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
+            postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
+        createdSecondsAgo < 120;
+  }
+
+  bool isReadyForTranscriptAssignment() {
+    // TODO: only thing matters here, is if !isPostProcessing() and if we have audio file.
+    return !discarded && !deleted && !failed && postprocessing?.status == MemoryPostProcessingStatus.completed;
   }
 
   Map<String, dynamic> toJson() {
@@ -120,6 +155,7 @@ class ServerMemory {
       'failed': failed,
       'retries': retries,
       'external_data': externalIntegration?.toJson(),
+      'postprocessing': postprocessing?.toJson(),
     };
   }
 
