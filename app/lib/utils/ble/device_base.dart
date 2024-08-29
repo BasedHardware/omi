@@ -29,4 +29,8 @@ abstract class DeviceBase {
 
   Future<StreamSubscription?> getImageListener(
       {required void Function(Uint8List base64JpgData) onImageReceived});
+
+  Future<StreamSubscription<List<int>>?> getAccelListener({
+    void Function(int)? onAccelChange,
+  });
 }
