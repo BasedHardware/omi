@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/websockets.dart';

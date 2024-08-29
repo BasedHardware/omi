@@ -1,13 +1,11 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
@@ -18,6 +16,7 @@ import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:tuple/tuple.dart';
@@ -294,7 +293,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                                 },
                                 'Can\'t be used for speech training',
                                 'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View Permissions',
+                                okButtonText: 'View',
                               ),
                             );
                           },
@@ -378,12 +377,21 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   List<Widget> _getTranscriptWidgets() {
-    String decodedRawText = widget.memory.externalIntegration?.text ?? '';
-    try {
-      decodedRawText = utf8.decode(decodedRawText.codeUnits);
-    } catch (e) {}
-
+    String decodedRawText = (widget.memory.externalIntegration?.text ?? '').decodeSting;
+    bool isPostprocessing = widget.memory.isPostprocessing();
     return [
+      SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
+      isPostprocessing
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+            )
+          : const SizedBox(height: 0),
       SizedBox(height: widget.memory.transcriptSegments.isEmpty ? 16 : 0),
       widget.memory.transcriptSegments.isEmpty
           ? ExpandableTextWidget(
@@ -400,7 +408,14 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               topMargin: false,
               canDisplaySeconds: canDisplaySeconds,
               isMemoryDetail: true,
-              editSegment: editSegment,
+              editSegment: !isPostprocessing
+                  ? editSegment
+                  : (_) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Memory still processing. Please wait...'),
+                        duration: Duration(seconds: 1),
+                      ));
+                    },
             ),
       const SizedBox(height: 32)
     ];
