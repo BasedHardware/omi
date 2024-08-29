@@ -7,7 +7,7 @@
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif
-
+// #include "sdcard.c"
 LOG_MODULE_REGISTER(codec, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
@@ -28,7 +28,7 @@ void set_codec_callback(codec_callback callback)
 uint8_t codec_ring_buffer_data[AUDIO_BUFFER_SAMPLES * 2]; // 2 bytes per sample
 struct ring_buf codec_ring_buf;
 
-int codec_receive_pcm(int16_t *data, size_t len)
+int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic data is finished 
 {
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
     if (written != len * 2)
