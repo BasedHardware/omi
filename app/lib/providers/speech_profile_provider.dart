@@ -216,6 +216,16 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     notifyListeners();
   }
 
+  void close() {
+    print('Closing speech profile provider');
+    connectionStateListener?.cancel();
+    _bleBytesStream?.cancel();
+    forceCompletionTimer?.cancel();
+    segments.clear();
+    // captureProvider?.resetState(restartBytesProcessing: true);
+    closeWebSocket();
+  }
+
   @override
   void dispose() {
     // This won't be called unless the provider is removed from the widget tree. So we need to manually call this in the widget's dispose method.
