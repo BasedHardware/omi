@@ -1,15 +1,18 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from modal import Image, App, Secret, asgi_app, mount
+from modal import Image, App, Secret, asgi_app, mount, Stub, Mount
+from modal import Stub, Image, Secret, Mount, asgi_app
 
 # from _mem0 import router as mem0_router
-from _multion import router as multion_router
+from _multion import router as multion_router, demo_app
 # from advanced import openglass as advanced_openglass_router
 from advanced import realtime as advanced_realtime_router
 from basic import memory_created as basic_memory_created_router
 from basic import realtime as basic_realtime_router
 from oauth import memory_created as oauth_memory_created_router
 from zapier import memory_created as zapier_memory_created_router
+
+#from _multion.demo import app as multion_demo_app
 
 app = FastAPI()
 app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
@@ -54,3 +57,5 @@ app.include_router(advanced_realtime_router.router)
 
 app.include_router(multion_router.router)
 # app.include_router(mem0_router.router)
+
+#app.mount("/multion-demo", demo_app)
