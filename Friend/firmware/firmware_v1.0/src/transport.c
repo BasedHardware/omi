@@ -29,7 +29,6 @@ uint16_t current_package_index = 0;
 //
 
 static struct bt_conn_cb _callback_references;
-struct bt_conn *current_connection = NULL;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
