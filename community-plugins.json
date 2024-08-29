@@ -24,7 +24,9 @@
     "image": "/plugins/logos/tweet-extractor.png",
     "memories": true,
     "chat": false,
-    "capabilities": ["memories"],
+    "capabilities": [
+      "memories"
+    ],
     "memory_prompt": "You will be given a conversation transcript or a summary of daily experiences. Extract the most interesting, insightful, or thought-provoking content and craft it into a concise, engaging tweet format. Ensure the tweet captures the essence of the conversation or experience while being attention-grabbing and shareable.",
     "deleted": false
   },
