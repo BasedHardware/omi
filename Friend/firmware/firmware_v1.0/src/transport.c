@@ -285,6 +285,8 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     return len;
 }
 
+
+
 //
 // Battery Service Handlers
 //
@@ -617,6 +619,7 @@ if(!err) {
     
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
+    register_storage_service();
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
