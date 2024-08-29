@@ -5,6 +5,7 @@ import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/personal_details.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/settings/webview.dart';
@@ -242,6 +243,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
+                      'Account Settings',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  getItemAddOn('Personal Details', () {
+                    routeToPage(context, const PersonalDetails());
+                  }, icon: Icons.person),
+                  const SizedBox(height: 32.0),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
                       'ADD ONS',
                       style: TextStyle(
                         color: Colors.white,
@@ -256,14 +271,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  Divider(color: Colors.transparent,),
+                  Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Speech Recognition', () {
                     routeToPage(context, const SpeakerIdPage());
                   }, icon: Icons.multitrack_audio),
                   getItemAddOn('Identifying Others', () {
                     routeToPage(context, const UserPeoplePage());
                   }, icon: Icons.people),
-                  const Divider(color: Colors.transparent,),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
