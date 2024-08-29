@@ -13,7 +13,7 @@
 #include "utils.h"
 #include "btutils.h"
 #include "lib/battery/battery.h"
-
+#include "speaker.h"
 
 #include <zephyr/drivers/sensor.h>
 
@@ -27,6 +27,8 @@ uint16_t current_package_index = 0;
 //
 // Internal
 //
+
+static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
 static struct bt_conn_cb _callback_references;
 struct bt_conn *current_connection = NULL;
@@ -49,12 +51,18 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+ #ifdef CONFIG_ENABLE_SPEAKER
+     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+     
+
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
