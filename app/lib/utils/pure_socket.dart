@@ -95,21 +95,22 @@ class PureSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
+      debugPrint("[Socket] Can not connect, because socket is $_status");
+      return false;
+    }
+
     return await _connect();
   }
 
   Future<bool> _connect() async {
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      return false;
-    }
-
     _channel = IOWebSocketChannel.connect(
       url,
       pingInterval: const Duration(seconds: 10),
       connectTimeout: const Duration(seconds: 30),
     );
     if (_channel?.ready == null) {
-      return false;
+	  throw Exception("[Socket] Can not connect, channel ready is null");
     }
 
     _status = PureSocketStatus.connecting;
