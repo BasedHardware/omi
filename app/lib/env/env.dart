@@ -7,8 +7,6 @@ abstract class Env {
     _instance = instance ?? DevEnv() as EnvFields;
   }
 
-  static String? get oneSignalAppId => _instance.oneSignalAppId;
-
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
   static String? get instabugApiKey => _instance.instabugApiKey;
@@ -28,8 +26,6 @@ abstract class Env {
 }
 
 abstract class EnvFields {
-  String? get oneSignalAppId;
-
   String? get openAIAPIKey;
 
   String? get instabugApiKey;
