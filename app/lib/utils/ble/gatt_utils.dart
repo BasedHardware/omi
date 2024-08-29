@@ -27,6 +27,8 @@ const String firmwareRevisionCharacteristicUuid = '00002a26-0000-1000-8000-00805
 const String hardwareRevisionCharacteristicUuid = '00002a27-0000-1000-8000-00805f9b34fb';
 const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805f9b34fb';
 
+const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
+
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
