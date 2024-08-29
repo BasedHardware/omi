@@ -1,3 +1,4 @@
+import threading
 import uuid
 from datetime import datetime
 from typing import List
@@ -94,8 +95,12 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-        for person in people:
+        def single(person):
             person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+
+        threads = [threading.Thread(target=single, args=(person,)) for person in people]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
     return people
 
 
