@@ -27,6 +27,7 @@ class CategoryEnum(str, Enum):
     social = 'social'
     work = 'work'
     sports = 'sports'
+    politics = 'politics'
     literature = 'literature'
     history = 'history'
     other = 'other'
@@ -106,6 +107,7 @@ class MemorySource(str, Enum):
 
 
 class PostProcessingStatus(str, Enum):
+    not_started = 'not_started'
     in_progress = 'in_progress'
     completed = 'completed'
     canceled = 'canceled'

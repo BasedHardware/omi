@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
