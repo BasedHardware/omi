@@ -12,7 +12,6 @@ String mapCodecToName(BleAudioCodec codec) {
     case BleAudioCodec.pcm16:
       return 'pcm16';
     case BleAudioCodec.pcm8:
-      return 'pcm8';
     default:
       return 'pcm8';
   }
@@ -25,7 +24,6 @@ BleAudioCodec mapNameToCodec(String codec) {
     case 'pcm16':
       return BleAudioCodec.pcm16;
     case 'pcm8':
-      return BleAudioCodec.pcm8;
     default:
       return BleAudioCodec.pcm8;
   }
@@ -34,11 +32,8 @@ BleAudioCodec mapNameToCodec(String codec) {
 int mapCodecToSampleRate(BleAudioCodec codec) {
   switch (codec) {
     case BleAudioCodec.opus:
-      return 16000;
     case BleAudioCodec.pcm16:
-      return 16000;
     case BleAudioCodec.pcm8:
-      return 16000;
     default:
       return 16000;
   }
@@ -46,12 +41,10 @@ int mapCodecToSampleRate(BleAudioCodec codec) {
 
 int mapCodecToBitDepth(BleAudioCodec codec) {
   switch (codec) {
-    case BleAudioCodec.opus:
-      return 16;
-    case BleAudioCodec.pcm16:
-      return 16;
     case BleAudioCodec.pcm8:
       return 8;
+    case BleAudioCodec.opus:
+    case BleAudioCodec.pcm16:
     default:
       return 16;
   }
