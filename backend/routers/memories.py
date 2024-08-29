@@ -194,6 +194,8 @@ def get_shared_memory_by_id(memory_id: str):
     visibility = memory.get('visibility', MemoryVisibility.private)
     if not visibility or visibility == MemoryVisibility.private:
         raise HTTPException(status_code=404, detail="Memory is private")
+    memory = Memory(**memory)
+    memory.geolocation = None
     return memory
 
 
@@ -208,4 +210,7 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
         data.append([uid, memory_id])
     # TODO: sort in some way to have proper pagination
 
-    return memories_db.run_get_public_memories(data[offset:offset + limit])
+    memories = memories_db.run_get_public_memories(data[offset:offset + limit])
+    for memory in memories:
+        memory['geolocation'] = None
+    return memories

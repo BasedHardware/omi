@@ -133,7 +133,7 @@ async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
     return None
 
 
-async def get_public_memories(data: List[Tuple[str, str]]):
+async def _get_public_memories(data: List[Tuple[str, str]]):
     db = AsyncClient()
     tasks = [_get_public_memory(db, uid, memory_id) for uid, memory_id in data]
     memories = await asyncio.gather(*tasks)
@@ -141,7 +141,7 @@ async def get_public_memories(data: List[Tuple[str, str]]):
 
 
 def run_get_public_memories(data: List[Tuple[str, str]]):
-    return asyncio.run(get_public_memories(data))
+    return asyncio.run(_get_public_memories(data))
 
 
 # POST PROCESSING
