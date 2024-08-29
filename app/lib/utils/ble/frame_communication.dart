@@ -480,4 +480,12 @@ class FrameDevice extends DeviceBase {
 
     return subscription;
   }
+
+  @override
+  Future<StreamSubscription<List<int>>?> getAccelListener({
+    void Function(int)? onAccelChange,
+  }) async {
+    // not yet implemented
+    return null;
+  }
 }
