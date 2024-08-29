@@ -21,6 +21,7 @@ class FriendDevice extends DeviceBase {
     name = device.platformName;
   }
 
+  @override
   Future<int> retrieveBatteryLevel() async {
     final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
     if (batteryService == null) {
@@ -40,6 +41,7 @@ class FriendDevice extends DeviceBase {
     return -1;
   }
 
+  @override
   Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
   }) async {
@@ -82,6 +84,7 @@ class FriendDevice extends DeviceBase {
     return listener;
   }
 
+  @override
   Future<StreamSubscription?> getBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
@@ -123,6 +126,7 @@ class FriendDevice extends DeviceBase {
     return listener;
   }
 
+  @override
   Future<BleAudioCodec> getAudioCodec() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
@@ -165,6 +169,7 @@ class FriendDevice extends DeviceBase {
     return codec;
   }
 
+  @override
   Future cameraStartPhotoController() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
@@ -185,6 +190,7 @@ class FriendDevice extends DeviceBase {
     print('cameraStartPhotoController');
   }
 
+  @override
   Future cameraStopPhotoController() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
@@ -204,6 +210,7 @@ class FriendDevice extends DeviceBase {
     print('cameraStopPhotoController');
   }
 
+  @override
   Future<bool> hasPhotoStreamingCharacteristic() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
