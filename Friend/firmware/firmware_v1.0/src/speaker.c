@@ -10,7 +10,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
-#include "lut.c"
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_BLOCK_SIZE   25000 //24000 * 2
