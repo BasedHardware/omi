@@ -1,2 +1,2 @@
 from .router import router
-from .demo_app import app as demo_app
+from .demo_router import demo_router
