@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/device_base.dart';
 import 'package:friend_private/utils/ble/frame_communication.dart';
 import 'package:friend_private/utils/ble/friend_communication.dart';
+
 
 Map<String, DeviceBase> deviceMap = {};
 Future<DeviceBase?> getDevice(String deviceId) async {
@@ -70,4 +72,12 @@ Future<StreamSubscription?> getImageListener(
 }) async =>
     (await getDevice(deviceId))?.getImageListener(
             onImageReceived: onImageReceived) ??
+        Future.value(null);
+
+Future<StreamSubscription<List<int>>?> getAccelListener(
+  String deviceId, {
+  void Function(int)? onAccelChange,
+}) async =>
+    (await getDevice(deviceId))?.getAccelListener(
+            onAccelChange: onAccelChange) ??
         Future.value(null);

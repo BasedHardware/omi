@@ -8,19 +8,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -71,6 +72,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
+
   // -----------------------
 
   void setHasTranscripts(bool value) {
@@ -159,6 +161,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
 
     if (memory != null) {
       // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory);
       memoryProvider?.addMemory(memory);
       if (memoryProvider?.memories.isEmpty ?? false) {
         memoryProvider?.getMoreMemoriesFromServer();
@@ -169,8 +172,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       setMemoryCreating(false);
       try {
         memoryPostProcessing(file, memory.id).then((postProcessed) {
-          // use memory provider to update memory
-          memoryProvider?.updateMemory(postProcessed);
+          if (postProcessed != null) {
+            memoryProvider?.updateMemory(postProcessed);
+          } else {
+            memory!.postprocessing = MemoryPostProcessing(
+              status: MemoryPostProcessingStatus.failed,
+              model: MemoryPostProcessingModel.fal_whisperx,
+            );
+            memoryProvider?.updateMemory(memory);
+          }
         });
       } catch (e) {
         print('Error occurred during memory post-processing: $e');

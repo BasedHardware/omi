@@ -52,6 +52,11 @@ def create_memory(
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
+    if not memory.discarded:
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
+        memory.postprocessing = MemoryPostProcessing(status=PostProcessingStatus.not_started,
+                                                     model=PostProcessingModel.fal_whisperx)
+
     messages = trigger_external_integrations(uid, memory)
     return CreateMemoryResponse(memory=memory, messages=messages)
 

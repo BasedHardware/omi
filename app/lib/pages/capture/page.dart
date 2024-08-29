@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';

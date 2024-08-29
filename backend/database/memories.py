@@ -166,6 +166,7 @@ def store_model_emotion_predictions_result(
             "end": prediction.time[1],
             "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
+        count = count+1
         if count % 400 == 0:
             batch.commit()
             batch = db.batch()
