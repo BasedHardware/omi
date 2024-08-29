@@ -61,7 +61,7 @@ class _SettingsPageState extends State<SettingsPage> {
             elevation: 5.0,
             backgroundColor: Colors.black,
             child: Container(
-              padding: EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
                 border: const GradientBoxBorder(
                   gradient: LinearGradient(colors: [
@@ -77,13 +77,13 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _MockNotification(
+                  const _MockNotification(
                     path: 'assets/images/emotional_feedback_1.png',
                   ),
                   const SizedBox(
                     height: 25,
                   ),
-                  Text(
+                  const Text(
                     "Omi will send you feedback in real-time.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color.fromRGBO(255, 255, 255, .8)),
@@ -92,7 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     height: 25,
                   ),
                   Container(
-                    padding: EdgeInsets.only(
+                    padding: const EdgeInsets.only(
                       left: 8,
                       right: 8,
                       top: 8,
@@ -101,11 +101,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: TextButton(
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        minimumSize: Size(50, 30),
+                        minimumSize: const Size(50, 30),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         alignment: Alignment.center,
                       ),
-                      child: Text(
+                      child: const Text(
                         "Ok, I understand",
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -253,15 +253,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
                   }, icon: Icons.integration_instructions),
-                  getItemAddOn('Speech Profile', () {
-                    routeToPage(context, const SpeakerIdPage());
-                  }, icon: Icons.multitrack_audio),
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  getItemAddOn('People', () {
+                  Divider(color: Colors.transparent,),
+                  getItemAddOn('Speech Recognition', () {
+                    routeToPage(context, const SpeakerIdPage());
+                  }, icon: Icons.multitrack_audio),
+                  getItemAddOn('Identifying Others', () {
                     routeToPage(context, const UserPeoplePage());
                   }, icon: Icons.people),
+                  const Divider(color: Colors.transparent,),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
