@@ -114,3 +114,15 @@ def get_cached_facts(uid: str) -> List[dict]:
     if not facts:
         return []
     return eval(facts)
+
+
+def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):
+    r.set(f'urls:{blob_path}', signed_url)
+    r.expire(f'urls:{blob_path}', ttl - 1)
+
+
+def get_cached_signed_url(blob_path: str) -> str:
+    signed_url = r.get(f'urls:{blob_path}')
+    if not signed_url:
+        return ''
+    return signed_url.decode()
