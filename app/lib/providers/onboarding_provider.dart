@@ -57,6 +57,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     notifyListeners();
     await bleConnectDevice(device.id);
     deviceId = device.id;
+    SharedPreferencesUtil().btDeviceStruct = device;
     deviceName = device.name;
     var cDevice = await getConnectedDevice();
     if (cDevice != null) {
