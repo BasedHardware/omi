@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -112,7 +113,26 @@ class PureSocket implements IPureSocket {
     }
 
     _status = PureSocketStatus.connecting;
-    await _channel?.ready;
+
+    try {
+      await _channel?.ready;
+    } on SocketException catch (e) {
+      debugPrint("[Socket] Can not connect to socket ${e.message}");
+      _status = PureSocketStatus.notConnected;
+
+      // retry
+      await _reconnect();
+
+      return _status == PureSocketStatus.connected;
+    } on WebSocketChannelException catch (e) {
+      debugPrint("[Socket] Can not connect to socket ${e.message}");
+      _status = PureSocketStatus.notConnected;
+
+      // retry
+      await _reconnect();
+
+      return _status == PureSocketStatus.connected;
+    }
     _status = PureSocketStatus.connected;
     _retries = 0;
 
@@ -149,18 +169,20 @@ class PureSocket implements IPureSocket {
   @override
   void onClosed() {
     _status = PureSocketStatus.disconnected;
-    debugPrint("Socket closed");
     _listener?.onClosed();
+
+    _cleanUp();
+
+    debugPrint("Socket closed");
   }
 
   @override
   void onError(Object err, StackTrace trace) {
-    _status = PureSocketStatus.disconnected;
+    _listener?.onError(err, trace);
+    disconnect();
+
     print("Error: ${err}");
     debugPrintStack(stackTrace: trace);
-
-    _listener?.onError(err, trace);
-
     CrashReporting.reportHandledCrash(err, trace, level: NonFatalExceptionLevel.error);
   }
 
@@ -175,7 +197,7 @@ class PureSocket implements IPureSocket {
     _channel?.sink.add(message);
   }
 
-  void _reconnect() async {
+  Future _reconnect() async {
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
     const int maxRetries = 7;
@@ -201,7 +223,7 @@ class PureSocket implements IPureSocket {
       _listener?.onMaxRetriesReach();
       return;
     }
-    _reconnect();
+    await _reconnect();
   }
 
   @override
