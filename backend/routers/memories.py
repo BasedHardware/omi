@@ -169,12 +169,12 @@ def set_assignee_memory_segment(
 
 @router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
 def set_memory_visibility(
-        memory_id: str, visibility: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
+        memory_id: str, value: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
-    print('update_memory_visibility', memory_id, visibility, uid)
+    print('update_memory_visibility', memory_id, value, uid)
     _get_memory_by_id(uid, memory_id)
-    memories_db.set_memory_visibility(uid, memory_id, visibility)
-    if visibility == MemoryVisibility.private:
+    memories_db.set_memory_visibility(uid, memory_id, value)
+    if value == MemoryVisibility.private:
         redis_db.remove_memory_to_uid(memory_id)
         redis_db.remove_public_memory(memory_id)
     else:
@@ -190,6 +190,8 @@ def get_shared_memory_by_id(memory_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Memory is private")
 
+    # TODO: include speakers and people matched?
+    # TODO: other fields that  shouldn't be included?
     memory = _get_memory_by_id(uid, memory_id)
     visibility = memory.get('visibility', MemoryVisibility.private)
     if not visibility or visibility == MemoryVisibility.private:
