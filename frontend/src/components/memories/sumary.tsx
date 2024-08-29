@@ -13,8 +13,12 @@ export default function Summary({ memory }: SummaryProps) {
         <h3 className="text-xl font-semibold md:text-2xl">Overview</h3>
         <p className="mt-3 text-base md:text-lg">{memory.structured.overview}</p>
       </div>
-      <ActionItems items={memory.structured.action_items} />
-      <MemoryEvents events={memory.structured.events} />
+      {memory?.structured?.action_items?.length > 0 && (
+        <ActionItems items={memory.structured.action_items} />
+      )}
+      {memory?.structured?.events?.length > 0 && (
+        <MemoryEvents events={memory.structured.events} />
+      )}
     </div>
   );
 }
