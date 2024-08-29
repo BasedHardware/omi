@@ -28,8 +28,8 @@ You can integrate your Omi wearable and app with Zapier, and get access to 6000+
 
 <img src="/images/zapier_setup_guide_2.png" alt="zapier_setup_guide_2" width="100%">
 
-3. Go to Omi app → memories → tap on the memory you want to trigger Zapier from.
+3. And that's it - you can create any workflow with Zapier you want!
 
-4. Tap on the Zapier icon and select the Zap you want to trigger.
+---
 
-Questions? join Discordor check out our site
+Questions? join Discord!
