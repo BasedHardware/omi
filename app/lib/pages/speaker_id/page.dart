@@ -37,9 +37,9 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
 
   @override
   void dispose() {
-    if (mounted) {
-      context.read<SpeechProfileProvider>().dispose();
-    }
+    // if (mounted) {
+    //   context.read<SpeechProfileProvider>().dispose();
+    // }
     super.dispose();
   }
 
@@ -60,6 +60,9 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
+      onPopInvoked: (didPop) {
+        context.read<SpeechProfileProvider>().close();
+      },
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return MessageListener<SpeechProfileProvider>(
           showInfo: (info) {
@@ -325,7 +328,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                       },
                                       child: const Text(
                                         'Listen to my speech profile ➡️',
-                                        style: TextStyle(color: Colors.white,fontSize: 16),
+                                        style: TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
                               TextButton(
