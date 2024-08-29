@@ -12,12 +12,22 @@ The official app discovers the device by scanning for BLE devices with the name 
 
 ## BLE Services and Characteristics
 
-The Friend wearable device implements 2 services:
+The Friend wearable device implements several services:
 
 ### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)
 
 The service uses the official UUID of 0x180F and exposes the standard Battery Level characteristic with UUID 0x2A19.  
-The characteristic supports notification to provide regulat updates of the level (this does not work with firmware 1.0 and requires at least v1.5).
+The characteristic supports notification to provide regular updates of the level (this does not work with firmware 1.0.x and requires at least v1.5).
+
+### the standard BLE [Device Information Service](https://www.bluetooth.com/specifications/specs/device-information-service/)
+
+**Available since firmware version 1.0.3**
+
+The service uses the official UUID of 0x180A and exposes the following characteristics:
+- Manufacturer Name String (0x2A29) : "Based Hardware"
+- Model Number String (0x2A24) : "Friend"
+- Hardware Revision String (0x2A27): "Seeed Xiao BLE Sense"
+- Firmware Revision String (0x2A26) : the firmware version e.g. "1.0.3"
 
 ### one BLE service to stream the audio data to the app
 
@@ -29,19 +39,25 @@ The main service has UUID of `19B10000-E8F2-537E-4F6C-D104768A1214` and has two 
 
 The possible values for the codec type are:
 - 0: PCM 16-bit, 16kHz, mono
-- 1: PCM 8-bit, 16kHz, mono
-- 10: Mu-law 16-bit, 16kHz, mono
-- 11: Mu-law 8-bit, 16kHz, mono
+- 1: PCM 16-bit, 8kHz, mono
+- 10: Mu-law 8-bit, 16kHz, mono
+- 11: Mu-law 8-bit, 8kHz, mono
 - 20: Opus 16-bit, 16kHz, mono
 
-The device default is PCM 8-bit, 16kHz, mono.
+Starting with version 1.0.3 of the firmware, the device default is Opus. On earlier versions it was PCM 16-bit, 8kHz, mono.
 
 ### Audio Data
 
-The audio data is sent as updates to the audio characteristic. The format of the data depends on the codec type.
-The data is split into packets, with each packet containing 160 samples.
-Each packet also has a three byte header:
-- The first two bytes are the overall packet number, starting from 0.
-- The third byte is the index of packet in the current batch of packets.
+The audio data is sent as notifications on the audio characteristic. The format of the data depends on the codec type.  
+The data is split into audio packets, with each packet containing 160 samples.  
+A packet could be sent in multiple value updates if it is larger than (negotiated BLE MTU - 3 bytes).  
+Each value update has a three byte header:
+- The first two bytes are the overall packet number, starting from 0, incremented for each value sent and looped over to 0 after 65535.
+- The third byte is the index of value in the current packet, starting at 0.  
+
+For instance, 160 samples with a codec 0 (16-bit, 16kHz PCM) results in a packet size of 320 bytes.  
+On current iOS devices, this results in 2 value notifications:
+- packet number n, index 0, 251 bytes
+- packet number n + 1, index 1, 75 bytes
 
 The data is sent in little-endian format.

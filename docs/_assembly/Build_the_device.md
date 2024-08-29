@@ -6,15 +6,21 @@ nav_order: 2
 
 # Building the device
 
-If you received an unassembled Friend or want build one yourself, follow the steps below:
+Here is a quick video guide that shows the assembly process:
+
+https://github.com/user-attachments/assets/5b255316-e675-4dce-92ba-d55e88bca19f
+
+https://github.com/user-attachments/assets/23e70cba-3db0-44ee-8531-58707df79a7b
+
+If you received an unassembled Friend or want to build one yourself, follow the steps below:
 
 **Step 0.** Components
 
-Ensure you've purchased all required components from the [buying guide] (https://docs.basedhardware.com/assembly/Buying_Guide/).
+Ensure you've purchased all required components from the [buying guide](https://docs.basedhardware.com/assembly/Buying_Guide/))
 
 <img src="/images/latest_assembly/components.png" alt="components" width="300">
 
-Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Friend/blob/main/3d-printing%20designs/Cover%20%2B%20Case.stl).
+Download and print the case from the provided .stl file [link](https://github.com/BasedHardware/Omi/tree/main/Friend/hardware/triangle%20v1).
 
 If you don't have access to a 3D printer, send the file to a 3D printing service or check https://makerspace.com/ for 3D printing spaces.
 
@@ -27,7 +33,7 @@ If you don't have access to a 3D printer, send the file to a 3D printing service
 
 <img src="/images/latest_assembly/2.png" alt="wire" width="300">
 
-The wire stripper should have multiple notches labeled with AWG sizes. For this project, we recommend using *28 AWG*.
+The wire stripper should have multiple notches labelled with AWG sizes. For this project, we recommend using *28 AWG*.
 
 **Step 3.** Follow the soldering diagram to connect the battery and board.
 

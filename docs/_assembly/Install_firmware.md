@@ -6,19 +6,22 @@ nav_order: 3
 
 # Install firmware
 
-If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
-
 {: .note }
 Important: If you purchased an assembled device please skip this step
 
+If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
 
-SKIP and INSTALL PRE-BUILT FIRMWARE: Looking into the git repository, in the [firmware](https://github.com/BasedHardware/Friend/tree/main/firmware) folder, under the desired version, you'll find pre-built firmwares in the Release folder. For now, the safe bet is to use the pcm firmware, but the goal is to implement opus firmware (please help if you can). To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
+### Official firmware:
+
+Go to [Releases](https://github.com/BasedHardware/Omi/releases) in Github, and find the latest official firmware release. To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
+
+### Build your own firmware:
 
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8)
 
 2. In the nRF Connect Extension inside your VS Code, click "Open an existing application" and open the `firmware` folder from the root of this repo.
 
-<img src="/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%">
+   <img src="/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%">
 
 
 3. In the application panel of the extension, click the "Add Build Configuration" icon.
@@ -31,11 +34,17 @@ SKIP and INSTALL PRE-BUILT FIRMWARE: Looking into the git repository, in the [fi
 
 5. Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
 
-6. Double-click on the reset button of the device. The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
+6. Double-click on the reset button of the device(see on image below) . The device will appear on your computer as a disk. Drag and drop the `zephyr.uf2` file into it.
 
    > **Note:** On a Mac, you might see an error message after dropping the file, indicating that the process did not complete. This is just a Mac-specific error; the firmware is successfully uploaded.
 
    <img src="/images/pinout.jpg" alt="Pinout" width="300">
+
+   If you have an assembled device, you can put a stick pin/needle into this whole and double-click 2 times
+
+
+   <img src="https://github.com/BasedHardware/Omi/assets/43514161/8136f688-8eac-4967-bd95-7aaeaac324cd" alt="whole" width="300">
+
 
 That's it! You have successfully installed the firmware on your device.
 

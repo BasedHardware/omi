@@ -1,0 +1,597 @@
+workflows:
+  ios-prod-testflight:
+    name: Release iOS to Testflight
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v2
+    environment:
+      ios_signing:
+        provisioning_profiles:
+          - codemagic_v2
+          - codemagic_v2_OneSignalNotificationServiceExten
+        certificates:
+          - codemagic_v2
+      groups:
+        - app_env
+        - firebase
+        - shorebird
+      vars:
+        APP_ID: 6502156163
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-ios-cm'
+          include: true
+        - pattern: 'v*-mobile-cm'
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Shorebird
+        script: |
+          # Install the Shorebird CLI
+          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+          # Set Shorebird PATH
+          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
+
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Set up Google Service Info
+        script: |
+          # TODO: check why we need this ?
+          echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/ios/Runner/GoogleService-Info.plist"
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build
+
+      - name: Instals pod
+        script: |
+          cd ios && pod install --repo-update
+
+      - name: Release ipa with Shorebird
+        script: |
+          # Set up code signing settings on Xcode project
+          # -> $HOME/export_options.plist
+          xcode-project use-profiles
+
+          # Build
+          shorebird release ios \
+            --flavor prod -- \
+            --export-options-plist=$HOME/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+        submit_to_app_store: false
+
+  android-prod-internal:
+    name: Release Android Internal Production
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    environment:
+      android_signing:
+        - prod_android_upload_keystore
+      groups:
+        - app_env
+        - firebase
+        - google_play
+        - shorebird
+      vars:
+        PACKAGE_NAME: "com.friend.ios"
+        GOOGLE_PLAY_TRACK: "internal"
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+      java: 17
+    cache:
+      cache_paths:
+        - $HOME/opt
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-android-cm'
+          include: true
+        - pattern: 'v*-mobile-cm'
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Shorebird
+        script: |
+          # Install the Shorebird CLI
+          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+          # Set Shorebird PATH
+          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
+
+      - name: Installing Android SDK
+        script: |
+          export ANDROID_HOME="$HOME/opt/android-sdk"
+          if [ ! -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does not exist. Installing..."
+         
+            mkdir -p $ANDROID_HOME
+
+            # Install cmdline-tools 11076708; NDK: 27.0.12077973
+            cd "$HOME/opt" && \
+            curl --fail --show-error --silent --connect-timeout 10.00 --max-time 120.00 \
+              --output commandlinetools-mac-11076708_latest.zip \
+              https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip && \
+            7z -bd x commandlinetools-mac-11076708_latest.zip && \
+            mkdir -p $ANDROID_HOME && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "tools" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "cmdline-tools;latest" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;27.0.12077973" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --licenses  && \
+            cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --list
+          fi
+
+          if [ -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does exist. Setting up env..."
+
+            # PATH
+            export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools
+
+            # Override ENV
+            echo ANDROID_HOME="$ANDROID_HOME" >> $CM_ENV
+            echo ANDROID_SDK_ROOT="$ANDROID_HOME" >> $CM_ENV
+            echo PATH="$PATH" >> $CM_ENV
+          fi
+
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
+          echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run build runner
+        script: |
+          dart run build_runner build
+      - name: Release AAB with Shorebird
+        script: | 
+          # TODO: Don't tricky
+          # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
+          echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
+
+          # Should use bump version automatically by CI
+          shorebird release android \
+            --flavor prod
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: false
+
+  ios-prod-patch:
+    name: Patch iOS to Production
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v2
+    environment:
+      ios_signing:
+        provisioning_profiles:
+          - codemagic_v2
+          - codemagic_v2_OneSignalNotificationServiceExten
+        certificates:
+          - codemagic_v2
+      groups:
+        - app_env
+        - firebase
+        - shorebird
+      vars:
+        APP_ID: 6502156163
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-ios-patch-cm'
+          include: true
+        - pattern: 'v*-mobile-patch-cm'
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Shorebird
+        script: |
+          # Install the Shorebird CLI
+          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+          # Set Shorebird PATH
+          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
+
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Set up Google Service Info
+        script: |
+          # TODO: check why we need this ?
+          echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/ios/Runner/GoogleService-Info.plist"
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build
+
+      - name: Instals pod
+        script: |
+          cd ios && pod install --repo-update
+
+      - name: Patch iOS app with Shorebird
+        script: |
+          # Set up code signing settings on Xcode project
+          # -> $HOME/export_options.plist
+          xcode-project use-profiles
+
+          # Build
+          shorebird patch ios \
+            --flavor prod -- \
+            --export-options-plist=$HOME/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+
+  android-prod-patch:
+    name: Patch Android to Production
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    environment:
+      android_signing:
+        - prod_android_upload_keystore
+      groups:
+        - app_env
+        - firebase
+        - shorebird
+      vars:
+        PACKAGE_NAME: "com.friend.ios"
+        GOOGLE_PLAY_TRACK: "internal"
+      flutter: 3.22.3
+      xcode: 15.4
+      cocoapods: 1.15.2
+      java: 17
+    cache:
+      cache_paths:
+        - $HOME/opt
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*-android-patch-cm'
+          include: true
+        - pattern: 'v*-mobile-patch-cm'
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Shorebird
+        script: |
+          # Install the Shorebird CLI
+          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+          # Set Shorebird PATH
+          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
+
+      - name: Installing Android SDK
+        script: |
+          export ANDROID_HOME="$HOME/opt/android-sdk"
+          if [ ! -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does not exist. Installing..."
+         
+            mkdir -p $ANDROID_HOME
+
+            # Install cmdline-tools 11076708; NDK: 27.0.12077973
+            cd "$HOME/opt" && \
+            curl --fail --show-error --silent --connect-timeout 10.00 --max-time 120.00 \
+              --output commandlinetools-mac-11076708_latest.zip \
+              https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip && \
+            7z -bd x commandlinetools-mac-11076708_latest.zip && \
+            mkdir -p $ANDROID_HOME && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "tools" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "cmdline-tools;latest" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;27.0.12077973" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --licenses  && \
+            cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --list
+          fi
+
+          if [ -d "$ANDROID_HOME" ]; then
+            echo "$ANDROID_HOME does exist. Setting up env..."
+
+            # PATH
+            export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools
+
+            # Override ENV
+            echo ANDROID_HOME="$ANDROID_HOME" >> $CM_ENV
+            echo ANDROID_SDK_ROOT="$ANDROID_HOME" >> $CM_ENV
+            echo PATH="$PATH" >> $CM_ENV
+          fi
+
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_prod.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+            --android-package-name=com.friend.ios \
+            --android-out=android/app/src/prod/  \
+            --ios-out=ios/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="android,ios" \
+            --out=lib/firebase_options_dev.dart \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --android-app-id=com.friend.ios.dev \
+            --android-out=android/app/src/dev/  \
+            --ios-out=ios/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --ios-target="Runner" \
+            --yes \
+            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
+          echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run build runner
+        script: |
+          dart run build_runner build
+      - name: Patch Android app with Shorebird
+        script: | 
+          # TODO: Don't tricky
+          # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
+          echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
+
+          # Should use bump version automatically by CI
+          shorebird patch android \
+            --flavor prod
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false

@@ -1,5 +1,6 @@
-.env
-__pycache__/
+*.env
+*__pycache__/
+*venv/
 libraries/
 myenv/
 venv/
@@ -19,16 +20,20 @@ yarn.lock
 .pub-cache/
 .pub/
 build/
+dist/
 
 # Android specific
 **/android/**/build/
 **/android/.gradle
 **/android/gradlew
 **/android/gradlew.bat
+**/android/key.properties
 **/android/**/gradle-wrapper.jar
 **/android/**/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/app/google-services.json
+**/android/app/src/dev/google-services.json
+**/android/app/src/prod/google-services.json
 
 # iOS specific
 **/ios/**/Pods/
@@ -42,6 +47,8 @@ build/
 **/ios/**/GeneratedPluginRegistrant.*
 **/ios/**/xcuserdata
 **/ios/Runner/GoogleService-Info.plist
+**/ios/Config/*
+**/ios/Config/**/*
 
 # macOS specific
 **/macos/**/Pods/
@@ -83,12 +90,12 @@ build/
 hs_err_pid*
 
 # Servers
-backend/app-server/dist
 src/recordings
 
 # Apps
-apps/AppStandalone/lib/firebase_options.dart
-apps/AppStandalone/firebase.json
+/app/lib/firebase_options.dart
+/app/lib/firebase_options_*.dart
+/app/firebase.json
 
 # Solidworks models
 *.SLDPRT
@@ -100,15 +107,42 @@ apps/AppStandalone/firebase.json
 
 # vscode configuration
 .vscode/
+!.vscode/extensions.json
 
 # test output
 test/recordings
 
-#Flutter
+# Flutter
 env.g.dart
 */upload-keystore.jks
 */key.properties
+*.jks
 
 # Jekyll
 docs/_site/
 .jekyll-metadata
+
+/app/lib/env/dev_env.g.dart
+/app/lib/env/prod_env.g.dart
+/app/lib/objectbox.g.dart
+*.jks
+plugins/example/tmp/
+
+backend/pretrained_models/
+backend/scripts/rag/*.json
+backend/scripts/rag/visualizations/
+/backend/scripts/data/
+/backend/pretrained_models/
+*/pretrained_models/
+/backend/_speech_profiles
+
+backend/google-credentials.json
+backend/google-credentials-dev.json
+
+startup-script.sh
+/app/lib/firebase_options_dev.dart
+/app/lib/firebase_options_prod.dart
+app/lib/env/dev_env.g.dart
+app/lib/env/prod_env.g.dart
+/app/lib/libobjectbox.dylib
+/app/lib/objectbox-model.json
