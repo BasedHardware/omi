@@ -1,4 +1,5 @@
 import 'package:friend_private/env/dev_env.dart';
+import 'package:friend_private/services/remote_config_service.dart';
 
 abstract class Env {
   static late final EnvFields _instance;
@@ -9,19 +10,27 @@ abstract class Env {
 
   static String? get oneSignalAppId => _instance.oneSignalAppId;
 
-  static String? get openAIAPIKey => _instance.openAIAPIKey;
+  static String? get openAIAPIKey => (constOpenaiApiKey.isNotEmpty)
+      ? constOpenaiApiKey
+      : _instance.openAIAPIKey;
 
   static String? get instabugApiKey => _instance.instabugApiKey;
 
-  static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
+  static String? get mixpanelProjectToken =>
+      (constMixpanelProjectToken.isNotEmpty)
+          ? constMixpanelProjectToken
+          : _instance.mixpanelProjectToken;
 
-  static String? get apiBaseUrl => _instance.apiBaseUrl;
+  static String? get apiBaseUrl =>
+      (constApiBaseUrl.isNotEmpty) ? constApiBaseUrl : _instance.apiBaseUrl;
 
-  // static String? get apiBaseUrl => 'https://camel-lucky-reliably.ngrok-free.app/';
+  static String? get growthbookApiKey => (constGrowthBookApiKey.isNotEmpty)
+      ? constGrowthBookApiKey
+      : _instance.growthbookApiKey;
 
-  static String? get growthbookApiKey => _instance.growthbookApiKey;
-
-  static String? get googleMapsApiKey => _instance.googleMapsApiKey;
+  static String? get googleMapsApiKey => (constGoogleMapsApiKey.isNotEmpty)
+      ? constGoogleMapsApiKey
+      : _instance.googleMapsApiKey;
 }
 
 abstract class EnvFields {

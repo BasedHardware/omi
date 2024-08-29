@@ -85,7 +85,8 @@ class ForegroundUtil {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'foreground_service',
         channelName: 'Foreground Service Notification',
-        channelDescription: 'Transcription service is running in the background.',
+        channelDescription:
+            'Transcription service is running in the background.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.HIGH,
         // iconData: const NotificationIconData(
@@ -98,9 +99,9 @@ class ForegroundUtil {
         showNotification: false,
         playSound: false,
       ),
-      foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 30000,
-        isOnceEvent: false,
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.repeat(5000),
+        autoRunOnMyPackageReplaced: true,
         autoRunOnBoot: false,
         allowWakeLock: true,
         allowWifiLock: true,

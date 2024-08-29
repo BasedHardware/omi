@@ -29,7 +29,6 @@ Future<void> initializeMicBackgroundService() async {
       onStart: onStart,
       isForegroundMode: true,
       autoStartOnBoot: true,
-      foregroundServiceType: AndroidForegroundType.microphone,
     ),
   );
 }

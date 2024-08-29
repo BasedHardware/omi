@@ -4,7 +4,7 @@ import 'env.dart';
 
 part 'dev_env.g.dart';
 
-@Envied(allowOptionalFields: true, path: '.dev.env')
+@Envied(allowOptionalFields: true, path: '.env')
 final class DevEnv implements EnvFields {
   DevEnv();
 

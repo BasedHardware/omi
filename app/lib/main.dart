@@ -12,8 +12,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
-import 'package:friend_private/firebase_options_dev.dart' as dev;
-import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
@@ -29,9 +27,9 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 Future<bool> _init() async {
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    await Firebase.initializeApp();
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    await Firebase.initializeApp();
   }
 
   await NotificationService.instance.initialize();

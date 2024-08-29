@@ -1,10 +1,10 @@
 plugins {
-   id "com.android.application"
+    id "com.android.application"
     // START: FlutterFire Configuration
     id 'com.google.gms.google-services'
     // END: FlutterFire Configuration
-   id "kotlin-android"
-   id "dev.flutter.flutter-gradle-plugin"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 def localProperties = new Properties()
@@ -17,12 +17,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
 if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
+    flutterVersionCode = '5'
 }
 
 def flutterVersionName = localProperties.getProperty('flutter.versionName')
 if (flutterVersionName == null) {
-    flutterVersionName = '1.0'
+    flutterVersionName = '1.0.4'
 }
 
 def keystoreProperties = new Properties()
@@ -39,13 +39,13 @@ android {
     productFlavors {
         prod {
             dimension "flavor-type"
-            applicationId "com.friend.ios"
-            resValue "string", "app_name", "Friend"
+            applicationId "com.ai.wearable"
+            resValue "string", "app_name", "Luca"
         }
         dev {
             dimension "flavor-type"
-            applicationId "com.friend.ios.dev"
-            resValue "string", "app_name", "Friend Dev"
+            applicationId "com.ai.wearable"
+            resValue "string", "app_name", "Luca Dev"
         }
     }
 
@@ -69,7 +69,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.friend.ios"
+        applicationId "com.ai.wearable"
         minSdkVersion 24
         targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
@@ -85,17 +85,17 @@ android {
             storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
             storePassword keystoreProperties['storePassword']
         }
+
     }
 
     buildTypes {
         release {
-            productFlavors.dev.signingConfig signingConfigs.debug
             productFlavors.prod.signingConfig signingConfigs.release
             // fixing calendar
             // https://github.com/builttoroam/device_calendar/issues/99#issuecomment-612449677
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             minifyEnabled true
-            shrinkResources true
+            shrinkResources false
         }
         debug{
             minifyEnabled true
