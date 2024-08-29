@@ -249,7 +249,7 @@ class CapturePageState extends State<CapturePage>
               speechProfileWidget(context),
               ...getConnectionStateWidgets(
                   context, provider.hasTranscripts, deviceProvider.connectedDevice, wsConnectionState, _internetStatus),
-              getTranscriptWidget(provider.memoryCreating, provider.segments, photos, deviceProvider.connectedDevice),
+              getTranscriptWidget(provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
               ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
               const SizedBox(height: 16)
             ]),
