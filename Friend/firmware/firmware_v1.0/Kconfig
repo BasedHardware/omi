@@ -10,7 +10,11 @@ config OFFLINE_STORAGE
 	default n
 config ACCELEROMETER
     bool "Accelerometer Support"
+    default n
 config ENABLE_BUTTON
     bool "Button support on Devkit2"
     default n
+config ENABLE_SPEAKER
+    bool "Enable the speaker!!"
+    default n 
 endmenu
