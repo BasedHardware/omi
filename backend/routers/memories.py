@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
+import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.memory import *
 from routers.speech_profile import expand_speech_profile
@@ -14,7 +15,7 @@ from utils.plugins import trigger_external_integrations
 router = APIRouter()
 
 
-def _get_memory_by_id(uid: str, memory_id: str):
+def _get_memory_by_id(uid: str, memory_id: str) -> dict:
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -164,3 +165,47 @@ def set_assignee_memory_segment(
         delete_speech_sample_for_people(uid, path)
 
     return memory
+
+
+@router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
+def update_memory_visibility(
+        memory_id: str, visibility: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('update_memory_visibility', memory_id, visibility, uid)
+    _get_memory_by_id(uid, memory_id)
+    memories_db.set_memory_visibility(uid, memory_id, visibility)
+    if visibility == MemoryVisibility.private:
+        redis_db.remove_memory_to_uid(memory_id)
+        redis_db.remove_public_memory(memory_id)
+    else:
+        redis_db.store_memory_to_uid(memory_id, uid)
+        redis_db.add_public_memory(memory_id)
+
+    return {"status": "Ok"}
+
+
+@router.get("/v1/memories/{memory_id}/shared", response_model=Memory, tags=['memories'])
+def get_shared_memory_by_id(memory_id: str):
+    uid = redis_db.get_memory_uid(memory_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail="Memory is private")
+
+    memory = _get_memory_by_id(uid, memory_id)
+    visibility = memory.get('visibility', MemoryVisibility.private)
+    if not visibility or visibility == MemoryVisibility.private:
+        raise HTTPException(status_code=404, detail="Memory is private")
+    return memory
+
+
+@router.get("/v1/public-memories", response_model=List[Memory], tags=['memories'])
+def get_public_memories(offset: int = 0, limit: int = 1000):
+    memories = redis_db.get_public_memories()
+    data = []
+    for memory_id in memories:
+        uid = redis_db.get_memory_uid(memory_id)
+        if not uid:
+            continue
+        data.append([uid, memory_id])
+    # TODO: sort in some way to have proper pagination
+
+    return memories_db.run_get_public_memories(data[offset:offset + limit])

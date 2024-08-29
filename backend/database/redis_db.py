@@ -126,3 +126,34 @@ def get_cached_signed_url(blob_path: str) -> str:
     if not signed_url:
         return ''
     return signed_url.decode()
+
+
+# VISIIBILTIY OF MEMORIES
+def store_memory_to_uid(memory_id: str, uid: str):
+    r.set(f'memories-visibility:{memory_id}', uid)
+
+
+def remove_memory_to_uid(memory_id: str):
+    r.delete(f'memories-visibility:{memory_id}')
+
+
+def get_memory_uid(memory_id: str) -> str:
+    uid = r.get(f'memories-visibility:{memory_id}')
+    if not uid:
+        return ''
+    return uid.decode()
+
+
+def add_public_memory(memory_id: str):
+    r.sadd('public-memories', memory_id)
+
+
+def remove_public_memory(memory_id: str):
+    r.srem('public-memories', memory_id)
+
+
+def get_public_memories() -> List[str]:
+    val = r.smembers('public-memories')
+    if not val:
+        return []
+    return [x.decode() for x in val]
