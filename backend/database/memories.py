@@ -128,7 +128,7 @@ async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
     memory_doc = await memory_ref.get()
     if memory_doc.exists:
         memory_data = memory_doc.to_dict()
-        if memory_data.get('visibility') in ['public']:
+        if memory_data.get('visibility') in ['public'] and not memory_data.get('deleted'):
             return memory_data
     return None
 
