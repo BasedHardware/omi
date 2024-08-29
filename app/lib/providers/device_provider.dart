@@ -193,6 +193,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (connectedDevice == null) {
       return;
     }
+    captureProvider?.resetState(restartBytesProcessing: true);
     captureProvider?.streamAudioToWs(connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
     notifyListeners();
   }

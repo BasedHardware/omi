@@ -157,10 +157,10 @@ class _MyAppState extends State<MyApp> {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider2<DeviceProvider, CaptureProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, value, SpeechProfileProvider? previous) =>
-                (previous?..setProvider(value)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, SpeechProfileProvider? previous) =>
+                (previous?..setProvider(device, capture)) ?? SpeechProfileProvider(),
           ),
         ],
         builder: (context, child) {
