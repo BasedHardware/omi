@@ -29,8 +29,8 @@ export default function LoadingMemory() {
         <div className="h-[28px] w-[10rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[30px]"></div>
         <div className="h-[10px]" />
         <div className="mt-3 flex flex-col gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div className="flex w-full items-center gap-3">
+          {[...Array(3)].map((_, index) => (
+            <div className="flex w-full items-center gap-3" key={index}>
               <div className="min-h-[20px] min-w-[20px] rounded-full bg-gray-500" />
               <div className="w-full">
                 <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
