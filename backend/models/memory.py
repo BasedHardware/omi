@@ -27,6 +27,7 @@ class CategoryEnum(str, Enum):
     social = 'social'
     work = 'work'
     sports = 'sports'
+    politics = 'politics'
     literature = 'literature'
     history = 'history'
     other = 'other'
