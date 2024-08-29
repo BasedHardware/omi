@@ -71,7 +71,7 @@ class ServerMemory {
   final String? language; // applies to Friend only
 
   final MemoryExternalData? externalIntegration;
-  final MemoryPostProcessing? postprocessing;
+  MemoryPostProcessing? postprocessing;
 
   bool discarded;
   final bool deleted;
@@ -127,7 +127,6 @@ class ServerMemory {
 
   bool isPostprocessing() {
     int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
-    print('postprocessing?.status ${postprocessing?.status}');
     return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
             postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
         createdSecondsAgo < 120;

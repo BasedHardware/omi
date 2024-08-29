@@ -69,7 +69,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   return null;
 }
 
-Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
+Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
   var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
   var request = http.MultipartRequest(
     'POST',
@@ -87,11 +87,11 @@ Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
       return ServerMemory.fromJson(jsonDecode(response.body));
     } else {
       debugPrint('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
-      throw Exception('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
+      return null;
     }
   } catch (e) {
     debugPrint('An error occurred memoryPostProcessing: $e');
-    throw Exception('An error occurred memoryPostProcessing: $e');
+    return null;
   }
 }
 

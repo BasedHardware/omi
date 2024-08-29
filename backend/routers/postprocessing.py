@@ -42,9 +42,11 @@ def postprocess_memory(
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
     if memory.discarded:
+        print('postprocess_memory: Memory is discarded')
         raise HTTPException(status_code=400, detail="Memory is discarded")
 
-    if memory.postprocessing is not None:
+    if memory.postprocessing is not None and memory.postprocessing.status != PostProcessingStatus.not_started:
+        print(f'postprocess_memory: Memory can\'t be post-processed again {memory.postprocessing.status}')
         raise HTTPException(status_code=400, detail="Memory can't be post-processed again")
 
     file_path = f"_temp/{memory_id}_{file.filename}"
@@ -52,9 +54,10 @@ def postprocess_memory(
         f.write(file.file.read())
 
     aseg = AudioSegment.from_wav(file_path)
-    if aseg.duration_seconds < 10:
+    if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         print('postprocess_memory: Audio duration is too short, seems wrong.')
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
         raise HTTPException(status_code=500, detail="Audio duration is too short, seems wrong.")
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
@@ -107,21 +110,25 @@ def postprocess_memory(
             # TODO: FAL fails too much and is fucking expensive. Remove it.
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
-            # TODO: consider doing reprocessing, if any segment still matched to user or people
+            memory.postprocessing = MemoryPostProcessing(
+                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
+            # TODO: consider doing process_memory, if any segment still matched to user or people
             return memory
 
         # Reprocess memory with improved transcription
-        result = process_memory(uid, memory.language, memory, force_process=True)
+        result: Memory = process_memory(uid, memory.language, memory, force_process=True)
 
         # Process users emotion, async
         if emotional_feedback:
             asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
     except Exception as e:
         print(e)
-        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed)
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
+    result.postprocessing = MemoryPostProcessing(
+        status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
     return result
 
 

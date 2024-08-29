@@ -239,6 +239,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
         builder: (ctx) {
           bool isUserSegment = widget.memory.transcriptSegments[segmentIdx].isUser;
           String? personId = widget.memory.transcriptSegments[segmentIdx].personId;
+          bool loading = false;
           return StatefulBuilder(builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               decoration: BoxDecoration(
@@ -246,129 +247,176 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
               ),
               height: 320,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              child: ListView(
+              child: Stack(
                 children: [
-                  const SizedBox(height: 16),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Row(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    child: ListView(
                       children: [
-                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () {
-                            MixpanelManager().unassignedSegment();
-                            widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            children: [
+                              Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () {
+                                  MixpanelManager().unassignedSegment();
+                                  widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                                  widget.memory.transcriptSegments[segmentIdx].personId = null;
+                                  assignMemoryTranscriptSegment(widget.memory.id, segmentIdx);
+                                  setModalState(() {
+                                    personId = null;
+                                    isUserSegment = false;
+                                  });
+                                  setState(() {});
+                                  Navigator.pop(context);
+                                },
+                                child: const Text('Un-assign',
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      decoration: TextDecoration.underline,
+                                    )),
+                              ),
+                            ],
+                          ),
+                        ),
+                        !hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                        !hasAudioRecording
+                            ? GestureDetector(
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (c) => getDialog(
+                                      context,
+                                      () => Navigator.pop(context),
+                                      () {
+                                        Navigator.pop(context);
+                                        routeToPage(context, const RecordingsStoragePermission());
+                                      },
+                                      'Can\'t be used for speech training',
+                                      'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                      okButtonText: 'View',
+                                    ),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Text('Can\'t be used for speech training',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium!
+                                              .copyWith(decoration: TextDecoration.underline)),
+                                      const Padding(
+                                        padding: EdgeInsets.only(right: 12),
+                                        child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : const SizedBox(),
+                        const SizedBox(height: 12),
+                        CheckboxListTile(
+                          title: const Text('Yours'),
+                          value: isUserSegment,
+                          checkboxShape:
+                              const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                          onChanged: (bool? value) async {
+                            if (loading) return;
+                            setModalState(() => loading = true);
+
+                            MixpanelManager().assignedSegment('User');
+                            widget.memory.transcriptSegments[segmentIdx].isUser = true;
                             widget.memory.transcriptSegments[segmentIdx].personId = null;
-                            assignMemoryTranscriptSegment(widget.memory.id, segmentIdx);
-                            setModalState(() {
-                              personId = null;
-                              isUserSegment = false;
-                            });
-                            setState(() {});
-                            Navigator.pop(context);
+                            bool result = await assignMemoryTranscriptSegment(
+                              widget.memory.id,
+                              segmentIdx,
+                              isUser: true,
+                              useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
+                            );
+                            try{
+                              setModalState(() {
+                                personId = null;
+                                isUserSegment = true;
+                                loading = false;
+                              });
+                              setState(() {});
+                              Navigator.pop(context);
+                              if (SharedPreferencesUtil().hasSpeakerProfile) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(result
+                                        ? 'Segment assigned, and speech profile updated!'
+                                        : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {}
                           },
-                          child: const Text('Un-assign',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                decoration: TextDecoration.underline,
-                              )),
+                        ),
+                        for (var person in people)
+                          CheckboxListTile(
+                            title: Text('${person.name}\'s'),
+                            value: personId == person.id,
+                            checkboxShape:
+                                const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                            onChanged: (bool? value) async {
+                              if (loading) return;
+                              setModalState(() => loading = true);
+                              MixpanelManager().assignedSegment('User Person');
+                              setState(() {
+                                widget.memory.transcriptSegments[segmentIdx].isUser = false;
+                                widget.memory.transcriptSegments[segmentIdx].personId = person.id;
+                              });
+                              bool result = await assignMemoryTranscriptSegment(widget.memory.id, segmentIdx,
+                                  personId: person.id);
+                              // TODO: make this un-closable or in a way that they receive the result
+                              try {
+                                setModalState(() {
+                                  personId = person.id;
+                                  isUserSegment = false;
+                                  loading = false;
+                                });
+                                Navigator.pop(context);
+                                setState(() {});
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(result
+                                        ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
+                                        : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ),
+                                );
+                              } catch (e) {}
+                            },
+                          ),
+                        ListTile(
+                          title: const Text('Someone else\'s'),
+                          trailing: const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Icon(Icons.add),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            routeToPage(context, const UserPeoplePage());
+                          },
                         ),
                       ],
                     ),
                   ),
-                  !hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  !hasAudioRecording
-                      ? GestureDetector(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  Navigator.pop(context);
-                                  routeToPage(context, const RecordingsStoragePermission());
-                                },
-                                'Can\'t be used for speech training',
-                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View',
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text('Can\'t be used for speech training',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .copyWith(decoration: TextDecoration.underline)),
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 12),
-                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox(),
-                  const SizedBox(height: 12),
-                  CheckboxListTile(
-                    title: const Text('Yours'),
-                    value: isUserSegment,
-                    checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                    onChanged: (bool? value) {
-                      MixpanelManager().assignedSegment('User');
-                      widget.memory.transcriptSegments[segmentIdx].isUser = true;
-                      widget.memory.transcriptSegments[segmentIdx].personId = null;
-                      assignMemoryTranscriptSegment(
-                        widget.memory.id,
-                        segmentIdx,
-                        isUser: true,
-                        useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
-                      );
-                      setModalState(() {
-                        personId = null;
-                        isUserSegment = true;
-                      });
-                      setState(() {});
-                      Navigator.pop(context);
-                    },
-                  ),
-                  for (var person in people)
-                    CheckboxListTile(
-                      title: Text('${person.name}\'s'),
-                      value: personId == person.id,
-                      checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                      onChanged: (bool? value) {
-                        MixpanelManager().assignedSegment('User Person');
-                        assignMemoryTranscriptSegment(widget.memory.id, segmentIdx, personId: person.id);
-                        widget.memory.transcriptSegments[segmentIdx].isUser = false;
-                        widget.memory.transcriptSegments[segmentIdx].personId = person.id;
-                        setModalState(() {
-                          personId = person.id;
-                          isUserSegment = false;
-                        });
-                        setState(() {});
-                        Navigator.pop(context);
-                      },
+                  if (loading)
+                    Container(
+                      color: Colors.black.withOpacity(0.3),
+                      child: const Center(
+                          child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                      )),
                     ),
-                  ListTile(
-                    title: const Text('Someone else\'s'),
-                    trailing: const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.add),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      routeToPage(context, const UserPeoplePage());
-                    },
-                  ),
                 ],
               ),
             );
