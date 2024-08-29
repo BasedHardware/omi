@@ -17,12 +17,15 @@ class PeopleProvider extends BaseProvider {
   bool isPlaying = false;
 
   void initialize() {
+    loading = true;
+    notifyListeners();
     setPeople();
     _setupAudioPlayerListeners();
   }
 
   setPeople() {
     getAllPeople().then((value) {
+      loading = false;
       people = value;
       SharedPreferencesUtil().cachedPeople = people;
       notifyListeners();

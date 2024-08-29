@@ -228,79 +228,88 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   : const SizedBox(),
             ],
           ),
-          body: provider.people.isEmpty
+          body: provider.loading
               ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(Icons.question_mark, size: 40),
-                      SizedBox(height: 24),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 32),
-                        child: Text('Create a new person and train Omi to recognize their speech too!',
-                            style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
-                      ),
-                      SizedBox(height: 64),
-                    ],
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 )
-              : ListView.separated(
-                  itemCount: provider.people.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final person = provider.people[index];
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ListTile(
-                          title: Text(person.name),
-                          onTap: () => _showPersonDialog(context, provider, person: person),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, size: 20),
-                            onPressed: () => _confirmDeletePerson(person, provider),
-                          ),
-                        ),
-                        if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+              : provider.people.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(Icons.question_mark, size: 40),
+                          SizedBox(height: 24),
                           Padding(
-                            padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: IconButton(
-                                        padding: const EdgeInsets.all(0),
-                                        icon: Icon(
-                                          provider.currentPlayingPersonIndex == index &&
-                                                  provider.currentPlayingIndex == j &&
-                                                  provider.isPlaying
-                                              ? Icons.pause
-                                              : Icons.play_arrow,
-                                        ),
-                                        onPressed: () => provider.playPause(index, j, sample),
-                                      ),
-                                      title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
-                                      onTap: () => _confirmDeleteSample(index, person, sample, provider),
-                                      subtitle: FutureBuilder<Duration?>(
-                                        future: AudioPlayer().setUrl(sample),
-                                        builder: (context, snapshot) {
-                                          if (snapshot.hasData) {
-                                            return Text('${snapshot.data!.inSeconds} seconds');
-                                          } else {
-                                            return const Text('Loading duration...');
-                                          }
-                                        },
-                                      ),
-                                    )),
-                              ],
-                            ),
+                            padding: EdgeInsets.symmetric(horizontal: 32),
+                            child: Text('Create a new person and train Omi to recognize their speech too!',
+                                style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
                           ),
-                      ],
-                    );
-                  },
-                ),
+                          SizedBox(height: 64),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: provider.people.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final person = provider.people[index];
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ListTile(
+                              title: Text(
+                                person.name,
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                              ),
+                              onTap: () => _showPersonDialog(context, provider, person: person),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, size: 20),
+                                onPressed: () => _confirmDeletePerson(person, provider),
+                              ),
+                            ),
+                            if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: IconButton(
+                                            padding: const EdgeInsets.all(0),
+                                            icon: Icon(
+                                              provider.currentPlayingPersonIndex == index &&
+                                                      provider.currentPlayingIndex == j &&
+                                                      provider.isPlaying
+                                                  ? Icons.pause
+                                                  : Icons.play_arrow,
+                                            ),
+                                            onPressed: () => provider.playPause(index, j, sample),
+                                          ),
+                                          title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                                          onTap: () => _confirmDeleteSample(index, person, sample, provider),
+                                          subtitle: FutureBuilder<Duration?>(
+                                            future: AudioPlayer().setUrl(sample),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.hasData) {
+                                                return Text('${snapshot.data!.inSeconds} seconds');
+                                              } else {
+                                                return const Text('Loading duration...');
+                                              }
+                                            },
+                                          ),
+                                        )),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
         );
       },
     );

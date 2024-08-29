@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -309,17 +311,31 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                 },
                                 color: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                child: const Text('Get Started', style: TextStyle(color: Colors.black)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                child: Text(
+                                  SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                  style: const TextStyle(color: Colors.black),
+                                ),
                               ),
+                              const SizedBox(height: 24),
+                              SharedPreferencesUtil().hasSpeakerProfile
+                                  ? TextButton(
+                                      onPressed: () {
+                                        routeToPage(context, const UserSpeechSamples());
+                                      },
+                                      child: const Text(
+                                        'Listen to my speech profile ➡️',
+                                        style: TextStyle(color: Colors.white,fontSize: 16),
+                                      ))
+                                  : const SizedBox(),
                               TextButton(
                                   onPressed: () {
-                                    routeToPage(context, const UserSpeechSamples());
+                                    routeToPage(context, const UserPeoplePage());
                                   },
                                   child: const Text(
-                                    'Listen to existing samples ➡️',
-                                    style: TextStyle(color: Colors.white),
-                                  ))
+                                    'Recognizing others 👀',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  )),
                             ],
                           )
                         : provider.profileCompleted
