@@ -2,46 +2,40 @@ export default function LoadingMemory() {
   return (
     <div className="mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 text-white md:mx-auto md:my-28 md:py-12">
       <div className="px-4 md:px-12">
-        <div className="line-clamp-2 w-[15rem] md:w-[30rem] h-[32px] md:h-[36px] rounded-lg font-bold bg-zinc-700 animate-pulse">
-        </div>
-        <p className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[18px] bg-gray-500 w-[30%] rounded-lg">
-        </p>
-        <div className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm h-[24px] w-[100px]">
-        </div>
+        <div className="line-clamp-2 h-[32px] w-[15rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[36px] md:w-[30rem]"></div>
+        <p className="my-2 h-[18px] w-[30%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base"></p>
+        <div className="h-[24px] w-[100px] rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm"></div>
       </div>
-      <div className="mt-8 flex border-y border-solid border-zinc-800 text-base md:mt-10 md:text-lg h-[52px]"></div>
-      <div className="px-4 md:px-12 mt-10">
-        <div className="w-[10rem] h-[28px] md:h-[30px] rounded-lg font-bold bg-zinc-700 animate-pulse">
-        </div>
-        <div className="h-[10px]"/>
+      <div className="mt-8 flex h-[52px] border-y border-solid border-zinc-800 text-base md:mt-10 md:text-lg"></div>
+      <div className="mt-10 px-4 md:px-12">
+        <div className="h-[28px] w-[10rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[30px]"></div>
+        <div className="h-[10px]" />
         <div>
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[30%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[90%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[70%] rounded-lg" />
+          <div className="my-2 h-[10px] w-[30%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[90%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[70%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
         </div>
         <div className="mt-9">
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[90%] rounded-lg" />
-          <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[70%] rounded-lg" />
+          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[90%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+          <div className="my-2 h-[10px] w-[70%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
         </div>
       </div>
-      <div className="px-4 md:px-12 mt-10">
-        <div className="w-[10rem] h-[28px] md:h-[30px] rounded-lg font-bold bg-zinc-700 animate-pulse">
-        </div>  
-        <div className="h-[10px]"/>
-        <div className="flex flex-col gap-4 mt-3">
+      <div className="mt-10 px-4 md:px-12">
+        <div className="h-[28px] w-[10rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[30px]"></div>
+        <div className="h-[10px]" />
+        <div className="mt-3 flex flex-col gap-4">
           {[...Array(3)].map((_, i) => (
-
-          <div className="flex gap-3 items-center w-full">
-            <div className="min-h-[20px] min-w-[20px] rounded-full bg-gray-500"/>
-            <div className="w-full">
-              <div className="my-2 text-sm text-gray-500 md:text-base animate-pulse h-[10px] bg-gray-500 w-[100%] rounded-lg" />
+            <div className="flex w-full items-center gap-3">
+              <div className="min-h-[20px] min-w-[20px] rounded-full bg-gray-500" />
+              <div className="w-full">
+                <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
+              </div>
             </div>
-          </div>
           ))}
         </div>
       </div>
