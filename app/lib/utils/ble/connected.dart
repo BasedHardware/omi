@@ -13,6 +13,7 @@ Future<BTDeviceStruct?> getConnectedDevice() async {
         id: device.remoteId.str,
         name: device.platformName,
         rssi: await device.readRssi(),
+        type: SharedPreferencesUtil().btDeviceStruct.type,
       );
     }
   }
