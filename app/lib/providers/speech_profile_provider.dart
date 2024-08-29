@@ -9,6 +9,7 @@ import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -17,6 +18,7 @@ import 'package:friend_private/utils/websockets.dart';
 
 class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, WebSocketMixin {
   DeviceProvider? deviceProvider;
+  CaptureProvider? captureProvider;
   bool? permissionEnabled;
   bool loading = false;
   BTDeviceStruct? device;
@@ -38,16 +40,19 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
   String text = '';
   String message = '';
 
-  void setProvider(DeviceProvider provider) {
+  void setProvider(DeviceProvider provider, CaptureProvider captureProvider) {
     deviceProvider = provider;
+    this.captureProvider = captureProvider;
     notifyListeners();
   }
 
   initialise() async {
     device = deviceProvider?.connectedDevice;
     device ??= await deviceProvider?.scanAndConnectToDevice();
+    captureProvider?.resetState(restartBytesProcessing: false);
+    initiateWebsocket();
     if (device != null) initiateFriendAudioStreaming();
-    initiateConnectionListener();
+    // initiateConnectionListener();
     notifyListeners();
   }
 
@@ -214,6 +219,16 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
       message = 'So close, just a little more';
     }
     notifyListeners();
+  }
+
+  void close() {
+    print('Closing speech profile provider');
+    connectionStateListener?.cancel();
+    _bleBytesStream?.cancel();
+    forceCompletionTimer?.cancel();
+    segments.clear();
+    // captureProvider?.resetState(restartBytesProcessing: true);
+    closeWebSocket();
   }
 
   @override
