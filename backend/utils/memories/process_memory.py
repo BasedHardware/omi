@@ -128,7 +128,7 @@ def _extract_facts(uid: str, memory: Memory):
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
-                   force_process: bool = False):
+                   force_process: bool = False) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
 
