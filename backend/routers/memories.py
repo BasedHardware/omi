@@ -168,7 +168,7 @@ def set_assignee_memory_segment(
 
 
 @router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
-def update_memory_visibility(
+def set_memory_visibility(
         memory_id: str, visibility: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('update_memory_visibility', memory_id, visibility, uid)
