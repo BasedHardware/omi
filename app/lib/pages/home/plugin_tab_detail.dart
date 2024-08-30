@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
@@ -57,12 +58,23 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                                 shape: BoxShape.circle,
                                 color: Colors.white,
                               ),
-                              child: CircleAvatar(
+                              child:
+                              CachedNetworkImage(
+                                imageUrl: widget.plugin.getImageUrl(),
+                                imageBuilder: (context, imageProvider) => CircleAvatar(
+                                  backgroundColor: Colors.white,
+                                  maxRadius: 18,
+                                  backgroundImage: imageProvider,
+                                ),
+                                placeholder: (context, url) => const CircularProgressIndicator(),
+                                errorWidget: (context, url, error) => const Icon(Icons.error),
+                              ),
+                              /*CircleAvatar(
                                 backgroundColor: Colors.white,
                                 maxRadius: 18,
                                 backgroundImage:
                                     NetworkImage(widget.plugin.getImageUrl()),
-                              ),
+                              ),*/
                             ),
                           )
                         else
