@@ -150,6 +150,21 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   return null;
 }
 
+Future<ServerProcessingMemory?> getProcessingMemoryById(String id) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/processing-memories/$id',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getProcessingMemoryById: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerProcessingMemory.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
 Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',

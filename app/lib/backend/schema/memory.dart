@@ -59,6 +59,9 @@ class ServerProcessingMemory {
   final String id;
   final DateTime createdAt;
   final DateTime? startedAt;
+  ServerMemory? memory;
+  List<ServerMessage> messages = [];
+
   bool recording; // Move to model
 
   ServerProcessingMemory({
