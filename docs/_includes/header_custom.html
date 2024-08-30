@@ -5,11 +5,18 @@
 
   jtd.addEvent(toggleDarkMode, "click", function () {
     if (jtd.getTheme() === "light") {
-      jtd.setTheme("dark");
+      jtd.setTheme("dark_custom");
       toggleDarkMode.textContent = "☼";
     } else {
       jtd.setTheme("light");
       toggleDarkMode.textContent = "☾";
     }
   });
+
+  // Set the initial state
+  if (jtd.getTheme() === "dark_custom") {
+    toggleDarkMode.textContent = "☼";
+  } else {
+    toggleDarkMode.textContent = "☾";
+  }
 </script>
