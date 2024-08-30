@@ -55,6 +55,48 @@ class MemoryPostProcessing {
   toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
 }
 
+class ServerProcessingMemory {
+  final String id;
+  final DateTime createdAt;
+  final DateTime? startedAt;
+  bool recording; // Move to model
+
+  ServerProcessingMemory({
+    required this.id,
+    required this.createdAt,
+    this.startedAt,
+    this.recording = false,
+  });
+
+  factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
+    return ServerProcessingMemory(
+      id: json['id'],
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'created_at': createdAt.toIso8601String(),
+      'started_at': startedAt?.toIso8601String(),
+    };
+  }
+
+  String getTag() {
+    return 'Processing';
+  }
+
+  Color getTagTextColor() {
+    return Colors.white;
+  }
+
+  Color getTagColor() {
+    return Colors.grey.shade800;
+  }
+}
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;

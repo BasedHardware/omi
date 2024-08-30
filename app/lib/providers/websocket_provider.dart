@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/services/notification_service.dart';
@@ -36,6 +37,7 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
@@ -52,6 +54,7 @@ class WebSocketProvider with ChangeNotifier {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
@@ -90,6 +93,7 @@ class WebSocketProvider with ChangeNotifier {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            onMessageEventReceived: onMessageEventReceived,
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
@@ -109,6 +113,7 @@ class WebSocketProvider with ChangeNotifier {
                 onConnectionClosed: onConnectionClosed,
                 onConnectionError: onConnectionError,
                 onMessageReceived: onMessageReceived,
+                onMessageEventReceived: onMessageEventReceived,
                 codec: codec,
                 sampleRate: sampleRate,
                 includeSpeechProfile: includeSpeechProfile,
@@ -130,6 +135,7 @@ class WebSocketProvider with ChangeNotifier {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            onMessageEventReceived: onMessageEventReceived,
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
@@ -137,6 +143,7 @@ class WebSocketProvider with ChangeNotifier {
           notifyListeners();
         },
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
@@ -155,6 +162,7 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
@@ -175,6 +183,7 @@ class WebSocketProvider with ChangeNotifier {
               onConnectionClosed: onConnectionClosed,
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
+              onMessageEventReceived: onMessageEventReceived,
               codec: codec,
               sampleRate: sampleRate,
               includeSpeechProfile: includeSpeechProfile,
@@ -201,6 +210,7 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
@@ -221,6 +231,7 @@ class WebSocketProvider with ChangeNotifier {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
@@ -243,6 +254,7 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
@@ -260,6 +272,7 @@ class WebSocketProvider with ChangeNotifier {
       onConnectionClosed: onConnectionClosed,
       onConnectionError: onConnectionError,
       onMessageReceived: onMessageReceived,
+      onMessageEventReceived: onMessageEventReceived,
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: includeSpeechProfile,

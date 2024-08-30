@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -13,6 +14,7 @@ enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error 
 
 Future<IOWebSocketChannel?> _initWebsocketStream(
   void Function(List<TranscriptSegment>) onMessageReceived,
+  void Function(ServerMessageEvent)? onMessageEventReceived,
   VoidCallback onWebsocketConnectionSuccess,
   void Function(dynamic) onWebsocketConnectionFailed,
   void Function(int?, String?) onWebsocketConnectionClosed,
@@ -23,7 +25,8 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
 ) async {
   debugPrint('Websocket Opening');
   final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-  var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile';
+  var params =
+      '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile';
 
   IOWebSocketChannel channel = IOWebSocketChannel.connect(
     Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params'),
@@ -33,14 +36,27 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   await channel.ready.then((v) {
     channel.stream.listen(
       (event) {
+        // ping
         if (event == 'ping') return;
-        final segments = jsonDecode(event);
-        if (segments is List) {
+
+        // json
+        final jsonEvent = jsonDecode(event);
+
+        // segment
+        if (jsonEvent is List) {
+          var segments = jsonEvent;
           if (segments.isEmpty) return;
           onMessageReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
-        } else {
-          debugPrint(event.toString());
+          return;
         }
+
+        // object message event
+        var messageEvent = ServerMessageEvent.fromJson(jsonEvent);
+        if (onMessageEventReceived != null) {
+          onMessageEventReceived(messageEvent);
+        }
+
+        debugPrint(event.toString());
       },
       onError: (err, stackTrace) {
         onWebsocketConnectionError(err); // error during connection
@@ -75,6 +91,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
   required void Function(int?, String?) onWebsocketConnectionClosed,
   required void Function(dynamic) onWebsocketConnectionError,
   required void Function(List<TranscriptSegment>) onMessageReceived,
+  Function(ServerMessageEvent)? onMessageEventReceived,
   required BleAudioCodec codec,
   required int sampleRate,
   required bool includeSpeechProfile,
@@ -82,6 +99,7 @@ Future<IOWebSocketChannel?> streamingTranscript({
   try {
     IOWebSocketChannel? channel = await _initWebsocketStream(
       onMessageReceived,
+      onMessageEventReceived,
       onWebsocketConnectionSuccess,
       onWebsocketConnectionFailed,
       onWebsocketConnectionClosed,

@@ -5,7 +5,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class HomeProvider extends ChangeNotifier {
-  int selectedIndex = 1;
+  int selectedIndex = 0;
 
   void setIndex(int index) {
     selectedIndex = index;
