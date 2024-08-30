@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Backend Deep Dive
-nav_order: 3
+parent: Backend
+nav_order: 2
 ---
 
 # Omi Backend Deep Dive 🧠🎙️
@@ -38,29 +39,9 @@ This deep dive will walk you through the **core elements** of Omi's backend, pro
 
 ## System Architecture
 
-```mermaid
-graph TD
-    A["Omi App"]:::mainApp -->|"/v1/memories (POST)<br>Upload audio/data for memory"| B["routers/memories.py<br><i>Handles memory API requests</i>"]:::routers
-    A -->|"/listen (WebSocket)<br>Real-time audio stream"| K["routers/transcribe.py<br><i>Handles real-time transcription</i>"]:::routers
-    B --> C["utils/memories/process_memory.py<br><i>Orchestrates memory creation</i>"]:::utils
-    C --> D["utils/llm.py<br><i>Language model functions (OpenAI)</i>"]:::utils
-    D -->|"Call OpenAI API"| E["OpenAI API<br><i>AI models for language & embeddings</i>"]:::externalAPIs
-    C -->|"Execute relevant plugins"| F["utils/plugins.py<br><i>Manages plugin interactions</i>"]:::utils
-    C -->|"Store memory data"| G["database/memories.py<br><i>Database functions for memories</i>"]:::database
-    G -->|"Save to Firestore"| H["Firebase Firestore<br><i>Main database for memories & data</i>"]:::externalAPIs
-    C -->|"Store embedding"| I["database/vector_db.py<br><i>Database functions for embeddings</i>"]:::database
-    I -->|"Save to Pinecone"| J["Pinecone<br><i>Vector database for memory embeddings</i>"]:::externalAPIs
-    K -->|"Transcribe audio"| L["Deepgram API<br><i>Real-time speech-to-text API</i>"]:::externalAPIs
-    B -->|"Post-Processing (POST)<br>Improve transcription"| M["FAL.ai (WhisperX)<br><i>Post-processing with WhisperX</i>"]:::externalAPIs
-    C -->|"Store/retrieve speech profile<br>(if applicable)"| N["Google Cloud Storage<br><i>Bucket for speech profiles</i>"]:::externalAPIs
-    C -->|"Access user data & settings"| P["Redis<br><i>Caching, user settings, speech profiles</i>"]:::database
+![Backend Design](/images/backend_design.png)
 
-    classDef mainApp fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef routers fill:#ccf,stroke:#333,stroke-width:2px;
-    classDef utils fill:#cfc,stroke:#333,stroke-width:2px;
-    classDef externalAPIs fill:#fcf,stroke:#333,stroke-width:2px;
-    classDef database fill:#ffc,stroke:#333,stroke-width:2px;
-```
+You can click on the image to view it in full size and zoom in for more detail.
 
 ## The Flow of Information: From User Interaction to Memory 🌊
 
