@@ -10,6 +10,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryProvider extends ChangeNotifier {
+  ServerProcessingMemory? processingMemory = ServerProcessingMemory(id: "123", createdAt: DateTime.now(), recording: true); // TODO: thinhx
   List<ServerMemory> memories = [];
   List<ServerMemory> filteredMemories = [];
   List memoriesWithDates = [];
