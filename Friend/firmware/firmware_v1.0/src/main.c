@@ -140,10 +140,11 @@ int main(void)
     set_led_green(false);
 
     err = mount_sd_card();
+    printk("result of mount:%d\n",err);
 
-    
+    err = initialize_audio_file();
+    printk("result of audio file:%d\n",err);
 
-    // printk("result of mount:%d\n",err);
     // const char dar[] = "audio/A1.txt";
     // err = create_file(dar);
     // printk("result of create file:%d\n",err);
@@ -198,7 +199,7 @@ int main(void)
     set_led_green(false);
 
     // Indicate successful initialization
-    LOG_INF("Omi firmware initialized successfully");
+    printk("Omi firmware initialized successfully\n");
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);
