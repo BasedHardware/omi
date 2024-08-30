@@ -126,6 +126,26 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     _proessOnMemoryCreate(null); // force failed
   }
 
+  Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
+  Future<void> _onMemoryPostProcessFailed(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
   Future<bool?> _proessOnMemoryCreate(ServerMemory? memory) async {
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
       memory = ServerMemory(
@@ -347,12 +367,34 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
 
         if (event.type == MessageEventType.newMemoryCreated) {
+          if (event.memoryId == null) {
+            print("New memory created message event is invalid");
+            return;
+          }
           _onMemoryCreated(event.memoryId!);
           return;
         }
 
         if (event.type == MessageEventType.newMemoryCreateFailed) {
           _onMemoryCreateFailed();
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingSuccess) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessSuccess(event.memoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingFailed) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessFailed(event.memoryId!);
           return;
         }
       },
