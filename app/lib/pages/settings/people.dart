@@ -59,7 +59,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   placeholder: 'Name',
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
-                  placeholderStyle: const TextStyle(color: Colors.white60),
+                  placeholderStyle: const TextStyle(color: Colors.white),
                   style: const TextStyle(color: Colors.white),
                   validator: _nameValidator,
                 ),

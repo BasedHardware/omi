@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 
 from google.cloud import firestore
@@ -7,11 +8,26 @@ from ._client import db
 
 
 def get_facts(uid: str, limit: int = 100, offset: int = 0):
+    # TODO: how to query more
     facts_ref = db.collection('users').document(uid).collection('facts')
-    facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING).where(
-        filter=FieldFilter('deleted', '==', False))
+    facts_ref = (
+        facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
+        # .where(filter=FieldFilter('user_review', '!=', False))
+    )
     facts_ref = facts_ref.limit(limit).offset(offset)
-    return [doc.to_dict() for doc in facts_ref.stream()]
+    facts = [doc.to_dict() for doc in facts_ref.stream()]
+    print('get_facts', len(facts))
+    result = [fact for fact in facts if fact['user_review'] is not False]
+    print('get_facts', len(result))
+    return result
+
+
+def create_fact(uid: str, data: dict):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(data['id'])
+    fact_ref.set(data)
 
 
 def save_facts(uid: str, data: List[dict]):
@@ -51,7 +67,7 @@ def edit_fact(uid: str, fact_id: str, value: str):
     user_ref = db.collection('users').document(uid)
     facts_ref = user_ref.collection('facts')
     fact_ref = facts_ref.document(fact_id)
-    fact_ref.update({'content': value, 'edited': True})
+    fact_ref.update({'content': value, 'edited': True, 'updated_at': datetime.utcnow()})
 
 
 def delete_fact(uid: str, fact_id: str):
