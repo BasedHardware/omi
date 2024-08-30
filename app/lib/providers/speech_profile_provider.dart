@@ -135,6 +135,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
       codec: BleAudioCodec.opus,
       sampleRate: 16000,
       includeSpeechProfile: false,
+      newMemoryWatch: false,
       onConnectionSuccess: () {
         print('Websocket connected in speech profile');
         notifyListeners();
