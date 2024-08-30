@@ -5,6 +5,9 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+RUN echo "deps: $(pwd)"
+RUN ls -la
+
 # Install dependencies based on the preferred package manager
 COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
 RUN \
@@ -17,20 +20,16 @@ RUN \
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+RUN echo "rebuild: $(pwd)"
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
-
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-# ENV NEXT_TELEMETRY_DISABLED 1
 
 
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
-
+RUN echo "production: $(pwd)"
 ENV NODE_ENV production
 
 RUN addgroup --system --gid 1001 nodejs
