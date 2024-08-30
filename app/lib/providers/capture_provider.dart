@@ -72,7 +72,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
   WavBytesUtil? audioStorage;
-  Timer? _memoryCreationTimer;
   String conversationId = const Uuid().v4();
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
@@ -423,9 +422,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         });
         SharedPreferencesUtil().transcriptSegments = segments;
         setHasTranscripts(true);
-        debugPrint('Memory creation timer restarted');
-        _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => createMemory());
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
         notifyListeners();
@@ -586,14 +582,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void cancelMemoryCreationTimer() {
-    _memoryCreationTimer?.cancel();
     notifyListeners();
   }
 
   @override
   void dispose() {
     _bleBytesStream?.cancel();
-    _memoryCreationTimer?.cancel();
     super.dispose();
   }
 
