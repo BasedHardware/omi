@@ -1,5 +1,4 @@
 import { Discord, Github, Instagram, Linkedin, Tiktok, X } from 'iconoir-react';
-import Link from 'next/link';
 
 export default function Footer() {
   return (
@@ -8,52 +7,52 @@ export default function Footer() {
         <div>
           <h2 className="text-4xl font-semibold">Omi</h2>
           <p className="text-gray-500">San Fransisco</p>
-          <Link href={'mailto:team@basedhardware.com>'} className="hover:underline">
+          <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
-          </Link>
+          </a>
           <div className="mt-3 flex items-center gap-3">
-            <Link
+            <a
               href="https://x.com/based_hardware"
               target="_blank"
               rel="noopener noreferrer"
             >
               <X />
-            </Link>
-            <Link
+            </a>
+            <a
               href="https://www.linkedin.com/company/omi-ai/"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Linkedin />
-            </Link>
-            <Link
+            </a>
+            <a
               href="https://github.com/BasedHardware"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Github />
-            </Link>
-            <Link
+            </a>
+            <a
               href="https://www.tiktok.com/@based_hardware"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Tiktok />
-            </Link>
-            <Link
+            </a>
+            <a
               href="https://www.instagram.com/based_hardware/"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Instagram />
-            </Link>
-            <Link
+            </a>
+            <a
               href="https://discord.com/invite/ZutWMTJnwA"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Discord />
-            </Link>
+            </a>
           </div>
         </div>
 
@@ -61,103 +60,103 @@ export default function Footer() {
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Products</li>
             <li>
-              <Link
+              <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/openglass'}
                 target="_blank"
               >
                 OpenGlass
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/'}
                 target="_blank"
               >
                 Friend
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/friend-dev'}
                 target="_blank"
               >
                 Friend DEV KIT
-              </Link>
+              </a>
             </li>
           </ul>
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Other</li>
             <li>
-              <Link
+              <a
                 href="https://airtable.com/appyGfrqMxoUaD1mg/shrswR2uD1LRoFkFX"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Residency
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 href="https://affiliate.basedhardware.com/"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Affiliate
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 href="https://www.omi.me/pages/privacy"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Privacy
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 href="https://coda.io/@kodjima33/customizations"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Customizations
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 href="https://discord.com/invite/8MP3b9ymvx"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Discord
-              </Link>
+              </a>
             </li>
           </ul>
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Company</li>
             <li>
-              <Link
+              <a
                 href={'https://www.omi.me/pages/about'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 About
-              </Link>
+              </a>
             </li>
             <li>
-              <Link
+              <a
                 href={'https://airtable.com/appyGfrqMxoUaD1mg/shrkALjXdq7mJMM1W'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Invest
-              </Link>
+              </a>
             </li>
           </ul>
         </div>
