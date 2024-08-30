@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Mulish } from 'next/font/google';
 import './globals.css';
-import Footer from '../components/shared/footer';
 import AppHeader from '../components/shared/app-header';
 
 const inter = Mulish({
@@ -32,7 +31,7 @@ export default function RootLayout({
             {children}
           </div>
         </main>
-        <Footer />
+        {/* <Footer /> */}
       </body>
     </html>
   );
