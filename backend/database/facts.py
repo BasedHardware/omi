@@ -7,19 +7,20 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 
 
-def get_facts(uid: str, limit: int = 100, offset: int = 0, filter_only_true: bool = False):
+def get_facts(uid: str, limit: int = 100, offset: int = 0):
+    # TODO: how to query more
     facts_ref = db.collection('users').document(uid).collection('facts')
-    facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING).where(
-        filter=FieldFilter('deleted', '==', False),
+    facts_ref = (
+        facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
+        # .where(filter=FieldFilter('user_review', '!=', False))
     )
-    if filter_only_true:
-        facts_ref = (
-            facts_ref
-            .where(filter=FieldFilter('reviewed', '==', True))
-            .where(filter=FieldFilter('user_review', '==', True))
-        )
     facts_ref = facts_ref.limit(limit).offset(offset)
-    return [doc.to_dict() for doc in facts_ref.stream()]
+    facts = [doc.to_dict() for doc in facts_ref.stream()]
+    print('get_facts', len(facts))
+    result = [fact for fact in facts if fact['user_review'] is not False]
+    print('get_facts', len(result))
+    return result
 
 
 def create_fact(uid: str, data: dict):

@@ -73,7 +73,14 @@ class _FactsPageState extends State<_FactsPage> {
                 ),
               ],
             ),
-            body: provider.selectedCategory == null ? _buildCategoryChips(provider) : _buildFactsList(provider),
+            body: provider.loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ))
+                : provider.selectedCategory == null
+                    ? _buildCategoryChips(provider)
+                    : _buildFactsList(provider),
           ),
         );
       },
@@ -276,12 +283,12 @@ class _FactsPageState extends State<_FactsPage> {
 
   Widget _buildCategoryChips(FactsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.fromLTRB(32, 0, 32, 80),
       child: Align(
-        alignment: Alignment.topCenter,
+        alignment: Alignment.center,
         child: Wrap(
           alignment: WrapAlignment.center,
-          spacing: 16,
+          spacing: 32,
           runSpacing: 16,
           children: provider.categories.map((item) {
             final category = item.item1;
@@ -295,7 +302,7 @@ class _FactsPageState extends State<_FactsPage> {
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.grey.withOpacity(0.3),
@@ -306,7 +313,7 @@ class _FactsPageState extends State<_FactsPage> {
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
