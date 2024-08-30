@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
@@ -217,38 +218,17 @@ class _SettingsPageState extends State<SettingsPage> {
                         await routeToPage(context, const RecordingsStoragePermission());
                         setState(() {});
                       }),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    title: const Text('Need help?', style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('team@basedhardware.com'),
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                    onTap: () {
-                      launchUrl(Uri.parse('mailto:team@basedhardware.com'));
-                      MixpanelManager().supportContacted();
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-                    title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('2300+ members and counting.'),
-                    trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
-                    onTap: () {
-                      launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
-                      MixpanelManager().joinDiscordClicked();
-                    },
-                  ),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ADD ONS',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
+                  const SizedBox(height: 16.0),
+                  // const Align(
+                  //   alignment: Alignment.centerLeft,
+                  //   child: Text(
+                  //     'ADD ONS',
+                  //     style: TextStyle(
+                  //       color: Colors.white,
+                  //     ),
+                  //     textAlign: TextAlign.start,
+                  //   ),
+                  // ),
                   getItemAddOn('Plugins', () {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
@@ -256,7 +236,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  Divider(
+                  const Divider(
                     color: Colors.transparent,
                   ),
                   getItemAddOn('Speech Recognition', () {
@@ -265,6 +245,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Identifying Others', () {
                     routeToPage(context, const UserPeoplePage());
                   }, icon: Icons.people),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
+                  getItemAddOn(
+                      SharedPreferencesUtil().givenName.isEmpty
+                          ? 'About YOU (by Omi)'
+                          : 'About ${SharedPreferencesUtil().givenName.toUpperCase()} (by Omi) ', () {
+                    routeToPage(context, const FactsPage());
+                  }, icon: Icons.self_improvement),
                   const Divider(
                     color: Colors.transparent,
                   ),
@@ -304,6 +293,27 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     );
                   }, icon: Icons.language_outlined, visibility: true),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: const Text('Need help?', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('team@basedhardware.com'),
+                    contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
+                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                    onTap: () {
+                      launchUrl(Uri.parse('mailto:team@basedhardware.com'));
+                      MixpanelManager().supportContacted();
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
+                    title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('2300+ members and counting.'),
+                    trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
+                    onTap: () {
+                      launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+                      MixpanelManager().joinDiscordClicked();
+                    },
+                  ),
                   getItemAddOn('About omi', () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
