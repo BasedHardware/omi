@@ -2,14 +2,33 @@ import 'package:friend_private/backend/http/api/facts.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/providers/base_provider.dart';
+import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
 class FactsProvider extends BaseProvider {
   List<Fact> facts = [];
+  List<Tuple2<FactCategory, int>> categories = [];
+  FactCategory? selectedCategory;
+
+  void setCategory(FactCategory? category) {
+    selectedCategory = category;
+    notifyListeners();
+  }
+
+  void _setCategories() {
+    categories = FactCategory.values.map((category) {
+      final count = facts.where((fact) => fact.category == category).length;
+      return Tuple2(category, count);
+    }).toList();
+  }
 
   void init() async {
+    loading = true;
+    notifyListeners();
     facts = await getFacts();
-    startCreateFactProvider();
+    _setCategories();
+    // startCreateFactProvider();
+    loading = false;
     notifyListeners();
   }
 
@@ -23,6 +42,7 @@ class FactsProvider extends BaseProvider {
     } else {
       facts[idx] = fact;
     }
+    _setCategories();
     notifyListeners();
   }
 
@@ -30,18 +50,21 @@ class FactsProvider extends BaseProvider {
     var fact = facts[idx];
     deleteFact(fact.id);
     facts.removeAt(idx);
+    _setCategories();
     notifyListeners();
   }
 
   void startCreateFactProvider() {
-    facts.insert(0, Fact(
-      id: '',
-      uid: SharedPreferencesUtil().uid,
-      content: '',
-      category: FactCategory.hobbies,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    ));
+    facts.insert(
+        0,
+        Fact(
+          id: '',
+          uid: SharedPreferencesUtil().uid,
+          content: '',
+          category: FactCategory.hobbies,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ));
     notifyListeners();
   }
 
@@ -55,6 +78,7 @@ class FactsProvider extends BaseProvider {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     ));
+    _setCategories();
     notifyListeners();
   }
 
@@ -64,6 +88,7 @@ class FactsProvider extends BaseProvider {
     fact.content = value;
     fact.updatedAt = DateTime.now();
     facts[idx] = fact;
-    notifyListeners();
+    _setCategories();
+   notifyListeners();
   }
 }
