@@ -351,6 +351,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: true,
+      newMemoryWatch: true, // Warn: need clarify about initiateWebsocket
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
         if (segments.isNotEmpty) {

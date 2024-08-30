@@ -41,6 +41,7 @@ class WebSocketProvider with ChangeNotifier {
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) async {
     print('isConnecting before even the func begins: $_isConnecting');
     if (_isConnecting) return;
@@ -58,6 +59,7 @@ class WebSocketProvider with ChangeNotifier {
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
       _internetListenerSetup = true;
     }
@@ -97,6 +99,7 @@ class WebSocketProvider with ChangeNotifier {
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
+            newMemoryWatch: newMemoryWatch,
           );
           notifyListeners();
         },
@@ -117,6 +120,7 @@ class WebSocketProvider with ChangeNotifier {
                 codec: codec,
                 sampleRate: sampleRate,
                 includeSpeechProfile: includeSpeechProfile,
+                newMemoryWatch: newMemoryWatch,
               );
             }
           }
@@ -139,6 +143,7 @@ class WebSocketProvider with ChangeNotifier {
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
+            newMemoryWatch: newMemoryWatch,
           );
           notifyListeners();
         },
@@ -147,6 +152,7 @@ class WebSocketProvider with ChangeNotifier {
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');
@@ -166,6 +172,7 @@ class WebSocketProvider with ChangeNotifier {
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) {
     _internetListener?.cancel();
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
@@ -187,6 +194,7 @@ class WebSocketProvider with ChangeNotifier {
               codec: codec,
               sampleRate: sampleRate,
               includeSpeechProfile: includeSpeechProfile,
+              newMemoryWatch: newMemoryWatch,
             );
           }
           break;
@@ -214,6 +222,7 @@ class WebSocketProvider with ChangeNotifier {
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) {
     if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
@@ -235,6 +244,7 @@ class WebSocketProvider with ChangeNotifier {
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
     });
     if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
@@ -258,6 +268,7 @@ class WebSocketProvider with ChangeNotifier {
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) async {
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('Cannot attempt reconnection: No internet connection');
@@ -276,6 +287,7 @@ class WebSocketProvider with ChangeNotifier {
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: includeSpeechProfile,
+      newMemoryWatch: newMemoryWatch,
     );
   }
 
