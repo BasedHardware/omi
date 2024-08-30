@@ -30,7 +30,6 @@ import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
@@ -59,11 +58,6 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  if (Env.oneSignalAppId != null) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize(Env.oneSignalAppId!);
-    OneSignal.login(SharedPreferencesUtil().uid);
-  }
   return isAuth;
 }
 
