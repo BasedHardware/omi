@@ -13,25 +13,30 @@ interface MemoryProps {
 export default function Memory({ memory, searchParams }: MemoryProps) {
   const currentTab = searchParams.tab ?? 'trs';
   return (
-    <div className="mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 text-white md:mx-auto md:my-28 md:py-12">
-      <div className="px-4 md:px-12">
-        <h2 className="line-clamp-2 text-2xl font-bold md:text-3xl">
-          {memory.structured.title}
-        </h2>
-        <p className="my-2 text-sm text-gray-500 md:text-base">
-          {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
-        </p>
-        <span className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm">
-          {memory.structured.emoji} {memory.structured.category}
-        </span>
+    <div className="mx-3 relative shadow-xl shadow-gray-900 my-10 max-w-screen-md rounded-2xl overflow-hidden backdrop-blur-lg bg-transparent border border-solid border-zinc-800 py-6 text-white md:mx-auto md:my-28 md:py-12">
+      <div className='relative z-50'>
+        <div className="px-4 md:px-12">
+          <h2 className="line-clamp-2 text-2xl font-bold md:text-3xl">
+            {memory.structured.title}
+          </h2>
+          <p className="my-2 text-sm text-gray-500 md:text-base">
+            {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
+          </p>
+          <span className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm">
+            {memory.structured.emoji} {memory.structured.category}
+          </span>
+        </div>
+        <Tabs currentTab={currentTab} />
+        <div className="px-4 md:px-12">
+          {currentTab === 'sum' ? (
+            <Summary memory={memory} />
+          ) : (
+            <Transcription transcript={memory.transcript_segments} />
+          )}
+        </div>
       </div>
-      <Tabs currentTab={currentTab} />
-      <div className="px-4 md:px-12">
-        {currentTab === 'sum' ? (
-          <Summary memory={memory} />
-        ) : (
-          <Transcription transcript={memory.transcript_segments} />
-        )}
+      <div className='absolute w-full z-10 top-0 blur-3xl  h-full select-none'>
+        <div className='h-[18rem] w-[120%] bg-cyan-800/10 opacity-30 absolute right-[0rem] top-[-70px]'/>
       </div>
     </div>
   );
