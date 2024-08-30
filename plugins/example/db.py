@@ -98,3 +98,29 @@ def store_zapier_subscribes(uid: str, target_url: str):
 
 def remove_zapier_subscribes(uid: str, target_url: str):
     r.srem(f'zapier_subscribes:{uid}', target_url)
+
+
+# **********************************************************
+# ************ MULTION UTILS ************
+# **********************************************************
+
+def store_multion_user_id(uid: str, user_id: str):
+    r.set(f'multion_user_id:{uid}', user_id)
+
+def get_multion_user_id(uid: str) -> str:
+    result = r.get(f'multion_user_id:{uid}')
+    return result.decode('utf-8') if result else None
+
+def set_task_status(task_id: str, status: str):
+    r.set(f'task_status:{task_id}', status)
+
+def get_task_status(task_id: str) -> str:
+    result = r.get(f'task_status:{task_id}')
+    return result.decode('utf-8') if result else None
+
+def set_task_result(task_id: str, result: str):
+    r.set(f'task_result:{task_id}', result)
+
+def get_task_result(task_id: str) -> str:
+    result = r.get(f'task_result:{task_id}')
+    return result.decode('utf-8') if result else None
