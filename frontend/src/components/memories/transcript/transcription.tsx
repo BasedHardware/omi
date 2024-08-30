@@ -1,4 +1,7 @@
-import { ExternalData as ExternalDataType, TranscriptSegment } from '@/src/types/memory.types';
+import {
+  ExternalData as ExternalDataType,
+  TranscriptSegment,
+} from '@/src/types/memory.types';
 import TranscriptionSegment from './transcription-segment';
 import ExternalData from '../external-data/external-data';
 
@@ -9,16 +12,12 @@ interface TranscriptionProps {
 
 export default function Transcription({ transcript, externalData }: TranscriptionProps) {
   if (transcript.length === 0 && externalData) {
-    return (
-      <ExternalData externalData={externalData} />
-    );
+    return <ExternalData externalData={externalData} />;
   } else if (transcript.length === 0 && !externalData) {
     return (
       <div>
         <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
-        <p className="mt-4 text-gray-400">
-          No available data.
-        </p>
+        <p className="mt-4 text-gray-400">No available data.</p>
       </div>
     );
   } else {
