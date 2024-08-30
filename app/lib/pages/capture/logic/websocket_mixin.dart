@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -22,11 +23,8 @@ mixin WebSocketMixin {
   final int _maxReconnectDelay = 60;
   bool _isConnecting = false;
 
-  // final int _maxReconnectionAttempts = 3;
   bool _hasNotifiedUser = false;
   bool _internetListenerSetup = false;
-
-  // Timer? internetReconnectedNotificationDelay;
   Timer? internetLostNotificationDelay;
 
   Future<void> initWebSocket({
@@ -35,12 +33,14 @@ mixin WebSocketMixin {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
-    BleAudioCodec codec = BleAudioCodec.pcm8,
+    required BleAudioCodec codec,
     required int sampleRate,
+    required bool includeSpeechProfile,
   }) async {
     if (_isConnecting) return;
     _isConnecting = true;
 
+    debugPrint('initWebSocket ${codec} ${sampleRate}');
     if (!_internetListenerSetup) {
       _setupInternetListener(
         onConnectionSuccess: onConnectionSuccess,
@@ -50,6 +50,7 @@ mixin WebSocketMixin {
         onMessageReceived: onMessageReceived,
         codec: codec,
         sampleRate: sampleRate,
+        includeSpeechProfile: includeSpeechProfile,
       );
       _internetListenerSetup = true;
     }
@@ -85,14 +86,15 @@ mixin WebSocketMixin {
             onMessageReceived: onMessageReceived,
             codec: codec,
             sampleRate: sampleRate,
+            includeSpeechProfile: includeSpeechProfile,
           );
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
-          debugPrint('WebSocket connection closed: $closeCode, $closeReason');
+          debugPrint('WebSocket connection closed: code ~ $closeCode, reason ~ $closeReason');
           wsConnectionState = WebsocketConnectionStatus.closed;
           _isConnecting = false;
           onConnectionClosed(closeCode, closeReason);
-          if (closeCode != 999 && closeCode != 1000 && !websocketReconnecting) {
+          if (closeCode != 1000 && !websocketReconnecting) {
             _scheduleReconnection(
               onConnectionSuccess: onConnectionSuccess,
               onConnectionFailed: onConnectionFailed,
@@ -101,6 +103,7 @@ mixin WebSocketMixin {
               onMessageReceived: onMessageReceived,
               codec: codec,
               sampleRate: sampleRate,
+              includeSpeechProfile: includeSpeechProfile,
             );
           }
         },
@@ -118,11 +121,14 @@ mixin WebSocketMixin {
             onMessageReceived: onMessageReceived,
             codec: codec,
             sampleRate: sampleRate,
+            includeSpeechProfile: includeSpeechProfile,
           );
         },
         onMessageReceived: onMessageReceived,
         codec: codec,
         sampleRate: sampleRate,
+        includeSpeechProfile: includeSpeechProfile,
+
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');
@@ -139,6 +145,7 @@ mixin WebSocketMixin {
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
     required int sampleRate,
+    required bool includeSpeechProfile,
   }) {
     _internetListener?.cancel();
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
@@ -158,6 +165,7 @@ mixin WebSocketMixin {
               onMessageReceived: onMessageReceived,
               codec: codec,
               sampleRate: sampleRate,
+              includeSpeechProfile: includeSpeechProfile,
             );
           }
           break;
@@ -182,6 +190,7 @@ mixin WebSocketMixin {
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
     required int sampleRate,
+    required bool includeSpeechProfile,
   }) {
     if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
@@ -209,6 +218,7 @@ mixin WebSocketMixin {
         onMessageReceived: onMessageReceived,
         codec: codec,
         sampleRate: sampleRate,
+        includeSpeechProfile: includeSpeechProfile,
       );
     });
     if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
@@ -230,6 +240,7 @@ mixin WebSocketMixin {
     required Function(List<TranscriptSegment>) onMessageReceived,
     required BleAudioCodec codec,
     required int sampleRate,
+    required bool includeSpeechProfile,
   }) async {
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('Cannot attempt reconnection: No internet connection');
@@ -246,6 +257,7 @@ mixin WebSocketMixin {
       onMessageReceived: onMessageReceived,
       codec: codec,
       sampleRate: sampleRate,
+      includeSpeechProfile: includeSpeechProfile,
     );
   }
 
@@ -271,6 +283,8 @@ mixin WebSocketMixin {
   void closeWebSocket() {
     _reconnectionTimer?.cancel();
     _internetListener?.cancel();
+    internetLostNotificationDelay?.cancel();
     websocketChannel?.sink.close(1000);
+    // TODO: once closed, it reconnects, at least happens on speaker_profile/page
   }
 }

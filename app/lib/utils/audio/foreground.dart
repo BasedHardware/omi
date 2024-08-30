@@ -46,6 +46,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     print("Foreground repeat event triggered");
+    await locationInBackground();
   }
 
   @override
@@ -78,7 +79,7 @@ class ForegroundUtil {
 
   static Future<void> initializeForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) return;
-    print('initializeForegroundService');
+    debugPrint('initializeForegroundService');
     // await Location().requestPermission();
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
@@ -113,7 +114,6 @@ class ForegroundUtil {
     if (await FlutterForegroundTask.isRunningService) {
       return FlutterForegroundTask.restartService();
     } else {
-      debugPrint('starting service');
       return await FlutterForegroundTask.startService(
         notificationTitle: 'Your Luca Device is connected.',
         notificationText: 'Transcription service is running in the background.',

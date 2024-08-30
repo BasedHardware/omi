@@ -78,6 +78,8 @@ void main() async {
     Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
+  // _setupAudioSession();
+
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -114,17 +116,15 @@ class MyApp extends StatefulWidget {
   const MyApp({super.key, required this.isAuth});
 
   @override
-  State<MyApp> createState() => MyAppState();
+  State<MyApp> createState() => _MyAppState();
 
-  static MyAppState of(BuildContext context) =>
-      context.findAncestorStateOfType<MyAppState>()!;
+  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
-class MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
@@ -187,3 +187,23 @@ class MyAppState extends State<MyApp> {
     );
   }
 }
+
+// void _setupAudioSession() {
+//   AudioSession.instance.then((audioSession) async {
+//     await audioSession.configure(const AudioSessionConfiguration(
+//       avAudioSessionCategory: AVAudioSessionCategory.playback,
+//       avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.mixWithOthers,
+//       avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+//       avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+//       avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+//       androidAudioAttributes: AndroidAudioAttributes(
+//         contentType: AndroidAudioContentType.speech,
+//         flags: AndroidAudioFlags.none,
+//         usage: AndroidAudioUsage.assistant,
+//       ),
+//       androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+//       androidWillPauseWhenDucked: true,
+//     ));
+//     audioSession.setActive(true);
+//   });
+// }

@@ -213,8 +213,8 @@ speechProfileWidget(BuildContext context, StateSetter setState, Function restart
                 MixpanelManager().speechProfileCapturePageClicked();
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeakerIdPage());
-                setState(() {});
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
+                  // setState(() {});
                   restartWebSocket();
                 }
               },

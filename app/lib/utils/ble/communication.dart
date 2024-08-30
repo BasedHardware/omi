@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/ble/errors.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
@@ -104,8 +105,6 @@ Future<StreamSubscription?> getBleAudioBytesListener(
 
   return listener;
 }
-
-enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
 
 Future<BleAudioCodec> getAudioCodec(String deviceId) async {
   final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
