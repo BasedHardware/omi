@@ -21,7 +21,7 @@ export default function AppHeader() {
 
   return (
     <header
-      className={`fixed top-0 z-30 flex w-full items-center justify-between p-4 px-4 text-white backdrop-blur-md transition-all duration-500 md:px-12 ${
+      className={`sticky top-0 z-30 flex w-full items-center justify-between p-4 px-4 text-white backdrop-blur-md transition-all duration-500 md:px-12 ${
         scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''
       }`}
     >
