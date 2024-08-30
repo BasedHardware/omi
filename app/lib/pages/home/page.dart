@@ -126,11 +126,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     // TODO: Being triggered multiple times during navigation. It ideally shouldn't
     _controller = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
       initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
     );
-    SharedPreferencesUtil().pageToShowFromNotification = 1;
+    SharedPreferencesUtil().pageToShowFromNotification = 0; // TODO: whatisit
     SharedPreferencesUtil().onboardingCompleted = true;
 
     WidgetsBinding.instance.addObserver(this);
@@ -331,7 +331,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ],
                         ),
                       ),
-<<<<<<< HEAD
                     ),
                   if (scriptsInProgress)
                     Center(
@@ -342,69 +341,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.white, width: 2),
-=======
-                      if (chatTextFieldFocusNode.hasFocus || memoriesTextFieldFocusNode.hasFocus)
-                        const SizedBox.shrink()
-                      else
-                        Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                            decoration: const BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.all(Radius.circular(16)),
-                              border: GradientBoxBorder(
-                                gradient: LinearGradient(colors: [
-                                  Color.fromARGB(127, 208, 208, 208),
-                                  Color.fromARGB(127, 188, 99, 121),
-                                  Color.fromARGB(127, 86, 101, 182),
-                                  Color.fromARGB(127, 126, 190, 236)
-                                ]),
-                                width: 2,
-                              ),
-                              shape: BoxShape.rectangle,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: MaterialButton(
-                                    onPressed: () => _tabChange(0),
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text(
-                                        'Memories',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: provider.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: MaterialButton(
-                                    onPressed: () => _tabChange(1),
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text(
-                                        'Chat',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: provider.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
->>>>>>> b7a0ce87 (Remove capture pages from tab, mix panel)
                         ),
                         child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.center,

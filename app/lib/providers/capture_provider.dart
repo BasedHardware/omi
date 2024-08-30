@@ -15,6 +15,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
@@ -110,6 +111,72 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     debugPrint('connected device changed from ${connectedDevice?.id} to ${device?.id}');
     connectedDevice = device;
     notifyListeners();
+  }
+
+  void _onMemoryCreating() {
+    setMemoryCreating(true);
+  }
+
+  Future<void> _onMemoryCreated(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    _proessOnMemoryCreate(memory);
+  }
+
+  void _onMemoryCreateFailed() {
+    _proessOnMemoryCreate(null); // force failed
+  }
+
+  Future<bool?> _proessOnMemoryCreate(ServerMemory? memory) async {
+    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        geolocation: geolocation,
+        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        startedAt: currentTranscriptStartedAt,
+        finishedAt: currentTranscriptFinishedAt,
+        failed: true,
+        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory);
+
+      // TODO: store anyways something temporal and retry once connected again.
+    }
+
+    if (memory != null) {
+      // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory);
+      memoryProvider?.addMemory(memory);
+      if (memoryProvider?.memories.isEmpty ?? false) {
+        memoryProvider?.getMoreMemoriesFromServer();
+      }
+    }
+
+    if (memory != null && !memory.failed && segments.isNotEmpty && !memory.discarded) {
+      setMemoryCreating(false);
+    }
+
+    SharedPreferencesUtil().transcriptSegments = [];
+    segments = [];
+    audioStorage?.clearAudioBytes();
+    setHasTranscripts(false);
+
+    currentTranscriptStartedAt = null;
+    currentTranscriptFinishedAt = null;
+    elapsedSeconds = 0;
+
+    streamStartedAtSecond = null;
+    firstStreamReceivedAt = null;
+    secondsMissedOnReconnect = null;
+    photos = [];
+    conversationId = const Uuid().v4();
+    setMemoryCreating(false);
+    notifyListeners();
+    return true;
   }
 
   Future<bool?> createMemory({bool forcedCreation = false}) async {
@@ -272,6 +339,22 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         print('err: $err');
         // connection was okay, but then failed.
         notifyListeners();
+      },
+      onMessageEventReceived: (ServerMessageEvent event) {
+        if (event.type == MessageEventType.newMemoryCreating) {
+          _onMemoryCreating();
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreated) {
+          _onMemoryCreated(event.memoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreateFailed) {
+          _onMemoryCreateFailed();
+          return;
+        }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
