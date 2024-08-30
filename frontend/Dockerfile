@@ -15,9 +15,9 @@ RUN echo "COPIED base files"
 RUN ls -la
 
 RUN \
-  if [ -f frontend/yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f frontend/package-lock.json ]; then npm ci; \
-  elif [ -f frontend/pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
   else echo "Lockfile not found." && exit 1; \
   fi
 
