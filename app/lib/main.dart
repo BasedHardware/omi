@@ -30,7 +30,6 @@ import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
@@ -59,11 +58,6 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  if (Env.oneSignalAppId != null) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize(Env.oneSignalAppId!);
-    OneSignal.login(SharedPreferencesUtil().uid);
-  }
   return isAuth;
 }
 
@@ -157,10 +151,10 @@ class _MyAppState extends State<MyApp> {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider2<DeviceProvider, CaptureProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, value, SpeechProfileProvider? previous) =>
-                (previous?..setProvider(value)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, SpeechProfileProvider? previous) =>
+                (previous?..setProvider(device, capture)) ?? SpeechProfileProvider(),
           ),
         ],
         builder: (context, child) {

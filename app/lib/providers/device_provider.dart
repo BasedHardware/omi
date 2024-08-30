@@ -126,14 +126,14 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (timer != null) return;
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       if (timer == null) return;
-      print(printer);
-      print('seconds: $connectionCheckSeconds');
-      print('triggered timer at ${DateTime.now()}');
+      // print(printer);
+      // print('seconds: $connectionCheckSeconds');
+      // print('triggered timer at ${DateTime.now()}');
 
       if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
         return;
       }
-      print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      // print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
       if ((!isConnected && connectedDevice == null)) {
         if (isConnecting) {
           return;
@@ -193,6 +193,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (connectedDevice == null) {
       return;
     }
+    captureProvider?.resetState(restartBytesProcessing: true);
     captureProvider?.streamAudioToWs(connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
     notifyListeners();
   }
