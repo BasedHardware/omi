@@ -34,8 +34,9 @@ class FactDB(Fact):
     created_at: datetime
     updated_at: datetime
 
-    memory_id: str
-    memory_category: CategoryEnum
+    # if manually added
+    memory_id: Optional[str] = None
+    memory_category: Optional[CategoryEnum] = None
 
     reviewed: bool = False
     user_review: Optional[bool] = None
