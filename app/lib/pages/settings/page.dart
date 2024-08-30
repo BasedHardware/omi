@@ -277,7 +277,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/pages/privacy',
+                          url: 'https://www.omi.me/pages/privacy',
                           title: 'Privacy Policy',
                         ),
                       ),
@@ -287,8 +287,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/',
-                          title: 'Based Hardware',
+                          url: 'https://www.omi.me/',
+                          title: 'omi',
                         ),
                       ),
                     );
@@ -314,6 +314,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().joinDiscordClicked();
                     },
                   ),
+                  getItemAddOn('About omi', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://www.omi.me/pages/about',
+                          title: 'About Us',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.people, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
