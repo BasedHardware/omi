@@ -62,6 +62,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
         updateConnectingStatus(false);
         periodicConnect('coming from onDisconnect');
         captureProvider?.resetState(restartBytesProcessing: false);
+        captureProvider?.setAudioBytesConnected(false);
         print('after resetState inside initiateConnectionListener');
 
         InstabugLog.logInfo('Friend Device Disconnected');
