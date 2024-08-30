@@ -27,6 +27,7 @@ def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_cur
     # TODO: consider and automatic weekly revision (cronjob) for the user facts, to maybe simplify them, condense them.
     # for example, if the user opened the page, and went through a few, and didn't remove them, they are probably good.
     # but the ones that don't were opened or seen, can be condensed, or removed. Also with more context over time.
+    # TODO: chat will need tool functions to get name, get user facts, filtered, add, or remove based on conversations.
 
     # user_name = get_user_name(uid, use_default=False)
     # for fact in facts:
