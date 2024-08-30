@@ -70,13 +70,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
   TabController? _controller;
-  List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
+  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-  
+
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
@@ -221,7 +221,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                       }),
                     ),
-
                   );
 
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -514,7 +513,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
-
                         MixpanelManager().settingsOpened();
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
