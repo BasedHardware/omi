@@ -11,9 +11,6 @@ RUN ls -la
 # Install dependencies based on the preferred package manager
 COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
 
-RUN echo "COPIED base files"
-RUN ls -la
-
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
@@ -24,11 +21,12 @@ RUN \
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
-RUN echo "rebuild: $(pwd)"
-RUN ls -la
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
+
+RUN echo "base files"
+RUN ls -la
 
 
 # Production image, copy all the files and run next
@@ -46,8 +44,8 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone frontend/
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static frontend/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
