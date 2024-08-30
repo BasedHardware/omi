@@ -36,7 +36,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   await channel.ready.then((v) {
     channel.stream.listen(
       (event) {
-        // ping
+        // ping, wrong {"type":"ping"}
         if (event == 'ping') return;
 
         // json
@@ -50,10 +50,14 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
           return;
         }
 
+        debugPrint(event);
+
         // object message event
-        var messageEvent = ServerMessageEvent.fromJson(jsonEvent);
-        if (onMessageEventReceived != null) {
-          onMessageEventReceived(messageEvent);
+        if (jsonEvent.containsKey("type")) {
+          var messageEvent = ServerMessageEvent.fromJson(jsonEvent);
+          if (onMessageEventReceived != null) {
+            onMessageEventReceived(messageEvent);
+          }
         }
 
         debugPrint(event.toString());

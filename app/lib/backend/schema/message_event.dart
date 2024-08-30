@@ -4,13 +4,15 @@ enum MessageEventType {
   newMemoryCreateFailed('new_memory_create_failed'),
   memoryPostProcessingSuccess('memory_post_processing_success'),
   memoryPostProcessingFailed('memory_post_processing_failed'),
+  ping('ping'),
+  unknown('unknown'),
   ;
 
   final String value;
   const MessageEventType(this.value);
 
   static MessageEventType valuesFromString(String value) {
-    return MessageEventType.values.firstWhere((e) => e.value == value);
+    return MessageEventType.values.firstWhere((e) => e.value == value, orElse: () => MessageEventType.unknown);
   }
 }
 
@@ -25,7 +27,7 @@ class ServerMessageEvent {
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
     return ServerMessageEvent(
-      json['type'],
+      MessageEventType.valuesFromString(json['type']),
       json['memory_id'],
     );
   }
