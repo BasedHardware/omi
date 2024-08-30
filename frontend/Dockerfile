@@ -10,6 +10,10 @@ RUN ls -la
 
 # Install dependencies based on the preferred package manager
 COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+
+RUN echo "COPIED base files"
+RUN ls -la
+
 RUN \
   if [ -f frontend/yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f frontend/package-lock.json ]; then npm ci; \
