@@ -12,6 +12,7 @@ import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -70,13 +71,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
   TabController? _controller;
-  List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
+  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   FocusNode chatTextFieldFocusNode = FocusNode(canRequestFocus: true);
   FocusNode memoriesTextFieldFocusNode = FocusNode(canRequestFocus: true);
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
-  
+
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
@@ -122,7 +123,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // TODO: Being triggered multiple times during navigation. It ideally shouldn't
     connectivityController.init();
     _controller = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
       initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
     );
@@ -167,7 +168,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   _tabChange(int index) {
-    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
+    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat', 'Facts'][index]);
     FocusScope.of(context).unfocus();
     context.read<HomeProvider>().setIndex(index);
     _controller!.animateTo(index);
@@ -221,7 +222,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                       }),
                     ),
-
                   );
 
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -267,6 +267,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 memProvider.updateMemory(memory);
                               },
                             ),
+                            const FactsPage(),
                           ],
                         ),
                       ),
@@ -348,6 +349,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     ),
                                   ),
                                 ),
+                                Expanded(
+                                  child: MaterialButton(
+                                    onPressed: () => _tabChange(3),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
+                                      child: Text(
+                                        'Facts',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: provider.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
                               ],
                             ),
                           ),
@@ -514,7 +532,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
-
                         MixpanelManager().settingsOpened();
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;

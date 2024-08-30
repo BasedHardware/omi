@@ -1,9 +1,6 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 import database.facts as facts_db
-from database.redis_db import cache_user_name
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -30,6 +27,3 @@ def review_fact(fact_id: str, value: bool, uid: str = Depends(auth.get_current_u
 def edit_fact(fact_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.edit_fact(uid, fact_id, value)
     return {'status': 'ok'}
-
-
-
