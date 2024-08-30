@@ -72,7 +72,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
     } else if (widget.memory.source == MemorySource.friend) {
       hasMemoryRecording(widget.memory.id).then((value) {
         hasAudioRecording = value;
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       });
     }
     // _animationController = AnimationController(
@@ -340,7 +342,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                               isUser: true,
                               useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
                             );
-                            try{
+                            try {
                               setModalState(() {
                                 personId = null;
                                 isUserSegment = true;

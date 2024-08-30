@@ -30,7 +30,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      context.read<SpeechProfileProvider>().initialise();
+      context.read<SpeechProfileProvider>().initialise(false);
     });
     super.initState();
   }
@@ -306,10 +306,11 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                     return;
                                   }
 
-                                  provider.initiateWebsocket();
+                                  provider.initiateWebsocket(false);
                                   // 1.5 minutes seems reasonable
-                                  provider.forceCompletionTimer =
-                                      Timer(Duration(seconds: provider.maxDuration), provider.finalize);
+                                  provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
+                                    provider.finalize(false);
+                                  });
                                   provider.updateStartedRecording(true);
                                 },
                                 color: Colors.white,
