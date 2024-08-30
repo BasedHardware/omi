@@ -11,33 +11,44 @@ export default function Footer() {
           <Link href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
           </Link>
-
           <div className="mt-3 flex items-center gap-3">
-            <Link href="https://www.x.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://x.com/based_hardware"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <X />
             </Link>
             <Link
-              href="https://www.linkedin.com"
+              href="https://www.linkedin.com/company/omi-ai/"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Linkedin />
             </Link>
-            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://github.com/BasedHardware"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Github />
             </Link>
-            <Link href="https://www.tiktok.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://www.tiktok.com/@based_hardware"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Tiktok />
             </Link>
             <Link
-              href="https://www.instagram.com"
+              href="https://www.instagram.com/based_hardware/"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Instagram />
             </Link>
             <Link
-              href="https://www.discord.com"
+              href="https://discord.com/invite/ZutWMTJnwA"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -52,7 +63,7 @@ export default function Footer() {
             <li>
               <Link
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'#'}
+                href={'https://www.omi.me/pages/openglass'}
                 target="_blank"
               >
                 OpenGlass
@@ -61,7 +72,7 @@ export default function Footer() {
             <li>
               <Link
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'#'}
+                href={'https://www.omi.me/'}
                 target="_blank"
               >
                 Friend
@@ -70,7 +81,7 @@ export default function Footer() {
             <li>
               <Link
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'#'}
+                href={'https://www.omi.me/pages/friend-dev'}
                 target="_blank"
               >
                 Friend DEV KIT
@@ -80,69 +91,69 @@ export default function Footer() {
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Other</li>
             <li>
-              <a
-                href="#"
+              <Link
+                href="https://airtable.com/appyGfrqMxoUaD1mg/shrswR2uD1LRoFkFX"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Residency
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="#"
+              <Link
+                href="https://affiliate.basedhardware.com/"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Affiliate
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="#"
+              <Link
+                href="https://www.omi.me/pages/privacy"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Privacy
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="#"
+              <Link
+                href="https://coda.io/@kodjima33/customizations"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Customizations
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="#"
+              <Link
+                href="https://discord.com/invite/8MP3b9ymvx"
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Discord
-              </a>
+              </Link>
             </li>
           </ul>
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Company</li>
             <li>
               <Link
+                href={'https://www.omi.me/pages/about'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'/public-trips'}
               >
                 About
               </Link>
             </li>
             <li>
               <Link
-                href={'#'}
+                href={'https://airtable.com/appyGfrqMxoUaD1mg/shrkALjXdq7mJMM1W'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Invest
