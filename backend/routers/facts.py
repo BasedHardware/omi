@@ -22,6 +22,12 @@ def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_cur
     facts = facts_db.get_facts(uid, limit, offset)
     # TODO: consider this "$name" part if really is an issue, when changing name or smth.
     # TODO: what happens when "The User" is at the beggining, user will feel it random.
+    # TODO: consider replika facts categories, probably perform better.
+    # Family & Friends, Temporary, Background, Favorites, Appearance, Hopes & Goals, Opinions, Personality, Other
+    # TODO: consider and automatic weekly revision (cronjob) for the user facts, to maybe simplify them, condense them.
+    # for example, if the user opened the page, and went through a few, and didn't remove them, they are probably good.
+    # but the ones that don't were opened or seen, can be condensed, or removed. Also with more context over time.
+
     # user_name = get_user_name(uid, use_default=False)
     # for fact in facts:
     #     if fact['manually_added']:
