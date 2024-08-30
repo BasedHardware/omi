@@ -17,7 +17,7 @@ class FactsPage extends StatelessWidget {
 }
 
 class _FactsPage extends StatefulWidget {
-  const _FactsPage({super.key});
+  const _FactsPage();
 
   @override
   State<_FactsPage> createState() => _FactsPageState();
@@ -44,6 +44,51 @@ class _FactsPageState extends State<_FactsPage> with AutomaticKeepAliveClientMix
           itemCount: provider.facts.length,
           itemBuilder: (context, index) {
             Fact fact = provider.facts[index];
+            if (fact.id.isEmpty) {
+              // TextField to create a new fact + dropdown selector + save or discard button
+              return Card(
+                color: Colors.black12,
+                elevation: 0,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: ListTile(
+                    title: TextField(
+                      onChanged: (value) {
+                        fact.content = value;
+                      },
+                      decoration: const InputDecoration(hintText: 'Fact'),
+                    ),
+                    subtitle: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        DropdownButton<FactCategory>(
+                          value: fact.category,
+                          onChanged: (value) {
+                            fact.category = value!;
+                          },
+                          items: FactCategory.values
+                              .map((category) => DropdownMenuItem(
+                                    value: category,
+                                    child: Text(category.toString().split('.').last),
+                                  ))
+                              .toList(),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            provider.createFactProvider(fact.content, fact.category);
+                          },
+                          icon: const Icon(Icons.save),
+                        ),
+                        IconButton(
+                          onPressed: () {},
+                          icon: const Icon(Icons.cancel),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
             return Dismissible(
                 key: Key(fact.id),
                 direction: DismissDirection.endToStart,
