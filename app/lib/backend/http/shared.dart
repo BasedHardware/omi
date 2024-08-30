@@ -10,16 +10,19 @@ import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<String> getAuthHeader() async {
-  DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
+  DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(
+      SharedPreferencesUtil().tokenExpirationTime);
   if (SharedPreferencesUtil().authToken == '' ||
       expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now()))) {
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) &&
+          expiry.isAfter(DateTime.now()))) {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
   }
   if (SharedPreferencesUtil().authToken == '') {
     throw Exception('No auth token found');
   }
+  debugPrint("Token: Bearer ${SharedPreferencesUtil().authToken}");
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
 
@@ -39,14 +42,17 @@ Future<http.Response?> makeApiCall({
     }
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
-      // headers['Authorization'] = ''; // set admin key + uid here for testing
+      // headers['Authorization'] = '123'+a; // set admin key + uid here for testing
     }
 
     final client = InstabugHttpClient();
-
+    print('POST Request:');
+    print('URL: $url');
+    print('Hea: $headers');
+    print('Body: $body');
     if (method == 'POST') {
       headers['Content-Type'] = 'application/json';
-      return await client.post(Uri.parse(url), headers: headers, body: body);
+      return await client.post(Uri.parse(url), headers: headers, body: body).timeout(const Duration(seconds: 30));
     } else if (method == 'GET') {
       return await client.get(Uri.parse(url), headers: headers);
     } else if (method == 'DELETE') {

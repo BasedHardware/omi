@@ -2,5 +2,5 @@
 #include "Generated.xcconfig"
 
 ASSET_PREFIX=dev
-BUNDLE_NAME=Friend Dev
-BUNDLE_DISPLAY_NAME=Friend Dev
+BUNDLE_NAME=Luca Dev
+BUNDLE_DISPLAY_NAME=Luca Dev

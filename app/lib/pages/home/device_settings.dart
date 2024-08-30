@@ -111,7 +111,7 @@ class DeviceSettings extends StatelessWidget {
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Your Friend is ${device == null ? "unpaired" : "disconnected"}  😔'),
+                      content: Text('Your Luca is ${device == null ? "unpaired" : "disconnected"}  😔'),
                     ));
                     MixpanelManager().disconnectFriendClicked();
                   },
@@ -131,7 +131,7 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
   return [
     ListTile(
       title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Friend'),
+      subtitle: Text(device?.name ?? 'Luca'),
     ),
     ListTile(
       title: const Text('Device ID'),
@@ -161,7 +161,7 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(deviceInfo?.modelNumber ?? 'Friend'),
+      subtitle: Text(deviceInfo?.modelNumber ?? 'Luca'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),

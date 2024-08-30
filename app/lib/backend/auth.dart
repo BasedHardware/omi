@@ -115,7 +115,7 @@ listenAuthTokenChanges() {
       debugPrint('User is currently signed out or the token has been revoked!');
       SharedPreferencesUtil().authToken = '';
     } else {
-      // debugPrint('User is signed in!'); // FIXME, triggered too many times.
+      debugPrint('User is signed in!');
       try {
         if (SharedPreferencesUtil().authToken.isEmpty ||
             DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {

@@ -156,6 +156,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     Navigator.of(context).pop();
                     SharedPreferencesUtil().deviceId = '';
                     SharedPreferencesUtil().deviceName = '';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Your Luca is ${widget.device == null ? "unpaired" : "disconnected"}   😔'),
+                    ));
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(

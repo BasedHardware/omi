@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/library/flutter_markdown/flutter_markdown.dart';
 
 class ExpandableTextWidget extends StatefulWidget {
   final String text;
   final TextStyle style;
-  final int maxLines;
+  final int maxCharacter;
   final String expandText;
   final String collapseText;
   final Color linkColor;
   final bool isExpanded;
   final Function toggleExpand;
+  final Function onTap;
 
   const ExpandableTextWidget({
     super.key,
@@ -16,9 +18,10 @@ class ExpandableTextWidget extends StatefulWidget {
     required this.style,
     required this.isExpanded,
     required this.toggleExpand,
-    this.maxLines = 3,
-    this.expandText = 'show more ↓',
-    this.collapseText = 'show less ↑',
+    required this.onTap,
+    this.maxCharacter = 300,
+    this.expandText = 'Show More ↓',
+    this.collapseText = 'Show Less ↑',
     this.linkColor = Colors.deepPurple,
   });
 
@@ -29,30 +32,34 @@ class ExpandableTextWidget extends StatefulWidget {
 class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
   @override
   Widget build(BuildContext context) {
-    final span = TextSpan(text: widget.text, style: widget.style);
-    final tp = TextPainter(
-      text: span,
-      maxLines: widget.maxLines,
-      textDirection: TextDirection.ltr,
-    );
-    tp.layout(maxWidth: MediaQuery.of(context).size.width);
-    final isOverflowing = tp.didExceedMaxLines;
+    String displayedText = widget.isExpanded
+        ? widget.text
+        : (widget.text.length <= widget.maxCharacter)
+            ? widget.text
+            : '${widget.text.substring(0, widget.maxCharacter)}...';
 
     return SelectionArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.text,
-            style: widget.style,
-            maxLines: widget.isExpanded ? 10000 : widget.maxLines,
-            overflow: TextOverflow.ellipsis,
+          GestureDetector(
+            onTap: (){
+              widget.onTap();
+            },
+            child: MarkdownBody(
+              shrinkWrap: true,
+              data: displayedText,
+              onTapText: () {
+                widget.onTap();
+              },
+              selectable: false,
+            ),
           ),
-          if (isOverflowing)
+          if (widget.text.length > widget.maxCharacter)
             InkWell(
               onTap: () => widget.toggleExpand(),
               child: Padding(
-                padding: const EdgeInsets.only(top: 4.0),
+                padding: const EdgeInsets.only(top: 4.0, right: 10, bottom: 4),
                 child: Text(
                   widget.isExpanded ? widget.collapseText : widget.expandText,
                   style: TextStyle(

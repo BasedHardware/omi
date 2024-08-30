@@ -1,33 +1,5 @@
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
-enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
-
-String mapCodecToName(BleAudioCodec codec) {
-  switch (codec) {
-    case BleAudioCodec.opus:
-      return 'opus';
-    case BleAudioCodec.pcm16:
-      return 'pcm16';
-    case BleAudioCodec.pcm8:
-      return 'pcm8';
-    default:
-      return 'pcm8';
-  }
-}
-
-BleAudioCodec mapNameToCodec(String codec) {
-  switch (codec) {
-    case 'opus':
-      return BleAudioCodec.opus;
-    case 'pcm16':
-      return BleAudioCodec.pcm16;
-    case 'pcm8':
-      return BleAudioCodec.pcm8;
-    default:
-      return BleAudioCodec.pcm8;
-  }
-}
-
 class BTDeviceStruct {
   String name;
   String id;

@@ -34,6 +34,8 @@ Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {
   }
   String url = 'https://storage.googleapis.com/upload/storage/v1/b/$bucketName/o?uploadType=media&name=$fileName';
 
+  debugPrint("uploadFile url -> $url");
+
   try {
     var response = await http.post(
       Uri.parse(url),
@@ -46,11 +48,11 @@ Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {
 
     if (response.statusCode == 200) {
       var json = jsonDecode(response.body);
-      debugPrint(json.toString());
-      debugPrint('Upload successful');
+      debugPrint("uploadFile response -> $json");
+      debugPrint('uploadFile response -> Upload successful');
       return fileName;
     } else {
-      debugPrint('Failed to upload: ${response.body}');
+      debugPrint('uploadFile failed -> Failed to upload: ${response.body}');
     }
   } catch (e) {
     debugPrint('Error uploading file: $e');

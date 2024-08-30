@@ -31,7 +31,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Help us improve Friend by answering a few questions.  🫶 💜',
+                'Help us improve Luca by answering a few questions.  🫶 💜',
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.start,
               ),

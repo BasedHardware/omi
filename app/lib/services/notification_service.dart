@@ -18,14 +18,14 @@ class NotificationService {
   NotificationService._();
 
   static NotificationService instance = NotificationService._();
-  MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
+  MethodChannel platform = const MethodChannel('com.ai.wearable/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Friend Notifications',
-    channelDescription: 'Notification channel for Friend',
+    channelName: 'Luca Notifications',
+    channelDescription: 'Notification channel for Luca',
     defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
@@ -98,8 +98,9 @@ class NotificationService {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
+          'title': "Luca Device Disconnected",
+          'description':
+              "Please keep your app opened to continue using your Friend.",
         },
       );
     } catch (e) {
@@ -134,7 +135,12 @@ class NotificationService {
     debugPrint('createNotification: $allowed');
     if (!allowed) return;
     debugPrint('createNotification ~ Creating notification: $title');
-    showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
+    showNotification(
+        id: notificationId,
+        title: title,
+        body: body,
+        wakeUpScreen: true,
+        payload: payload);
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
@@ -151,14 +157,18 @@ class NotificationService {
     });
   }
 
-  final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
+  final _serverMessageStreamController =
+      StreamController<ServerMessage>.broadcast();
 
-  Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
+  Stream<ServerMessage> get listenForServerMessages =>
+      _serverMessageStreamController.stream;
 
-  Future<void> _showForegroundNotification(RemoteNotification? notification) async {
+  Future<void> _showForegroundNotification(
+      RemoteNotification? notification) async {
     if (notification != null) {
       final id = Random().nextInt(10000);
-      showNotification(id: id, title: notification.title!, body: notification.body!);
+      showNotification(
+          id: id, title: notification.title!, body: notification.body!);
     }
   }
 }
@@ -168,7 +178,8 @@ class NotificationUtil {
 
   static Future<void> initializeNotificationsEventListeners() async {
     // Only after at least the action method is set, the notification events are delivered
-    AwesomeNotifications().setListeners(onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
+    AwesomeNotifications().setListeners(
+        onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
   }
 
   static Future<void> initializeIsolateReceivePort() async {
@@ -179,34 +190,40 @@ class NotificationUtil {
     });
 
     // This initialization only happens on main isolate
-    IsolateNameServer.registerPortWithName(receivePort!.sendPort, 'notification_action_port');
+    IsolateNameServer.registerPortWithName(
+        receivePort!.sendPort, 'notification_action_port');
   }
 
   /// Use this method to detect when the user taps on a notification or action button
   @pragma("vm:entry-point")
-  static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
+  static Future<void> onActionReceivedMethod(
+      ReceivedAction receivedAction) async {
     if (receivePort != null) {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
       print(
           'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
-      SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
+      SendPort? sendPort =
+          IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
-        print('Redirecting the execution to main isolate process in listening...');
+        print(
+            'Redirecting the execution to main isolate process in listening...');
         dynamic serializedData = receivedAction.toMap();
         sendPort.send(serializedData);
       }
     }
   }
 
-  static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
+  static Future<void> onActionReceivedMethodImpl(
+      ReceivedAction receivedAction) async {
     final Map<String, int> screensWithRespectToPath = {
       '/chat': 2,
       '/capture': 1,
       '/memories': 0,
     };
-    var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
+    var message =
+        'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
     debugPrint(message);
     debugPrint(receivedAction.toMap().toString());
 
@@ -214,9 +231,12 @@ class NotificationUtil {
     WidgetsFlutterBinding.ensureInitialized();
     final payload = receivedAction.payload;
     if (payload?.containsKey('navigateTo') ?? false) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
+      SharedPreferencesUtil().subPageToShowFromNotification =
+          payload?['navigateTo'] ?? '';
     }
-    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
-    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+    SharedPreferencesUtil().pageToShowFromNotification =
+        screensWithRespectToPath[payload?['path']] ?? 1;
+    MyApp.navigatorKey.currentState?.pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomePageWrapper()));
   }
 }

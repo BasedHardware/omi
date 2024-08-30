@@ -71,7 +71,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future getLatestVersion({required String deviceName}) async {
-    int device = deviceName == 'Friend' ? 1 : 2;
+    int device = deviceName == 'Luca' ? 1 : 2;
     var res = await makeApiCall(
         url: "${Env.apiBaseUrl}v1/firmware/latest?device=$device", headers: {}, body: '', method: 'GET');
     if (res == null) {
@@ -111,7 +111,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
             false
           );
         } else {
-          return ('A new version is available! Update your Friend now.', true);
+          return ('A new version is available! Update your Luca now.', true);
         }
       } else {
         return ('You are already on the latest version', false);

@@ -125,13 +125,12 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
                 width: double.infinity, // Button takes full width of the padding
                 height: 45, // Fixed height for the button
                 alignment: Alignment.center,
-                child: const Text(
-                  'Connect My Friend',
+                child: Text(
+                  'Connect My Luca',
                   style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 18,
-                    color: Color.fromARGB(255, 255, 255, 255),
-                  ),
+                      fontWeight: FontWeight.w400,
+                      fontSize: screenSize.width * 0.045,
+                      color: const Color.fromARGB(255, 255, 255, 255)),
                 ),
               ),
             ),
@@ -146,8 +145,8 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
               'Skip for now',
               style: TextStyle(
                   color: Colors.white,
-                  // decoration: TextDecoration.underline,
-                  fontSize: 14,
+                  decoration: TextDecoration.underline,
+                  fontSize: 16,
                   fontWeight: FontWeight.normal),
             )),
         const SizedBox(height: 16)

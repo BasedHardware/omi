@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -58,19 +57,9 @@ class _AIMessageState extends State<AIMessage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         widget.pluginSender != null
-            ? CachedNetworkImage(
-                imageUrl: widget.pluginSender!.getImageUrl(),
-                imageBuilder: (context, imageProvider) => Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: DecorationImage(
-                      image: imageProvider,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                placeholder: (context, url) => const CircularProgressIndicator(),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+            ? CircleAvatar(
+                radius: 16,
+                backgroundImage: NetworkImage(widget.pluginSender!.getImageUrl()),
               )
             : Container(
                 decoration: const BoxDecoration(

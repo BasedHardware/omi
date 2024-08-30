@@ -36,7 +36,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
               NotificationService.instance.requestNotificationPermissions();
             },
             title: const Text(
-              'Enable notification access for Friend\'s full experience.',
+              'Enable notification access for Luca\'s full experience.',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             contentPadding: const EdgeInsets.only(left: 8),

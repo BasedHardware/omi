@@ -16,13 +16,11 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -49,7 +47,12 @@ class CapturePage extends StatefulWidget {
 }
 
 class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, PhoneRecorderMixin, WebSocketMixin, OpenGlassMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        WidgetsBindingObserver,
+        PhoneRecorderMixin,
+        WebSocketMixin,
+        OpenGlassMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -110,7 +113,8 @@ class CapturePageState extends State<CapturePage>
 
   late StreamSubscription<InternetStatus> _internetListener;
   bool isGlasses = false;
-  String conversationId = const Uuid().v4(); // used only for transcript segment plugins
+  String conversationId =
+      const Uuid().v4(); // used only for transcript segment plugins
 
   double? streamStartedAtSecond;
   DateTime? firstStreamReceivedAt;
@@ -118,19 +122,23 @@ class CapturePageState extends State<CapturePage>
 
   Geolocation? geolocation;
 
-  Future<void> initiateWebsocket([BleAudioCodec? audioCodec, int? sampleRate]) async {
-    print('initiateWebsocket');
-    BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
+  Future<void> initiateWebsocket(
+      [BleAudioCodec? audioCodec, int? sampleRate]) async {
+    BleAudioCodec codec = audioCodec ??
+        (btDevice?.id == null
+            ? BleAudioCodec.pcm8
+            : await getAudioCodec(btDevice!.id));
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
     await initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
-      includeSpeechProfile: true,
       onConnectionSuccess: () {
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
-          secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
+          secondsMissedOnReconnect =
+              (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
+
         }
         setState(() {});
       },
@@ -150,7 +158,8 @@ class CapturePageState extends State<CapturePage>
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
           //  losing from the audio the first part of the recording. All other parts are fine.
           FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
+          audioStorage?.removeFramesRange(
+              fromSecond: 0, toSecond: newSegments[0].start.toInt());
           firstStreamReceivedAt = DateTime.now();
         }
         streamStartedAtSecond ??= newSegments[0].start;
@@ -161,12 +170,15 @@ class CapturePageState extends State<CapturePage>
           toRemoveSeconds: streamStartedAtSecond ?? 0,
           toAddSeconds: secondsMissedOnReconnect ?? 0,
         );
-        triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: sendMessageToChat);
+        triggerTranscriptSegmentReceivedEvents(newSegments, conversationId,
+            sendMessageToChat: sendMessageToChat);
         SharedPreferencesUtil().transcriptSegments = segments;
         setHasTranscripts(true);
         debugPrint('Memory creation timer restarted');
         _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemory());
+        _memoryCreationTimer = Timer(
+            const Duration(seconds: quietSecondsForMemoryCreation),
+            () => _createMemory());
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
         setState(() {});
@@ -177,33 +189,14 @@ class CapturePageState extends State<CapturePage>
   Future<void> initiateFriendAudioStreaming() async {
     if (btDevice == null) return;
     BleAudioCodec codec = await getAudioCodec(btDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      SharedPreferencesUtil().deviceCodec = codec;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => getDialog(
-          context,
-          () => routeToPage(context, const HomePageWrapper(), replace: true),
-          () => {},
-          'Firmware change detected!',
-          'You are currently using a different firmware version than the one you were using before. Please restart the app to apply the changes.',
-          singleButton: true,
-          okButtonText: 'Restart',
-        ),
-      );
-      return;
-    }
+    if (codec != BleAudioCodec.pcm8) restartWebSocket();
     audioStorage = WavBytesUtil(codec: codec);
     _bleBytesStream = await getBleAudioBytesListener(
       btDevice!.id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
-        // print(value);
         value.removeRange(0, 3);
-        // TODO: if this is not removed, deepgram can't seem to be able to detect the audio.
-        // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (wsConnectionState == WebsocketConnectionStatus.connected) {
           websocketChannel?.sink.add(value);
         }
@@ -216,16 +209,21 @@ class CapturePageState extends State<CapturePage>
   Future<void> startOpenGlass() async {
     if (btDevice == null) return;
     isGlasses = await hasPhotoStreamingCharacteristic(btDevice!.id);
+    debugPrint('startOpenGlass isGlasses: $isGlasses');
     if (!isGlasses) return;
-    await openGlassProcessing(btDevice!, (p) => setState(() {}), setHasTranscripts);
+
+    await openGlassProcessing(
+        btDevice!, (p) => setState(() {}), setHasTranscripts);
     closeWebSocket();
   }
 
-  void resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
+  void resetState(
+      {bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) {
     debugPrint('resetState: $restartBytesProcessing');
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
-    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) _createMemory(forcedCreation: true);
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty))
+      _createMemory(forcedCreation: true);
     if (btDevice != null) setState(() => this.btDevice = btDevice);
     if (restartBytesProcessing) {
       startOpenGlass();
@@ -234,7 +232,6 @@ class CapturePageState extends State<CapturePage>
   }
 
   void restartWebSocket() {
-    debugPrint('restartWebSocket');
     closeWebSocket();
     initiateWebsocket();
   }
@@ -251,14 +248,19 @@ class CapturePageState extends State<CapturePage>
     // TODO: should clean variables here? and keep them locally?
     setState(() => memoryCreating = true);
     File? file;
+
     if (audioStorage?.frames.isNotEmpty == true) {
+      debugPrint("uploadFile url -> if");
       try {
         var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
+        file =
+            (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
         uploadFile(file);
       } catch (e) {
         print("creating and uploading file error: $e");
       } // in case was a local recording and not a BLE recording
+    } else {
+      debugPrint("uploadFile url -> else");
     }
 
     ServerMemory? memory = await processTranscriptContent(
@@ -280,12 +282,17 @@ class CapturePageState extends State<CapturePage>
         discarded: true,
         transcriptSegments: segments,
         geolocation: geolocation,
-        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        photos: photos
+            .map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2))
+            .toList(),
         startedAt: currentTranscriptStartedAt,
         finishedAt: currentTranscriptFinishedAt,
         failed: true,
-        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        source:
+            segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: segments.isNotEmpty
+            ? SharedPreferencesUtil().recordingsLanguage
+            : null,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -323,6 +330,7 @@ class CapturePageState extends State<CapturePage>
 
   processCachedTranscript() async {
     // TODO: only applies to friend, not openglass, fix it
+    debugPrint('_processCachedTranscript');
     var segments = SharedPreferencesUtil().transcriptSegments;
     if (segments.isEmpty) return;
     processTranscriptContent(
@@ -384,7 +392,8 @@ class CapturePageState extends State<CapturePage>
         );
       }
     });
-    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+    _internetListener =
+        InternetConnection().onStatusChange.listen((InternetStatus status) {
       switch (status) {
         case InternetStatus.connected:
           _internetStatus = InternetStatus.connected;
@@ -429,7 +438,8 @@ class CapturePageState extends State<CapturePage>
         );
       }
     } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
+      PermissionStatus permissionGranted =
+          await locationService.requestPermission();
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
@@ -451,17 +461,22 @@ class CapturePageState extends State<CapturePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Stack(
-      children: [
-        ListView(children: [
-          speechProfileWidget(context, setState, restartWebSocket),
-          ...getConnectionStateWidgets(context, _hasTranscripts, widget.device, wsConnectionState, _internetStatus),
-          getTranscriptWidget(memoryCreating, segments, photos, widget.device),
-          ...connectionStatusWidgets(context, segments, wsConnectionState, _internetStatus),
-          const SizedBox(height: 16)
-        ]),
-        getPhoneMicRecordingButton(_recordingToggled, recordingState)
-      ],
+    return Scaffold(
+      body: Stack(
+        children: [
+          ListView(children: [
+            speechProfileWidget(context, setState, restartWebSocket),
+            ...getConnectionStateWidgets(context, _hasTranscripts,
+                widget.device, wsConnectionState, _internetStatus),
+            getTranscriptWidget(
+                memoryCreating, segments, photos, widget.device),
+            ...connectionStatusWidgets(
+                context, segments, wsConnectionState, _internetStatus),
+            const SizedBox(height: 16)
+          ]),
+          getPhoneMicRecordingButton(_recordingToggled, recordingState)
+        ],
+      ),
     );
   }
 
@@ -489,7 +504,8 @@ class CapturePageState extends State<CapturePage>
             closeWebSocket();
             await initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
-              await streamRecordingOnAndroid(wsConnectionState, websocketChannel);
+              await streamRecordingOnAndroid(
+                  wsConnectionState, websocketChannel);
             } else {
               await startStreamRecording(wsConnectionState, websocketChannel);
             }

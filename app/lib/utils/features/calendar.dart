@@ -32,16 +32,6 @@ class CalendarUtil {
     return true;
   }
 
-  Future<bool> hasCalendarAccess() async {
-    final permissionsGranted = await _calendarPlugin!.hasPermissions();
-    return permissionsGranted.isSuccess && permissionsGranted.data == true;
-  }
-
-  Future<bool> calendarPermissionAsked() async {
-    final permissionsGranted = await _calendarPlugin!.hasPermissions();
-    return permissionsGranted.isSuccess;
-  }
-
   Future<List<Calendar>> getCalendars() async {
     bool hasAccess = await enableCalendarAccess();
     if (!hasAccess) return [];
@@ -80,4 +70,4 @@ class CalendarUtil {
     }
     return false;
   }
-}
+ }

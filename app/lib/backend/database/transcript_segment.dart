@@ -125,8 +125,7 @@ class TranscriptSegment {
         (joinedSimilarSegments[0].start - segments.last.end < 30)) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       segments.last.end = joinedSimilarSegments[0].end;
-      // let's not switch to user, if the 1st segment is not, it will be always the user basically.
-      // if (joinedSimilarSegments[0].isUser) segments.last.isUser = true;
+      if (joinedSimilarSegments[0].isUser) segments.last.isUser = true;
       joinedSimilarSegments.removeAt(0);
     }
 

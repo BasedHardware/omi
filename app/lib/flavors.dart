@@ -22,11 +22,11 @@ class F {
   static String get title {
     switch (env) {
       case Environment.prod:
-        return 'Friend';
+        return 'Luca';
       case Environment.dev:
-        return 'Friend Dev';
+        return 'Luca Dev';
       default:
-        return 'Friend Dev';
+        return 'Luca Dev';
     }
   }
 }
