@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Backend Setup
-nav_order: 2
+parent: Backend
+nav_order: 1
 ---
 
 # Backend Setup 🚀

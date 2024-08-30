@@ -21,10 +21,6 @@ final class ProdEnv implements EnvFields {
   final String? mixpanelProjectToken = _ProdEnv.mixpanelProjectToken;
 
   @override
-  @EnviedField(varName: 'ONESIGNAL_APP_ID', obfuscate: true)
-  final String? oneSignalAppId = _ProdEnv.oneSignalAppId;
-
-  @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
 
