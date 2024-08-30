@@ -7,11 +7,14 @@ import 'package:uuid/uuid.dart';
 
 class FactsProvider extends BaseProvider {
   List<Fact> facts = [];
+  List<Fact> filteredFacts = [];
   List<Tuple2<FactCategory, int>> categories = [];
   FactCategory? selectedCategory;
 
   void setCategory(FactCategory? category) {
     selectedCategory = category;
+    filteredFacts = category == null ? facts : facts.where((fact) => fact.category == category).toList();
+    filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     notifyListeners();
   }
 
@@ -20,52 +23,36 @@ class FactsProvider extends BaseProvider {
       final count = facts.where((fact) => fact.category == category).length;
       return Tuple2(category, count);
     }).toList();
+    setCategory(selectedCategory); // refresh
+    notifyListeners();
   }
 
   void init() async {
     loading = true;
     notifyListeners();
     facts = await getFacts();
-    _setCategories();
-    // startCreateFactProvider();
     loading = false;
-    notifyListeners();
-  }
-
-  void reviewFactProvider(int idx, bool value) async {
-    var fact = facts[idx];
-    reviewFact(fact.id, value);
-    fact.reviewed = true;
-    fact.userReview = value;
-    if (!value) {
-      facts.removeAt(idx);
-    } else {
-      facts[idx] = fact;
-    }
     _setCategories();
-    notifyListeners();
   }
 
-  void deleteFactProvider(int idx) async {
-    var fact = facts[idx];
+  // void reviewFactProvider(int idx, bool value) async {
+  //   var fact = facts[idx];
+  //   reviewFact(fact.id, value);
+  //   fact.reviewed = true;
+  //   fact.userReview = value;
+  //   if (!value) {
+  //     facts.removeAt(idx);
+  //   } else {
+  //     facts[idx] = fact;
+  //   }
+  //   _setCategories();
+  //   notifyListeners();
+  // }
+
+  void deleteFactProvider(Fact fact) async {
     deleteFact(fact.id);
-    facts.removeAt(idx);
+    facts.remove(fact);
     _setCategories();
-    notifyListeners();
-  }
-
-  void startCreateFactProvider() {
-    facts.insert(
-        0,
-        Fact(
-          id: '',
-          uid: SharedPreferencesUtil().uid,
-          content: '',
-          category: FactCategory.hobbies,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ));
-    notifyListeners();
   }
 
   void createFactProvider(String content, FactCategory category) async {
@@ -80,17 +67,16 @@ class FactsProvider extends BaseProvider {
       manuallyAdded: true,
     ));
     _setCategories();
-    notifyListeners();
   }
 
-  void editFactProvider(int idx, String value) async {
-    var fact = facts[idx];
+  void editFactProvider(Fact fact, String value, FactCategory category) async {
+    var idx = facts.indexWhere((f) => f.id == fact.id);
     editFact(fact.id, value);
     fact.content = value;
+    fact.category = category;
     fact.updatedAt = DateTime.now();
     fact.edited = true;
     facts[idx] = fact;
     _setCategories();
-    notifyListeners();
   }
 }

@@ -243,7 +243,7 @@ class _FactsPageState extends State<_FactsPage> {
     onPressed() async {
       if (formKey.currentState!.validate()) {
         if (isEditing && fact != null) {
-          // provider.editFactProvider(fact, contentController.text, selectedCategory);
+          provider.editFactProvider(fact, contentController.text, selectedCategory);
         } else {
           provider.createFactProvider(contentController.text, selectedCategory);
         }
@@ -344,7 +344,7 @@ class _FactsPageState extends State<_FactsPage> {
   }
 
   Widget _buildFactsList(FactsProvider provider) {
-    final filteredFacts = provider.facts.where((fact) => fact.category == provider.selectedCategory).toList();
+    final filteredFacts = provider.filteredFacts;
     return filteredFacts.isEmpty
         ? const Center(
             child: Column(
@@ -372,7 +372,7 @@ class _FactsPageState extends State<_FactsPage> {
                 key: Key(fact.id),
                 direction: DismissDirection.endToStart,
                 onDismissed: (direction) {
-                  provider.deleteFactProvider(provider.facts.indexOf(fact));
+                  provider.deleteFactProvider(fact);
                 },
                 background: Container(
                   alignment: Alignment.centerRight,
