@@ -45,7 +45,16 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
             children: [
               _getMemoryHeader(),
               const SizedBox(height: 16),
-              const CaptureWidget(),
+              const Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    SliverToBoxAdapter(
+                      child: CaptureWidget(),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
