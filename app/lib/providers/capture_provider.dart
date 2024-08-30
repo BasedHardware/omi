@@ -73,6 +73,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
   WavBytesUtil? audioStorage;
+  Timer? _memoryCreationTimer;
   String conversationId = const Uuid().v4();
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
@@ -217,10 +218,13 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     return true;
   }
 
+  // Warn: Support OpenGlass
   Future<bool?> createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return null;
-    if (segments.isEmpty && photos.isEmpty) return false;
+
+    // Suport OpenGlass only
+    if (photos.isEmpty) return false;
 
     // TODO: should clean variables here? and keep them locally?
     setMemoryCreating(true);
@@ -450,6 +454,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
           messageProvider?.addMessage(v);
         });
         SharedPreferencesUtil().transcriptSegments = segments;
+        debugPrint('Memory creation timer restarted');
+        _memoryCreationTimer?.cancel();
+        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => createMemory());
         setHasTranscripts(true);
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
@@ -611,12 +618,14 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void cancelMemoryCreationTimer() {
+    _memoryCreationTimer?.cancel();
     notifyListeners();
   }
 
   @override
   void dispose() {
     _bleBytesStream?.cancel();
+    _memoryCreationTimer?.cancel();
     super.dispose();
   }
 
