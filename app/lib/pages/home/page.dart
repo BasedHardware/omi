@@ -12,7 +12,6 @@ import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -123,7 +122,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // TODO: Being triggered multiple times during navigation. It ideally shouldn't
     connectivityController.init();
     _controller = TabController(
-      length: 4,
+      length: 3,
       vsync: this,
       initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
     );
@@ -168,7 +167,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   _tabChange(int index) {
-    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat', 'Facts'][index]);
+    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
     FocusScope.of(context).unfocus();
     context.read<HomeProvider>().setIndex(index);
     _controller!.animateTo(index);
@@ -267,7 +266,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 memProvider.updateMemory(memory);
                               },
                             ),
-                            const FactsPage(),
                           ],
                         ),
                       ),
@@ -349,23 +347,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     ),
                                   ),
                                 ),
-                                Expanded(
-                                  child: MaterialButton(
-                                    onPressed: () => _tabChange(3),
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 20, bottom: 20),
-                                      child: Text(
-                                        'Facts',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: provider.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
                               ],
                             ),
                           ),

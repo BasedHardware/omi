@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
@@ -235,14 +236,27 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  Divider(color: Colors.transparent,),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Speech Recognition', () {
                     routeToPage(context, const SpeakerIdPage());
                   }, icon: Icons.multitrack_audio),
                   getItemAddOn('Identifying Others', () {
                     routeToPage(context, const UserPeoplePage());
                   }, icon: Icons.people),
-                  const Divider(color: Colors.transparent,),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
+                  getItemAddOn(
+                      SharedPreferencesUtil().givenName.isEmpty
+                          ? 'About YOU (by Omi)'
+                          : 'About ${SharedPreferencesUtil().givenName.toUpperCase()} (by Omi) ', () {
+                    routeToPage(context, const FactsPage());
+                  }, icon: Icons.self_improvement),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
