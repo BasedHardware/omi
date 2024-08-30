@@ -256,14 +256,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Calendar Integration', () {
                     routeToPage(context, const CalendarPage());
                   }, icon: Icons.calendar_month),
-                  Divider(color: Colors.transparent,),
+                  Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Speech Recognition', () {
                     routeToPage(context, const SpeakerIdPage());
                   }, icon: Icons.multitrack_audio),
                   getItemAddOn('Identifying Others', () {
                     routeToPage(context, const UserPeoplePage());
                   }, icon: Icons.people),
-                  const Divider(color: Colors.transparent,),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
                   getItemAddOn('Developer Mode', () async {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
@@ -284,7 +288,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/pages/privacy',
+                          url: 'https://www.omi.me/pages/privacy',
                           title: 'Privacy Policy',
                         ),
                       ),
@@ -294,7 +298,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/',
+                          url: 'https://www.omi.me/pages/about/',
                           title: 'Based Hardware',
                         ),
                       ),
