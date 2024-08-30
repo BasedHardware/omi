@@ -33,5 +33,14 @@ typedef struct {
     int res;
 } file_info_t;
 
+typedef struct {
+    char name;
+    uint32_t size;
+    struct fs_file_t *file;
+} audio_info_t;
+
 
 char* get_info_file_data_();
+int close_audio_file();
+int initialize_audio_file();
+int write_audio_file_unsafe(uint8_t *buf, int amount);

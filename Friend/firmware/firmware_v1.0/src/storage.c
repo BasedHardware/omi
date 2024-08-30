@@ -54,3 +54,4 @@ int register_storage_service() {
     bt_gatt_service_register(&storage_service);
     return 0;
 }
+
