@@ -1,5 +1,3 @@
-
-
 enum FactCategory { hobbies, lifestyle, interests, habits, work, skills, other }
 
 class Fact {
@@ -9,8 +7,8 @@ class Fact {
   FactCategory category;
   DateTime createdAt;
   DateTime updatedAt;
-  String memoryId;
-  String memoryCategory;
+  String? memoryId;
+  String? memoryCategory;
   bool reviewed;
   bool? userReview;
   bool manuallyAdded;
@@ -24,8 +22,8 @@ class Fact {
     required this.category,
     required this.createdAt,
     required this.updatedAt,
-    required this.memoryId,
-    required this.memoryCategory,
+    this.memoryId,
+    this.memoryCategory,
     this.reviewed = false,
     this.userReview,
     this.manuallyAdded = false,

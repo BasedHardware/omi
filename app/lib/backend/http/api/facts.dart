@@ -5,6 +5,21 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/env/env.dart';
 
+Future<bool> createFact(String content, FactCategory category) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/facts',
+    headers: {},
+    method: 'POST',
+    body: json.encode({
+      'content': content,
+      'category': category.toString().split('.').last,
+    }),
+  );
+  if (response == null) return false;
+  debugPrint('createFact response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts?limit=$limit&offset=$offset',
