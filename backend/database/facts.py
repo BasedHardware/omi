@@ -6,12 +6,26 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 
 
-def get_facts(uid: str, limit: int = 100, offset: int = 0):
+def get_facts(uid: str, limit: int = 100, offset: int = 0, filter_only_true: bool = False):
     facts_ref = db.collection('users').document(uid).collection('facts')
     facts_ref = facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING).where(
-        filter=FieldFilter('deleted', '==', False))
+        filter=FieldFilter('deleted', '==', False),
+    )
+    if filter_only_true:
+        facts_ref = (
+            facts_ref
+            .where(filter=FieldFilter('reviewed', '==', True))
+            .where(filter=FieldFilter('user_review', '==', True))
+        )
     facts_ref = facts_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in facts_ref.stream()]
+
+
+def create_fact(uid: str, data: dict):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(data['id'])
+    fact_ref.set(data)
 
 
 def save_facts(uid: str, data: List[dict]):
