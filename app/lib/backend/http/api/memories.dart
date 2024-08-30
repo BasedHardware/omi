@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -196,5 +196,17 @@ Future<bool> assignMemoryTranscriptSegment(
   );
   if (response == null) return false;
   debugPrint('assignMemoryTranscriptSegment: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/visibility?value=$visibility&visibility=$visibility',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryVisibility: ${response.body}');
   return response.statusCode == 200;
 }
