@@ -10,7 +10,6 @@ import database.memories as memories_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
 from utils.llm import get_memory_summary
-from utils.memories.facts import get_prompt_data
 from utils.notifications import send_notification, send_bulk_notification
 
 
@@ -58,8 +57,7 @@ def _send_summary_notification(user_data: tuple):
     if not memories:
         return
     else:
-        user_name, user_facts = get_prompt_data(uid)
-        summary = get_memory_summary(user_name, user_facts, memories)
+        summary = get_memory_summary(uid, memories)
 
     ai_message = NotificationMessage(
         text=summary,

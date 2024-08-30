@@ -10,10 +10,22 @@ export interface Memory {
   geolocation: null;
   photos: string[];
   plugins_results: PluginsResult[];
-  external_data: null;
+  external_data: ExternalData | null;
   postprocessing: Postprocessing;
   discarded: boolean;
   deleted: boolean;
+}
+
+export interface ExternalData {
+  request_id: string;
+  source: string;
+  text: string;
+  timestamp_range: TimestampRange;
+}
+
+export interface TimestampRange {
+  start: number;
+  end: number;
 }
 
 export interface PluginsResult {
