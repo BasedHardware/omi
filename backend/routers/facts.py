@@ -3,7 +3,6 @@ from typing import List
 from fastapi import APIRouter, Depends
 
 import database.facts as facts_db
-from database.auth import get_user_name
 from models.facts import FactDB, Fact
 from utils.other import endpoints as auth
 
@@ -21,6 +20,8 @@ def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v1/facts', tags=['facts'], response_model=List[FactDB])  # filters
 def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = facts_db.get_facts(uid, limit, offset)
+    # TODO: consider this "$name" part if really is an issue, when changing name or smth.
+    # TODO: what happens when "The User" is at the beggining, user will feel it random.
     # user_name = get_user_name(uid, use_default=False)
     # for fact in facts:
     #     if fact['manually_added']:
