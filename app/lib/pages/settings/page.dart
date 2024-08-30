@@ -298,12 +298,22 @@ class _SettingsPageState extends State<SettingsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://www.omi.me/pages/about/',
-                          title: 'Based Hardware',
+                          url: 'https://www.omi.me/',
+                          title: 'omi',
                         ),
                       ),
                     );
                   }, icon: Icons.language_outlined, visibility: true),
+                  getItemAddOn('About omi', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://www.omi.me/pages/about',
+                          title: 'About Us',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.people, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
