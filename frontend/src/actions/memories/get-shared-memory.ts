@@ -1,14 +1,12 @@
 'use server';
-
+import envConfig from '@/src/constants/envConfig';
 import { Memory } from '@/src/types/memory.types';
-
-const BASE_URL = process.env.API_URL;
 
 // example: 32190a0f-8229-4189-93a9-ba8156c952cb
 
 export default async function getSharedMemory(id: string) {
   try {
-    const response = await fetch(`${BASE_URL}/v1/memories/${id}/shared`, {
+    const response = await fetch(`${envConfig.API_URL}/v1/memories/${id}/shared`, {
       headers: {
         'Content-Type': 'application/json',
       },
