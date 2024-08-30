@@ -154,3 +154,15 @@ Future<void> signOut(BuildContext context) async {
 }
 
 bool isSignedIn() => FirebaseAuth.instance.currentUser != null;
+
+getFirebaseUser() {
+  return FirebaseAuth.instance.currentUser;
+}
+
+// update user full name
+Future<void> updateFullName(String fullName) async {
+  var user = FirebaseAuth.instance.currentUser;
+  if (user != null) {
+    await user.updateProfile(displayName: fullName);
+  }
+}
