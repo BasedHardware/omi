@@ -25,6 +25,7 @@ RUN \
 FROM base AS builder
 WORKDIR /app
 RUN echo "rebuild: $(pwd)"
+RUN ls -la
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
@@ -34,6 +35,7 @@ COPY frontend .
 FROM base AS runner
 WORKDIR /app
 RUN echo "production: $(pwd)"
+RUN ls -la
 ENV NODE_ENV production
 
 RUN addgroup --system --gid 1001 nodejs
