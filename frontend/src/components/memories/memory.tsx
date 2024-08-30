@@ -31,7 +31,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
           {currentTab === 'sum' ? (
             <Summary memory={memory} />
           ) : (
-            <Transcription transcript={memory.transcript_segments} />
+            <Transcription transcript={memory.transcript_segments} externalData={memory.external_data} />
           )}
         </div>
       </div>
