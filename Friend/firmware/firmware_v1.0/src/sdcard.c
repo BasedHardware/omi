@@ -165,46 +165,49 @@ char* get_info_file_data_() {
   	fs_close(&file);
     return boot_count;
 }
+//this method will write to an already open file. we will enforce that the file is opened
 
-// read_params_t read_file(const char *file_path)
-// {
-// 	read_params_t readParams;
-// 	readParams.ret = 0;
-//     char boot_count[1000];
-// 	struct fs_file_t file;
-// 	int rc;
+static audio_info_t current_audio_file;
+// fs_stat() check if dircetory exists
+int initialize_audio_file() {
+    current_audio_file.name = "A1.txt";
+    char temp[16] = "a00 00000000000\n";
+    current_audio_file.size = 0;
+    struct fs_file_t *temp_file = malloc(sizeof(struct fs_file_t));
+    fs_file_t_init(temp_file);
+    int ret = fs_open(temp_file, "/SD:/audio/A1.txt", FS_O_WRITE | FS_O_APPEND);
+    printk("result of audio open: %d\n",ret);
+    current_audio_file.file = temp_file;
+    
 
-// 	int ret = set_path(file_path);
-	
-// 	if(ret)
-// 	{
-// 		readParams.ret = -1;
-// 		return readParams;
-// 	}
-	
-// 	fs_file_t_init(&file);
-	
-// 	rc = fs_open(&file, current_full_path, FS_O_READ | FS_O_RDWR);
-	
-// 	if (rc < 0)
-// 	{
-// 		printk("FAIL: open %s: %d\n", current_full_path, rc);
-// 		readParams.ret = rc;
-// 		return readParams;
-// 	}
-//     	rc = fs_read(&file, &boot_count, sizeof(boot_count));
-	
-// 	if (rc < 0)
-// 	{
-// 		printk("FAIL: read %s: [rd:%d]\n", current_full_path, rc);
-// 	}
+    return 0;
+}
 
-//     boot_count[rc] = 0;
+int close_audio_file() {
+       fs_close(current_audio_file.file);
+       k_free(current_audio_file.file);
+       return 0;
+}
 
-// 	readParams.data = boot_count;
+int get_audio_file(const char *buf) {
+    return 1;
+}
 
-// 	fs_close(&file);
+int write_audio_file_unsafe(uint8_t *buf, int amount) {
+    int amount_left = 0;
+    int amount_ =0;
+    while(amount >= amount_left) {
+   	amount_ = fs_write(current_audio_file.file, buf+amount_left, amount);
+    amount_left+=amount_;
+    printk("amount_left: %d\n",amount_left);
+    }
+    
+    printk("File wrote successfully\n");
 
-// 	return readParams;
-// }
-	
+    return 0;
+
+}
+
+int update_length_on_audio_file() {
+
+}
