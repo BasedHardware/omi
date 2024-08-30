@@ -1,22 +1,26 @@
-import { Discord, Github, Instagram, Linkedin, Tiktok, X } from "iconoir-react";
-import Link from "next/link";
+import { Discord, Github, Instagram, Linkedin, Tiktok, X } from 'iconoir-react';
+import Link from 'next/link';
 
-export default function Footer(){
+export default function Footer() {
   return (
-    <footer className="footer text-white px-4 md:px-12 w-full bg-black/5 border-t border-solid border-zinc-800 py-12">
-      <div className="mx-auto flex flex-wrap gap-12 justify-between max-w-screen-xl">
+    <footer className="footer w-full border-t border-solid border-zinc-800 bg-black/5 px-4 py-12 text-white md:px-12">
+      <div className="mx-auto flex max-w-screen-xl flex-wrap justify-between gap-12">
         <div>
-          <h2 className="font-semibold text-4xl">Omi</h2>
+          <h2 className="text-4xl font-semibold">Omi</h2>
           <p className="text-gray-500">San Fransisco</p>
           <Link href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
           </Link>
 
-          <div className="flex gap-3 items-center mt-3">
+          <div className="mt-3 flex items-center gap-3">
             <Link href="https://www.x.com" target="_blank" rel="noopener noreferrer">
               <X />
             </Link>
-            <Link href="https://www.linkedin.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://www.linkedin.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Linkedin />
             </Link>
             <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer">
@@ -25,30 +29,50 @@ export default function Footer(){
             <Link href="https://www.tiktok.com" target="_blank" rel="noopener noreferrer">
               <Tiktok />
             </Link>
-            <Link href="https://www.instagram.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://www.instagram.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Instagram />
             </Link>
-            <Link href="https://www.discord.com" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://www.discord.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Discord />
             </Link>
           </div>
         </div>
 
-        <div className="grid gap-10 md:gap-20 grid-cols-3">
+        <div className="grid grid-cols-3 gap-10 md:gap-20">
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Products</li>
             <li>
-              <Link className="hover:underline md:text-base text-zinc-400 hover:text-white" href={'#'} target="_blank">
+              <Link
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
+                href={'#'}
+                target="_blank"
+              >
                 OpenGlass
               </Link>
             </li>
             <li>
-              <Link className="hover:underline md:text-base text-zinc-400 hover:text-white" href={'#'} target="_blank">
+              <Link
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
+                href={'#'}
+                target="_blank"
+              >
                 Friend
               </Link>
             </li>
             <li>
-              <Link className="hover:underline md:text-base text-zinc-400 hover:text-white" href={'#'} target="_blank">
+              <Link
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
+                href={'#'}
+                target="_blank"
+              >
                 Friend DEV KIT
               </Link>
             </li>
@@ -60,7 +84,7 @@ export default function Footer(){
                 href="#"
                 target={'_blank'}
                 rel={'noreferrer'}
-                className="hover:underline md:text-base text-zinc-400 hover:text-white"
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Residency
               </a>
@@ -70,7 +94,7 @@ export default function Footer(){
                 href="#"
                 target={'_blank'}
                 rel={'noreferrer'}
-                className="hover:underline md:text-base text-zinc-400 hover:text-white"
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Affiliate
               </a>
@@ -80,7 +104,7 @@ export default function Footer(){
                 href="#"
                 target={'_blank'}
                 rel={'noreferrer'}
-                className="hover:underline md:text-base text-zinc-400 hover:text-white"
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Privacy
               </a>
@@ -90,7 +114,7 @@ export default function Footer(){
                 href="#"
                 target={'_blank'}
                 rel={'noreferrer'}
-                className="hover:underline md:text-base text-zinc-400 hover:text-white"
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Customizations
               </a>
@@ -100,7 +124,7 @@ export default function Footer(){
                 href="#"
                 target={'_blank'}
                 rel={'noreferrer'}
-                className="hover:underline md:text-base text-zinc-400 hover:text-white"
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 Discord
               </a>
@@ -109,12 +133,18 @@ export default function Footer(){
           <ul className="flex flex-col gap-3">
             <li className="font-bold">Company</li>
             <li>
-              <Link className="hover:underline md:text-base text-zinc-400 hover:text-white" href={'/public-trips'}>
+              <Link
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
+                href={'/public-trips'}
+              >
                 About
               </Link>
             </li>
             <li>
-              <Link href={'#'} className="hover:underline md:text-base text-zinc-400 hover:text-white">
+              <Link
+                href={'#'}
+                className="text-zinc-400 hover:text-white hover:underline md:text-base"
+              >
                 Invest
               </Link>
             </li>
@@ -122,5 +152,5 @@ export default function Footer(){
         </div>
       </div>
     </footer>
-  )
+  );
 }

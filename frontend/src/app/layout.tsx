@@ -26,10 +26,8 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AppHeader />
-        <main className='flex min-h-screen flex-col'>
-          <div className='w-full flex-grow'>
-            {children}
-          </div>
+        <main className="flex min-h-screen flex-col">
+          <div className="w-full flex-grow">{children}</div>
         </main>
         {/* <Footer /> */}
       </body>

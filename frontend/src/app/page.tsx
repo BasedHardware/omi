@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 export default function Home() {
-  return (    
+  return (
     <div className="flex min-h-screen flex-col items-center justify-between p-12 text-xl text-white md:p-24 md:text-lg">
       <Image
         src={'/logo.webp'}
@@ -15,8 +15,8 @@ export default function Home() {
         We are working in this feature
       </h2>
       <p className="mt-10 max-w-xl text-center">
-        For now, you can order Omi wearable. Remember everything you want to remember
-        with Omi.
+        For now, you can order Omi wearable. Remember everything you want to remember with
+        Omi.
       </p>
       <Link
         href={`https://basedhardware.com/`}
