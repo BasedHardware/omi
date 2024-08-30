@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -9,10 +10,12 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/find.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   DeviceProvider? deviceProvider;
@@ -28,6 +31,68 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   late Timer _findDevicesTimer;
   bool enableInstructions = false;
   Map<String, BTDeviceStruct> foundDevicesMap = {};
+
+  //----------------- Onboarding Permissions -----------------
+  bool hasBluetoothPermission = false;
+  bool hasLocationPermission = false;
+  bool hasNotificationPermission = false;
+
+  Future updatePermissions() async {
+    hasBluetoothPermission = await Permission.bluetooth.isGranted;
+    hasLocationPermission = await Permission.location.isGranted;
+    hasNotificationPermission = await Permission.notification.isGranted;
+    notifyListeners();
+  }
+
+  void updateBluetoothPermission(bool value) {
+    hasBluetoothPermission = value;
+    notifyListeners();
+  }
+
+  void updateLocationPermission(bool value) {
+    hasLocationPermission = value;
+    notifyListeners();
+  }
+
+  void updateNotificationPermission(bool value) {
+    hasNotificationPermission = value;
+    notifyListeners();
+  }
+
+  Future askForBluetoothPermissions() async {
+    if (Platform.isIOS) {
+      PermissionStatus bleStatus = await Permission.bluetooth.request();
+      debugPrint('bleStatus: $bleStatus');
+
+      updateBluetoothPermission(bleStatus.isGranted);
+    } else {
+      if (Platform.isAndroid) {
+        if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
+          try {
+            await FlutterBluePlus.turnOn();
+          } catch (e) {
+            if (e is FlutterBluePlusException) {
+              if (e.code == 11) {
+                //  onShowDialog();
+              }
+            }
+          }
+        }
+      }
+      PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
+      PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
+      // PermissionStatus locationStatus = await Permission.location.request();
+      updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
+    }
+    notifyListeners();
+  }
+
+  Future askForNotificationPermissions() async {
+    await NotificationService.instance.requestNotificationPermissions();
+
+    notifyListeners();
+  }
+  //----------------- Onboarding Permissions -----------------
 
   void stopFindDeviceTimer() {
     if (_findDevicesTimer != null && _findDevicesTimer.isActive) {
@@ -49,6 +114,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   // Method to handle taps on devices
   Future<void> handleTap({
     required BTDeviceStruct device,
+    required bool isFromOnboarding,
+    VoidCallback? goNext,
   }) async {
     if (isClicked) return; // if any item is clicked, don't do anything
 
@@ -83,7 +150,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     SharedPreferencesUtil().deviceName = connectedDevice.name;
     foundDevicesMap.clear();
     deviceList.clear();
-    notifyInfo('DEVICE_CONNECTED');
+    if (isFromOnboarding) {
+      goNext!();
+    } else {
+      notifyInfo('DEVICE_CONNECTED');
+    }
     notifyListeners();
   }
 
