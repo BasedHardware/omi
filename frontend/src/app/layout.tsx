@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Mulish } from 'next/font/google';
 import './globals.css';
+import AppHeader from '../components/shared/app-header';
+import Footer from '../components/shared/footer';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -23,7 +25,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <AppHeader />
+        <main className="flex min-h-screen flex-col">
+          <div className="w-full flex-grow">{children}</div>
+        </main>
+        <Footer />
+      </body>
     </html>
   );
 }
