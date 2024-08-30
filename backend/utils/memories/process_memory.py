@@ -116,10 +116,8 @@ def _trigger_plugins(uid: str, memory: Memory):
 def _extract_facts(uid: str, memory: Memory):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     facts_db.delete_facts_for_memory(uid, memory.id)
-    existing_facts = facts_db.get_facts(uid)
-    existing_facts = [Fact(**fact) for fact in existing_facts]
-    user_name = get_user_name(uid)
-    new_facts = new_facts_extractor(user_name, existing_facts, memory.transcript_segments)
+    user_name, user_facts = get_prompt_data(uid)
+    new_facts = new_facts_extractor(user_name, user_facts, memory.transcript_segments)
     parsed_facts = []
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
