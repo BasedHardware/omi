@@ -69,7 +69,7 @@ class _FactsPageState extends State<_FactsPage> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
-                  onPressed: () => _showCreateFactDialog(context, provider),
+                  onPressed: () => _showFactDialog(context, provider),
                 ),
               ],
             ),
@@ -80,19 +80,19 @@ class _FactsPageState extends State<_FactsPage> {
     );
   }
 
-  Future<void> _showCreateFactDialog(BuildContext context, FactsProvider provider) async {
+  Future<void> _showFactDialog(BuildContext context, FactsProvider provider, {Fact? fact}) async {
     if (!ConnectivityController().isConnected.value) {
       ConnectivityController.showNoInternetDialog(context);
       return;
     }
 
-    final contentController = TextEditingController();
+    final contentController = TextEditingController(text: fact?.content.decodeSting ?? '');
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
       builder: (BuildContext context) {
-        FactCategory selectedCategory = provider.selectedCategory ?? FactCategory.values.first;
+        FactCategory selectedCategory = fact?.category ?? provider.selectedCategory ?? FactCategory.values.first;
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             setCategory(FactCategory category) {
@@ -104,11 +104,27 @@ class _FactsPageState extends State<_FactsPage> {
             return Platform.isIOS
                 ? CupertinoAlertDialog(
                     content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(context, formKey, contentController, selectedCategory, provider),
+                    actions: _showFactDialogActions(
+                      context,
+                      formKey,
+                      contentController,
+                      selectedCategory,
+                      provider,
+                      isEditing: fact != null,
+                      fact: fact,
+                    ),
                   )
                 : AlertDialog(
                     content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(context, formKey, contentController, selectedCategory, provider),
+                    actions: _showFactDialogActions(
+                      context,
+                      formKey,
+                      contentController,
+                      selectedCategory,
+                      provider,
+                      isEditing: fact != null,
+                      fact: fact,
+                    ),
                   );
           },
         );
@@ -220,11 +236,17 @@ class _FactsPageState extends State<_FactsPage> {
     GlobalKey<FormState> formKey,
     TextEditingController contentController,
     FactCategory selectedCategory,
-    FactsProvider provider,
-  ) {
+    FactsProvider provider, {
+    bool isEditing = false,
+    Fact? fact,
+  }) {
     onPressed() async {
       if (formKey.currentState!.validate()) {
-        provider.createFactProvider(contentController.text, selectedCategory);
+        if (isEditing && fact != null) {
+          // provider.editFactProvider(fact, contentController.text, selectedCategory);
+        } else {
+          provider.createFactProvider(contentController.text, selectedCategory);
+        }
         Navigator.pop(context);
       }
     }
@@ -237,7 +259,7 @@ class _FactsPageState extends State<_FactsPage> {
             ),
             CupertinoDialogAction(
               onPressed: onPressed,
-              child: const Text('Add', style: TextStyle(color: Colors.white)),
+              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
             ),
           ]
         : [
@@ -247,7 +269,7 @@ class _FactsPageState extends State<_FactsPage> {
             ),
             TextButton(
               onPressed: onPressed,
-              child: const Text('Add', style: TextStyle(color: Colors.white)),
+              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
             ),
           ];
   }
@@ -363,7 +385,10 @@ class _FactsPageState extends State<_FactsPage> {
                   elevation: 0,
                   child: Padding(
                     padding: const EdgeInsets.only(top: 16.0),
-                    child: ListTile(title: Text(fact.content.decodeSting)),
+                    child: ListTile(
+                      title: Text(fact.content.decodeSting),
+                      onTap: () => _showFactDialog(context, provider, fact: fact),
+                    ),
                   ),
                 ),
               );

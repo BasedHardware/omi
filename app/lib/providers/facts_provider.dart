@@ -77,6 +77,7 @@ class FactsProvider extends BaseProvider {
       category: category,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      manuallyAdded: true,
     ));
     _setCategories();
     notifyListeners();
@@ -87,8 +88,9 @@ class FactsProvider extends BaseProvider {
     editFact(fact.id, value);
     fact.content = value;
     fact.updatedAt = DateTime.now();
+    fact.edited = true;
     facts[idx] = fact;
     _setCategories();
-   notifyListeners();
+    notifyListeners();
   }
 }
