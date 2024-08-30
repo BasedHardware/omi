@@ -36,10 +36,6 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
   await channel.ready.then((v) {
     channel.stream.listen(
       (event) {
-        // ping, wrong {"type":"ping"}
-        if (event == 'ping') return;
-
-        // json
         final jsonEvent = jsonDecode(event);
 
         // segment
