@@ -4,7 +4,7 @@ from modal import Image, App, Secret, asgi_app, mount, Stub, Mount
 from modal import Stub, Image, Secret, Mount, asgi_app
 
 # from _mem0 import router as mem0_router
-from _multion import router as multion_router, demo_router
+from _multion import router as multion_router
 # from advanced import openglass as advanced_openglass_router
 from advanced import realtime as advanced_realtime_router
 from basic import memory_created as basic_memory_created_router
@@ -52,8 +52,6 @@ app.include_router(advanced_realtime_router.router)
 # ***********************************************
 
 # Multion
-app.include_router(demo_router, prefix="/multion-demo")
-
 app.include_router(multion_router.router)
 
 # Mem0
