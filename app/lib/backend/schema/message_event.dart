@@ -4,6 +4,7 @@ enum MessageEventType {
   newMemoryCreateFailed('new_memory_create_failed'),
   memoryPostProcessingSuccess('memory_post_processing_success'),
   memoryPostProcessingFailed('memory_post_processing_failed'),
+  newProcessingMemoryCreated('new_processing_memory_created'),
   ping('ping'),
   unknown('unknown'),
   ;
@@ -18,17 +19,20 @@ enum MessageEventType {
 
 class ServerMessageEvent {
   String? memoryId;
+  String? processingMemoryId;
   MessageEventType type;
 
   ServerMessageEvent(
     this.type,
     this.memoryId,
+    this.processingMemoryId,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
     return ServerMessageEvent(
       MessageEventType.valuesFromString(json['type']),
       json['memory_id'],
+      json['processing_memory_id'],
     );
   }
 
@@ -36,6 +40,7 @@ class ServerMessageEvent {
     return {
       'type': type,
       'memory_id': memoryId,
+      'processing_memory_id': processingMemoryId,
     };
   }
 }
