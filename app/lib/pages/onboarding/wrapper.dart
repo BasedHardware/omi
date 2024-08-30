@@ -3,15 +3,23 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
 import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
-import 'package:friend_private/pages/onboarding/permissions/permissions.dart';
+import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
+import 'package:friend_private/pages/onboarding/name/name_widget.dart';
+import 'package:friend_private/pages/onboarding/permissions/bluetooth_permission.dart';
+import 'package:friend_private/pages/onboarding/permissions/notification_permission.dart';
+import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
+import 'package:provider/provider.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});
@@ -25,7 +33,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _controller = TabController(length: 5, vsync: this);
+    _controller = TabController(length: 9, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -55,17 +63,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           child: ListView(
             children: [
               DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-              Center(
-                child: Text(
-                  _controller!.index == _controller!.length - 1 ? 'You are all set  🎉' : 'Friend',
-                  style: TextStyle(
-                      color: Colors.grey.shade200,
-                      fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                      fontWeight: FontWeight.w500),
-                ),
-              ),
+              _controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7
+                  ? SizedBox()
+                  : Center(
+                      child: Text(
+                        _controller!.index == _controller!.length - 1 ? 'You are all set  🎉' : 'Friend',
+                        style: TextStyle(
+                            color: Colors.grey.shade200,
+                            fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
               const SizedBox(height: 24),
-              _controller!.index == 3 || _controller!.index == 4 || _controller!.index == 5
+              _controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7
                   ? const SizedBox()
                   : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -78,7 +88,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                     ),
               SizedBox(
-                height: max(MediaQuery.of(context).size.height - 500 - 64, 305),
+                height: max(MediaQuery.of(context).size.height - 500 - (_controller!.index == 7 ? 10 : 60), 305),
                 child: Padding(
                   padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                   child: TabBarView(
@@ -97,7 +107,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           }
                         },
                       ),
-                      PermissionsPage(
+                      NameWidget(
+                        goNext: _goNext,
+                      ),
+                      NotificationPermissionWidget(
+                        goNext: () {
+                          _goNext();
+                          MixpanelManager().onboardingStepICompleted('Permissions');
+                        },
+                      ),
+                      BluetoothPermissionWidget(
                         goNext: () {
                           _goNext();
                           MixpanelManager().onboardingStepICompleted('Permissions');
@@ -109,14 +128,38 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           MixpanelManager().onboardingStepICompleted('Welcome');
                         },
                         skipDevice: () {
-                          _controller!.animateTo(_controller!.index + 2);
+                          _controller!.animateTo(_controller!.index + 4);
                           MixpanelManager().onboardingStepICompleted('Welcome');
                         },
                       ),
                       FindDevicesPage(
+                        isFromOnboarding: true,
+                        goNext: () async {
+                          var provider = context.read<OnboardingProvider>();
+                          if (provider.deviceId.isEmpty) {
+                            _goNext();
+                          } else {
+                            var codec = await getAudioCodec(provider.deviceId);
+                            if (codec == BleAudioCodec.opus) {
+                              _goNext();
+                            } else {
+                              _controller!.animateTo(_controller!.index + 3);
+                            }
+                          }
+
+                          MixpanelManager().onboardingStepICompleted('Find Devices');
+                        },
+                      ),
+                      SpeechProfileWidget(
                         goNext: () {
                           _goNext();
-                          MixpanelManager().onboardingStepICompleted('Find Devices');
+                          MixpanelManager().onboardingStepICompleted('Speech Profile');
+                        },
+                      ),
+                      MemoryCreatedWidget(
+                        goNext: () {
+                          _goNext();
+                          MixpanelManager().onboardingStepICompleted('Memory Created');
                         },
                       ),
                       CompletePage(

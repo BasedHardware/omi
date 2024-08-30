@@ -11,10 +11,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
+  final bool isFromOnboarding;
   final VoidCallback goNext;
   final bool includeSkip;
 
-  const FindDevicesPage({super.key, required this.goNext, this.includeSkip = true});
+  const FindDevicesPage({super.key, required this.goNext, this.includeSkip = true, this.isFromOnboarding = false});
 
   @override
   State<FindDevicesPage> createState() => _FindDevicesPageState();
@@ -68,6 +69,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
             FoundDevices(
               deviceList: provider.deviceList,
               goNext: widget.goNext,
+              isFromOnboarding: widget.isFromOnboarding,
             ),
             if (provider.deviceList.isEmpty && provider.enableInstructions) const SizedBox(height: 48),
             if (provider.deviceList.isEmpty && provider.enableInstructions)
