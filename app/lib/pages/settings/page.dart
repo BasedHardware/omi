@@ -219,7 +219,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         await routeToPage(context, const RecordingsStoragePermission());
                         setState(() {});
                       }),
-
                   const SizedBox(height: 32.0),
                   getItemAddOn('Plugins', () {
                     MixpanelManager().pluginsOpened();
@@ -246,8 +245,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           : 'About ${SharedPreferencesUtil().givenName.toUpperCase()} (by Omi) ', () {
                     routeToPage(context, const FactsPage());
                   }, icon: Icons.self_improvement),
-                  getItemAddOn('Personal Details', () {
-                    routeToPage(context, const PersonalDetails());
+                  getItemAddOn('How Omi should call you?', () {
+                    // routeToPage(context, const PersonalDetails());
+                    showModalBottomSheet(
+                        context: context,
+                        builder: (c) {
+                          return Container(
+                            child: const PersonalDetails(),
+                          );
+                        });
                   }, icon: Icons.person),
                   const Divider(
                     color: Colors.transparent,
@@ -257,7 +263,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
                   }, icon: Icons.code, visibility: devModeEnabled),
-
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
