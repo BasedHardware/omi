@@ -1,3 +1,9 @@
+---
+layout: default
+title: Memory Post-Processing
+parent: Backend
+nav_order: 6
+---
 # 🎛️ Omi Memory Post-Processing Workflow
 
 This document outlines the post-processing workflow for memories in the Omi application.
