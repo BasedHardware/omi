@@ -16,6 +16,9 @@ This document outlines how Omi creates and stores embeddings for memories.
 4. Metadata is created for the embedding
 5. Embedding and metadata are stored in Pinecone
 
+   ![omibackend-embedding-08302024 (1)](https://github.com/user-attachments/assets/5e5ace72-98c7-426c-9bc4-2c839bc3000f)
+
+
 ## 📊 Detailed Steps
 
 ### 1. Memory Processing Triggers Embedding Creation
