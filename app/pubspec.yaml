@@ -76,8 +76,8 @@ dependencies:
   flutter_timezone: ^2.0.0
   sign_in_button: ^3.2.0
   sign_in_with_apple: ^6.1.1
-  firebase_core: ^3.2.0
-  firebase_auth: ^5.1.2
+  firebase_core: 3.3.0
+  firebase_auth: 5.1.4
   google_sign_in: ^6.2.1
   location: ^7.0.0
   cached_network_image: ^3.3.1

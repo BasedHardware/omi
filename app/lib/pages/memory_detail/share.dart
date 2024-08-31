@@ -192,7 +192,7 @@ void showShareBottomSheet(
                               );
                               return;
                             }
-                            Clipboard.setData(ClipboardData(text: 'https://omi.me/memories/${memory.id}'));
+                            Clipboard.setData(ClipboardData(text: 'https://omitdotme.web.app/memories/${memory.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('URL Copied to Clipboard')),
                             );
