@@ -159,8 +159,8 @@ getFirebaseUser() {
   return FirebaseAuth.instance.currentUser;
 }
 
-// update user full name
-Future<void> updateFullName(String fullName) async {
+// update user given name
+Future<void> updateGivenName(String fullName) async {
   var user = FirebaseAuth.instance.currentUser;
   if (user != null) {
     await user.updateProfile(displayName: fullName);
