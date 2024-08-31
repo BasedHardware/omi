@@ -14,12 +14,13 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   User? user;
-  bool isSaving = false;
+  var focusNode = FocusNode();
 
   @override
   void initState() {
     user = FirebaseAuth.instance.currentUser;
     nameController = TextEditingController(text: user?.displayName ?? '');
+    // focusNode.requestFocus();
     super.initState();
   }
 
@@ -29,18 +30,30 @@ class _NameWidgetState extends State<NameWidget> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          TextFormField(
+          Text(
+            'How should Omi call you?',
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+            textAlign: TextAlign.start,
+          ),
+          SizedBox(height: 16),
+          TextField(
             enabled: true,
+            focusNode: focusNode,
             controller: nameController,
             // textCapitalization: TextCapitalization.sentences,
             obscureText: false,
             // canRequestFocus: true,
-            textAlign: TextAlign.start,
+            textAlign: TextAlign.center,
             textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
-              hintText: 'Enter your name',
+              hintText: 'Enter your given name',
+              // label: const Text('What should Omi call you?'),
               hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+              // border: UnderlineInputBorder(
+              //   borderSide: BorderSide(color: Colors.grey.shade200),
+              // ),
               border: GradientOutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 gradient: const LinearGradient(
@@ -53,7 +66,7 @@ class _NameWidgetState extends State<NameWidget> {
             ),
             style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -75,31 +88,21 @@ class _NameWidgetState extends State<NameWidget> {
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     onPressed: () async {
                       if (nameController.text.isEmpty || nameController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(content: Text('Please enter a valid name')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please enter a valid name')),
+                        );
                       } else {
                         FocusManager.instance.primaryFocus?.unfocus();
-                        setState(() {
-                          isSaving = true;
-                        });
-                        await updateFullName(nameController.text).then((value) {
-                          setState(() {
-                            isSaving = false;
-                          });
-                        });
+                        updateGivenName(nameController.text);
                         widget.goNext();
                       }
                     },
-                    child: isSaving
-                        ? const CircularProgressIndicator(
-                            color: Colors.white,
-                          )
-                        : const Text(
-                            'Sounds good!',
-                            style: TextStyle(
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
+                    child: const Text(
+                      'Continue',
+                      style: TextStyle(
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
                   ),
                 ),
               )
