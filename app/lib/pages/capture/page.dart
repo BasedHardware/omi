@@ -204,6 +204,8 @@ class CapturePageState extends State<CapturePage>
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
+          // TODO: Fix this after onboarding
+          // Ideally this shouldn't even be required, because we can close the socket and restart it with the new codec
           if (info == 'FIM_CHANGE') {
             showDialog(
               context: context,
@@ -216,7 +218,9 @@ class CapturePageState extends State<CapturePage>
                   var codec = await getAudioCodec(connectedDevice!.id);
                   context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
                   context.read<CaptureProvider>().initiateWebsocket(codec);
-                  Navigator.pop(context);
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
                   // We can just restart the socket and not the whole app
                   // Navigator.pushAndRemoveUntil(
                   //   context,
@@ -249,7 +253,8 @@ class CapturePageState extends State<CapturePage>
               speechProfileWidget(context),
               ...getConnectionStateWidgets(
                   context, provider.hasTranscripts, deviceProvider.connectedDevice, wsConnectionState, _internetStatus),
-              getTranscriptWidget(provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
+              getTranscriptWidget(
+                  provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
               ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
               const SizedBox(height: 16)
             ]),

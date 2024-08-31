@@ -5,7 +5,6 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';

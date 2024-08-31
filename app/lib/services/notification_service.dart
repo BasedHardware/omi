@@ -126,6 +126,10 @@ class NotificationService {
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
+  Future<bool> hasNotificationPermissions() async {
+    return await _awesomeNotifications.isNotificationAllowed();
+  }
+
   Future<void> createNotification({
     String title = '',
     String body = '',

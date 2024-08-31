@@ -8,6 +8,7 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
+  final bool isFromOnboarding;
   final List<BTDeviceStruct> deviceList;
   final VoidCallback goNext;
 
@@ -15,6 +16,7 @@ class FoundDevices extends StatefulWidget {
     super.key,
     required this.deviceList,
     required this.goNext,
+    required this.isFromOnboarding,
   });
 
   @override
@@ -121,6 +123,8 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? () async {
                   await provider.handleTap(
                     device: device,
+                    isFromOnboarding: widget.isFromOnboarding,
+                    goNext: widget.goNext,
                   );
                 }
               : null,
