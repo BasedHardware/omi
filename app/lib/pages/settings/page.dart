@@ -219,52 +219,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         await routeToPage(context, const RecordingsStoragePermission());
                         setState(() {});
                       }),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    title: const Text('Need help?', style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('team@basedhardware.com'),
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                    onTap: () {
-                      launchUrl(Uri.parse('mailto:team@basedhardware.com'));
-                      MixpanelManager().supportContacted();
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-                    title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('2300+ members and counting.'),
-                    trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
-                    onTap: () {
-                      launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
-                      MixpanelManager().joinDiscordClicked();
-                    },
-                  ),
+
                   const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Account Settings',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  getItemAddOn('Personal Details', () {
-                    routeToPage(context, const PersonalDetails());
-                  }, icon: Icons.person),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ADD ONS',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
                   getItemAddOn('Plugins', () {
                     MixpanelManager().pluginsOpened();
                     routeToPage(context, const PluginsPage());
@@ -290,6 +246,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           : 'About ${SharedPreferencesUtil().givenName.toUpperCase()} (by Omi) ', () {
                     routeToPage(context, const FactsPage());
                   }, icon: Icons.self_improvement),
+                  getItemAddOn('Personal Details', () {
+                    routeToPage(context, const PersonalDetails());
+                  }, icon: Icons.person),
                   const Divider(
                     color: Colors.transparent,
                   ),
@@ -298,37 +257,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
                   }, icon: Icons.code, visibility: devModeEnabled),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ABOUT US',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  getItemAddOn('Privacy Policy', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://www.omi.me/pages/privacy',
-                          title: 'Privacy Policy',
-                        ),
-                      ),
-                    );
-                  }, icon: Icons.privacy_tip_outlined, visibility: true),
-                  getItemAddOn('Our Website', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://www.omi.me/',
-                          title: 'omi',
-                        ),
-                      ),
-                    );
-                  }, icon: Icons.language_outlined, visibility: true),
+
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
@@ -350,16 +279,26 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().joinDiscordClicked();
                     },
                   ),
+                  getItemAddOn('Privacy Policy', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const PageWebView(
+                          url: 'https://www.omi.me/pages/privacy',
+                          title: 'Privacy Policy',
+                        ),
+                      ),
+                    );
+                  }, icon: Icons.privacy_tip_outlined, visibility: true),
                   getItemAddOn('About omi', () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://www.omi.me/pages/about',
-                          title: 'About Us',
+                          url: 'https://www.omi.me/',
+                          title: 'omi',
                         ),
                       ),
                     );
-                  }, icon: Icons.people, visibility: true),
+                  }, icon: Icons.language_outlined, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
