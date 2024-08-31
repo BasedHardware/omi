@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/http/cloud_storage.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
@@ -11,10 +15,13 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
+import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
+import 'package:uuid/uuid.dart';
 
 class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, WebSocketMixin {
   DeviceProvider? deviceProvider;
@@ -40,17 +47,27 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
   String text = '';
   String message = '';
 
+  /// only used during onboarding /////
+  String loadingText = 'Uploading your voice profile....';
+  ServerMemory? memory;
+  /////////////////////////////////
+
+  void updateLoadingText(String text) {
+    loadingText = text;
+    notifyListeners();
+  }
+
   void setProvider(DeviceProvider provider, CaptureProvider captureProvider) {
     deviceProvider = provider;
     this.captureProvider = captureProvider;
     notifyListeners();
   }
 
-  initialise() async {
+  initialise(bool isFromOnboarding) async {
     device = deviceProvider?.connectedDevice;
     device ??= await deviceProvider?.scanAndConnectToDevice();
     captureProvider?.resetState(restartBytesProcessing: false);
-    initiateWebsocket();
+    initiateWebsocket(isFromOnboarding);
     if (device != null) initiateFriendAudioStreaming();
     // initiateConnectionListener();
     notifyListeners();
@@ -81,7 +98,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
         }));
   }
 
-  Future<void> initiateWebsocket() async {
+  Future<void> initiateWebsocket(bool isFromOnboarding) async {
     await initWebSocket(
       codec: BleAudioCodec.opus,
       sampleRate: 16000,
@@ -110,24 +127,24 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
         );
         updateProgressMessage();
         _validateSingleSpeaker();
-        _handleCompletion();
+        _handleCompletion(isFromOnboarding);
         notifyInfo('SCROLL_DOWN');
         debugPrint('Memory creation timer restarted');
       },
     );
   }
 
-  _handleCompletion() async {
+  _handleCompletion(bool isFromOnboarding) async {
     if (uploadingProfile || profileCompleted) return;
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
-    if (percentageCompleted == 1) finalize();
+    if (percentageCompleted == 1) finalize(isFromOnboarding);
     notifyListeners();
   }
 
-  finalize() async {
+  finalize(bool isFromOnboarding) async {
     if (uploadingProfile || profileCompleted) return;
 
     int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
@@ -147,15 +164,23 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
 
+    updateLoadingText('Memorizing your voice...');
     List<List<int>> raw = List.from(audioStorage.rawPackets);
     var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
-    await uploadProfile(data.item1);
-    await uploadProfileBytes(raw, duration);
+    try {
+      await uploadProfile(data.item1);
+      await uploadProfileBytes(raw, duration);
+    } catch (e) {}
 
+    updateLoadingText('Personalizing your experience...');
     SharedPreferencesUtil().hasSpeakerProfile = true;
+    if (isFromOnboarding) {
+      await createMemory();
+    }
 
     uploadingProfile = false;
     profileCompleted = true;
+    updateLoadingText("You're all set!");
     notifyListeners();
   }
 
@@ -229,6 +254,60 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     segments.clear();
     // captureProvider?.resetState(restartBytesProcessing: true);
     closeWebSocket();
+  }
+
+  Future<bool?> createMemory({bool forcedCreation = false}) async {
+    debugPrint('_createMemory forcedCreation: $forcedCreation');
+
+    // if (memoryCreating) return null;
+    // if (segments.isEmpty && photos.isEmpty) return false;
+
+    // TODO: should clean variables here? and keep them locally?
+    // setMemoryCreating(true);
+    File? file;
+    if (audioStorage.frames.isNotEmpty == true) {
+      try {
+        file = (await audioStorage.createWavFile(removeLastNSeconds: 0)).item1;
+        uploadFile(file);
+      } catch (e) {
+        print("creating and uploading file error: $e");
+      } // in case was a local recording and not a BLE recording
+    }
+
+    memory = await processTranscriptContent(
+      segments: segments,
+      startedAt: null,
+      finishedAt: null,
+      geolocation: null,
+      photos: [],
+      triggerIntegrations: true,
+      language: SharedPreferencesUtil().recordingsLanguage,
+    );
+    debugPrint(memory.toString());
+    if (memory == null && (segments.isNotEmpty)) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        failed: true,
+        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory!);
+
+      // TODO: store anyways something temporal and retry once connected again.
+    }
+
+    if (memory != null) {
+      // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory!);
+      // memoryProvider?.addMemory(memory);
+    }
+
+    notifyListeners();
+    return true;
   }
 
   @override
