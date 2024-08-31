@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
@@ -118,12 +119,15 @@ class NotificationService {
   Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
     String timeZone = await getTimeZone();
-    if (FirebaseAuth.instance.currentUser != null) {
+    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
       await saveFcmTokenServer(token: token, timeZone: timeZone);
     }
   }
 
   void saveNotificationToken() async {
+    if (Platform.isIOS) {
+      await _firebaseMessaging.getAPNSToken();
+    }
     String? token = await _firebaseMessaging.getToken();
     await saveFcmToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);

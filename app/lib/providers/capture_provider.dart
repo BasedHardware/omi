@@ -339,6 +339,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     } else {
       closeWebSocket();
     }
+    setAudioBytesConnected(false);
     setRestartAudioProcessing(restartBytesProcessing);
     startOpenGlass();
     initiateFriendAudioStreaming();
@@ -377,6 +378,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
     } else {
+      print('codec is the same');
+      print(audioBytesConnected);
       if (audioBytesConnected) return;
       streamAudioToWs(connectedDevice!.id, codec);
     }
