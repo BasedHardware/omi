@@ -52,7 +52,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     plugins = prefs.pluginsList;
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await context.read<MessageProvider>().refreshMessages();
-      _moveListToBottom();
+      scrollToBottom();
     });
     // _initDailySummary();
     super.initState();
@@ -73,45 +73,43 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         return Stack(
           children: [
             Center(
-              child: SingleChildScrollView(
-                controller: scrollController,
-                child: provider.isLoadingMessages
-                    ? const CircularProgressIndicator(
-                        color: Colors.white,
-                      )
-                    : (provider.messages.isEmpty)
-                        ? Text(
-                            ConnectivityController().isConnected.value
-                                ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                : 'Please check your internet connection and try again',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            reverse: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: provider.messages.length,
-                            itemBuilder: (context, chatIndex) {
-                              final message = provider.messages[chatIndex];
-                              double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
-                              double bottomPadding =
-                                  chatIndex == 0 ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
-                              return Padding(
-                                key: ValueKey(message.id),
-                                padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
-                                child: message.sender == MessageSender.ai
-                                    ? AIMessage(
-                                        message: message,
-                                        sendMessage: _sendMessageUtil,
-                                        displayOptions: provider.messages.length <= 1,
-                                        pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
-                                        updateMemory: widget.updateMemory,
-                                      )
-                                    : HumanMessage(message: message),
-                              );
-                            },
-                          ),
-              ),
+              child: provider.isLoadingMessages
+                  ? const CircularProgressIndicator(
+                      color: Colors.white,
+                    )
+                  : (provider.messages.isEmpty)
+                      ? Text(
+                          ConnectivityController().isConnected.value
+                              ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                              : 'Please check your internet connection and try again',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          reverse: true,
+                          controller: scrollController,
+                          //  physics: const NeverScrollableScrollPhysics(),
+                          itemCount: provider.messages.length,
+                          itemBuilder: (context, chatIndex) {
+                            final message = provider.messages[chatIndex];
+                            double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
+                            double bottomPadding =
+                                chatIndex == 0 ? (widget.textFieldFocusNode.hasFocus ? 120 : 200) : 0;
+                            return Padding(
+                              key: ValueKey(message.id),
+                              padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                              child: message.sender == MessageSender.ai
+                                  ? AIMessage(
+                                      message: message,
+                                      sendMessage: _sendMessageUtil,
+                                      displayOptions: provider.messages.length <= 1,
+                                      pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                                      updateMemory: widget.updateMemory,
+                                    )
+                                  : HumanMessage(message: message),
+                            );
+                          },
+                        ),
             ),
             Align(
               alignment: Alignment.bottomCenter,
@@ -202,30 +200,34 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     var newMessage = ServerMessage(
         const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, null, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
-    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
+    scrollToBottom();
     textController.clear();
     await context.read<MessageProvider>().sendMessageToServer(message, pluginId);
     // TODO: restore streaming capabilities, with initial empty message
-    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
+    scrollToBottom();
     changeLoadingState();
   }
 
   sendInitialPluginMessage(Plugin? plugin) async {
     changeLoadingState();
-    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
+    scrollToBottom();
     ServerMessage message = await getInitialPluginMessage(plugin?.id);
     context.read<MessageProvider>().addMessage(message);
-    _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
+    scrollToBottom();
     changeLoadingState();
   }
 
-  _moveListToBottom({double extra = 0}) async {
-    try {
-      scrollController.jumpTo(scrollController.position.maxScrollExtent + extra);
-    } catch (e) {
-      debugPrint(e.toString());
-    }
+  void _moveListToBottom() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (scrollController.hasClients) {
+        scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
-  void scrollToBottom() => _moveListToBottom(extra: widget.textFieldFocusNode.hasFocus ? 148 : 200);
+  scrollToBottom() => _moveListToBottom();
 }
