@@ -28,7 +28,6 @@ class _PersonalDetailsState extends State<PersonalDetails> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Personal Details'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           MaterialButton(
@@ -40,13 +39,14 @@ class _PersonalDetailsState extends State<PersonalDetails> {
               setState(() {
                 isSaving = true;
               });
-              await updateFullName(nameController.text);
+              await updateGivenName(nameController.text);
               setState(() {
                 isSaving = false;
               });
               AppSnackbar.showSnackbar(
                 'Name updated successfully!',
               );
+              Navigator.of(context).pop();
             },
             color: Colors.transparent,
             elevation: 0,
@@ -90,7 +90,7 @@ class _PersonalDetailsState extends State<PersonalDetails> {
                 hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
                 floatingLabelBehavior: FloatingLabelBehavior.always,
                 label: Text(
-                  'Full Name',
+                  'Given Name',
                   style: TextStyle(
                     color: Colors.grey.shade200,
                     fontSize: 16,
@@ -111,34 +111,34 @@ class _PersonalDetailsState extends State<PersonalDetails> {
             const SizedBox(
               height: 30,
             ),
-            TextFormField(
-              enabled: true,
-              obscureText: false,
-              textAlign: TextAlign.start,
-              textAlignVertical: TextAlignVertical.center,
-              readOnly: true,
-              initialValue: user?.email,
-              decoration: InputDecoration(
-                floatingLabelBehavior: FloatingLabelBehavior.always,
-                label: Text(
-                  'Email Address',
-                  style: TextStyle(
-                    color: Colors.grey.shade200,
-                    fontSize: 16,
-                  ),
-                ),
-                border: GradientOutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  gradient: const LinearGradient(
-                    colors: <Color>[
-                      Color.fromARGB(255, 202, 201, 201),
-                      Color.fromARGB(255, 159, 158, 158),
-                    ],
-                  ),
-                ),
-              ),
-              style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-            ),
+            // TextFormField(
+            //   enabled: true,
+            //   obscureText: false,
+            //   textAlign: TextAlign.start,
+            //   textAlignVertical: TextAlignVertical.center,
+            //   readOnly: true,
+            //   initialValue: user?.email,
+            //   decoration: InputDecoration(
+            //     floatingLabelBehavior: FloatingLabelBehavior.always,
+            //     label: Text(
+            //       'Email Address',
+            //       style: TextStyle(
+            //         color: Colors.grey.shade200,
+            //         fontSize: 16,
+            //       ),
+            //     ),
+            //     border: GradientOutlineInputBorder(
+            //       borderRadius: BorderRadius.circular(8),
+            //       gradient: const LinearGradient(
+            //         colors: <Color>[
+            //           Color.fromARGB(255, 202, 201, 201),
+            //           Color.fromARGB(255, 159, 158, 158),
+            //         ],
+            //       ),
+            //     ),
+            //   ),
+            //   style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+            // ),
           ],
         ),
       ),
