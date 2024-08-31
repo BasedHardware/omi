@@ -9,6 +9,8 @@ nav_order: 4
 
 This document outlines the real-time audio transcription process in the Omi application.
 
+![Post Processing](../../images/transcription-process.png)
+
 ## 📡 Audio Streaming
 
 1. The Omi App initiates a real-time audio stream to the backend.
