@@ -119,7 +119,8 @@ async def process_audio_dg(stream_transcript, stream_id: int, language: str, sam
                         'person_id': None,
                     })
 
-            stream_transcript(segments, stream_id)
+        # stream
+        stream_transcript(segments, stream_id)
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")

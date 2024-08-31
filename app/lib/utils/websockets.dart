@@ -54,6 +54,7 @@ Future<IOWebSocketChannel?> _initWebsocketStream(
           var messageEvent = ServerMessageEvent.fromJson(jsonEvent);
           if (onMessageEventReceived != null) {
             onMessageEventReceived(messageEvent);
+            return;
           }
         }
 
