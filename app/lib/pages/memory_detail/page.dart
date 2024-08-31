@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
@@ -23,8 +24,9 @@ import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
   final ServerMemory memory;
+  final bool isFromOnboarding;
 
-  const MemoryDetailPage({super.key, required this.memory});
+  const MemoryDetailPage({super.key, required this.memory, this.isFromOnboarding = false});
 
   @override
   State<MemoryDetailPage> createState() => _MemoryDetailPageState();
@@ -100,6 +102,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
+      onPopInvoked: (didPop) {
+        if (widget.isFromOnboarding) {
+          Navigator.pushAndRemoveUntil(
+              context, MaterialPageRoute(builder: (c) => const HomePageWrapper()), (route) => false);
+        }
+      },
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: Theme.of(context).colorScheme.primary,
