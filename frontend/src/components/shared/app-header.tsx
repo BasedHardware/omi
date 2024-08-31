@@ -33,7 +33,7 @@ export default function AppHeader() {
           height={64}
           className="h-auto w-[25px]"
         />
-        <span className="hidden md:inline">Based Hardware</span>
+        <span className="hidden md:inline font-bold">Omi</span>
       </h1>
       <nav>
         <ul className="flex gap-3 text-sm md:gap-4 md:text-base">
