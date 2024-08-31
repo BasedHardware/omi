@@ -44,7 +44,7 @@ Future<UserCredential?> signInWithApple() async {
     debugPrint('Given Name: ${appleCredential.givenName ?? "null"}');
     debugPrint('Family Name: ${appleCredential.familyName ?? "null"}');
     debugPrint('Identity Token: ${appleCredential.identityToken != null ? 'Present' : 'Null'}');
-    debugPrint('Authorization Code: ${appleCredential.authorizationCode != null ? 'Present' : 'Null'}');
+    debugPrint('Authorization Code: ${appleCredential.authorizationCode.isNotEmpty ? 'Present' : 'Null'}');
 
     if (appleCredential.identityToken == null) {
       throw Exception('Apple Sign In failed - no identity token received.');
