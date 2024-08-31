@@ -39,7 +39,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
         </div>
       </div>
       <div className="absolute top-0 z-10 h-full w-full  select-none blur-3xl">
-        <div className="absolute right-[0rem] top-[-70px] h-[18rem] w-[120%] bg-cyan-800/10 opacity-30" />
+        <div className="absolute right-[0rem] top-[-70px] h-[10rem] w-[100%] bg-[#1758e74f] opacity-30" />
       </div>
     </div>
   );
