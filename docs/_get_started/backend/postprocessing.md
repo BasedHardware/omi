@@ -19,6 +19,8 @@ This document outlines the post-processing workflow for memories in the Omi appl
 7. Memory updated and reprocessed
 8. Optional emotional analysis
 
+   ![Post Processing](../../images/postprocessing.png)
+
 ## 🔍 Detailed Steps
 
 ### 1. Post-Processing Request
