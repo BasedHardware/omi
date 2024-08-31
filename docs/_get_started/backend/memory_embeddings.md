@@ -1,3 +1,9 @@
+---
+layout: default
+title: Memory Embeddings
+parent: Backend
+nav_order: 5
+---
 # 🧠 Memory Embedding Process in Omi
 
 This document outlines how Omi creates and stores embeddings for memories.
