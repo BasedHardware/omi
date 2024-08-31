@@ -26,6 +26,9 @@ nav_order: 2
 Welcome to the Omi backend! This document provides a comprehensive overview of Omi's architecture and code, guiding you through its key components, functionalities, and how it all works together to
 power a unique and intelligent AI assistant experience.
 
+![omibackend-08302024](https://github.com/user-attachments/assets/b67c2b0b-74a1-4739-8e9f-53b96df1ac1e)
+
+
 ## Understanding the Omi Ecosystem 🗺️
 
 Omi is a multimodal AI assistant designed to understand and interact with users in a way that's both intelligent and human-centered. The backend plays a crucial role in this by:
