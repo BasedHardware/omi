@@ -3,9 +3,11 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
+import { useParams } from 'next/navigation';
 
 export default function AppHeader() {
   const [scrollPosition, setScrollPosition] = useState(0);
+  const params = useParams();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -33,13 +35,15 @@ export default function AppHeader() {
           height={64}
           className="h-auto w-[25px]"
         />
-        <span className="hidden md:inline">Based Hardware</span>
+        <span className="hidden font-bold md:inline">Omi</span>
       </h1>
       <nav>
         <ul className="flex gap-3 text-sm md:gap-4 md:text-base">
-          <li>
-            <ShareButton />
-          </li>
+          {params.id && (
+            <li>
+              <ShareButton />
+            </li>
+          )}
           <li>
             <Link
               href={`https://basedhardware.com/`}

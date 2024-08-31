@@ -1,11 +1,21 @@
 import { Discord, Github, Instagram, Linkedin, Tiktok, X } from 'iconoir-react';
+import Image from 'next/image';
 
 export default function Footer() {
   return (
     <footer className="footer w-full border-t border-solid border-zinc-800 bg-black/5 px-4 py-12 text-white md:px-12">
       <div className="mx-auto flex max-w-screen-xl flex-wrap justify-between gap-12">
         <div>
-          <h2 className="text-4xl font-semibold">Omi</h2>
+          <div className="flex items-center gap-2">
+            <Image
+              src={'/logo.webp'}
+              alt="Based Hardware Logo"
+              width={68}
+              height={64}
+              className="h-auto w-[27px]"
+            />
+            <h2 className="text-4xl font-semibold">Omi</h2>
+          </div>
           <p className="text-gray-500">San Fransisco</p>
           <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
