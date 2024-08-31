@@ -74,7 +74,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                     ),
               const SizedBox(height: 24),
-              _controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7
+              [-1, 5, 6, 7].contains(_controller?.index)
                   ? const SizedBox(
                       height: 0,
                     )

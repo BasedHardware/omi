@@ -1,10 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;
+
   const NameWidget({super.key, required this.goNext});
 
   @override
@@ -13,13 +15,11 @@ class NameWidget extends StatefulWidget {
 
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
-  User? user;
   var focusNode = FocusNode();
 
   @override
   void initState() {
-    user = FirebaseAuth.instance.currentUser;
-    nameController = TextEditingController(text: user?.displayName ?? '');
+    nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
     // focusNode.requestFocus();
     super.initState();
   }
@@ -37,7 +37,7 @@ class _NameWidgetState extends State<NameWidget> {
             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
             textAlign: TextAlign.start,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 24),
           TextField(
             enabled: true,
             focusNode: focusNode,
@@ -50,7 +50,7 @@ class _NameWidgetState extends State<NameWidget> {
             decoration: InputDecoration(
               hintText: 'Enter your given name',
               // label: const Text('What should Omi call you?'),
-              hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+              hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
               // border: UnderlineInputBorder(
               //   borderSide: BorderSide(color: Colors.grey.shade200),
               // ),
@@ -64,7 +64,7 @@ class _NameWidgetState extends State<NameWidget> {
                 ),
               ),
             ),
-            style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade200),
           ),
           const SizedBox(height: 20),
           Row(
