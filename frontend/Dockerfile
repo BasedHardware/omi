@@ -5,8 +5,12 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Instala las dependencias basadas en el gestor de paquetes preferido
+RUN echo "deps: $(pwd)"
+RUN ls -la
+
+# Install dependencies based on the preferred package manager
 COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
@@ -18,12 +22,19 @@ RUN \
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY frontend/. .
+#COPY frontend/. .
+COPY frontend .
+RUN npm run build
+
+RUN echo "base files"
+RUN ls -la
+
 
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
-
+RUN echo "production: $(pwd)"
+RUN ls -la
 ENV NODE_ENV production
 
 RUN addgroup --system --gid 1001 nodejs

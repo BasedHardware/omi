@@ -13,6 +13,7 @@ from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment, ImprovedTranscript
+from utils.memories.facts import get_prompt_facts
 
 llm = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -239,12 +240,14 @@ def summarize_experience_text(text: str) -> Structured:
     return llm_with_parser.invoke(prompt)
 
 
-def get_memory_summary(user_name: str, user_facts: List[Fact], memories: List[Memory]) -> str:
+def get_memory_summary(uid: str, memories: List[Memory]) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+
     conversation_history = Memory.memories_to_string(memories)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
-    You are advising {user_name} right now, this is what you know about {user_name}: {Fact.get_facts_as_str(user_facts)}
+    You are advising {user_name} right now, {facts_str}
     
     
     The following are a list of ${user_name}'s conversations from today, with the transcripts and a slight summary of each, that ${user_name} had during his day.
@@ -269,7 +272,8 @@ def generate_embedding(content: str) -> List[float]:
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
-def initial_chat_message(user_name: str, user_facts: List[Fact], plugin: Optional[Plugin] = None) -> str:
+def initial_chat_message(uid: str, plugin: Optional[Plugin] = None) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
         prompt = f'''
         You are an AI with the following characteristics:
@@ -277,7 +281,7 @@ def initial_chat_message(user_name: str, user_facts: List[Fact], plugin: Optiona
         Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
         Task: Provide assistance, answer questions, and engage in meaningful conversations.
         
-        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+        You are made for {user_name}, {facts_str}
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -291,7 +295,7 @@ def initial_chat_message(user_name: str, user_facts: List[Fact], plugin: Optiona
         Personality/Description: {plugin.chat_prompt},
         Task: {plugin.memory_prompt}
         
-        You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+        You are made for {user_name}, {facts_str}
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
@@ -395,12 +399,11 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def qa_rag(
-        user_name: str, user_facts: List[Fact], context: str, messages: List[Message], plugin: Optional[Plugin] = None
-) -> str:
+def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
+    user_name, facts_str = get_prompt_facts(uid)
 
     plugin_info = ""
     if plugin:
@@ -408,7 +411,7 @@ def qa_rag(
 
     prompt = f"""
     You are an assistant for question-answering tasks. 
-    You are made for {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    You are made for {user_name}, {facts_str}
     
     Use what you know about {user_name}, the following pieces of retrieved context and the chat history to continue the chat.
     If you don't know the answer, just say that there's no available information about it. Use three sentences maximum and keep the answer concise.
@@ -457,11 +460,12 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
         return []
 
 
-def obtain_emotional_message(user_name: str, user_facts: List[Fact], memory: Memory, context: str, emotion: str) -> str:
+def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: str) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
     transcript = memory.get_transcript(False)
     prompt = f"""
     You are a thoughtful and encouraging Friend. 
-    Your best friend is {user_name}, you already know the following facts about {user_name}: {Fact.get_facts_as_str(user_facts)}.
+    Your best friend is {user_name}, {facts_str}
     
     {user_name} just finished a conversation where {user_name} experienced {emotion}.
     
@@ -496,14 +500,15 @@ class Facts(BaseModel):
     )
 
 
-def new_facts_extractor(
-        user_name: str, existing_facts: List[Fact], segments: List[TranscriptSegment]
-) -> List[Fact]:
+def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fact]:
+    user_name, facts_str = get_prompt_facts(uid)
+
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 100:  # less than 100 chars, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?
+    # TODO: make it more strict?
 
     prompt = f'''
     You are an experienced detective, whose job is to create detailed profile personas based on conversations.
@@ -520,7 +525,7 @@ def new_facts_extractor(
     This way we can create a more accurate profile. 
     Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
 
-    Existing Facts: {Fact.get_facts_as_str(existing_facts)}
+    Existing Facts that were: {Fact.get_facts_as_str(existing_facts)}
 
     Conversation:
     ```
@@ -531,6 +536,8 @@ def new_facts_extractor(
     try:
         with_parser = llm.with_structured_output(Facts)
         response: Facts = with_parser.invoke(prompt)
+        # for fact in response:
+        #     fact.content = fact.content.replace(user_name, '').replace('The User', '').replace('User', '').strip()
         return response.facts
     except Exception as e:
         # print(f'Error extracting new facts: {e}')
