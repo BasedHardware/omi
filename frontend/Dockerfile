@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
+RUN npm run build
 
 RUN echo "base files"
 RUN ls -la
