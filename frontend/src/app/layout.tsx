@@ -20,13 +20,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
+  params,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const memoryId = params.id as string;
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AppHeader />
+        <AppHeader memoryId={memoryId} />
         <main className="flex min-h-screen flex-col">
           <div className="w-full flex-grow">{children}</div>
         </main>
