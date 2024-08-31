@@ -1,3 +1,6 @@
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
+
 enum MessageEventType {
   newMemoryCreating('new_memory_creating'),
   newMemoryCreated('new_memory_created'),
@@ -18,14 +21,18 @@ enum MessageEventType {
 }
 
 class ServerMessageEvent {
+  MessageEventType type;
   String? memoryId;
   String? processingMemoryId;
-  MessageEventType type;
+  ServerMemory? memory;
+  List<ServerMessage>? messages;
 
   ServerMessageEvent(
     this.type,
     this.memoryId,
     this.processingMemoryId,
+    this.memory,
+    this.messages,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -33,14 +40,8 @@ class ServerMessageEvent {
       MessageEventType.valuesFromString(json['type']),
       json['memory_id'],
       json['processing_memory_id'],
+      json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
+      ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'memory_id': memoryId,
-      'processing_memory_id': processingMemoryId,
-    };
   }
 }
