@@ -1,3 +1,6 @@
+import io
+import json
+import base64
 import asyncio
 import time
 import asyncio
@@ -5,6 +8,9 @@ import os
 import threading
 import uuid
 from datetime import datetime
+import opuslib
+from pydub import AudioSegment
+
 
 from models.message_event import NewMemoryCreated, MessageEvent
 from models.processing_memory import ProcessingMemory
@@ -13,8 +19,10 @@ from utils.memories.process_memory import process_memory
 from utils.memories.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 from utils.processing_memories import create_memory_by_processing_memory
+from utils.audio import create_wav_from_bytes
 import database.processing_memories as processing_memories_db
 import database.memories as memories_db
+from utils.other.storage import upload_postprocessing_audio_bytes
 
 from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
@@ -24,6 +32,7 @@ from utils.stt.streaming import process_segments
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from utils.stt.streaming import process_audio_dg, send_initial_file
 from utils.stt.vad import VADIterator, model
+from routers.postprocessing import postprocess_memory_util
 
 # import opuslib
 
@@ -88,7 +97,7 @@ async def _websocket_util(
         return
 
     # Processing memory
-    processing_memory = None
+    processing_memory: ProcessingMemory = None
 
     # Stream transcript
     memory_stream_id = 1
@@ -115,10 +124,18 @@ async def _websocket_util(
                 processing_memory.transcript_segments.extend(list(map(lambda m: TranscriptSegment(**m), new_segments)))
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
+    audio_frames = []
+
+    def stream_audio(audio_buffer):
+        if not new_memory_watch:
+            return
+        audio_frames.append(audio_buffer)
+
     # Process
     transcript_socket2 = None
     websocket_active = True
     timer_start = None
+    audio_buffer = None
     duration = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
@@ -150,6 +167,7 @@ async def _websocket_util(
     async def receive_audio(socket1, socket2):
         nonlocal websocket_active
         nonlocal timer_start
+        nonlocal audio_buffer
         audio_buffer = bytearray()
         timer_start = time.time()
         # speech_state = SpeechState.no_speech
@@ -172,6 +190,9 @@ async def _websocket_util(
                         socket2 = None
                 else:
                     socket2.send(audio_buffer)
+
+                # stream
+                stream_audio(data)
 
                 audio_buffer = bytearray()
 
@@ -233,18 +254,18 @@ async def _websocket_util(
         try:
             if not processing_memory:
                 await _create_processing_memory()  # force create one
-                return
 
             # Message: creating
             await websocket.send_json({"type": "new_memory_creating", })
 
             # Create memory
-            (memory, messages) = await create_memory_by_processing_memory(uid, processing_memory.id)
+            (memory, messages, updated_processing_memory) = await create_memory_by_processing_memory(uid, processing_memory.id)
             if not memory:
                 print("Can not create new memory")
                 # Message: failed
                 await websocket.send_json({"type": "new_memory_create_failed", })
                 return
+            processing_memory = updated_processing_memory
 
             # Message: completed
             event_type = "new_memory_created"
@@ -257,18 +278,23 @@ async def _websocket_util(
             print(msg)
             await websocket.send_json(msg)
 
+            return memory
+
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Can not create memory: {e}')
-        finally:
-            pass
+
+        return None
 
     # New memory watch
     async def memory_transcript_segements_watch():
         nonlocal memory_transcript_segements
         nonlocal timer_start
-        while True:
+        nonlocal processing_memory
+        nonlocal audio_frames
+        watching = True
+        while watching:
             print("new memory watch")
             await asyncio.sleep(5)
 
@@ -313,7 +339,22 @@ async def _websocket_util(
                     processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
                 # Create memory
-                await _create_memory()
+                memory = await _create_memory()
+                if not memory:
+                    print("Memory is invalid, can not move to post-processing step")
+                    return
+
+                # Post-processing
+                file_path = f"_temp/{memory.id}_{uuid.uuid4()}"
+                print(file_path)
+                print(len(audio_frames))
+                # Create wav
+                # TODO: re-frame before create new wav
+                create_wav_from_bytes(file_path=file_path, frames=audio_frames, frame_rate=sample_rate, channels=channels, codec=codec,)
+
+                emotional_feedback = True  # TODO: use users emotional feedback
+                postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+
                 break
 
     try:
@@ -331,6 +372,7 @@ async def _websocket_util(
         print(f"Error during WebSocket operation: {e}")
     finally:
         websocket_active = False
+        large_audio_buffer = bytearray()
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close()
