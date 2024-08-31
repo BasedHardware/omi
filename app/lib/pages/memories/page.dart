@@ -135,7 +135,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
           SliverToBoxAdapter(
             child: memoryProvider.processingMemory != null
                 ? Container(
-                    constraints: BoxConstraints(maxHeight: memoryProvider.processingMemory!.recording ? 350.0 : 0),
                     child: getProcessingMemoryWidget(memoryProvider.processingMemory!),
                   )
                 : const SizedBox.shrink(),

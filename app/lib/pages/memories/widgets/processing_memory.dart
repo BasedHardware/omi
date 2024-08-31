@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/processing_memory_capture.dart';
+import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
 
 class ProcessingMemoryWidget extends StatefulWidget {
   final ServerProcessingMemory memory;
@@ -19,47 +22,50 @@ class ProcessingMemoryWidget extends StatefulWidget {
 class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      child: Container(
-        margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
-        width: double.maxFinite,
-        decoration: const BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          border: GradientBoxBorder(
-            gradient: LinearGradient(colors: [
-              Color.fromARGB(127, 208, 208, 208),
-              Color.fromARGB(127, 188, 99, 121),
-              Color.fromARGB(127, 86, 101, 182),
-              Color.fromARGB(127, 126, 190, 236)
-            ]),
-            width: 1,
+    return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+      return GestureDetector(
+        child: Container(
+                    constraints: BoxConstraints(maxHeight: provider.hasTranscripts ? 350 : 90),
+          margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
+          width: double.maxFinite,
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+            border: GradientBoxBorder(
+              gradient: LinearGradient(colors: [
+                Color.fromARGB(127, 208, 208, 208),
+                Color.fromARGB(127, 188, 99, 121),
+                Color.fromARGB(127, 86, 101, 182),
+                Color.fromARGB(127, 126, 190, 236)
+              ]),
+              width: 1,
+            ),
+            shape: BoxShape.rectangle,
           ),
-          shape: BoxShape.rectangle,
-        ),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _getMemoryHeader(),
-              const SizedBox(height: 16),
-              const Expanded(
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(child: SizedBox(height: 32)),
-                    SliverToBoxAdapter(
-                      child: CaptureWidget(),
-                    ),
-                  ],
+          child: Padding(
+            padding: const EdgeInsetsDirectional.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _getMemoryHeader(),
+                const SizedBox(height: 16),
+                const Expanded(
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(child: SizedBox(height: 32)),
+                      SliverToBoxAdapter(
+                        child: CaptureWidget(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   _getMemoryHeader() {

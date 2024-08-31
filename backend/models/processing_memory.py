@@ -13,6 +13,7 @@ class ProcessingMemory(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
     geolocation: Optional[Geolocation] = None
     transcript_segments: List[TranscriptSegment] = []
+    audio_file_url: Optional[str] = None
 
     memory_id: Optional[str] = None
     message_ids: List[str] = []
