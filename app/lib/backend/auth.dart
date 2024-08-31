@@ -50,7 +50,9 @@ Future<UserCredential> signInWithApple() async {
     idToken: appleCredential.identityToken,
     rawNonce: rawNonce,
   );
-
+  print(oauthCredential);
+  print(oauthCredential.appleFullPersonName);
+  print(oauthCredential.serverAuthCode);
   // Sign in the user with Firebase. If the nonce we generated earlier does
   // not match the nonce in `appleCredential.identityToken`, sign in will fail.
   UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
@@ -132,9 +134,18 @@ Future<String?> getIdToken() async {
   try {
     IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
     if (newToken?.token != null) {
-      SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+      var user = FirebaseAuth.instance.currentUser!;
+      SharedPreferencesUtil().uid = user.uid;
       SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
       SharedPreferencesUtil().authToken = newToken?.token ?? '';
+      if (SharedPreferencesUtil().email.isEmpty) {
+        SharedPreferencesUtil().email = user.email ?? '';
+      }
+
+      if (SharedPreferencesUtil().givenName.isEmpty) {
+        SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
+        SharedPreferencesUtil().familyName = user.displayName?.split(' ')[1] ?? '';
+      }
     }
     return newToken?.token;
   } catch (e) {
