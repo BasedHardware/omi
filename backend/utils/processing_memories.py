@@ -52,4 +52,4 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     processing_memory.message_ids = list(map(lambda m: m.id, messages))
     processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
-    return (memory, messages)
+    return (memory, messages, processing_memory)
