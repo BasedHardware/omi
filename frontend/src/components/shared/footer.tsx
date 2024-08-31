@@ -6,7 +6,7 @@ export default function Footer() {
     <footer className="footer w-full border-t border-solid border-zinc-800 bg-black/5 px-4 py-12 text-white md:px-12">
       <div className="mx-auto flex max-w-screen-xl flex-wrap justify-between gap-12">
         <div>
-          <div className='flex gap-2 items-center'> 
+          <div className="flex items-center gap-2">
             <Image
               src={'/logo.webp'}
               alt="Based Hardware Logo"
