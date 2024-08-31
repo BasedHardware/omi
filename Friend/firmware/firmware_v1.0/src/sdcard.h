@@ -44,3 +44,7 @@ char* get_info_file_data_();
 int close_audio_file();
 int initialize_audio_file();
 int write_audio_file_unsafe(uint8_t *buf, int amount);
+int create_file();
+int read_audio_data(uint8_t *buf, int amount,int offset);
+int write_entry_info(uint8_t entry_num,uint32_t size);
+int get_file_size();
