@@ -14,7 +14,7 @@
 #include "btutils.h"
 #include "lib/battery/battery.h"
 #include "speaker.h"
-
+#include "button.h"
 #include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
@@ -449,12 +449,13 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        LOG_WRN("Failed to read from ring buffer %d", tx_buffer_size);
+        printk("Failed to read from ring buffer %d\n", tx_buffer_size);
         return false;
     }
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
+    // printk("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -468,12 +469,13 @@ K_THREAD_STACK_DEFINE(pusher_stack, 1024);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
-
+static char storage_temp_data[CODEC_OUTPUT_MAX_BYTES];
 static bool push_to_gatt(struct bt_conn *conn)
 {
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
+        printk("invalid\n");
         return false;
     }
 
@@ -490,6 +492,11 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+        uint8_t *tr = pusher_temp_data + 2;
+        // for (int i = 0; i < packet_size; i ++) {
+        //     printk("%d ",tr[i]);
+        // }
+        // printk("\n");
         offset += packet_size;
         index++;
 
@@ -520,10 +527,28 @@ static bool push_to_gatt(struct bt_conn *conn)
     return true;
 }
 
+
+
+bool write_to_storage(void) {
+    if (!read_from_tx_queue())
+    {
+        return false;
+    }
+    printk("about to write to storage\n");
+    uint8_t *buffer = tx_buffer+2;
+    uint32_t packet_size = tx_buffer_size;
+    memcpy(storage_temp_data, buffer, packet_size);
+    uint8_t *b = (uint8_t*)storage_temp_data;
+    write_to_file(b,(uint32_t*)packet_size);
+    return true;
+}
+
+static bool use_storage = true;
 void pusher(void)
 {
     while (1)
     {
+
 
         //
         // Load current connection
@@ -531,6 +556,7 @@ void pusher(void)
 
         struct bt_conn *conn = current_connection;
         bool use_gatt = true;
+        // FSM_STATE_T state_ = get_current_button_state();
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -549,22 +575,45 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
 
+        // if (!valid) {
+            bool result = write_to_storage();
+        //     if (!result)
+        //     {
+        //         k_sleep(K_MSEC(50));
+        //     }
+        //     ring_buf_reset(&ring_buf);
+        //     k_sleep(K_MSEC(10));
+        // }
+        
+
+        // if(state_ == IDLE ) { //button is pressed
+        // write_to_storage();
+        // }
+
         // If no valid mode exists - discard whole buffer
-        if (!valid)
-        {
-            ring_buf_reset(&ring_buf);
-            k_sleep(K_MSEC(10));
-        }
+        // if (!valid)
+        // {
+        //     ring_buf_reset(&ring_buf);
+        //     k_sleep(K_MSEC(10));
+        // }
+
+     
+
 
         // Handle GATT
-        if (use_gatt && valid)
-        {
-            bool sent = push_to_gatt(conn);
-            if (!sent)
-            {
-                k_sleep(K_MSEC(50));
-            }
-        }
+        // write_to_storage();
+        // if (use_gatt && valid)
+        // {
+        //     // bool sent =write_to_storage();
+        //      bool sent = push_to_gatt(conn);
+        //     if (!sent)
+        //     {
+        //         k_sleep(K_MSEC(50));
+        //     }
+        // }
+
+
+
 
         if (conn)
         {
@@ -572,6 +621,8 @@ void pusher(void)
         }
     }
 }
+
+
 
 //
 // Public functions

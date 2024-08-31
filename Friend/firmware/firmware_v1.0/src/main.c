@@ -142,26 +142,17 @@ int main(void)
     err = mount_sd_card();
     printk("result of mount:%d\n",err);
 
-    err = initialize_audio_file();
-    printk("result of audio file:%d\n",err);
 
-    // const char dar[] = "audio/A1.txt";
-    // err = create_file(dar);
-    // printk("result of create file:%d\n",err);
+    write_entry_info(1,10);
+    write_entry_info(1,20);
+    write_entry_info(1,30);
 
-    // const char d[] = "A1 ";
-    // err=write_info(d);
-    // printk("result of info write is %d\n",err);
-    // char *f = get_info_file_data_();
+    int size = get_file_size();
 
-    // printk("%d\n",f[0]);
-    // printk("%d\n",f[1]);
-    // printk("%d\n",f[2]);
-    // printk("%d\n",f[3]);
+    printk("file size is %d\n", size);
 
-    // k_free(f);
-    // Indicate codec initialization
-    update_info_buffer();
+
+    k_msleep(100);
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
