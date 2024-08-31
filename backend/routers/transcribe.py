@@ -6,6 +6,7 @@ import threading
 import uuid
 from datetime import datetime
 
+from models.message_event import NewMemoryCreated, MessageEvent
 from models.processing_memory import ProcessingMemory
 from models.memory import Memory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing, TranscriptSegment
 from utils.memories.process_memory import process_memory
@@ -95,8 +96,11 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
-    async def stream_transcript(segments, stream_id):
+    def stream_transcript(segments, stream_id):
         nonlocal websocket
+
+        print("Received transcript segments")
+        print(segments)
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
@@ -107,9 +111,9 @@ async def _websocket_util(
 
             # Sync processing transcript, periodly
             if processing_memory and len(memory_transcript_segements) % 3 == 0:
-                new_segments = memory_transcript_segements[len(processing_memory.transcrip_segments):]
-                processing_memory.transcript_segments.extend(map(lambda m: TranscriptSegment(**m), new_segments))
-                await processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+                new_segments = memory_transcript_segements[len(processing_memory.transcript_segments):]
+                processing_memory.transcript_segments.extend(list(map(lambda m: TranscriptSegment(**m), new_segments)))
+                processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
     # Process
     transcript_socket2 = None
@@ -210,7 +214,7 @@ async def _websocket_util(
                 timer_start=timer_start,
                 language=language,
             )
-            processing_memory.transcript_segments = map(lambda m: TranscriptSegment(**m), memory_transcript_segements)
+            processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
             processing_memories_db.upsert_processing_memory(uid, processing_memory.dict())
 
             # send processing memory created
@@ -224,17 +228,18 @@ async def _websocket_util(
             pass
 
     async def _create_memory():
+        print(f"create memory")
         nonlocal processing_memory
         try:
             if not processing_memory:
-                print("processing memory is not initiated")
+                await _create_processing_memory()  # force create one
                 return
 
             # Message: creating
             await websocket.send_json({"type": "new_memory_creating", })
 
             # Create memory
-            memory = await create_memory_by_processing_memory(uid, processing_memory.id)
+            (memory, messages) = await create_memory_by_processing_memory(uid, processing_memory.id)
             if not memory:
                 print("Can not create new memory")
                 # Message: failed
@@ -242,7 +247,15 @@ async def _websocket_util(
                 return
 
             # Message: completed
-            await websocket.send_json({"type": "new_memory_created", "processing_memory_id": processing_memory.id, "memory_id": memory.id})
+            event_type = "new_memory_created"
+            msg = NewMemoryCreated(event_type=event_type,
+                                   processing_memory_id=processing_memory.id,
+                                   memory_id=memory.id,
+                                   memory=memory,
+                                   messages=messages,).model_dump(mode="json")
+            msg["type"] = event_type
+            print(msg)
+            await websocket.send_json(msg)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -256,32 +269,48 @@ async def _websocket_util(
         nonlocal memory_transcript_segements
         nonlocal timer_start
         while True:
+            print("new memory watch")
             await asyncio.sleep(5)
 
             if not timer_start:
+                print("not timer start")
                 continue
 
             # last segment
             last_segment = None
             if len(memory_transcript_segements) > 0:
-                last_segment = memory_transcript_segements[len(memory_transcript_segements)-1]
+                last_segment = memory_transcript_segements[-1]
             if not last_segment or "end" not in last_segment:
+                print(f"not last segment or invalid")
+                if last_segment:
+                    print(f"{last_segment.dict()}")
                 continue
 
             # first chunk, create processing memory
             should_create_processing_memory = len(memory_transcript_segements) > 0 \
                 and not processing_memory
+            print(f"should create processing {should_create_processing_memory}")
             if should_create_processing_memory:
                 await _create_processing_memory()
 
-            # Should count words
-            should_create_memory = (timer_start + int(last_segment["end"]) + 15 < time.time()) \
-                and (len(memory_transcript_segements) >= 3)
+            # debounce 15s, 15 words at least
+            segment_end = int(last_segment["end"])
+            now = time.time()
+            should_create_memory = (timer_start + segment_end + 15 < now)
+            if should_create_memory:
+                should_create_memory = False
+                wc = 0
+                for segment in memory_transcript_segements:
+                    wc = wc + len(segment["text"].split(" "))
+                    if wc >= 15:
+                        should_create_memory = True
+                        break
+            print(f"should create memory {timer_start} {segment_end} {now} {should_create_memory}")
             if should_create_memory:
                 # Ensure synced processing transcript
                 if processing_memory:
-                    processing_memory.transcript_segments = map(lambda m: TranscriptSegment(**m), memory_transcript_segements)
-                    await processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+                    processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
+                    processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
                 # Create memory
                 await _create_memory()
@@ -309,9 +338,10 @@ async def _websocket_util(
                 print(f"Error closing WebSocket: {e}")
 
 
-@router.websocket("/listen")
+@ router.websocket("/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False
 ):
+    print("here")
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)

@@ -119,16 +119,15 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
-    // TODO: thinh, update info to /processing-memories/:id
+    // TODO: thinh, update info likes geolocation to /processing-memories/:id
   }
 
-  Future<void> _onMemoryCreated(String processingMemoryId) async {
-    var processingMemory = await getProcessingMemoryById(processingMemoryId);
-    if (processingMemory == null) {
-      print("Processing Memory is not found $processingMemoryId");
+  Future<void> _onMemoryCreated(ServerMessageEvent event) async {
+    if (event.memory == null) {
+      print("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    _proessOnMemoryCreate(processingMemory.memory, processingMemory.messages);
+    _proessOnMemoryCreate(event.memory, event.messages??[]);
   }
 
   void _onMemoryCreateFailed() {
@@ -394,7 +393,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
             print("New memory created message event is invalid");
             return;
           }
-          _onMemoryCreated(event.processingMemoryId!);
+          _onMemoryCreated(event);
           return;
         }
 
@@ -431,6 +430,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
+		debugPrint("Message received ${newSegments.length}");
+		newSegments.forEach((s) => debugPrint(s.text));
+
         if (newSegments.isEmpty) return;
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');

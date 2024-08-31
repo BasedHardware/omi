@@ -9,10 +9,10 @@ from models.transcript_segment import TranscriptSegment
 class ProcessingMemory(BaseModel):
     id: str
     created_at: datetime
-    timer_start: Optional[int]
+    timer_start: float
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
     geolocation: Optional[Geolocation] = None
     transcript_segments: List[TranscriptSegment] = []
 
-    memory_id: Optional[str]
+    memory_id: Optional[str] = None
     message_ids: List[str] = []
