@@ -76,8 +76,8 @@ dependencies:
   flutter_timezone: ^2.0.0
   sign_in_button: ^3.2.0
   sign_in_with_apple: ^6.1.1
-  firebase_core: ^3.2.0
-  firebase_auth: ^5.1.2
+  firebase_core: 3.3.0
+  firebase_auth: 5.1.4
   google_sign_in: ^6.2.1
   location: ^7.0.0
   cached_network_image: ^3.3.1
@@ -85,13 +85,12 @@ dependencies:
   internet_connection_checker_plus: ^2.5.0
   geolocator:
   visibility_detector: ^0.4.0+2
-  firebase_messaging: ^15.0.4
+  firebase_messaging: 15.0.4
   version: ^3.0.2
   webview_flutter: ^4.8.0
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
-
 
 dependency_overrides:
   http: ^1.2.1
@@ -166,3 +165,4 @@ flutter_native_splash:
 
   android: true
   ios: true
+ 
