@@ -83,16 +83,19 @@ async def _websocket_util(
     async def receive_audio(socket1, socket2):
         nonlocal is_speech_active, last_speech_time, websocket_active, decoder
         
-        REALTIME_RESOLUTION = 0.02
+        REALTIME_RESOLUTION = 0.025
         sample_width = 2  # pcm8/16 here is 16 bit
         byte_rate = sample_width * sample_rate * channels
-        chunk_size = int(byte_rate * REALTIME_RESOLUTION)
-        audio_buffer = deque(maxlen=byte_rate * 1)  # 1 secs
+        # chunk_size = int(byte_rate * REALTIME_RESOLUTION)
+        audio_buffer = deque(maxlen=window_size_samples)
         databuffer = bytearray(b"")
-        prespeech_audio = deque(maxlen=int(byte_rate * 0.5)) # Queue of audio that will included to beginning of data (sent to DG) when is_speech_active become True
+        prespeech_audio = deque(maxlen=int(byte_rate * 0.5))
             
         timer_start = time.time()
         audio_cursor = 0 # For sleep realtime logic
+        last_vad_check_time = 0
+        opus_vad_check_interval = speech_timeout/40  # interval for Opus VAD checks
+
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
@@ -108,31 +111,55 @@ async def _websocket_util(
                 else:
                     raise ValueError(f"Unsupported codec: {codec}")
                 audio_buffer.extend(samples)
-                if len(audio_buffer) >= window_size_samples:
-                    tensor_audio = torch.tensor(list(audio_buffer))
-                    # Good alr, but increase the window size to get wider context but server will be slower
-                    if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
-                        if not is_speech_active:
-                            for audio in prespeech_audio:
-                                databuffer.extend(audio.int().numpy().tobytes())
-                            prespeech_audio.clear()
-                            print('+Detected speech')
-                        is_speech_active = True
-                        last_speech_time = time.time()
-                    elif is_speech_active:
-                        if recv_time - last_speech_time > speech_timeout:
-                            is_speech_active = False
-                            # Reset only happens after the speech timeout
-                            # Reason : Better to carry vad context for a speech, then reset for any new speech
-                            vad_iterator.reset_states()
+                if codec in ['pcm8', 'pcm16']:
+                    if len(audio_buffer) >= window_size_samples:
+                        tensor_audio = torch.tensor(list(audio_buffer))
+                        if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
+                            if not is_speech_active:
+                                for audio in prespeech_audio:
+                                    databuffer.extend(audio.int().numpy().tobytes())
+                                prespeech_audio.clear()
+                                print('+Detected speech')
+                            is_speech_active = True
+                            last_speech_time = recv_time
+                        elif is_speech_active:
+                            if recv_time - last_speech_time > speech_timeout:
+                                is_speech_active = False
+                                vad_iterator.reset_states()
+                                prespeech_audio.extend(samples)
+                                print('-NO Detected speech')
+                                continue
+                        else:
                             prespeech_audio.extend(samples)
-                            print('-NO Detected speech')
                             continue
-                    else:
-                        prespeech_audio.extend(samples)
+                elif codec == 'opus':
+                    # CHeck VAD for Opus every vad_check_interval
+                    if recv_time - last_vad_check_time >= opus_vad_check_interval and not is_speech_active:
+                        last_vad_check_time = recv_time
+                        if len(audio_buffer) >= window_size_samples:
+                            tensor_audio = torch.tensor(list(audio_buffer))
+                            if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
+                                print('!+ Start Detected speech\n')
+                                is_speech_active = True
+                                last_speech_time = recv_time
+                    elif is_speech_active and recv_time - last_vad_check_time >= speech_timeout/2 :
+                        last_vad_check_time += speech_timeout/30
+                        if len(audio_buffer) >= window_size_samples:
+                            tensor_audio = torch.tensor(list(audio_buffer))
+                            if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
+                                print("+ Still active but detected speech\n")
+                                last_vad_check_time += speech_timeout/2
+                                last_speech_time = recv_time
+                            elif recv_time - last_speech_time > speech_timeout:
+                                print("- No detected while active, reverting to no active speech\n")
+                                is_speech_active = False
+                                vad_iterator.reset_states()
+                                continue
+                    
+                    if not is_speech_active:
                         continue
-            
-                elapsed_seconds = time.time() - timer_start
+                
+                elapsed_seconds = recv_time - timer_start
                 databuffer.extend(data)
                 # Sleep logic, because naive sleep is not accurate
                 current_time = time.time()
