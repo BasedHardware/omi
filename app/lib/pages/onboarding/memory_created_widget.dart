@@ -21,7 +21,7 @@ class MemoryCreatedWidget extends StatelessWidget {
             provider.memory == null
                 ? const SizedBox()
                 : Text(
-                    'While you were talking, we created a memory for you. Isn\'t that cool?',
+                    'Your first memory is ready! 🎉',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
