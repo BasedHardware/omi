@@ -8,7 +8,6 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memory_detail/share.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
@@ -128,12 +127,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               ),
               const SizedBox(width: 4),
               Expanded(child: Text("${structured.getEmoji()}")),
-              IconButton(
-                onPressed: () {
-                  showShareBottomSheet(context, widget.memory, setState);
-                },
-                icon: const Icon(Icons.ios_share, size: 20),
-              ),
+              // IconButton(
+              //   onPressed: () {
+              //     showShareBottomSheet(context, widget.memory, setState);
+              //   },
+              //   icon: const Icon(Icons.ios_share, size: 20),
+              // ),
               IconButton(
                 onPressed: () {
                   if (widget.memory.failed) {
@@ -490,7 +489,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
 
   _reProcessMemory(
     BuildContext context,
-    StateSetter setModalState,
     ServerMemory memory,
     Function changeLoadingState,
   ) async {
