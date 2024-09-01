@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from modal import Image, App, Secret, asgi_app, mount, Stub, Mount
-from modal import Stub, Image, Secret, Mount, asgi_app
+from modal import App, mount
+from modal import Image, Secret, asgi_app
 
 # from _mem0 import router as mem0_router
 from _multion import router as multion_router
@@ -20,6 +20,7 @@ modal_app = App(
     secrets=[Secret.from_dotenv('.env')],
     mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
 )
+
 
 @modal_app.function(
     image=(
@@ -53,9 +54,3 @@ app.include_router(advanced_realtime_router.router)
 
 # Multion
 app.include_router(multion_router.router)
-
-# Mem0
-# app.include_router(mem0_router.router)
-
-
-

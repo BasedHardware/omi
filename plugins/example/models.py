@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -72,6 +72,7 @@ class TranscriptSegment(BaseModel):
                     return False
         return True
 
+
 class Memory(BaseModel):
     created_at: datetime
     started_at: Optional[datetime] = None
@@ -87,6 +88,7 @@ class Memory(BaseModel):
     def get_transcript(self, include_timestamps: bool = False) -> str:
         # Warn: missing transcript for workflow source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
 
 class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
@@ -124,6 +126,3 @@ class EndpointResponse(BaseModel):
 class RealtimePluginRequest(BaseModel):
     session_id: str
     segments: List[TranscriptSegment]
-
-    def get_segments(self):
-        return list(map(lambda x: x.dict(), self.segments))

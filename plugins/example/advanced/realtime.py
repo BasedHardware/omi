@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter
 from langchain_community.tools.asknews import AskNewsSearch
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -21,8 +23,7 @@ class NewsCheck(BaseModel):
     query: str = Field(description="The query to ask a news search engine, can be empty.", default='')
 
 
-def news_checker(conversation: list[dict]) -> str:
-    # TODO: use chains instead
+def news_checker(conversation: List[TranscriptSegment]) -> str:
     chat_with_parser = chat.with_structured_output(NewsCheck)
     conversation_str = TranscriptSegment.segments_as_string(conversation)
     print(conversation_str)
@@ -62,7 +63,7 @@ def news_checker(conversation: list[dict]) -> str:
 @router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
     clean_all_transcripts_except(uid, data.session_id)
-    transcript: list[dict] = append_segment_to_transcript(uid, data.session_id, data.get_segments())
+    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = news_checker(transcript)
 
     if message:
@@ -72,15 +73,15 @@ def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
     return {'message': message}
 
 
-def emotional_support(conversation: list[dict]) -> str:
+def emotional_support(segments: list[TranscriptSegment]) -> str:
     result = chat.invoke(f'''
     You will be given a segment of an ongoing conversation.
-    Your task is to help the speakers as their emotionals supporter.
+    Your task is to detect if there are any accentuated emotions on the conversation and act if it's something unpleasant.
+    Please make sure that there's something valueable to say that will improve user's mood, otherwise output an empty string.
     
     Transcript:
-    {conversation}
+    {TranscriptSegment.segments_as_string(segments)}
     
-    Please make sure that there's something valueable to say that will improve user's mood, otherwise output an empty string.
     ''')
     print('Output', result.content)
     if len(result.content) < 5:
@@ -91,7 +92,7 @@ def emotional_support(conversation: list[dict]) -> str:
 @router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
     clean_all_transcripts_except(uid, data.session_id)
-    transcript: list[dict] = append_segment_to_transcript(uid, data.session_id, data.get_segments())
+    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = emotional_support(transcript)
 
     if message:
