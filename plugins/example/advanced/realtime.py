@@ -73,20 +73,28 @@ def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
     return {'message': message}
 
 
+class EmotionalSupport(BaseModel):
+    message: str = Field(description='The message that will be sent to the user, can be empty.', default='')
+
+
 def emotional_support(segments: list[TranscriptSegment]) -> str:
-    result = chat.invoke(f'''
+    chat_with_parser = chat.with_structured_output(EmotionalSupport)
+    result: EmotionalSupport = chat_with_parser.invoke(f'''
     You will be given a segment of an ongoing conversation.
     Your task is to detect if there are any accentuated emotions on the conversation and act if it's something unpleasant.
     Please make sure that there's something valueable to say that will improve user's mood, otherwise output an empty string.
+    The user is super busy and needs to be as productive as possible, so only output something if it's really worth it.
     
     Transcript:
     {TranscriptSegment.segments_as_string(segments)}
     
+    The message has to be at most 20 words. Be short and concise.
     ''')
-    print('Output', result.content)
-    if len(result.content) < 5:
+
+    print('Output', result.message)
+    if len(result.message) < 10:
         return ''
-    return result.content
+    return result.message
 
 
 @router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
