@@ -12,8 +12,8 @@ const inter = Mulish({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Based Hardware',
-    template: '%s | Based Hardware',
+    default: 'Omi',
+    template: '%s | Omi',
   },
   description: 'Open-source AI wearable Build using the power of recall',
 };
