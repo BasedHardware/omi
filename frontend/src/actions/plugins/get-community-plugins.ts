@@ -14,5 +14,10 @@ export default async function getCummunityPlugins() {
 
 export async function getCommunityPlugin(pluginId: string) {
   const plugins = await getCummunityPlugins();
+
+  const plugin = plugins.find((plugin) => plugin.id === pluginId);
+
+  if(!plugin) return undefined;
+
   return plugins.find((plugin) => plugin.id === pluginId);
 }
