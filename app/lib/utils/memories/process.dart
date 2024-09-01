@@ -20,6 +20,7 @@ Future<ServerMemory?> processTranscriptContent({
   Geolocation? geolocation,
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
+  bool isFromOnboarding = false,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -32,6 +33,7 @@ Future<ServerMemory?> processTranscriptContent({
     triggerIntegrations: triggerIntegrations,
     language: language,
     audioFile: audioFile,
+    isFromOnboarding: isFromOnboarding,
   );
   if (result == null || result.memory == null) return null;
 
