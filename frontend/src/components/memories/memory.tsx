@@ -1,6 +1,6 @@
 import { Memory as MemoryType } from '@/src/types/memory.types';
 import moment from 'moment';
-import Summary from './sumary';
+import Summary from './summary/sumary';
 import Tabs from './tabs';
 import Transcription from './transcript/transcription';
 import { SearchParamsTypes } from '@/src/types/params.types';
