@@ -65,7 +65,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -230,7 +230,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -363,7 +363,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -528,7 +528,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
