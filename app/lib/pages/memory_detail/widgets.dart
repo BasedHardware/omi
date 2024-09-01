@@ -412,6 +412,10 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
         ];
 }
 
+///************************************************
+///************ SETTINGS BOTTOM SHEET *************
+///************************************************
+
 _getSheetTitle(context, memory) {
   return <Widget>[
     ListTile(
@@ -538,6 +542,7 @@ _getShareOptions(
               '''
               .replaceAll('  ', '')
               .trim();
+          print(content);
           await Share.share(content);
           changeLoadingShareMemoryViaURL(false);
         },
@@ -608,9 +613,9 @@ _getShareOptions(
           memory.discarded
               ? const SizedBox()
               : ListTile(
-              title: const Text('Copy Summary'),
-              leading: const Icon(Icons.file_copy),
-              onTap: () => _copyContent(context, memory.structured.toString()))
+                  title: const Text('Copy Summary'),
+                  leading: const Icon(Icons.file_copy),
+                  onTap: () => _copyContent(context, memory.structured.toString()))
         ],
       ),
     ),
@@ -690,10 +695,11 @@ _getSheetMainOptions(
                       });
                     } else {
                       showDialog(
-                          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                              'Unable to Re-summarize Memory', 'Please check your internet connection and try again.',
-                              singleButton: true, okButtonText: 'OK'),
-                          context: context);
+                        builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                            'Unable to Re-summarize Memory', 'Please check your internet connection and try again.',
+                            singleButton: true, okButtonText: 'OK'),
+                        context: context,
+                      );
                     }
                   },
           ),
@@ -715,20 +721,22 @@ _getSheetMainOptions(
                             backgroundColor: Colors.transparent,
                             alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
                             child: ConfirmDeletionWidget(
-                                memory: memory,
-                                onDelete: () {
-                                  Navigator.pop(context, true);
-                                  Navigator.pop(context, {'deleted': true});
-                                }),
+                              memory: memory,
+                              onDelete: () {
+                                Navigator.pop(context, true);
+                                Navigator.pop(context, {'deleted': true});
+                              },
+                            ),
                           );
                         },
                       );
                     } else {
                       showDialog(
-                          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                              'Unable to Delete Memory', 'Please check your internet connection and try again.',
-                              singleButton: true, okButtonText: 'OK'),
-                          context: context);
+                        builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                            'Unable to Delete Memory', 'Please check your internet connection and try again.',
+                            singleButton: true, okButtonText: 'OK'),
+                        context: context,
+                      );
                     }
                   },
           ),
