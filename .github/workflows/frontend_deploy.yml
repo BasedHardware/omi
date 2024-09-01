@@ -3,6 +3,8 @@ name: Deploy Frontend to Cloud RUN
 on:
   push:
     branches: [ "main", "development" ]
+    paths:
+      - 'frontend/**'
 
 env:
   SERVICE: frontend
