@@ -49,4 +49,3 @@ export default async function MemoryPage({ params, searchParams }: MemoryPagePro
   if (!memory) throw new Error();
   return <Memory memory={memory} searchParams={searchParams} />;
 }
-
