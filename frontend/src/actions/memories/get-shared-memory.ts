@@ -10,7 +10,7 @@ export default async function getSharedMemory(id: string) {
       headers: {
         'Content-Type': 'application/json',
       },
-      next: { revalidate: 60 * 60 * 24 },
+      next: { revalidate: 86400 },
     });
     if (!response.ok) {
       return undefined;

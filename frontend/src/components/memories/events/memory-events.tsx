@@ -8,7 +8,7 @@ interface MemoryEventsProps {
 }
 export default function MemoryEvents({ events }: MemoryEventsProps) {
   return (
-    <div>
+    <div className="px-4 md:px-12">
       <h3 className="text-xl font-semibold md:text-2xl">Events</h3>
       <ul className="mt-3">
         {events.map((event, index) => (
