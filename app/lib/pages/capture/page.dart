@@ -204,8 +204,7 @@ class CapturePageState extends State<CapturePage>
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
-          // TODO: Fix this after onboarding
-          // Ideally this shouldn't even be required, because we can close the socket and restart it with the new codec
+          // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
           if (info == 'FIM_CHANGE') {
             showDialog(
               context: context,
