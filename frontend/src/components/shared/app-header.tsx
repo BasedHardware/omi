@@ -29,13 +29,12 @@ export default function AppHeader() {
     >
       <h1 className="flex items-center gap-2 text-xl">
         <Image
-          src={'/logo.webp'}
+          src={'/omi-white.webp'}
           alt="Based Hardware Logo"
-          width={68}
+          width={146}
           height={64}
-          className="h-auto w-[25px]"
+          className="h-auto w-[50px]"
         />
-        <span className="hidden font-bold md:inline">Omi</span>
       </h1>
       <nav>
         <ul className="flex gap-3 text-sm md:gap-4 md:text-base">
