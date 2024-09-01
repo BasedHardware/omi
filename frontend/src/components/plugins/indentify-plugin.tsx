@@ -1,4 +1,4 @@
-import { getCommunityPlugin } from "@/src/actions/plugins/get-community-plugins";
+import { getCommunityPlugin } from '@/src/actions/plugins/get-community-plugins';
 
 interface IndentifyPluginProps {
   pluginId: string;
@@ -11,5 +11,5 @@ export default async function IndentifyPlugin({ pluginId }: IndentifyPluginProps
       <h3 className="text-xl font-semibold md:text-2xl">{pluginCommunity.name}</h3>
       <p className="text-white">{pluginCommunity.description}</p>
     </div>
-  )
+  );
 }
