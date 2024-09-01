@@ -192,6 +192,7 @@ void showShareBottomSheet(
                               );
                               return;
                             }
+                            // print('https://omitdotme.web.app/memories/${memory.id}');
                             Clipboard.setData(ClipboardData(text: 'https://omitdotme.web.app/memories/${memory.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('URL Copied to Clipboard')),
