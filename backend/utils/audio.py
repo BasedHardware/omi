@@ -1,40 +1,50 @@
 import io
-import opuslib
-from pydub import AudioSegment
+import wave
+from utils.pyogg import OpusDecoder
 
 
 # frames is 2darray
 def create_wav_from_bytes(file_path: str, frames: [], codec: str, frame_rate: int = 16000, channels: int = 1, sample_width: int = 2):
-    # decode
-    dec = opuslib.api.decoder.create_state(frame_rate, channels)
-    pcm_buffer = _decode(frames, codec, frame_rate, channels, sample_width)
-
-    cn = AudioSegment.from_raw(
-        io.BytesIO(pcm_buffer),
-        sample_width=sample_width,
-        channels=channels,
-        frame_rate=frame_rate,
-    )
-
-    cn.export(file_path, format="wav")
-
-def _decode(frames: [], codec: str, frame_rate: int = 16000, channels: int = 1, sample_width: int = 2):
+    # opus
     if codec == "opus":
-        # decode
-        dec = opuslib.api.decoder.create_state(frame_rate, channels)
-        pcm_buffer = bytearray()
+        # Create an Opus decoder
+        opus_decoder = OpusDecoder()
+        opus_decoder.set_channels(channels)
+        opus_decoder.set_sampling_frequency(frame_rate)
+
+        wave_write = wave.open(file_path, "wb")
+        # Save the wav's specification
+        wave_write.setnchannels(channels)
+        wave_write.setframerate(frame_rate)
+        wave_write.setsampwidth(sample_width)
+
+        encoded_packets = []
         for frame in frames:
-            audio_buffer = bytes(frame)
-            try:
-                i_pcm_buffer = opuslib.api.decoder.decode(dec, audio_buffer, len(audio_buffer), 1920, 0)
-                pcm_buffer.extend(i_pcm_buffer)
-            except opuslib.OpusError as e:
-                print(f'Decode failed {e}')
-        opuslib.api.decoder.destroy(dec)
+            encoded_packets.append(memoryview(bytearray(frame)))
 
-        return pcm_buffer
+        for encoded_packet in encoded_packets:
+            decoded_pcm = opus_decoder.decode(encoded_packet)
 
-    # else
-    pcm_buffer = bytearray()
-    for frame in frames:
-        pcm_buffer.extend(frame)
+            # Save the decoded PCM as a new wav file
+            wave_write.writeframes(decoded_pcm)
+
+        wave_write.close()
+
+        return
+
+    # pcm16
+    if codec == "pcm16":
+        wave_write = wave.open(file_path, "wb")
+        # Save the wav's specification
+        wave_write.setnchannels(channels)
+        wave_write.setframerate(frame_rate)
+        wave_write.setsampwidth(sample_width)
+
+        for frame in frames:
+            decoded_pcm = frame
+            wave_write.writeframes(decoded_pcm)
+
+        wave_write.close()
+        return
+
+    raise Exception(f"codec {codec} is not supported")

@@ -8,7 +8,6 @@ import os
 import threading
 import uuid
 from datetime import datetime
-import opuslib
 from pydub import AudioSegment
 
 
@@ -33,8 +32,6 @@ from database.redis_db import get_user_speech_profile, get_user_speech_profile_d
 from utils.stt.streaming import process_audio_dg, send_initial_file
 from utils.stt.vad import VADIterator, model
 from routers.postprocessing import postprocess_memory_util
-
-# import opuslib
 
 router = APIRouter()
 
@@ -345,15 +342,15 @@ async def _websocket_util(
                     return
 
                 # Post-processing
-                file_path = f"_temp/{memory.id}_{uuid.uuid4()}"
-                print(file_path)
-                print(len(audio_frames))
+
                 # Create wav
-                # TODO: re-frame before create new wav
+                file_path = f"_temp/{memory.id}_{uuid.uuid4()}"
                 create_wav_from_bytes(file_path=file_path, frames=audio_frames, frame_rate=sample_rate, channels=channels, codec=codec,)
 
                 emotional_feedback = True  # TODO: use users emotional feedback
                 postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+
+                os.remove(file_path)
 
                 break
 
