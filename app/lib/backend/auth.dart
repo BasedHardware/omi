@@ -175,7 +175,11 @@ Future<String?> getIdToken() async {
 
       if (SharedPreferencesUtil().givenName.isEmpty) {
         SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
-        SharedPreferencesUtil().familyName = user.displayName?.split(' ')[1] ?? '';
+        if ((user.displayName?.split(' ').length ?? 0) > 1) {
+          SharedPreferencesUtil().familyName = user.displayName?.split(' ')[1] ?? '';
+        } else {
+          SharedPreferencesUtil().familyName = '';
+        }
       }
     }
     return newToken?.token;
