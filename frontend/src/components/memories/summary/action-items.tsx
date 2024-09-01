@@ -7,7 +7,7 @@ interface ActionsItemsProps {
 
 export default function ActionItems({ items }: ActionsItemsProps) {
   return (
-    <div className='px-4 md:px-12'>
+    <div className="px-4 md:px-12">
       <h3 className="text-xl font-semibold md:text-2xl">Action Items</h3>
       <ul className="mt-3 text-base md:text-lg">
         {items.map((item, index) => (

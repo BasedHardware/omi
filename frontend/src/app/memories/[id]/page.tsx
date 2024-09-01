@@ -12,7 +12,9 @@ export async function generateMetadata(
   const prevData = (await parent) as Metadata;
   const memory = await getSharedMemory(params.id);
 
-  const title = !memory ? 'Memory Not Found' : memory.structured.title || DEFAULT_TITLE_MEMORY;
+  const title = !memory
+    ? 'Memory Not Found'
+    : memory.structured.title || DEFAULT_TITLE_MEMORY;
 
   return {
     title: title,
@@ -21,9 +23,6 @@ export async function generateMetadata(
     robots: {
       follow: true,
       index: true,
-    },
-    twitter: {
-      card: 'summary_large_image',
     },
     openGraph: {
       title: title,
