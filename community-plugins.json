@@ -689,8 +689,8 @@
     "deleted": false
   },
   {
-    "id": "amazon-add-to-cart-multion",
-    "name": "Amazon Add to Cart (With MultiOn)",
+    "id": "multion-amazon",
+    "name": "Amazon Add to Cart <> Multion",
     "author": "@multion",
     "description": "Automatically add books mentioned in your conversations to your Amazon cart using MultiOn",
     "image": "/plugins/logos/amazon-add-to-cart-multion.jpg",
