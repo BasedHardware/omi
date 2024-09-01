@@ -34,10 +34,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
   bool triggerIntegrations = true,
   String? language,
   File? audioFile,
-  bool isFromOnboarding = false,
+  String? source,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&is_from_onboarding=$isFromOnboarding',
+    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
     headers: {},
     method: 'POST',
     body: jsonEncode({

@@ -282,7 +282,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
       photos: [],
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
-      isFromOnboarding: true,
+      source: 'speech_profile_onboarding',
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty)) {
