@@ -89,7 +89,7 @@ async def _websocket_util(
         # chunk_size = int(byte_rate * REALTIME_RESOLUTION)
         audio_buffer = deque(maxlen=window_size_samples)
         databuffer = bytearray(b"")
-        prespeech_audio = deque(maxlen=int(byte_rate * 0.5))
+        prespeech_audio = deque(maxlen=int(byte_rate * 0.25))
             
         timer_start = time.time()
         audio_cursor = 0 # For sleep realtime logic
@@ -142,8 +142,9 @@ async def _websocket_util(
                                 print('!+ Start Detected speech\n')
                                 is_speech_active = True
                                 last_speech_time = recv_time
+                    # Gradually start check for speech on active state, with higher interval than non-active
                     elif is_speech_active and recv_time - last_vad_check_time >= speech_timeout/2 :
-                        last_vad_check_time += speech_timeout/30
+                        last_vad_check_time += speech_timeout/40
                         if len(audio_buffer) >= window_size_samples:
                             tensor_audio = torch.tensor(list(audio_buffer))
                             if is_speech_present(tensor_audio[-window_size_samples:], vad_iterator, window_size_samples):
