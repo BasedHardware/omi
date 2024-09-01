@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -104,8 +105,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       canPop: true,
       onPopInvoked: (didPop) {
         if (widget.isFromOnboarding) {
-          Navigator.pushAndRemoveUntil(
-              context, MaterialPageRoute(builder: (c) => const HomePageWrapper()), (route) => false);
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushAndRemoveUntil(
+                context, MaterialPageRoute(builder: (c) => const HomePageWrapper()), (route) => false);
+          });
         }
       },
       child: Scaffold(
