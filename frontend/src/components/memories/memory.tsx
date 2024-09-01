@@ -21,7 +21,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
             {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
           </p>
           <span className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm">
-            {memory.structured.emoji} {memory.structured.category}
+            {memory.structured.emoji} {memory.structured.category.charAt(0).toUpperCase() + memory.structured.category.slice(1)}
           </span>
         </div>
         <Tabs currentTab={currentTab} />

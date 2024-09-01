@@ -16,7 +16,7 @@ export default function Footer() {
             />
             <h2 className="text-4xl font-semibold">Omi</h2>
           </div>
-          <p className="text-gray-500">San Fransisco</p>
+          <p className="text-gray-500">Made in San Fransisco</p>
           <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
           </a>
