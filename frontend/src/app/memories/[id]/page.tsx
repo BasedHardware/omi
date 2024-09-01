@@ -24,7 +24,7 @@ export async function generateMetadata(
 
   const title = !memory
     ? 'Memory Not Found'
-    : memory.structured.title || DEFAULT_TITLE_MEMORY;
+    : memory?.structured?.title || DEFAULT_TITLE_MEMORY;
 
   return {
     title: title,
