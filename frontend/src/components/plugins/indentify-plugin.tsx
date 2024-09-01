@@ -7,7 +7,7 @@ interface IndentifyPluginProps {
 
 export default async function IndentifyPlugin({ pluginId }: IndentifyPluginProps) {
   const pluginCommunity = await getCommunityPlugin(pluginId);
-  if(!pluginCommunity) throw new Error('Plugin not found');
+  if (!pluginCommunity) throw new Error('Plugin not found');
 
   return (
     <div className="sticky top-[4rem] z-[50] mb-3 flex items-center gap-2 border-b border-solid border-zinc-900 bg-[#0f0f0f] bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
