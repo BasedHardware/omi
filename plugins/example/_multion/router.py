@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 import db
-from models import TranscriptSegment
+from models import RealtimePluginRequest, TranscriptSegment
 
 load_dotenv()
 
@@ -23,6 +23,7 @@ MULTION_API_KEY = os.getenv('MULTION_API_KEY', '123')
 
 
 async def retrieve_books_to_buy(transcript: str) -> List[str]:
+    print('retrieve_books_to_buy')
     groq_api_url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     prompt = f"""
@@ -44,24 +45,24 @@ async def retrieve_books_to_buy(transcript: str) -> List[str]:
             response.raise_for_status()
             response_data = response.json()
             content = response_data['choices'][0]['message']['content']
-            print(f"Raw GROQ API response: {content}")
+            print(f"retrieve_books_to_buy, Raw GROQ API response: {content}")
 
             import re
             json_match = re.search(r'\[.*\]', content, re.DOTALL)
             if json_match:
                 book_titles = json.loads(json_match.group())
             else:
-                raise ValueError("No JSON array found in the response")
+                raise ValueError("retrieve_books_to_buy, No JSON array found in the response")
 
-            print('Books to buy:', book_titles)
+            print('retrieve_books_to_buy, Books to buy:', book_titles)
             return book_titles
     except Exception as e:
-        print(f"Error in retrieve_books_to_buy: {e}")
+        print(f"retrieve_books_to_buy: error {e}")
         return []
 
 
 async def call_multion(books: List[str], user_id: str):
-    print(f'Buying books with MultiOn for user_id: {user_id}')
+    print('call_multion', f'Buying books with MultiOn for user_id: {user_id}')
     headers = {
         "X_MULTION_API_KEY": MULTION_API_KEY,
         "Content-Type": "application/json"
@@ -139,7 +140,6 @@ async def retry_multion(session_id: str):
 @router.get("/multion", response_class=HTMLResponse, tags=['multion'])
 async def get_integration_page(request: Request):
     org_id = os.getenv('MULTION_ORG_ID')
-    print(f"Debug: org_id = {org_id}")
     return templates.TemplateResponse("setup_multion_desktop.html", {"request": request, "org_id": org_id})
 
 
@@ -178,19 +178,15 @@ async def check_setup_completion(uid: str = Query(...)):
 
 
 @router.post("/multion/process_transcript", tags=['multion'])
-async def initiate_process_transcript(
-        segments: List[TranscriptSegment],
-        session_id: str = Query(...),
-        uid: str = Query(...)
-):
+async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Query(...)):
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
 
-    full_transcript = " ".join([segment.text for segment in segments])
+    transcript = TranscriptSegment.segments_as_string(data.segments)
 
     try:
-        books = await retrieve_books_to_buy(full_transcript)
+        books = await retrieve_books_to_buy(transcript)
         result = await asyncio.wait_for(call_multion(books, user_id), timeout=120)
     except asyncio.TimeoutError:
         print("Timeout error occurred")
