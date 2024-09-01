@@ -13,7 +13,9 @@ import 'package:friend_private/utils/ble/errors.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
 class FriendDevice extends DeviceBase {
+  @override
   final String deviceId;
+  @override
   late String name;
 
   FriendDevice(this.deviceId) : super(deviceId) {
@@ -22,15 +24,20 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<int> retrieveBatteryLevel() async {
+  Future<bool> isConnected() async {
+    var device = BluetoothDevice.fromId(deviceId);
+    return device.isConnected;
+  }
+
+  @override
+  Future<int> performRetrieveBatteryLevel() async {
     final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
     if (batteryService == null) {
       logServiceNotFoundError('Battery', deviceId);
       return -1;
     }
 
-    var batteryLevelCharacteristic =
-        getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
+    var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
     if (batteryLevelCharacteristic == null) {
       logCharacteristicNotFoundError('Battery level', deviceId);
       return -1;
@@ -42,7 +49,7 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({
+  Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
   }) async {
     final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
@@ -51,8 +58,7 @@ class FriendDevice extends DeviceBase {
       return null;
     }
 
-    var batteryLevelCharacteristic =
-        getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
+    var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
     if (batteryLevelCharacteristic == null) {
       logCharacteristicNotFoundError('Battery level', deviceId);
       return null;
@@ -85,7 +91,7 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<StreamSubscription?> getBleAudioBytesListener({
+  Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
@@ -94,24 +100,21 @@ class FriendDevice extends DeviceBase {
       return null;
     }
 
-    var audioDataStreamCharacteristic = getCharacteristicByUuid(
-        friendService, audioDataStreamCharacteristicUuid);
+    var audioDataStreamCharacteristic = getCharacteristicByUuid(friendService, audioDataStreamCharacteristicUuid);
     if (audioDataStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Audio data stream', deviceId);
       return null;
     }
 
     try {
-      await audioDataStreamCharacteristic
-          .setNotifyValue(true); // device could be disconnected here.
+      await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
     } catch (e, stackTrace) {
       logSubscribeError('Audio data stream', deviceId, e, stackTrace);
       return null;
     }
 
     debugPrint('Subscribed to audioBytes stream from Friend Device');
-    var listener =
-        audioDataStreamCharacteristic.lastValueStream.listen((value) {
+    var listener = audioDataStreamCharacteristic.lastValueStream.listen((value) {
       if (value.isNotEmpty) onAudioBytesReceived(value);
     });
 
@@ -127,15 +130,14 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<BleAudioCodec> getAudioCodec() async {
+  Future<BleAudioCodec> performGetAudioCodec() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return BleAudioCodec.pcm8;
     }
 
-    var audioCodecCharacteristic =
-        getCharacteristicByUuid(friendService, audioCodecCharacteristicUuid);
+    var audioCodecCharacteristic = getCharacteristicByUuid(friendService, audioCodecCharacteristicUuid);
     if (audioCodecCharacteristic == null) {
       logCharacteristicNotFoundError('Audio codec', deviceId);
       return BleAudioCodec.pcm8;
@@ -170,15 +172,15 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future cameraStartPhotoController() async {
+  Future performCameraStartPhotoController() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic = getCharacteristicByUuid(
-        friendService, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic =
+        getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -191,15 +193,15 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future cameraStopPhotoController() async {
+  Future performCameraStopPhotoController() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic = getCharacteristicByUuid(
-        friendService, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic =
+        getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -211,14 +213,13 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<bool> hasPhotoStreamingCharacteristic() async {
+  Future<bool> performHasPhotoStreamingCharacteristic() async {
     final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
     if (friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return false;
     }
-    var imageCaptureControlCharacteristic = getCharacteristicByUuid(
-        friendService, imageDataStreamCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
     return imageCaptureControlCharacteristic != null;
   }
 
@@ -231,16 +232,14 @@ class FriendDevice extends DeviceBase {
       return null;
     }
 
-    var imageStreamCharacteristic = getCharacteristicByUuid(
-        friendService, imageDataStreamCharacteristicUuid);
+    var imageStreamCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
     if (imageStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Image data stream', deviceId);
       return null;
     }
 
     try {
-      await imageStreamCharacteristic
-          .setNotifyValue(true); // device could be disconnected here.
+      await imageStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
     } catch (e, stackTrace) {
       logSubscribeError('Image data stream', deviceId, e, stackTrace);
       return null;
@@ -263,8 +262,9 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<StreamSubscription?> getImageListener(
-      {required void Function(Uint8List base64JpgData) onImageReceived}) async {
+  Future<StreamSubscription?> performGetImageListener({
+    required void Function(Uint8List base64JpgData) onImageReceived,
+  }) async {
     if (!await hasPhotoStreamingCharacteristic()) {
       return null;
     }
@@ -290,94 +290,91 @@ class FriendDevice extends DeviceBase {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> getAccelListener({
-  void Function(int)? onAccelChange,
-}) async {
-  final accelService =
-      await getServiceByUuid(deviceId, accelDataStreamServiceUuid);
-  if (accelService == null) {
-    logServiceNotFoundError('Accelerometer', deviceId);
-    return null;
-  }
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({
+    void Function(int)? onAccelChange,
+  }) async {
+    final accelService = await getServiceByUuid(deviceId, accelDataStreamServiceUuid);
+    if (accelService == null) {
+      logServiceNotFoundError('Accelerometer', deviceId);
+      return null;
+    }
 
-  var accelCharacteristic =
-      getCharacteristicByUuid(accelService, accelDataStreamCharacteristicUuid);
-  if (accelCharacteristic == null) {
-    logCharacteristicNotFoundError('Accelerometer', deviceId);
-    return null;
-  }
+    var accelCharacteristic = getCharacteristicByUuid(accelService, accelDataStreamCharacteristicUuid);
+    if (accelCharacteristic == null) {
+      logCharacteristicNotFoundError('Accelerometer', deviceId);
+      return null;
+    }
 
-  var currValue = await accelCharacteristic.read();
-  if (currValue.isNotEmpty) {
-    debugPrint('Accelerometer level: ${currValue[0]}');
-    onAccelChange!(currValue[0]);
-  }
+    var currValue = await accelCharacteristic.read();
+    if (currValue.isNotEmpty) {
+      debugPrint('Accelerometer level: ${currValue[0]}');
+      onAccelChange!(currValue[0]);
+    }
 
-  try {
-    await accelCharacteristic.setNotifyValue(true);
-  } catch (e, stackTrace) {
-    logSubscribeError('Accelerometer level', deviceId, e, stackTrace);
-    return null;
-  }
+    try {
+      await accelCharacteristic.setNotifyValue(true);
+    } catch (e, stackTrace) {
+      logSubscribeError('Accelerometer level', deviceId, e, stackTrace);
+      return null;
+    }
 
-  var listener = accelCharacteristic.lastValueStream.listen((value) {
-    // debugPrint('Battery level listener: $value');
+    var listener = accelCharacteristic.lastValueStream.listen((value) {
+      // debugPrint('Battery level listener: $value');
 
-    if (value.length > 4) {
-      //for some reason, the very first reading is four bytes
+      if (value.length > 4) {
+        //for some reason, the very first reading is four bytes
 
-      if (value.isNotEmpty) {
-        List<double> accelerometerData = [];
-        onAccelChange!(value[0]);
+        if (value.isNotEmpty) {
+          List<double> accelerometerData = [];
+          onAccelChange!(value[0]);
 
-        for (int i = 0; i < 6; i++) {
-          int baseIndex = i * 8;
-          var result = ((value[baseIndex] |
-                      (value[baseIndex + 1] << 8) |
-                      (value[baseIndex + 2] << 16) |
-                      (value[baseIndex + 3] << 24)) &
-                  0xFFFFFFFF as int)
-              .toSigned(32);
-          var temp = ((value[baseIndex + 4] |
-                      (value[baseIndex + 5] << 8) |
-                      (value[baseIndex + 6] << 16) |
-                      (value[baseIndex + 7] << 24)) &
-                  0xFFFFFFFF as int)
-              .toSigned(32);
-          double axisValue = result + (temp / 1000000);
-          accelerometerData.add(axisValue);
-        }
-        debugPrint('Accelerometer x direction: ${accelerometerData[0]}');
-        debugPrint('Gyroscope x direction: ${accelerometerData[3]}\n');
+          for (int i = 0; i < 6; i++) {
+            int baseIndex = i * 8;
+            var result = ((value[baseIndex] |
+                        (value[baseIndex + 1] << 8) |
+                        (value[baseIndex + 2] << 16) |
+                        (value[baseIndex + 3] << 24)) &
+                    0xFFFFFFFF as int)
+                .toSigned(32);
+            var temp = ((value[baseIndex + 4] |
+                        (value[baseIndex + 5] << 8) |
+                        (value[baseIndex + 6] << 16) |
+                        (value[baseIndex + 7] << 24)) &
+                    0xFFFFFFFF as int)
+                .toSigned(32);
+            double axisValue = result + (temp / 1000000);
+            accelerometerData.add(axisValue);
+          }
+          debugPrint('Accelerometer x direction: ${accelerometerData[0]}');
+          debugPrint('Gyroscope x direction: ${accelerometerData[3]}\n');
 
-        debugPrint('Accelerometer y direction: ${accelerometerData[1]}');
-        debugPrint('Gyroscope y direction: ${accelerometerData[4]}\n');
+          debugPrint('Accelerometer y direction: ${accelerometerData[1]}');
+          debugPrint('Gyroscope y direction: ${accelerometerData[4]}\n');
 
-        debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
-        debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
-        //simple threshold fall calcaultor
-        var fall_number = sqrt(pow(accelerometerData[0], 2) +
-            pow(accelerometerData[1], 2) +
-            pow(accelerometerData[2], 2));
-        if (fall_number > 30.0) {
-          AwesomeNotifications().createNotification(
-            content: NotificationContent(
-              id: 6,
-              channelKey: 'channel',
-              actionType: ActionType.Default,
-              title: 'ouch',
-              body: 'did you fall?',
-              wakeUpScreen: true,
-            ),
-          );
+          debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
+          debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
+          //simple threshold fall calcaultor
+          var fall_number =
+              sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
+          if (fall_number > 30.0) {
+            AwesomeNotifications().createNotification(
+              content: NotificationContent(
+                id: 6,
+                channelKey: 'channel',
+                actionType: ActionType.Default,
+                title: 'ouch',
+                body: 'did you fall?',
+                wakeUpScreen: true,
+              ),
+            );
+          }
         }
       }
-    }
-  });
+    });
 
-  final device = BluetoothDevice.fromId(deviceId);
-  device.cancelWhenDisconnected(listener);
+    final device = BluetoothDevice.fromId(deviceId);
+    device.cancelWhenDisconnected(listener);
 
-  return listener;
-}
+    return listener;
+  }
 }
