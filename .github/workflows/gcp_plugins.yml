@@ -1,13 +1,15 @@
-name: Deploy Backend to Cloud RUN
+name: Deploy Plugins to Cloud RUN
 
 # TODO: determine if changes to backend folder before pushing
 
 on:
   push:
     branches: [ "main", "development" ]
+    paths:
+      - 'plugins/example/**'
 
 env:
-  SERVICE: backend
+  SERVICE: plugins
   REGION: us-central1
 
 jobs:
@@ -30,7 +32,7 @@ jobs:
       - run: gcloud auth configure-docker
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f backend/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/example/Dockerfile .
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
         id: deploy

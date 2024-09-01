@@ -1,5 +1,4 @@
 import threading
-import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -8,10 +7,10 @@ import requests
 from database.chat import add_plugin_message
 from database.redis_db import get_enabled_plugins, get_plugin_reviews
 from models.memory import Memory, MemorySource
+from models.notification_message import NotificationMessage
 from models.plugin import Plugin
 from utils.notifications import send_notification
 
-from models.notification_message import NotificationMessage
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     if not plugin_id:
@@ -125,23 +124,17 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
         else:
             url += '?uid=' + uid
 
-        new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]
-
-        payload = {
-            "session_id": uid,
-            "segments": new_segments
-        }
-
         try:
-            response = requests.post(url, json=payload)
+            response = requests.post(url, json={"session_id": uid, "segments": segments})
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
                 return
 
             response_data = response.json()
-            print('response', response_data)
-            if message := response_data.get('message', ''):
-                send_plugin_notification(token, plugin.id, message)
+            message = response_data.get('message', '')
+            print('Plugin', plugin.id, 'response:', message)
+            if message and len(message) > 5:
+                send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
         except Exception as e:
             print(f"Plugin integration error: {e}")
@@ -160,8 +153,7 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
     return messages
 
 
-def send_plugin_notification(token: str, plugin_id: str, message: str):
-
+def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
         plugin_id=plugin_id,
@@ -169,5 +161,5 @@ def send_plugin_notification(token: str, plugin_id: str, message: str):
         type='text',
         notification_type='plugin',
     )
- 
-    send_notification(token, plugin_id + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+    send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

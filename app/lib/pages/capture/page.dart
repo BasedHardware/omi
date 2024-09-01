@@ -129,8 +129,8 @@ class CapturePageState extends State<CapturePage>
               await LocationService().requestBackgroundPermission();
               if (mounted) Navigator.of(context).pop();
             },
-            'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
+            'Enable Location?  🌍',
+            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
             singleButton: false,
             okButtonText: 'Continue',
           ),

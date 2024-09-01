@@ -20,6 +20,7 @@ Future<ServerMemory?> processTranscriptContent({
   Geolocation? geolocation,
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
+  String? source,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -32,6 +33,7 @@ Future<ServerMemory?> processTranscriptContent({
     triggerIntegrations: triggerIntegrations,
     language: language,
     audioFile: audioFile,
+    source: source,
   );
   if (result == null || result.memory == null) return null;
 
