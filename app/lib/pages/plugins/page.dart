@@ -301,7 +301,7 @@ class _PluginsPageState extends State<PluginsPage> {
                           )
                         ],
                       ),
-                      trailing: provider.pluginLoading[index]
+                      trailing: provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
                           ? const SizedBox(
                               height: 24,
                               width: 24,
