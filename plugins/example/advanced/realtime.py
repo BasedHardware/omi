@@ -61,6 +61,8 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
 
 @router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
+    return {'message': ''}
+    # print('news_checker_endpoint', uid)
     clean_all_transcripts_except(uid, data.session_id)
     transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = news_checker(transcript)
@@ -98,6 +100,7 @@ def emotional_support(segments: list[TranscriptSegment]) -> str:
 
 @router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
+    return {'message': ''}
     clean_all_transcripts_except(uid, data.session_id)
     transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = emotional_support(transcript)

@@ -158,6 +158,7 @@ async def check_setup_completion(uid: str = Query(...)):
 
 @router.post("/multion/process_transcript", tags=['multion'])
 async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Query(...)):
+    return {'message': ''}
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
