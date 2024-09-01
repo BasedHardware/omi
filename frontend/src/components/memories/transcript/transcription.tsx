@@ -15,7 +15,7 @@ export default function Transcription({ transcript, externalData }: Transcriptio
     return <ExternalData externalData={externalData} />;
   } else if (transcript.length === 0 && !externalData) {
     return (
-      <div>
+      <div className='px-4 md:px-12'>
         <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
         <p className="mt-4 text-gray-400">No available data.</p>
       </div>
@@ -25,7 +25,7 @@ export default function Transcription({ transcript, externalData }: Transcriptio
       new Set(transcript.map((segment) => segment.speaker_id)),
     );
     return (
-      <div>
+      <div className='px-4 md:px-12'>
         <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
         <span className="text-sm font-light text-gray-400 md:text-base">
           Total Speakers: {uniqueSpeakers.length}

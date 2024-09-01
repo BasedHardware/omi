@@ -13,7 +13,7 @@ export default async function IndentifyPlugin({ pluginId }: IndentifyPluginProps
   return (
     <div className="sticky top-[4rem] z-[50] flex items-center gap-2 border-b border-solid border-zinc-900 bg-[#0f0f0f] bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
       {/* <Image src={`${envConfig.API_URL}${pluginCommunity.image}`} alt={pluginCommunity.name} width={50} height={50}/> */}
-      <div className="grid h-9 w-9 place-items-center rounded-full bg-zinc-700">
+      <div className="grid min-w-[36px] h-9 w-9 place-items-center rounded-full bg-zinc-700">
         <Puzzle className="text-xs" />
       </div>
       <div>

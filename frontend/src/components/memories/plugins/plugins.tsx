@@ -4,16 +4,16 @@ import { Suspense } from 'react';
 import IndentifyPlugin from '../../plugins/indentify-plugin';
 import IdentifyPluginLoader from '../../plugins/identify-plugin-loader';
 
-interface PuglinsProps {
-  puglins: PluginsResult[];
+interface PluginsProps {
+  plugins: PluginsResult[];
 }
 
-export default function Puglins({ puglins }: PuglinsProps) {
+export default function Plugins({ plugins }: PluginsProps) {
   return (
     <div className="h-auto">
-      <h3 className="px-4 text-xl font-semibold md:px-12 md:text-2xl">Puglins</h3>
+      <h3 className="px-4 text-xl font-semibold md:px-12 md:text-2xl">Plugins</h3>
       <div className="mt-3 flex flex-col gap-8">
-        {puglins.map((puglin, index) => {
+        {plugins.map((puglin, index) => {
           return (
             <div key={index}>
               <Suspense fallback={<IdentifyPluginLoader />}>
