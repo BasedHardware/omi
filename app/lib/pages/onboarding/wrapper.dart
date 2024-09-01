@@ -6,15 +6,14 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
-import 'package:friend_private/pages/onboarding/complete/complete.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
 import 'package:friend_private/pages/onboarding/name/name_widget.dart';
-import 'package:friend_private/pages/onboarding/permissions/bluetooth_permission.dart';
 import 'package:friend_private/pages/onboarding/permissions/notification_permission.dart';
 import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -33,7 +32,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _controller = TabController(length: 9, vsync: this);
+    _controller = TabController(length: 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -63,11 +62,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           child: ListView(
             children: [
               DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-              _controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7
-                  ? SizedBox()
+              _controller!.index == 6 || _controller!.index == 7
+                  ? const SizedBox()
                   : Center(
                       child: Text(
-                        _controller!.index == _controller!.length - 1 ? 'You are all set  🎉' : 'Friend',
+                        'Omi',
                         style: TextStyle(
                             color: Colors.grey.shade200,
                             fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
@@ -75,8 +74,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                     ),
               const SizedBox(height: 24),
-              _controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7
-                  ? const SizedBox()
+              [-1, 5, 6, 7].contains(_controller?.index)
+                  ? const SizedBox(
+                      height: 0,
+                    )
                   : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
@@ -88,7 +89,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                     ),
               SizedBox(
-                height: max(MediaQuery.of(context).size.height - 500 - (_controller!.index == 7 ? 10 : 60), 305),
+                height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
+                    ? max(MediaQuery.of(context).size.height - 500 - 10, 305)
+                    : max(MediaQuery.of(context).size.height - 500 - 60, 305),
                 child: Padding(
                   padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                   child: TabBarView(
@@ -116,19 +119,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           MixpanelManager().onboardingStepICompleted('Permissions');
                         },
                       ),
-                      BluetoothPermissionWidget(
-                        goNext: () {
-                          _goNext();
-                          MixpanelManager().onboardingStepICompleted('Permissions');
-                        },
-                      ),
                       WelcomePage(
                         goNext: () {
                           _goNext();
                           MixpanelManager().onboardingStepICompleted('Welcome');
                         },
                         skipDevice: () {
-                          _controller!.animateTo(_controller!.index + 4);
+                          routeToPage(context, const HomePageWrapper(), replace: true);
                           MixpanelManager().onboardingStepICompleted('Welcome');
                         },
                       ),
@@ -136,14 +133,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         isFromOnboarding: true,
                         goNext: () async {
                           var provider = context.read<OnboardingProvider>();
-                          if (provider.deviceId.isEmpty) {
-                            _goNext();
+                          if (SharedPreferencesUtil().hasSpeakerProfile) {
+                            // previous users
+                            routeToPage(context, const HomePageWrapper(), replace: true);
                           } else {
-                            var codec = await getAudioCodec(provider.deviceId);
-                            if (codec == BleAudioCodec.opus) {
+                            if (provider.deviceId.isEmpty) {
                               _goNext();
                             } else {
-                              _controller!.animateTo(_controller!.index + 3);
+                              var codec = await getAudioCodec(provider.deviceId);
+                              if (codec == BleAudioCodec.opus) {
+                                _goNext();
+                              } else {
+                                _controller!.animateTo(_controller!.index + 3);
+                              }
                             }
                           }
 
@@ -152,23 +154,30 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                       SpeechProfileWidget(
                         goNext: () {
-                          _goNext();
+                          if (context.read<SpeechProfileProvider>().memory == null) {
+                            _controller!.animateTo(_controller!.index + 2);
+                          } else {
+                            _goNext();
+                          }
                           MixpanelManager().onboardingStepICompleted('Speech Profile');
+                        },
+                        onSkip: () {
+                          routeToPage(context, const HomePageWrapper(), replace: true);
                         },
                       ),
                       MemoryCreatedWidget(
                         goNext: () {
-                          _goNext();
+                          // _goNext();
                           MixpanelManager().onboardingStepICompleted('Memory Created');
                         },
                       ),
-                      CompletePage(
-                        goNext: () {
-                          routeToPage(context, const HomePageWrapper(), replace: true);
-                          MixpanelManager().onboardingStepICompleted('Finalize');
-                          MixpanelManager().onboardingCompleted();
-                        },
-                      ),
+                      // CompletePage(
+                      //   goNext: () {
+                      //     routeToPage(context, const HomePageWrapper(), replace: true);
+                      //     MixpanelManager().onboardingStepICompleted('Finalize');
+                      //     MixpanelManager().onboardingCompleted();
+                      //   },
+                      // ),
                     ],
                   ),
                 ),

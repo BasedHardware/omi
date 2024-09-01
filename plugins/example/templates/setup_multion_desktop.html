@@ -82,7 +82,7 @@
     <script>
       function connectWithMultion() {
         const orgId = "{{ org_id }}";
-        const redirectUri = encodeURIComponent(window.location.href + 'callback');
+        const redirectUri = encodeURIComponent(window.location.href + '/callback');
         const multionAuthUrl = `https://platform.multion.ai/authorize?org_id=${orgId}&redirect_uri=${redirectUri}`;
         window.location.href = multionAuthUrl;
       }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -26,6 +27,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
   void initState() {
     super.initState();
     SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (widget.isFromOnboarding) {
+        context.read<HomeProvider>().setupHasSpeakerProfile();
+      }
       _scanDevices();
     });
   }

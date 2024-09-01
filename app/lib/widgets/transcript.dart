@@ -102,7 +102,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    text,
+                    tryDecodingText(text),
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
@@ -113,5 +113,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         );
       },
     );
+  }
+}
+
+String tryDecodingText(String text) {
+  try {
+    return utf8.decode(text.toString().codeUnits);
+  } catch (e) {
+    return text;
   }
 }
