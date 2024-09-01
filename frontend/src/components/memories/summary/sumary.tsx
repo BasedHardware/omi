@@ -3,7 +3,6 @@ import ActionItems from './action-items';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 
-
 interface SummaryProps {
   memory: Memory;
 }
