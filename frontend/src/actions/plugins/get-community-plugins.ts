@@ -1,6 +1,6 @@
 'use server';
 
-import { CommunityPlugin } from "@/src/types/plugins/plugins.types";
+import { CommunityPlugin } from '@/src/types/plugins/plugins.types';
 
 export default async function getCummunityPlugins() {
   const response = await fetch(
