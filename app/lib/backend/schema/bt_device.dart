@@ -225,7 +225,7 @@ class DeviceInfo {
   }
 
   static Future<DeviceInfo> getDeviceInfoFromFrame(BTDeviceStruct? device) async {
-    FrameDevice frameDevice = FrameDevice.fromId(device!.id);
+    FrameDevice frameDevice = await FrameDevice.fromId(device!.id);
     await frameDevice.init();
     return DeviceInfo(
       frameDevice.modelNumber,
