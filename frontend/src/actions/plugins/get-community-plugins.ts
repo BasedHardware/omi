@@ -17,7 +17,7 @@ export async function getCommunityPlugin(pluginId: string) {
 
   const plugin = plugins.find((plugin) => plugin.id === pluginId);
 
-  if(!plugin) return undefined;
+  if (!plugin) return undefined;
 
   return plugins.find((plugin) => plugin.id === pluginId);
 }
