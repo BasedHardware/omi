@@ -342,6 +342,19 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     setAudioBytesConnected(false);
     setRestartAudioProcessing(restartBytesProcessing);
     startOpenGlass();
+    if (connectedDevice != null) {
+      BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+      if (SharedPreferencesUtil().deviceCodec != codec) {
+        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec while resetting state');
+        SharedPreferencesUtil().deviceCodec = codec;
+        if (webSocketConnected) {
+          closeWebSocket();
+          await initiateWebsocket();
+        } else {
+          await initiateWebsocket();
+        }
+      }
+    }
     initiateFriendAudioStreaming();
     notifyListeners();
   }
