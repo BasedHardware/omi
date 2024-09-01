@@ -90,7 +90,7 @@ def emotional_support(segments: list[TranscriptSegment]) -> str:
     The message has to be at most 20 words. Be short and concise.
     ''')
 
-    print('Output', result.message)
+    print('emotional_support output:', result.message)
     if len(result.message) < 10:
         return ''
     return result.message
