@@ -183,10 +183,17 @@ async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Qu
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
 
-    transcript = TranscriptSegment.segments_as_string(data.segments)
+    session_id = 'multion-' + data.session_id
+    db.clean_all_transcripts_except(uid, session_id)
+    transcript: List[TranscriptSegment] = db.append_segment_to_transcript(uid, session_id, data.segments)
 
     try:
         books = await retrieve_books_to_buy(transcript)
+        if not books:
+            return {'message': ''}
+        else:
+            db.remove_transcript(uid, data.session_id)
+
         result = await asyncio.wait_for(call_multion(books, user_id), timeout=120)
     except asyncio.TimeoutError:
         print("Timeout error occurred")
