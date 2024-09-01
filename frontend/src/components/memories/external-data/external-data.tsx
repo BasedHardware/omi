@@ -26,7 +26,7 @@ export default function ExternalData({ externalData }: ExternalDataProps) {
   };
 
   return (
-    <div>
+    <div className='px-4 md:px-12'>
       <div className="mt-10 flex items-center justify-between">
         <h3 className="text-xl font-semibold md:text-2xl">External data</h3>
         <button
