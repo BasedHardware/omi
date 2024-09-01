@@ -1,7 +1,8 @@
 import { Memory } from '@/src/types/memory.types';
 import ActionItems from './action-items';
 import MemoryEvents from '../events/memory-events';
-import Puglins from '../plugins/puglins';
+import Plugins from '../plugins/plugins';
+
 
 interface SummaryProps {
   memory: Memory;
@@ -18,7 +19,7 @@ export default function Summary({ memory }: SummaryProps) {
           <p className="mt-4 text-gray-400">No overview available for this memory.</p>
         )}
       </div>
-      {memory.plugins_results.length > 0 && <Puglins puglins={memory.plugins_results} />}
+      {memory.plugins_results.length > 0 && <Plugins plugins={memory.plugins_results} />}
       {memory?.structured?.action_items?.length > 0 && (
         <ActionItems items={memory.structured.action_items} />
       )}
