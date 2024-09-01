@@ -672,11 +672,11 @@
     "deleted": false
   },
   {
-    "id": "bookwatch-friend-plugin-idx",
+    "id": "bookwatch",
     "name": "BookWatch Friend Plugin",
     "author": "Alex Toska - Miran Antamian",
     "description": "This plugin enables you to add bookmarks for books you want to watch in BookWatch later",
-    "image": "/plugins/logos/bookwatch.png",
+    "image": "/plugins/logos/bookwatch.jpg",
     "capabilities": [
       "external_integration"
     ],
@@ -686,7 +686,7 @@
       "setup_completed_url": "https://friend-integration.vercel.app/check_setup",
       "setup_instructions_file_path": "https://friend-integration.vercel.app/static/README.md"
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "multion-amazon",
