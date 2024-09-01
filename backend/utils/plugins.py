@@ -126,6 +126,8 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
             url += '?uid=' + uid
 
         new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]
+        # TODO: this is probably wrong, session id should be query param + is wrong, also the json
+        # test backend locally + plugins with own set url
 
         payload = {
             "session_id": uid,
