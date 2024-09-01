@@ -10,7 +10,7 @@ The MultiOn plugin allows you to automatically add books mentioned in your conve
 2. Follow instructions and copy the USER ID.
    ![Explanation GIF](assets/desktop-app.gif)
 
-3. Click [this link](https://based-hardware--plugins-api.modal.run/uid_input) and enter the USER ID.
+3. Click [this link](https://based-hardware--plugins-api.modal.run/multion/uid_input) and enter the USER ID.
    ![Explanation GIF](assets/friend-app.gif)
 
 4. After successful authentication, you will be redirected back to the app. The plugin is now set up and ready to use! Return to the Friend app.
