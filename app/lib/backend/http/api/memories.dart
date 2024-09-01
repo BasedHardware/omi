@@ -34,9 +34,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
   bool triggerIntegrations = true,
   String? language,
   File? audioFile,
+  String? source,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations',
+    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
     headers: {},
     method: 'POST',
     body: jsonEncode({
