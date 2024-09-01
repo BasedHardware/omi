@@ -4,6 +4,7 @@ import Summary from './summary/sumary';
 import Tabs from './tabs';
 import Transcription from './transcript/transcription';
 import { SearchParamsTypes } from '@/src/types/params.types';
+import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 
 interface MemoryProps {
   memory: MemoryType;
@@ -17,7 +18,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
       <div className="relative overflow-hidden py-6 md:pt-12">
         <div className="relative z-50">
           <div className="px-4 md:px-12">
-            <h2 className="text-2xl font-bold md:text-3xl">{memory.structured.title}</h2>
+            <h2 className="text-2xl font-bold md:text-3xl">{memory.structured.title || DEFAULT_TITLE_MEMORY}</h2>
             <p className="my-2 text-sm text-gray-500 md:text-base">
               {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
             </p>

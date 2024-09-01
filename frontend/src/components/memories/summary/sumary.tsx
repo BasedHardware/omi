@@ -13,7 +13,7 @@ export default function Summary({ memory }: SummaryProps) {
     <div className="flex flex-col gap-10">
       <div className="mt-10 px-4 md:px-12">
         <h3 className="text-xl font-semibold md:text-2xl">Overview</h3>
-        {!memory.structured.overview ? (
+        {memory.structured.overview ? (
           <p className="mt-3 text-base md:text-lg">{memory.structured.overview}</p>
         ) : (
           <p className="mt-4 text-gray-400">No overview available for this memory.</p>
