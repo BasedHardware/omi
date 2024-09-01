@@ -1,9 +1,7 @@
 export default function LoadingMemory() {
   return (
-    <div className="mx-3 my-10 max-w-screen-md text-center rounded-2xl border border-solid border-zinc-800 py-6 text-white md:mx-auto md:my-28 md:py-12">
-      <p>
-        Loading Memory...
-      </p>
+    <div className="mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 text-center text-white md:mx-auto md:my-28 md:py-12">
+      <p>Loading Memory...</p>
       {/* <div className="px-4 md:px-12">
         <div className="line-clamp-2 h-[32px] w-[15rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[36px] md:w-[30rem]"></div>
         <p className="my-2 h-[18px] w-[30%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base"></p>

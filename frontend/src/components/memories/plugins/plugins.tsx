@@ -20,7 +20,7 @@ export default function Plugins({ plugins }: PluginsProps) {
                 <IndentifyPlugin pluginId={puglin.plugin_id} />
               </Suspense>
               <div className="bg-[#0f0f0f] px-4 md:px-12">
-                <Markdown className="prose md:prose-lg prose-slate text-white prose-p:m-0 prose-p:mt-3 prose-p:text-white last:prose-p:mt-8 last:prose-p:rounded-lg last:prose-p:bg-zinc-900 last:prose-p:p-2 last:prose-p:px-4 md:last:prose-p:text-sm last:prose-p:text-zinc-300 prose-strong:text-white prose-ul:my-0 prose-ul:list-disc prose-li:text-zinc-400">
+                <Markdown className="prose prose-slate text-white md:prose-lg prose-p:m-0 prose-p:mt-3 prose-p:text-white last:prose-p:mt-8 last:prose-p:rounded-lg last:prose-p:bg-zinc-900 last:prose-p:p-2 last:prose-p:px-4 last:prose-p:text-zinc-300 prose-strong:text-white prose-ul:my-0 prose-ul:list-disc prose-li:text-zinc-400 md:last:prose-p:text-sm">
                   {puglin.content}
                 </Markdown>
               </div>
