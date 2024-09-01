@@ -1,5 +1,6 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
 import Memory from '@/src/components/memories/memory';
+import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 
@@ -11,7 +12,7 @@ export async function generateMetadata(
   const prevData = (await parent) as Metadata;
   const memory = await getSharedMemory(params.id);
 
-  const title = memory?.structured?.title ? memory.structured.title : 'Memory not found';
+  const title = !memory ? 'Memory Not Found' : memory.structured.title || DEFAULT_TITLE_MEMORY;
 
   return {
     title: title,
