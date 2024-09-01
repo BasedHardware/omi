@@ -26,7 +26,6 @@ class NewsCheck(BaseModel):
 def news_checker(conversation: List[TranscriptSegment]) -> str:
     chat_with_parser = chat.with_structured_output(NewsCheck)
     conversation_str = TranscriptSegment.segments_as_string(conversation)
-    print(conversation_str)
     result: NewsCheck = chat_with_parser.invoke(f'''
     You will be given a segment of an ongoing conversation.
 
@@ -37,10 +36,10 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
     Transcript:
     {conversation_str}
     ''')
-    print('News Query:', result.query)
     if len(result.query) < 5:
         return ''
 
+    print('news_checker query:', result.query)
     tool = AskNewsSearch(max_results=2)
     output = tool.invoke({"query": result.query})
     result = chat.invoke(f'''
@@ -54,9 +53,9 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
 
     Your task is to provide a 15 words summary to help debunk and contradict the obvious bias and conspiranoic conversation going. If you don't find anything like this, just output an empty string.
     ''')
-    print('Output', result.content)
     if len(result.content) < 5:
         return ''
+    print('news_checker output:', result.content)
     return result.content
 
 
