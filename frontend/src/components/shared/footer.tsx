@@ -6,16 +6,14 @@ export default function Footer() {
     <footer className="footer w-full border-t border-solid border-zinc-800 bg-black/5 px-4 py-12 text-white md:px-12">
       <div className="mx-auto flex max-w-screen-xl flex-wrap justify-between gap-12">
         <div>
-          <div className="flex items-center gap-2">
-                   <Image
-          src={'/omi-white.webp'}
-          alt="Based Hardware Logo"
-          width={146}
-          height={64}
-          className="h-auto w-[70px]"
-        />
-          </div>
-          <p className="text-gray-500 mt-1">Made in San Fransisco</p>
+          <Image
+            src={'/omi-white.webp'}
+            alt="Based Hardware Logo"
+            width={146}
+            height={64}
+            className="h-auto w-[70px]"
+          />
+          <p className="mt-1 text-gray-500">Made in San Fransisco</p>
           <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
             team@basedhardware.com
           </a>
