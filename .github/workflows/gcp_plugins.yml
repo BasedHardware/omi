@@ -9,7 +9,7 @@ on:
       - 'plugins/example/**'
 
 env:
-  SERVICE: backend
+  SERVICE: plugins
   REGION: us-central1
 
 jobs:
