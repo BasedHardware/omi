@@ -7,7 +7,6 @@ import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
@@ -714,21 +713,19 @@ _getSheetMainOptions(
                     if (ConnectivityController().isConnected.value) {
                       showDialog(
                         context: context,
-                        builder: (dialogContext) {
-                          return Dialog(
-                            elevation: 0,
-                            insetPadding: EdgeInsets.zero,
-                            backgroundColor: Colors.transparent,
-                            alignment: const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                            child: ConfirmDeletionWidget(
-                              memory: memory,
-                              onDelete: () {
-                                Navigator.pop(context, true);
-                                Navigator.pop(context, {'deleted': true});
-                              },
-                            ),
-                          );
-                        },
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            deleteMemoryServer(memory.id);
+                            Navigator.pop(context, true);
+                            Navigator.pop(context, true);
+                            Navigator.pop(context, {'deleted': true});
+                          },
+                          'Delete Memory?',
+                          'Are you sure you want to delete this memory? This action cannot be undone.',
+                          okButtonText: 'Confirm',
+                        ),
                       );
                     } else {
                       showDialog(
