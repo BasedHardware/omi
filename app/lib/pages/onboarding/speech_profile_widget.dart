@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -10,7 +11,8 @@ import 'package:provider/provider.dart';
 
 class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
-  const SpeechProfileWidget({super.key, required this.goNext});
+  final VoidCallback onSkip;
+  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
@@ -22,6 +24,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       context.read<SpeechProfileProvider>().initialise(true);
     });
+    SharedPreferencesUtil().onboardingCompleted = true;
     super.initState();
   }
 
@@ -116,178 +119,198 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                 );
               }
             },
-            child: Column(
-              children: [
-                const SizedBox(
-                  height: 20,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(40, 20, 40, 20),
-                  child: !provider.startedRecording
-                      ? const Text(
-                          'Now, Friend needs to learn your voice to be able to recognise you.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            height: 1.4,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            return ShaderMask(
-                              shaderCallback: (bounds) {
-                                if (provider.text.split(' ').length < 10) {
-                                  return const LinearGradient(colors: [Colors.white, Colors.white])
-                                      .createShader(bounds);
-                                }
-                                return const LinearGradient(
-                                  colors: [Colors.transparent, Colors.white],
-                                  stops: [0.0, 0.5],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ).createShader(bounds);
-                              },
-                              blendMode: BlendMode.dstIn,
-                              child: SizedBox(
-                                height: 100,
-                                child: ListView(
-                                  controller: _scrollController,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  children: [
-                                    Text(
-                                      provider.text,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w400,
-                                        height: 1.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-                  child: !provider.startedRecording
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            const SizedBox(height: 20),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              decoration: BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(colors: [
-                                    Color.fromARGB(127, 208, 208, 208),
-                                    Color.fromARGB(127, 188, 99, 121),
-                                    Color.fromARGB(127, 86, 101, 182),
-                                    Color.fromARGB(127, 126, 190, 236)
-                                  ]),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: TextButton(
-                                onPressed: () async {
-                                  provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
-                                    provider.finalize(true);
-                                  });
-                                  provider.updateStartedRecording(true);
-                                },
-                                child: const Text(
-                                  'Get Started',
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                              ),
+            child: Container(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(40, 20, 40, 20),
+                    child: !provider.startedRecording
+                        ? const Text(
+                            'Now, Omi needs to learn your voice to be able to recognise you.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              height: 1.4,
+                              fontWeight: FontWeight.w400,
                             ),
-                            const SizedBox(height: 20),
-                          ],
-                        )
-                      : provider.profileCompleted
-                          ? Container(
-                              margin: const EdgeInsets.only(top: 40),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              decoration: BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(colors: [
-                                    Color.fromARGB(127, 208, 208, 208),
-                                    Color.fromARGB(127, 188, 99, 121),
-                                    Color.fromARGB(127, 86, 101, 182),
-                                    Color.fromARGB(127, 126, 190, 236)
-                                  ]),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: TextButton(
-                                onPressed: () {
-                                  widget.goNext();
+                          )
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              return ShaderMask(
+                                shaderCallback: (bounds) {
+                                  if (provider.text.split(' ').length < 10) {
+                                    return const LinearGradient(colors: [Colors.white, Colors.white])
+                                        .createShader(bounds);
+                                  }
+                                  return const LinearGradient(
+                                    colors: [Colors.transparent, Colors.white],
+                                    stops: [0.0, 0.5],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ).createShader(bounds);
                                 },
-                                child: const Text(
-                                  "All done!",
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                              ),
-                            )
-                          : provider.uploadingProfile
-                              ? Padding(
-                                  padding: const EdgeInsets.only(top: 40.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                blendMode: BlendMode.dstIn,
+                                child: SizedBox(
+                                  height: 100,
+                                  child: ListView(
+                                    controller: _scrollController,
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
                                     children: [
-                                      const SizedBox(
-                                        height: 24,
-                                        width: 24,
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
+                                      Text(
+                                        provider.text,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w400,
+                                          height: 1.5,
                                         ),
                                       ),
-                                      const SizedBox(width: 24),
-                                      Text(provider.loadingText,
-                                          style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),
-                                )
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      provider.message,
-                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                                      child: Stack(
-                                        children: [
-                                          LinearProgressIndicator(
-                                            value: provider.percentageCompleted,
-                                            backgroundColor: Colors.grey.shade300,
-                                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      '${(provider.percentageCompleted * 100).toInt()}%',
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ],
                                 ),
-                ),
-              ],
+                              );
+                            },
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+                    child: !provider.startedRecording
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              const SizedBox(height: 20),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                                decoration: BoxDecoration(
+                                  border: const GradientBoxBorder(
+                                    gradient: LinearGradient(colors: [
+                                      Color.fromARGB(127, 208, 208, 208),
+                                      Color.fromARGB(127, 188, 99, 121),
+                                      Color.fromARGB(127, 86, 101, 182),
+                                      Color.fromARGB(127, 126, 190, 236)
+                                    ]),
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: TextButton(
+                                  onPressed: () {
+                                    provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
+                                      provider.finalize(true);
+                                    });
+                                    provider.updateStartedRecording(true);
+                                  },
+                                  child: const Text(
+                                    'Get Started',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          )
+                        : provider.profileCompleted
+                            ? Container(
+                                margin: const EdgeInsets.only(top: 40),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                decoration: BoxDecoration(
+                                  border: const GradientBoxBorder(
+                                    gradient: LinearGradient(colors: [
+                                      Color.fromARGB(127, 208, 208, 208),
+                                      Color.fromARGB(127, 188, 99, 121),
+                                      Color.fromARGB(127, 86, 101, 182),
+                                      Color.fromARGB(127, 126, 190, 236)
+                                    ]),
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: TextButton(
+                                  onPressed: () {
+                                    widget.goNext();
+                                  },
+                                  child: const Text(
+                                    "All done!",
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                ),
+                              )
+                            : provider.uploadingProfile
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 40.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: Center(
+                                            child: CircularProgressIndicator(
+                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 24),
+                                        Text(provider.loadingText,
+                                            style: const TextStyle(color: Colors.white, fontSize: 18)),
+                                      ],
+                                    ),
+                                  )
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(height: 30),
+                                      Text(
+                                        provider.message,
+                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 18),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                                        child: Stack(
+                                          children: [
+                                            LinearProgressIndicator(
+                                              value: provider.percentageCompleted,
+                                              backgroundColor: Colors.grey.shade300,
+                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        '${(provider.percentageCompleted * 100).toInt()}%',
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                  ),
+                  (!provider.startedRecording)
+                      ? TextButton(
+                          onPressed: () {
+                            widget.onSkip();
+                          },
+                          child: const Text(
+                            'Skip for now',
+                            style: TextStyle(
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                              fontSize: 14,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
+                ],
+              ),
             ),
           );
         },

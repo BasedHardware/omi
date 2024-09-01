@@ -1,12 +1,14 @@
 from typing import List
+
 from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from db import get_zapier_user_status, store_zapier_user_status, store_zapier_subscribes, get_zapier_subscribes, remove_zapier_subscribes
-from models import Memory, WorkflowCreateMemory, MemorySource, EndpointResponse
-from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
+from db import get_zapier_user_status, store_zapier_user_status, store_zapier_subscribes, get_zapier_subscribes, \
+    remove_zapier_subscribes
+from models import Memory, WorkflowCreateMemory, EndpointResponse
 from .client import get_zapier, get_friend
+from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -14,7 +16,8 @@ templates = Jinja2Templates(directory="templates")
 
 
 def response_setup_page(request: Request, uid: str, status: str):
-    return templates.TemplateResponse("setup_zapier.html", {"request": request, "uid": uid, "status": status if status is not None else ""})
+    return templates.TemplateResponse("setup_zapier.html",
+                                      {"request": request, "uid": uid, "status": status if status is not None else ""})
 
 
 @router.get('/setup-zapier', response_class=HTMLResponse, tags=['zapier'])
@@ -121,16 +124,16 @@ async def get_trigger_memory_sample(request: Request, uid: str):
 
     # Genrate sample
     sample = ZapierCreateMemory(
-            icon={
-                "type": "emoji",
-                "emoji": "🧠",
-            },
-            title='Omi\'s sammple memory',
-            speakers=0,
-            category="other",
-            duration=300,
-            overview="Meet Omi today, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.",
-            transcript="User: Meet Omi today.",
+        icon={
+            "type": "emoji",
+            "emoji": "🧠",
+        },
+        title='Omi\'s sammple memory',
+        speakers=0,
+        category="other",
+        duration=300,
+        overview="Meet Omi today, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality transcriptions of meetings, chats, and voice memos wherever you are.",
+        transcript="User: Meet Omi today.",
     )
 
     # Get latest from Omi
@@ -139,8 +142,10 @@ async def get_trigger_memory_sample(request: Request, uid: str):
     if "error" in ok:
         err = ok["error"]
         print(err)
-        raise HTTPException(status_code=err["status"] if "status" in err else 500,
-                            detail='Can not create memory')
+        raise HTTPException(
+            status_code=err["status"] if "status" in err else 500,
+            detail='Can not create memory'
+        )
 
     memory = ok["result"]
     if memory is not None:

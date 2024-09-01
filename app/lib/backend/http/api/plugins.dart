@@ -19,6 +19,7 @@ Future<List<Plugin>> retrievePlugins() async {
     try {
       log('plugins: ${response?.body}');
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      plugins = plugins.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().pluginsList = plugins;
       return plugins;
     } catch (e, stackTrace) {
@@ -38,7 +39,7 @@ Future<bool> enablePluginServer(String pluginId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
+  debugPrint('enablePluginServer: $pluginId ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -50,7 +51,7 @@ Future<bool> disablePluginServer(String pluginId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
+  debugPrint('disablePluginServer: ${response.body}');
   return response.statusCode == 200;
 }
 

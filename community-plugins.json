@@ -607,7 +607,7 @@
     ],
     "deleted": false
   },
-   {
+  {
     "id": "nik-shevchenko",
     "name": "Nik Shevchenko",
     "author": "Nik Shevchenko",
@@ -620,20 +620,20 @@
     ],
     "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
     "deleted": false
-   },
-     {
-   "id":"class-notes",
-   "name":"Class Notes",
-   "author":"Findirfin",
-   "description":"Takes notes optimised for classses and lectures",
-   "image":"/plugins/logos/class-notes.jpg",
-   "memories":true,
-   "chat":false,
-   "capabilities":[
+  },
+  {
+    "id": "class-notes",
+    "name": "Class Notes",
+    "author": "Findirfin",
+    "description": "Takes notes optimised for classses and lectures",
+    "image": "/plugins/logos/class-notes.jpg",
+    "memories": true,
+    "chat": false,
+    "capabilities": [
       "memories"
-   ],
-   "memory_prompt":"You will be given a transcript of a class or lecture. Your job is to accurately identify and extract these four key points of information. 1: An outline of the main points and subpoints of the lecture. 2: A list of Important facts and concepts that need to be remembered 3: A list of homework and other assigned tasks to be completed or worked on later 4: Any other important items mentioned that do not fit into the above categories. Do not output anything for them. Label these sections, 'Class Outline', 'Important Facts and Concepts', 'Homework', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading.",
-   "deleted":false
+    ],
+    "memory_prompt": "You will be given a transcript of a class or lecture. Your job is to accurately identify and extract these four key points of information. 1: An outline of the main points and subpoints of the lecture. 2: A list of Important facts and concepts that need to be remembered 3: A list of homework and other assigned tasks to be completed or worked on later 4: Any other important items mentioned that do not fit into the above categories. Do not output anything for them. Label these sections, 'Class Outline', 'Important Facts and Concepts', 'Homework', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading.",
+    "deleted": false
   },
   {
     "id": "zapier",
@@ -663,7 +663,7 @@
     "description": "Analyzes the emotional tone and communication quality of a transcribed conversation. It identifies the speaker's emotional state, offers constructive feedback on their communication style, and encourages reflection on how their words might have been perceived. The goal is to help users connect more deeply with their emotions and improve their communication skills.",
     "image": "/plugins/logos/echo.png",
     "prompt": "",
-    "memories": true, 
+    "memories": true,
     "chat": false,
     "capabilities": [
       "chat"
@@ -672,11 +672,11 @@
     "deleted": false
   },
   {
-    "id": "bookwatch-friend-plugin-idx",
+    "id": "bookwatch",
     "name": "BookWatch Friend Plugin",
     "author": "Alex Toska - Miran Antamian",
     "description": "This plugin enables you to add bookmarks for books you want to watch in BookWatch later",
-    "image": "/plugins/logos/bookwatch.png",
+    "image": "/plugins/logos/bookwatch.jpg",
     "capabilities": [
       "external_integration"
     ],
@@ -686,23 +686,23 @@
       "setup_completed_url": "https://friend-integration.vercel.app/check_setup",
       "setup_instructions_file_path": "https://friend-integration.vercel.app/static/README.md"
     },
-    "deleted": false
-},
-{
-  "id": "amazon-add-to-cart-multion",
-  "name": "Amazon Add to Cart (With MultiOn)",
-  "author": "@multion",
-  "description": "Automatically add books mentioned in your conversations to your Amazon cart using MultiOn",
-  "image": "/plugins/logos/amazon-add-to-cart-multion.jpg",
-  "capabilities": [
-    "external_integration"
-  ],
-  "external_integration": {
-    "triggers_on": "transcript_processed",
-    "webhook_url": "https://multion--friend-demo-fastapi-app.modal.run/process_transcript",
-    "setup_completed_url": "https://multion--friend-demo-fastapi-app.modal.run/check_setup_completion",
-    "setup_instructions_file_path": "/plugins/instructions/multion-amazon/README.md"
+    "deleted": true
   },
-  "deleted": false
-}
+  {
+    "id": "multion-amazon",
+    "name": "Amazon Add to Cart <> Multion",
+    "author": "@multion",
+    "description": "Automatically add books mentioned in your conversations to your Amazon cart using MultiOn",
+    "image": "/plugins/logos/multion-amazon.jpg",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/multion/process_transcript",
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/multion/check_setup_completion",
+      "setup_instructions_file_path": "/plugins/instructions/multion-amazon/README.md"
+    },
+    "deleted": false
+  }
 ]

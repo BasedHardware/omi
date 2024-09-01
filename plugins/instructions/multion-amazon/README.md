@@ -5,15 +5,13 @@ The MultiOn plugin allows you to automatically add books mentioned in your conve
 ## Setup Steps
 
 1. Open the following link on desktop:
-   [https://multion--friend-demo-fastapi-app.modal.run](https://multion--friend-demo-fastapi-app.modal.run)
-   
+   [https://based-hardware--plugins-api.modal.run/multion](https://based-hardware--plugins-api.modal.run/multion)
+
 2. Follow instructions and copy the USER ID.
+   ![Explanation GIF](assets/desktop-app.gif)
 
-   <img src="assets/desktop-app.gif" alt="Connect MultiOn" width="600"/>
-
-3. Click [this link](https://multion--friend-demo-fastapi-app.modal.run/uid_input) and enter the USER ID.
-
-   <img src="assets/friend-app.gif" alt="MultiOn Login" width="200"/>
+3. Click [this link](https://based-hardware--plugins-api.modal.run/multion/uid_input) and enter the USER ID.
+   ![Explanation GIF](assets/friend-app.gif)
 
 4. After successful authentication, you will be redirected back to the app. The plugin is now set up and ready to use! Return to the Friend app.
 
@@ -28,7 +26,6 @@ The MultiOn plugin allows you to automatically add books mentioned in your conve
 - If books are not being added to your cart, ensure that your MultiOn account is correctly linked and has the necessary permissions.
 - If you encounter any errors, try disconnecting and reconnecting the plugin in your Friend app settings.
 
-
 ---
 
-> This is an experimental feature.
+> This is an experimental feature. It may not work as expected. If you have any feedback, please let us know at team@multion.ai.
