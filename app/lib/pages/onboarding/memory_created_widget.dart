@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -33,9 +31,11 @@ class MemoryCreatedWidget extends StatelessWidget {
                 : MemoryListItem(
                     memory: context.read<SpeechProfileProvider>().memory!,
                     updateMemory: (d, i) {},
-                    memoryIdx: 1,
-                    deleteMemory: (d, i) {}),
-            SizedBox(height: 30),
+                    memoryIdx: 0,
+                    deleteMemory: (d, i) {},
+                    isFromOnboarding: true,
+                  ),
+            const SizedBox(height: 30),
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
