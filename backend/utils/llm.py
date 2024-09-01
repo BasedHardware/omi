@@ -525,7 +525,7 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     This way we can create a more accurate profile. 
     Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
 
-    Existing Facts that were: {Fact.get_facts_as_str(segments)}
+    Existing Facts that were: {facts_str}
 
     Conversation:
     ```
