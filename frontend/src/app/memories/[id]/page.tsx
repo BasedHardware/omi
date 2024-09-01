@@ -1,17 +1,30 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
 import Memory from '@/src/components/memories/memory';
+import envConfig from '@/src/constants/envConfig';
+import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
+
+interface MemoryPageProps {
+  params: ParamsTypes;
+  searchParams: SearchParamsTypes;
+}
 
 export async function generateMetadata(
   { params }: { params: ParamsTypes },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
-  // read route params
-  const prevData = (await parent) as Metadata;
-  const memory = await getSharedMemory(params.id);
+  const memory = (await (
+    await fetch(`${envConfig.API_URL}/v1/memories/${params.id}/shared`, {
+      next: { revalidate: 86400 },
+    })
+  ).json()) as any;
 
-  const title = memory?.structured?.title ? memory.structured.title : 'Memory not found';
+  const prevData = (await parent) as Metadata;
+
+  const title = !memory
+    ? 'Memory Not Found'
+    : memory?.structured?.title || DEFAULT_TITLE_MEMORY;
 
   return {
     title: title,
@@ -21,9 +34,6 @@ export async function generateMetadata(
       follow: true,
       index: true,
     },
-    twitter: {
-      card: 'summary_large_image',
-    },
     openGraph: {
       title: title,
       url: `${prevData.metadataBase}/memories/${params.id}`,
@@ -31,11 +41,6 @@ export async function generateMetadata(
       description: prevData.openGraph?.description,
     },
   };
-}
-
-interface MemoryPageProps {
-  params: ParamsTypes;
-  searchParams: SearchParamsTypes;
 }
 
 export default async function MemoryPage({ params, searchParams }: MemoryPageProps) {
