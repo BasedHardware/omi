@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 from typing import List
 
@@ -8,6 +7,8 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_openai import ChatOpenAI
 
 import db
 from models import RealtimePluginRequest, TranscriptSegment
@@ -22,43 +23,21 @@ GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 MULTION_API_KEY = os.getenv('MULTION_API_KEY', '123')
 
 
-async def retrieve_books_to_buy(transcript: str) -> List[str]:
-    print('retrieve_books_to_buy')
-    groq_api_url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    prompt = f"""
-    Analyze the following transcript and identify any book titles mentioned or suggested:
+class BooksToBuy(BaseModel):
+    books: List[str] = Field(description="The list of titles of the books mentioned", default=[], min_items=0)
+
+
+def retrieve_books_to_buy(transcript: str) -> List[str]:
+    chat = ChatOpenAI(model='gpt-4o', temperature=0).with_structured_output(BooksToBuy)
+
+    response: BooksToBuy = chat.invoke(f'''The following is the transcript of a conversation.
     {transcript}
-    Return only a JSON array of book titles, without any additional text. If no books are mentioned or suggested, return an empty array.
-    """
 
-    payload = {
-        "model": "llama3-8b-8192",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7,
-        "max_tokens": 150
-    }
+    Your task is to determine first if the speakers talked or mentioned books to each other \
+    at some point during the conversation, and provide the titles of those.''')
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(groq_api_url, headers=headers, json=payload)
-            response.raise_for_status()
-            response_data = response.json()
-            content = response_data['choices'][0]['message']['content']
-            print(f"retrieve_books_to_buy, Raw GROQ API response: {content}")
-
-            import re
-            json_match = re.search(r'\[.*\]', content, re.DOTALL)
-            if json_match:
-                book_titles = json.loads(json_match.group())
-            else:
-                raise ValueError("retrieve_books_to_buy, No JSON array found in the response")
-
-            print('retrieve_books_to_buy, Books to buy:', book_titles)
-            return book_titles
-    except Exception as e:
-        print(f"retrieve_books_to_buy: error {e}")
-        return []
+    print('Books to buy:', response.books)
+    return response.books
 
 
 async def call_multion(books: List[str], user_id: str):
@@ -188,7 +167,7 @@ async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Qu
     transcript: List[TranscriptSegment] = db.append_segment_to_transcript(uid, session_id, data.segments)
 
     try:
-        books = await retrieve_books_to_buy(transcript)
+        books = retrieve_books_to_buy(transcript)
         if not books:
             return {'message': ''}
         else:
@@ -206,7 +185,7 @@ async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Qu
         result = result.decode('utf-8')
         return {"message": result}
 
-    return {"message": ''}
+    return {"message": str(result)}
 
 # @router.post("/multion", response_model=EndpointResponse, tags=['multion'])
 # async def multion_endpoint(memory: Memory, uid: str = Query(...)):
