@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -18,7 +18,7 @@ class SpeechProfileWidget extends StatefulWidget {
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
 }
 
-class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin, WebSocketMixin {
+class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
