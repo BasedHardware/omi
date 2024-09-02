@@ -7,6 +7,9 @@
 #include <zephyr/fs/fs_sys.h>
 #include <zephyr/sys/check.h>
 #include "sdcard.h"
+
+LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
+
 static FATFS fat_fs;
 
 static struct fs_mount_t mount_point = {
@@ -14,15 +17,10 @@ static struct fs_mount_t mount_point = {
 	.fs_data = &fat_fs,
 };
 
-static bool mounted = false;
-bool sd_card_mounted = false;
 static char *current_header;
-static int current_audio_file_number = 0;
 #define MAX_PATH_LENGTH 32
 
 uint8_t file_count = 0;
-
-K_MUTEX_DEFINE(audio_mutex);
 
 static char current_full_path[MAX_PATH_LENGTH];
 static char read_buffer[MAX_PATH_LENGTH];
@@ -31,28 +29,10 @@ static const char *disk_mount_pt = "/SD:/";
 
 
 //hehe...
-char* generate_new_audio_header(uint8_t num) {
-    if (num > 99 ) return NULL;
-    char *ptr_ = k_malloc(14);
-    ptr_[0] = 'a';
-    ptr_[1] = 'u';
-    ptr_[2] = 'd';
-    ptr_[3] = 'i';
-    ptr_[4] = 'o';
-    ptr_[5] = '/';
-    ptr_[6] = 'a';
-    ptr_[7] = 48 + (num / 10);
-    ptr_[8] = 48 + (num % 10);
-    ptr_[9] = '.';
-    ptr_[10] = 't';
-    ptr_[11] = 'x';
-    ptr_[12] = 't';
-    ptr_[13] = '\0';
-
-    return ptr_;
-}
 uint32_t get_file_size(uint8_t num){
-    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, generate_new_audio_header(num));
+    char *ptr = generate_new_audio_header(num);
+    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
+    k_free(ptr);
     struct fs_dirent entry;
     fs_stat(&current_full_path,&entry);
     return (uint32_t)entry.size;
@@ -85,17 +65,17 @@ uint8_t get_directory_item_count(struct fs_dir_t *zdp, struct fs_dirent *entry) 
         return count;
 }
 
-int rebase_audio_file(uint8_t num) {
-
-    current_header = generate_new_audio_header(num);
-    printk("current header: %s\n",current_header);
-    return 0;
-} 
-
 int move_read_pointer(uint8_t num) {
-    char *read_ptr = generate_new_audio_header(num);
+   char *read_ptr = generate_new_audio_header(num);
    snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
-  return 0;
+    struct fs_dirent entry; //check if the info file exists. if not, generate new info file
+    int res = fs_stat(&read_buffer,&entry);
+    if (res) {
+        printk("invalid file\n");
+        
+    return -1;  
+    }
+   return 0;
 }
 
 int move_write_pointer(uint8_t num) {
@@ -112,18 +92,32 @@ int mount_sd_card(void)
     static const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
     printk("disk_access_init: %d\n", err);
+    if (err == -116) {
+        k_msleep(2000);
+        disk_access_init(disk_pdrv); 
+    }
 
     mount_point.mnt_point = "/SD:";
     int res = fs_mount(&mount_point);
 
     if (res == FR_OK) {
-        mounted = true;
-        sd_card_mounted = true;
         printk("SD card mounted successfully\n");
     } else {
         printk("f_mount failed: %d\n", res);
         return -1;
     }
+    res = fs_mkdir("/SD:/audio");
+    if (res == FR_OK) {
+        printk("audio directory created successfully\n");
+        initialize_audio_file(0);
+    }
+    else if (res == FR_EXIST) {
+        printk("audio directory already exists\n");
+    }
+     else {
+        printk("audio directory creation failed: %d\n", res);
+    }
+
     struct fs_dir_t zdp;
     fs_dir_t_init(&zdp);
     res = fs_opendir(&zdp,"/SD:/audio");
@@ -132,29 +126,21 @@ int mount_sd_card(void)
     if (zdp.mp == NULL) {
         printk("mp is null \n");
     }
-    printk("%d\n",get_file_size(5));
+    
     struct fs_dirent entry_;
-    file_count = get_directory_item_count(&zdp,&entry_);
+    file_count = get_directory_item_count(&zdp,&entry_)-1;
+
     fs_closedir(&zdp);
-    file_count= file_count+1;
+
+
+
     printk("current num files: %d\n",file_count);
+    file_count++;
     initialize_audio_file(file_count);
 
-    // move_write_pointer(7);
-    // move_read_pointer(7);
+    move_write_pointer(file_count);
+    move_read_pointer(file_count-1);
 
-    
-
-    res = fs_mkdir("/SD:/audio");
-    if (res == FR_OK) {
-        printk("audio directory created successfully\n");
-    }
-    else if (res == FR_EXIST) {
-        printk("audio directory already exists\n");
-    }
-     else {
-        printk("audio directory creation failed: %d\n", res);
-    }
 
     struct fs_dirent entry; //check if the info file exists. if not, generate new info file
     const char *info_path = "/SD:/info.txt";
@@ -167,17 +153,6 @@ int mount_sd_card(void)
     printk("result of check: %d\n",res);
 
 
-
-
-
-
-    current_audio_file_number = 1;
-    // initialize_audio_file(8);
-    // initialize_audio_file(3);
-    // make_and_rebase_audio_file(get_info_file_length()+1);
-    // // write_entry_info(get_info_file_length()+1,1);
-    // update_info_file_length(current_audio_file_number+1);
-    
 	return 0;
 }
 
@@ -200,67 +175,60 @@ int create_file(const char *file_path){
 
     return 0;
 }
-//need length,name
-//a01 00000000000\n
-
 
 int read_audio_data(uint8_t *buf, int amount,int offset) {
-    // k_mutex_lock(&audio_mutex,K_FOREVER);
     struct fs_file_t file;
    	fs_file_t_init(&file); 
     uint8_t *temp_ptr = buf;
     struct fs_dirent entry;  
-    // snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, current_header);
-    // printk("current full path in read file is %s\n",current_full_path);
+
 
 	int rc = fs_open(&file, read_buffer, FS_O_READ | FS_O_RDWR);
     rc = fs_seek(&file,offset,FS_SEEK_SET);
     rc = fs_read(&file, temp_ptr, amount);
-    printk("read data :");
-    for (int i = 0; i < 10;i++) {
-        printk("%d ",temp_ptr[i]);
-    }
-    printk("\n");
+    // printk("read data :");
+    // for (int i = 0; i < amount;i++) {
+    //     printk("%d ",temp_ptr[i]);
+    // }
+    // printk("\n");
   	fs_close(&file);
-    // k_mutex_unlock(&audio_mutex);
+
     return rc;
 }
-//f
- //this is the length of the opus encoding
+
 int write_to_file(uint8_t *data,uint32_t length)
 {
-    k_mutex_lock(&audio_mutex,K_FOREVER);
+
     int ret = 0;
-    struct fs_file_t data_filp;
-	fs_file_t_init(&data_filp);
+    struct fs_file_t data_loc;
+	fs_file_t_init(&data_loc);
     uint8_t *temp_ptr = data;
-   	ret = fs_open(&data_filp, write_buffer , FS_O_WRITE | FS_O_APPEND);
+   	ret = fs_open(&data_loc, write_buffer , FS_O_WRITE | FS_O_APPEND);
     if(ret)
     {
         printk("Error opening file\n");
-        k_mutex_unlock(&audio_mutex);
+  
         return -1;
     }
-	ret = fs_write(&data_filp, temp_ptr, length);
-    printk("write data: ");
-    for (int i = 0; i < 10; i++) {
-        printk("%d ",temp_ptr[i]);
-    }
-    printk("\n");
+	ret = fs_write(&data_loc, temp_ptr, length);
+    // // printk("length is %d\n", length);
+    // printk("write data: ");
+    // for (int i = 0; i < length; i++) {
+    //     printk("%d ",temp_ptr[i]);
+    // }
+    // printk("\n");
 
 	if(ret < 0)
 	{
         printk("er %d\n",ret);
-        k_mutex_unlock(&audio_mutex);
+
 		return -1;
 	}
-    fs_close(&data_filp);
-    k_mutex_unlock(&audio_mutex);
+    fs_close(&data_loc);
+
     return 0;
 }
-
-
-// fs_stat() check if dircetory exists     
+    
 int initialize_audio_file(uint8_t num) {
     char *header = generate_new_audio_header(num);
     if (header == NULL) {
@@ -270,26 +238,8 @@ int initialize_audio_file(uint8_t num) {
     return 0;
 }
 
-// int close_audio_file() {
-//     printk("about to close\n");
-//     k_msleep(10); 
-//        fs_close(current_audio_file.file);
-//        k_free(current_audio_file.file);
-//        return 0;
-// }
-
-int make_and_rebase_audio_file(uint8_t num) {
-
-
-    initialize_audio_file(num);
-    rebase_audio_file(num);
-    current_audio_file_number = num;
-
-    return 0;
-}
-
 void print_directory_contents(struct fs_dir_t *zdp, struct fs_dirent *entry) {
-    // struct fs_dir_t *zip;
+
    int rc = zdp->mp->fs->readdir(zdp, entry);
     printk("%s %d ",entry->name,entry->size);
 		while (true) {
@@ -306,5 +256,28 @@ void print_directory_contents(struct fs_dir_t *zdp, struct fs_dirent *entry) {
         		if (rc < 0) {
 		}
         printk("\n");
-        return rc;
+
+}
+
+
+
+char* generate_new_audio_header(uint8_t num) {
+    if (num > 99 ) return NULL;
+    char *ptr_ = k_malloc(14);
+    ptr_[0] = 'a';
+    ptr_[1] = 'u';
+    ptr_[2] = 'd';
+    ptr_[3] = 'i';
+    ptr_[4] = 'o';
+    ptr_[5] = '/';
+    ptr_[6] = 'a';
+    ptr_[7] = 48 + (num / 10);
+    ptr_[8] = 48 + (num % 10);
+    ptr_[9] = '.';
+    ptr_[10] = 't';
+    ptr_[11] = 'x';
+    ptr_[12] = 't';
+    ptr_[13] = '\0';
+
+    return ptr_;
 }

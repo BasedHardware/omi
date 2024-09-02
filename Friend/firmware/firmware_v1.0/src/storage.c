@@ -13,18 +13,25 @@
 #include "sdcard.h"
 #include <string.h>
 #include <stdio.h>
+
+LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
+
+#define MAX_PACKET_LENGTH 256
+#define OPUS_ENTRY_LENGTH 100
+#define FRAME_PREFIX_LENGTH 3
+
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
-static struct bt_uuid_128 storage_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001540, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-static struct bt_uuid_128 storage_write_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001541, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-static struct bt_uuid_128 storage_read_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001542, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
+static struct bt_uuid_128 storage_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295780, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_write_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295781, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_read_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295782, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
 K_THREAD_STACK_DEFINE(storage_stack, 2048);
 static struct k_thread storage_thread;
 
-
+extern uint8_t file_count;
 
 void broadcast_storage_packet(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(storage_work, broadcast_storage_packet);
@@ -40,114 +47,150 @@ static struct bt_gatt_attr storage_service_attr[] = {
 
 static struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
-
-static info_file_t info_file;
-static char hello[256];
-static char num_buffer[32];
 bool storage_is_on = false;
 
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-    printk("hoi \n");
-    // snprintf(hello, sizeof(hello), "%d",   get_file_size(5) );
 
     storage_is_on = true;
+    if (value == BT_GATT_CCC_NOTIFY)
+    {
+        LOG_INF("Client subscribed for notifications");
+    }
+    else if (value == 0)
+    {
+        LOG_INF("Client unsubscribed from notifications");
+    }
+    else
+    {
+        LOG_ERR("Invalid CCC value: %u", value);
+    }
 
 }
 
 static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-    printk("hello\n");
     k_msleep(10);
-    // printk("%d\n",get_file_size(5));
-    // get_info_file_data_();
-    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, hello, 256);
+    char amount[1] = {file_count};
+
+    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, sizeof(amount));
     return result;
 }
 
+uint8_t transport_started = 0;
 
-
-
-static uint32_t remaining_length = 0;
-static bool transport_started = false;
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) {
-  
-    printk("%s\n",((char*)buf)[0]);
 
-    printk("about to schedule the storage\n");
+    LOG_INF("about to schedule the storage");
+    transport_started = 1;
     k_msleep(1000);
-    transport_started = true;
+    
     
     return len;
 }
+
 static uint16_t packet_next_index = 0;
 
-
-//start num is assumed to be 2 
-static uint8_t lowest_num = 2;
 static uint8_t storage_write_buffer[256];
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
 static uint8_t current_packet_size = 0;
 static uint8_t tx_buffer_size = 0;
-bool storage_is_subscribed() {
 
-    
-    return bt_gatt_is_subscribed(get_current_connection(), &storage_service.attrs[1], BT_GATT_CCC_NOTIFY);
+
+static uint8_t current_read_num = 2;
+uint32_t remaining_length = 0;
+
+static void setup_storage_tx(void) {
+    transport_started= (uint8_t)0; 
+    offset = 0;
+
+    int res = move_read_pointer(current_read_num);
+    if (res) {
+        LOG_ERR("bad pointer");
+        transport_started = 0;
+        current_read_num++;
+        remaining_length = 0;
+    }
+    else {
+    if ((uint32_t)get_file_size(current_read_num) == 0 ) {
+            LOG_ERR("bad file size, moving again...");
+            current_read_num++;
+            move_read_pointer(current_read_num);
+    }
+    LOG_INF("current read ptr %d",current_read_num);
+
+    remaining_length = get_file_size(current_read_num);
+    LOG_INF("remaining length: %d",remaining_length);
+    }
 
 }
-#define MAX_PACKET_LENGTH 256
-static uint8_t starting_num[2];
+
+
+static void write_to_gatt(struct bt_conn *conn) {
+    uint32_t id = packet_next_index++;
+    index = 0;
+    storage_write_buffer[0] = id & 0xFF;
+    storage_write_buffer[1] = (id >> 8) & 0xFF;
+    storage_write_buffer[2] = index;
+
+    uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
+
+    int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
+    offset = offset + packet_size;
+    remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
+    index++;
+    
+    // printk("current remaining length: %d\n",remaining_length);
+    // for (int i = 0 ; i < 103; i ++) {
+    //     printk("%d ",storage_write_buffer[i]);
+    // }
+    // printk("\n");
+
+    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+3);
+}
+
+
+
 void storage_write(void) {
   while (1) {
-    if ( transport_started) {
-        offset = 1;
-        index = 0;
-        move_read_pointer(7);
-        // remaining_length = (uint32_t)get_file_size(7);
-         remaining_length = 1000;
-        printk("remaining length: %d \n",remaining_length);
-        transport_started=false;
-        
-        read_audio_data(&starting_num,2,0);
-        tx_buffer_size = starting_num[0];
-        printk("first number is %d\n",tx_buffer_size);
+    
+    if ( transport_started ) {
+    LOG_INF("transpor started in side : %d",transport_started);
+        setup_storage_tx();
     }
-    // printk("hello\n");
 
-    if(remaining_length > 0) {
-        uint32_t id = packet_next_index++;
-        
-        storage_write_buffer[0] = id & 0xFF;
-        storage_write_buffer[1] = (id >> 8) & 0xFF;
-        storage_write_buffer[2] = index;
-        printk("current buffer size is %d\n",tx_buffer_size);
-        uint32_t packet_size = MIN(remaining_length,tx_buffer_size+1);
-        
-        int r = read_audio_data(storage_write_buffer+3,packet_size,offset);
-        tx_buffer_size=storage_write_buffer[3+packet_size-1];
-        // printk("next tx buffer os %d\n",tx_buffer_size);
-        offset = offset + packet_size;
-        remaining_length = MAX(remaining_length - packet_size,0);
-        index++;
-        
-        // printk("current offset: %d\n",offset);
-        printk("current reamining length: %d\n",remaining_length);
+    if(remaining_length > 0 ) {
+
         struct bt_conn *conn = get_current_connection();
         if (conn == NULL)  {
-            printk("invalid connection\n");
-            k_sleep(K_MSEC(10));
+            LOG_ERR("invalid connection");
+            k_yield();
         }
-        int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+3-1);
+        write_to_gatt(conn);
 
-        k_sleep(K_MSEC(10));
+        transport_started = 0;
+        if (remaining_length == 0) {
+           LOG_INF("done. attempting to download more files");
+        //    current_read_num++;
+           k_sleep(K_MSEC(10));
+        //    setup_storage_tx();
+           
         }
-        // printk("hullo\n");
+        
+        }
+        
+
         k_yield();
   }
+
 }
 
 int storage_init() {
+
+    bt_gatt_service_register(&storage_service);
     k_thread_create(&storage_thread, storage_stack, K_THREAD_STACK_SIZEOF(storage_stack), (k_thread_entry_t)storage_write, NULL, NULL, NULL, K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
+
     return 0;
+
 }

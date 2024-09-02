@@ -11,8 +11,8 @@ load_dotenv()
 audio_frames = []
 decoder=opuslib.Decoder(16000, 1)
 device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
-storage_uuid = "00001541-1212-EFDE-1523-785FEABCD123" #dont change this
-storage_read_uuid = "00001542-1212-EFDE-1523-785FEABCD123" 
+storage_uuid = "30295781-4301-EABD-2904-2849ADFEAE43" #dont change this
+storage_read_uuid = "30295782-4301-EABD-2904-2849ADFEAE43" 
 count = 0
 pcm_data=bytearray()
 done =False
@@ -28,13 +28,18 @@ async def main():
             with open("my_file.txt", "wb") as binary_file:
                 result = bytearray()
                 print('a')
+
+
                 async def on_notify(sender: bleak.BleakGATTCharacteristic, data: bytearray):
                         # Write bytes to file
                         # binary_file.write(data)
-                        audio_frames.append(data[3:])
+                        global count
+                        global done
+                        amount_to_append = data[3]
+                        audio_frames.append(data[4:data[3]+4])
                         count +=1
-                        # print(np.frombuffer(data,dtype=np.uint8))
-                        if (count > 1000) and not done:
+                        print(np.frombuffer(data[4:data[3]+4],dtype=np.uint8))
+                        if (count > 700) and not done:
                              done=True
                              for frame in audio_frames:
                                 try:
@@ -46,7 +51,9 @@ async def main():
                                     wf.setnchannels(1)
                                     wf.setsampwidth(2)
                                     wf.setframerate(16000)
-                                    wf.writeframes(pcm_data)                            
+                                    wf.writeframes(pcm_data)     
+
+
                 stuff = await client.start_notify(storage_uuid, on_notify)
                 print('b')
                 # await client.read_gatt_char(storage_read_uuid)
