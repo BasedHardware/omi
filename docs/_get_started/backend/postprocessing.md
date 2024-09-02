@@ -19,7 +19,7 @@ This document outlines the post-processing workflow for memories in the Omi appl
 7. Memory updated and reprocessed
 8. Optional emotional analysis
 
-   ![Post Processing](../../images/postprocessing.png)
+   ![Post Processing](/images/postprocessing.png)
 
 ## 🔍 Detailed Steps
 
@@ -109,3 +109,4 @@ def fal_postprocessing(words: List[dict]) -> List[TranscriptSegment]:
 # In utils/stt/speech_profile.py
 def get_speech_profile_matching_predictions(uid: str, segments: List[TranscriptSegment]):
     # ... (speaker identification logic)
+```
