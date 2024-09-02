@@ -40,6 +40,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     hasBluetoothPermission = await Permission.bluetooth.isGranted;
     hasLocationPermission = await Permission.location.isGranted;
     hasNotificationPermission = await Permission.notification.isGranted;
+    SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
+    SharedPreferencesUtil().locationEnabled = hasLocationPermission;
     notifyListeners();
   }
 
@@ -50,11 +52,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
 
   void updateLocationPermission(bool value) {
     hasLocationPermission = value;
+    SharedPreferencesUtil().locationEnabled = value;
     notifyListeners();
   }
 
   void updateNotificationPermission(bool value) {
     hasNotificationPermission = value;
+    SharedPreferencesUtil().notificationsEnabled = value;
     notifyListeners();
   }
 
@@ -63,7 +67,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
-
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
       if (Platform.isAndroid) {
@@ -123,6 +126,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     connectingToDeviceId = device.id; // Mark this device as being connected to
     notifyListeners();
     await bleConnectDevice(device.id);
+    print('Connected to device: ${device.name}');
     deviceId = device.id;
     SharedPreferencesUtil().btDeviceStruct = device;
     deviceName = device.name;
@@ -200,7 +204,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
 
       // Merge the new devices into the current map to maintain order
       foundDevicesMap.addAll(updatedDevicesMap);
-
       // Convert the values of the map back to a list
       List<BTDeviceStruct> orderedDevices = foundDevicesMap.values.toList();
       if (orderedDevices.isNotEmpty) {

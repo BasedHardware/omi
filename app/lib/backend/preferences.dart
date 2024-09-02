@@ -49,6 +49,14 @@ class SharedPreferencesUtil {
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
 
+  set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
+
+  bool get notificationsEnabled => getBool('notificationsEnabled') ?? false;
+
+  set locationEnabled(bool value) => saveBool('locationEnabled', value);
+
+  bool get locationEnabled => getBool('locationEnabled') ?? false;
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
