@@ -38,8 +38,6 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
                   } else {
                     provider.updateNotificationPermission(false);
                   }
-                  var isAllowed = await NotificationService.instance.hasNotificationPermissions();
-                  provider.updateNotificationPermission(isAllowed);
                 }
               },
               title: const Text(
