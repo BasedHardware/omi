@@ -325,7 +325,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
                             },
                             'Delete Account',
-                            'Are you sure you want to delete your account? You will lose all of your data.\nOnce you clcik on delete, your data will be deleted in a few hours',
+                            'Are you sure you want to delete your account? You will lose all of your memories and data if you do so.\n\nOnce you click on delete, your data will be deleted in a few hours.',
                             singleButton: false,
                           );
                         });
