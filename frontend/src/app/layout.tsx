@@ -3,6 +3,7 @@ import { Mulish } from 'next/font/google';
 import './globals.css';
 import AppHeader from '../components/shared/app-header';
 import Footer from '../components/shared/footer';
+import envConfig from '../constants/envConfig';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -12,9 +13,10 @@ const inter = Mulish({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Based Hardware',
-    template: '%s | Based Hardware',
+    default: 'Omi',
+    template: '%s | Omi',
   },
+  metadataBase: new URL(envConfig.WEB_URL),
   description: 'Open-source AI wearable Build using the power of recall',
 };
 
