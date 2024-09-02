@@ -28,15 +28,14 @@ void set_codec_callback(codec_callback callback)
 
 uint8_t codec_ring_buffer_data[AUDIO_BUFFER_SAMPLES * 2]; // 2 bytes per sample
 struct ring_buf codec_ring_buf;
-//here we will check whether there is a connection to offload the device. if not, then we will try to 
-//dump the pdm data to the sd card file. the pointer is always on.
 int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic data is finished 
 {   
    
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
     if (written != len * 2)
     {
-        printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
+
+        // printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
         return -1;
     }
     
@@ -76,6 +75,7 @@ void codec_entry()
         // Check if we have enough data
         if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2)
         {
+            // printk("waiting on data....\n");
             k_sleep(K_MSEC(10));
             continue;
         }

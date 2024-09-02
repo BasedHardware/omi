@@ -15,12 +15,13 @@
 #include "lib/battery/battery.h"
 #include "speaker.h"
 #include "button.h"
+#include "sdcard.h"
 #include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
-
+extern bool storage_is_on;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
@@ -449,7 +450,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        printk("Failed to read from ring buffer %d\n", tx_buffer_size);
+        printk("Failed to read from ring buffer. not enough data %d\n", tx_buffer_size);
         return false;
     }
 
@@ -465,17 +466,18 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 1024);
+K_THREAD_STACK_DEFINE(pusher_stack, 2048);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
 static char storage_temp_data[CODEC_OUTPUT_MAX_BYTES];
+
 static bool push_to_gatt(struct bt_conn *conn)
 {
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
-        printk("invalid\n");
+
         return false;
     }
 
@@ -492,11 +494,8 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        uint8_t *tr = pusher_temp_data + 2;
-        // for (int i = 0; i < packet_size; i ++) {
-        //     printk("%d ",tr[i]);
-        // }
-        // printk("\n");
+        // printk("sent %d bytes \n",tx_buffer_size);
+
         offset += packet_size;
         index++;
 
@@ -526,26 +525,36 @@ static bool push_to_gatt(struct bt_conn *conn)
 
     return true;
 }
+#define OPUS_PREFIX_LENGTH 1
 
-
-
+static uint32_t offset = 0;
 bool write_to_storage(void) {
     if (!read_from_tx_queue())
     {
         return false;
     }
-    printk("about to write to storage\n");
-    uint8_t *buffer = tx_buffer+2;
+    // printk("about to write to storage\n");
+    uint8_t *buffer = tx_buffer+3;
     uint32_t packet_size = tx_buffer_size;
-    memcpy(storage_temp_data, buffer, packet_size);
+    storage_temp_data[0] = (uint8_t)tx_buffer_size;
+    memcpy(storage_temp_data+OPUS_PREFIX_LENGTH, buffer, packet_size);
     uint8_t *b = (uint8_t*)storage_temp_data;
-    write_to_file(b,(uint32_t*)packet_size);
+    write_to_file(b,(uint32_t*)packet_size+OPUS_PREFIX_LENGTH);
+    // read_audio_data(pog,10,0);
+    // read_audio_data(storage_temp_data,packet_size,offset);
+    offset=offset+packet_size;
     return true;
 }
 
 static bool use_storage = true;
+#define MAX_FILES 10
+#define MAX_AUDIO_FILE_SIZE 300000
+
+
+
 void pusher(void)
 {
+    k_msleep(500);
     while (1)
     {
 
@@ -556,7 +565,10 @@ void pusher(void)
 
         struct bt_conn *conn = current_connection;
         bool use_gatt = true;
-        // FSM_STATE_T state_ = get_current_button_state();
+        uint32_t offset = 0;
+        int length = 1;
+
+        //FSM_STATE_T state_ = get_current_button_state();
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -574,22 +586,25 @@ void pusher(void)
         {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
-
-        // if (!valid) {
-            bool result = write_to_storage();
-        //     if (!result)
-        //     {
-        //         k_sleep(K_MSEC(50));
-        //     }
-        //     ring_buf_reset(&ring_buf);
-        //     k_sleep(K_MSEC(10));
-        // }
         
+        // if (!valid   && ( length < 100) && !storage_is_on) {
 
-        // if(state_ == IDLE ) { //button is pressed
-        // write_to_storage();
+        // bool result = write_to_storage();
+    
+        // if (result)
+        // {
+        //     // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
+        //     //     printk("Audio file size limit reached, making new file\n");
+        //     //     // make_and_rebase_audio_file(get_info_file_length()+1);
+        //     // }
         // }
-
+        // else {
+        //      k_sleep(K_MSEC(50));
+        // }
+        // }
+        // k_yield();
+            // ring_buf_reset(&ring_buf);
+            // k_sleep(K_MSEC(10));
         // If no valid mode exists - discard whole buffer
         // if (!valid)
         // {
@@ -599,21 +614,22 @@ void pusher(void)
 
      
 
-
+ 
         // Handle GATT
         // write_to_storage();
-        // if (use_gatt && valid)
-        // {
-        //     // bool sent =write_to_storage();
-        //      bool sent = push_to_gatt(conn);
-        //     if (!sent)
-        //     {
-        //         k_sleep(K_MSEC(50));
-        //     }
-        // }
+        if (use_gatt && valid)
+        {
+            // printk("bt\n");
+            // bool sent =write_to_storage();
+             bool sent = push_to_gatt(conn);
+            if (!sent)
+            {
+                k_sleep(K_MSEC(50));
+            }
+        }
 
 
-
+       k_yield();
 
         if (conn)
         {
@@ -670,7 +686,7 @@ if(!err) {
     
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-    register_storage_service();
+   
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
