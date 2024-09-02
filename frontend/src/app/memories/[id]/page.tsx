@@ -2,7 +2,6 @@ import getSharedMemory from '@/src/actions/memories/get-shared-memory';
 import Memory from '@/src/components/memories/memory';
 import envConfig from '@/src/constants/envConfig';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
-import { Memory as MemoryType } from '@/src/types/memory.types';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 
@@ -15,13 +14,14 @@ export async function generateMetadata(
   { params }: { params: ParamsTypes },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const prevData = (await parent) as Metadata;
   const memory = (await (
     await fetch(`${envConfig.API_URL}/v1/memories/${params.id}/shared`, {
-      cache: 'no-cache',
+      next: {
+        revalidate: 60,
+      },
     })
-  ).json()) as MemoryType;
-
-  const prevData = (await parent) as Metadata;
+  ).json()) as any;
 
   const title = !memory
     ? 'Memory Not Found'
