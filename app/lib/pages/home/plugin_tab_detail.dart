@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
+import 'package:intl/intl.dart';
 
 class PluginTabDetailPage extends StatefulWidget {
   final Plugin plugin;
@@ -42,6 +44,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
               SizedBox(
                 width: MediaQuery.of(context).size.width,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,16 +61,18 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                                 shape: BoxShape.circle,
                                 color: Colors.white,
                               ),
-                              child:
-                              CachedNetworkImage(
+                              child: CachedNetworkImage(
                                 imageUrl: widget.plugin.getImageUrl(),
-                                imageBuilder: (context, imageProvider) => CircleAvatar(
+                                imageBuilder: (context, imageProvider) =>
+                                    CircleAvatar(
                                   backgroundColor: Colors.white,
                                   maxRadius: 18,
                                   backgroundImage: imageProvider,
                                 ),
-                                placeholder: (context, url) => const CircularProgressIndicator(),
-                                errorWidget: (context, url, error) => const Icon(Icons.error),
+                                placeholder: (context, url) =>
+                                    const CircularProgressIndicator(),
+                                errorWidget: (context, url, error) =>
+                                    const Icon(Icons.error),
                               ),
                               /*CircleAvatar(
                                 backgroundColor: Colors.white,
@@ -85,7 +90,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.only(bottom: 5, top: 5),
+                            padding: const EdgeInsets.only(bottom: 5, top: 5,right: 5),
                             child: ExpandableTextWidget(
                               onTap: () {
                                 widget.onTap();
@@ -115,6 +120,16 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ),
                         ),
                       ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Text(
+                       dateTimeFormat(
+                            'MMM d, h:mm a',
+                            DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                                .parse(widget.plugin.content![index].date ?? "")),
+                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
                     ),
                     if (index != 0)
                       Container(

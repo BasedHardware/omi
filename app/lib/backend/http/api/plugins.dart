@@ -26,10 +26,8 @@ Future<List<Plugin>> retrievePlugins() async {
     try {
       // Attempt to decode the response and parse plugins
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
-
       // Save the plugin list to shared preferences
       SharedPreferencesUtil().pluginsList = plugins;
-
       // Log the response body
       print('retrievePlugins Response Body: ${response.body}');
 

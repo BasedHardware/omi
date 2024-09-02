@@ -139,8 +139,10 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                           maxRadius: 18,
                           backgroundImage: imageProvider,
                         ),
-                        placeholder: (context, url) => const CircularProgressIndicator(),
-                        errorWidget: (context, url, error) => const Icon(Icons.error),
+                        placeholder: (context, url) =>
+                            const CircularProgressIndicator(),
+                        errorWidget: (context, url, error) =>
+                            const Icon(Icons.error),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -180,12 +182,18 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                                     ? Icons.check
                                     : Icons.arrow_downward_rounded,
                                 size: 20,
-                                color: Colors.grey,
+                                color:
+                                    plugin.enabled ? Colors.grey : Colors.white,
                               ),
-                              onPressed: () {
-                                Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (c) => const SubscriptionPage()));
-                                /*if (plugin.worksExternally() &&
+                              onPressed: (!plugin.enabled)
+                                  ? () {
+                                      if (!plugin.enabled) {
+                                        Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                                builder: (c) =>
+                                                    const SubscriptionPage()));
+                                      }
+                                      /*if (plugin.worksExternally() &&
                                         !plugin.enabled) {
                                       showDialog(
                                         context: context,
@@ -211,7 +219,8 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                                       _togglePlugin(plugin.id.toString(),
                                           !plugin.enabled, index);
                                     }*/
-                              },
+                                    }
+                                  : null,
                             ),
                     ],
                   ),

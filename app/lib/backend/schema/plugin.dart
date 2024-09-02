@@ -191,20 +191,24 @@ class Plugin {
 class Content {
   String? pluginId;
   String? content;
+  String? date;
   bool isExpanded = false;
 
   Content({
     this.pluginId,
     this.content,
+    this.date,
   });
 
   factory Content.fromJson(Map<String, dynamic> json) => Content(
         pluginId: json["plugin_id"],
         content: json["content"],
+        date: (json["date"] != null) ? json["date"].toString() : "",
       );
 
   Map<String, dynamic> toJson() => {
         "plugin_id": pluginId,
+        "date": date,
         "content": content,
       };
 }
