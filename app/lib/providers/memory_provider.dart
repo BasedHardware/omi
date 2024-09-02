@@ -76,7 +76,8 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    await retryFailedMemories();
+    initFilteredMemories();
+    retryFailedMemories();
     notifyListeners();
   }
 
