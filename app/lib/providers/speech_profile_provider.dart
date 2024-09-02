@@ -176,6 +176,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     SharedPreferencesUtil().hasSpeakerProfile = true;
     if (isFromOnboarding) {
       await createMemory();
+      captureProvider?.clearTranscripts();
+      captureProvider?.resetState(restartBytesProcessing: true);
     }
 
     uploadingProfile = false;

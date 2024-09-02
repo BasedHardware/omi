@@ -314,6 +314,13 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     notifyListeners();
   }
 
+  void clearTranscripts() {
+    segments = [];
+    SharedPreferencesUtil().transcriptSegments = [];
+    setHasTranscripts(false);
+    notifyListeners();
+  }
+
   Future resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
     //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
     debugPrint('resetState: $restartBytesProcessing');
