@@ -11,7 +11,6 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/find.dart';
@@ -60,6 +59,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   }
 
   Future askForBluetoothPermissions() async {
+    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
     if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
@@ -88,8 +88,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   }
 
   Future askForNotificationPermissions() async {
-    await NotificationService.instance.requestNotificationPermissions();
-
+    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+    updateNotificationPermission(isAllowed);
     notifyListeners();
   }
   //----------------- Onboarding Permissions -----------------
@@ -173,20 +173,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
-    // check if bluetooth is enabled on Android
-    if (Platform.isAndroid) {
-      if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
-        try {
-          await FlutterBluePlus.turnOn();
-        } catch (e) {
-          if (e is FlutterBluePlusException) {
-            if (e.code == 11) {
-              onShowDialog();
-            }
-          }
-        }
+    // check if bluetooth is enabled on both platforms
+    if (!hasBluetoothPermission) {
+      await askForBluetoothPermissions();
+      if (!hasBluetoothPermission) {
+        onShowDialog();
       }
     }
+
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
       enableInstructions = true;
       notifyListeners();

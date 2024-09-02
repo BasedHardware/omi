@@ -102,14 +102,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
-        if (widget.isFromOnboarding) {
-          SchedulerBinding.instance.addPostFrameCallback((_) {
-            Navigator.pushAndRemoveUntil(
-                context, MaterialPageRoute(builder: (c) => const HomePageWrapper()), (route) => false);
-          });
-        }
-      },
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -122,7 +114,16 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               IconButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  if (widget.isFromOnboarding) {
+                    SchedulerBinding.instance.addPostFrameCallback((_) {
+                      Navigator.pushAndRemoveUntil(
+                          context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                    });
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
                 icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
               ),
               const SizedBox(width: 4),

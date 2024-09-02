@@ -34,9 +34,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
       if (Provider.of<MemoryProvider>(context, listen: false).memories.isEmpty) {
         await Provider.of<MemoryProvider>(context, listen: false).getInitialMemories();
       }
-      if (mounted) {
-        Provider.of<MemoryProvider>(context, listen: false).initFilteredMemories();
-      }
+      // if (mounted) {
+      //   Provider.of<MemoryProvider>(context, listen: false).initFilteredMemories();
+      // }
     });
     super.initState();
   }
