@@ -11,9 +11,9 @@ class ProcessingMemory(BaseModel):
     created_at: datetime
     timer_start: float
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
-    geolocation: Optional[Geolocation] = None
     transcript_segments: List[TranscriptSegment] = []
-    audio_file_url: Optional[str] = None
+    geolocation: Optional[Geolocation] = None
+    emotional_feedback: Optional[bool] = False
 
     memory_id: Optional[str] = None
     message_ids: List[str] = []
