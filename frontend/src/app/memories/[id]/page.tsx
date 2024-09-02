@@ -39,6 +39,7 @@ export async function generateMetadata(
       ...prevData.openGraph,
       title: title,
       type: 'website',
+      url: `${prevData.metadataBase}/memories/${params.id}`,
       description: memory?.structured?.overview || prevData.openGraph?.description,
     },
   };
