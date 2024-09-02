@@ -127,7 +127,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       print("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    _proessOnMemoryCreate(event.memory, event.messages??[]);
+    _proessOnMemoryCreate(event.memory, event.messages ?? []);
   }
 
   void _onMemoryCreateFailed() {
@@ -220,10 +220,13 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   // Warn: Support OpenGlass
   Future<bool?> createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
-    if (memoryCreating) return null;
 
     // Suport OpenGlass only
-    if (photos.isEmpty) return false;
+    if (!isGlasses) return false;
+
+    if (memoryCreating) return null;
+
+    if (segments.isEmpty && photos.isEmpty) return false;
 
     // TODO: should clean variables here? and keep them locally?
     setMemoryCreating(true);
@@ -430,8 +433,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
-		debugPrint("Message received ${newSegments.length}");
-		newSegments.forEach((s) => debugPrint(s.text));
+        debugPrint("Message received ${newSegments.length}");
+        newSegments.forEach((s) => debugPrint(s.text));
 
         if (newSegments.isEmpty) return;
         if (segments.isEmpty) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/processing_memory.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -133,11 +134,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             ),
           ),
           SliverToBoxAdapter(
-            child: memoryProvider.processingMemory != null
-                ? Container(
-                    child: getProcessingMemoryWidget(memoryProvider.processingMemory!),
-                  )
-                : const SizedBox.shrink(),
+            child: getMemoryCaptureWidget(),
           ),
           if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
             const SliverToBoxAdapter(
