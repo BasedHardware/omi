@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
-import 'package:friend_private/pages/memories/widgets/processing_memory.dart';
+import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
