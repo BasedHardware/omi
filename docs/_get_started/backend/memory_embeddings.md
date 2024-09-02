@@ -16,7 +16,7 @@ This document outlines how Omi creates and stores embeddings for memories.
 4. Metadata is created for the embedding
 5. Embedding and metadata are stored in Pinecone
 
-![Embeddings](../../images/embeddings.png)
+![Embeddings](/images/embeddings.png)
 
 
 ## 📊 Detailed Steps
@@ -96,3 +96,4 @@ def generate_embedding(content: str) -> List[float]:
 # In database/vector_db.py
 def upsert_vector(uid: str, memory: Memory, vector: List[float]):
     # ... (create metadata and upsert to Pinecone)
+```
