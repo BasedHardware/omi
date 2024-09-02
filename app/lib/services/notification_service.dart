@@ -89,12 +89,13 @@ class NotificationService {
     );
   }
 
-  Future<void> requestNotificationPermissions() async {
+  Future<bool> requestNotificationPermissions() async {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
-      _awesomeNotifications.requestPermissionToSendNotifications();
+      isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
       _register();
     }
+    return isAllowed;
   }
 
   Future<void> _register() async {
