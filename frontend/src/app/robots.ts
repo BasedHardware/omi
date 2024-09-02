@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: ['/'],
     },
-    sitemap: 'https://omi.me/sitemap.xml',
+    sitemap: 'https://h.omi.me/sitemap.xml',
   };
 }
