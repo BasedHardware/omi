@@ -535,7 +535,7 @@ _getShareOptions(
           String content = '''
               Here\'s my memory created with Omi. ${memory.structured.getEmoji()}
               
-              https://omitdotme.web.app/memories/${memory.id}
+              https://h.omi.me/memories/${memory.id}
               
               Get started using Omi today.
               '''
@@ -683,7 +683,8 @@ _getSheetMainOptions(
                     height: 24,
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ))
+                    ),
+                  )
                 : const Icon(Icons.refresh),
             onTap: loadingReprocessMemory
                 ? null
@@ -694,9 +695,15 @@ _getSheetMainOptions(
                       });
                     } else {
                       showDialog(
-                        builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                            'Unable to Re-summarize Memory', 'Please check your internet connection and try again.',
-                            singleButton: true, okButtonText: 'OK'),
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'Unable to Re-summarize Memory',
+                          'Please check your internet connection and try again.',
+                          singleButton: true,
+                          okButtonText: 'OK',
+                        ),
                         context: context,
                       );
                     }
@@ -786,31 +793,33 @@ showOptionsBottomSheet(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: _getSheetTitle(context, memory) +
-                    (displayDevTools
-                        ? _getDevToolsOptions(
-                            context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
-                        : displayShareOptions
-                            ? _getShareOptions(
-                                context,
-                                memory,
-                                loadingShareMemoryViaURL,
-                                changeLoadingShareMemoryViaURL,
-                                loadingShareMemoryTranscript,
-                                changeLoadingShareMemoryTranscript,
-                                loadingShareMemorySummary,
-                                changeLoadingShareMemorySummary,
-                              )
-                            : _getSheetMainOptions(
-                                context,
-                                memory,
-                                changeLoadingReprocessMemory,
-                                loadingReprocessMemory,
-                                changeDisplayDevOptions,
-                                displayDevTools,
-                                changeDisplayShareOptions,
-                                displayShareOptions,
-                                reprocessMemory,
-                              )) +
+                    (
+                      displayDevTools
+                          ? _getDevToolsOptions(
+                              context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
+                          : displayShareOptions
+                              ? _getShareOptions(
+                                  context,
+                                  memory,
+                                  loadingShareMemoryViaURL,
+                                  changeLoadingShareMemoryViaURL,
+                                  loadingShareMemoryTranscript,
+                                  changeLoadingShareMemoryTranscript,
+                                  loadingShareMemorySummary,
+                                  changeLoadingShareMemorySummary,
+                                )
+                              : _getSheetMainOptions(
+                                  context,
+                                  memory,
+                                  changeLoadingReprocessMemory,
+                                  loadingReprocessMemory,
+                                  changeDisplayDevOptions,
+                                  displayDevTools,
+                                  changeDisplayShareOptions,
+                                  displayShareOptions,
+                                  reprocessMemory,
+                                ),
+                    ) +
                     <Widget>[const SizedBox(height: 40)],
               ),
             );

@@ -71,9 +71,13 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
       method: 'POST',
     );
     debugPrint('response: ${response?.statusCode}');
-    var body = jsonDecode(response?.body ?? '{}');
-    print(body);
-    return body['message'] ?? '';
+    if (response?.statusCode == 200) {
+      var body = jsonDecode(response?.body ?? '{}');
+      print(body);
+      return body['message'] ?? '';
+    } else {
+      return '';
+    }
   } catch (e) {
     debugPrint('Error triggering transcript request at endpoint: $e');
     // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.
