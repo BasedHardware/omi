@@ -60,6 +60,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   }
 
   Future askForBluetoothPermissions() async {
+    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
     if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
@@ -88,8 +89,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   }
 
   Future askForNotificationPermissions() async {
-    await NotificationService.instance.requestNotificationPermissions();
-
+    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+    updateNotificationPermission(isAllowed);
     notifyListeners();
   }
   //----------------- Onboarding Permissions -----------------
