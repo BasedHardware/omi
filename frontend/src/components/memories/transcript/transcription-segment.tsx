@@ -2,7 +2,7 @@
 
 import { predefinedColors } from '@/src/constants/colors';
 import { TranscriptSegment } from '@/src/types/memory.types';
-import { UserCircle } from 'iconoir-react';
+import { UserCircle, UserStar } from 'iconoir-react';
 import { useState } from 'react';
 
 export default function TranscriptionSegment({
@@ -17,11 +17,21 @@ export default function TranscriptionSegment({
     segment.text.replace(`Speaker ${segment.speaker_id}:`, '').charAt(0).toUpperCase() +
     segment.text.replace(`Speaker ${segment.speaker_id}:`, '').slice(1);
 
+  const isUser = segment.is_user;
+
   return (
     <li className="my-5 flex gap-2">
-      <UserCircle className="mt-1 min-w-min text-sm" color={color} />
+      {isUser ? (
+        <div className='min-w-7 h-7 bg-zinc-800 rounded-full grid place-items-center'>
+          <UserStar className="text-xs" />
+        </div>
+      ) : (
+        <div className='min-w-7 h-7 rounded-full grid place-items-center'>
+        <UserCircle className="min-w-min" color={color} />
+</div>
+      )}
       <div>
-        <p className="text-base font-semibold md:text-lg">Speaker {segment.speaker_id}</p>
+        <p className="text-base font-semibold md:text-lg">{isUser ? `Owner` : `Speaker ${segment.speaker_id}`}</p>
         <p className="text-base font-extralight leading-7 md:text-lg md:leading-9">
           {showMore
             ? textFormatted
