@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 extern bool storage_is_on;
+extern uint8_t file_count;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
@@ -327,6 +328,7 @@ void broadcast_battery_level(struct k_work *work_item) {
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+    storage_is_on = true;
 
     err = bt_conn_get_info(conn, &info);
     if (err)
@@ -357,6 +359,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+    storage_is_on = false;
 
     LOG_INF("Transport disconnected");
     bt_conn_unref(conn);
@@ -526,22 +529,24 @@ static bool push_to_gatt(struct bt_conn *conn)
     return true;
 }
 #define OPUS_PREFIX_LENGTH 1
-
+#define OPUS_PADDED_LENGTH 100
 static uint32_t offset = 0;
+
 bool write_to_storage(void) {
     if (!read_from_tx_queue())
     {
         return false;
     }
-    // printk("about to write to storage\n");
+
     uint8_t *buffer = tx_buffer+3;
     uint32_t packet_size = tx_buffer_size;
+    
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH);
+    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH, buffer, packet_size);
     storage_temp_data[0] = (uint8_t)tx_buffer_size;
-    memcpy(storage_temp_data+OPUS_PREFIX_LENGTH, buffer, packet_size);
-    uint8_t *b = (uint8_t*)storage_temp_data;
-    write_to_file(b,(uint32_t*)packet_size+OPUS_PREFIX_LENGTH);
-    // read_audio_data(pog,10,0);
-    // read_audio_data(storage_temp_data,packet_size,offset);
+    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+    write_to_file(write_ptr,OPUS_PADDED_LENGTH);
+
     offset=offset+packet_size;
     return true;
 }
@@ -568,7 +573,6 @@ void pusher(void)
         uint32_t offset = 0;
         int length = 1;
 
-        //FSM_STATE_T state_ = get_current_button_state();
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -587,41 +591,33 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
         
-        // if (!valid   && ( length < 100) && !storage_is_on) {
+        if (!valid   && ( length < 100) && !storage_is_on) {
 
-        // bool result = write_to_storage();
+        bool result = write_to_storage();
     
-        // if (result)
-        // {
-        //     // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
-        //     //     printk("Audio file size limit reached, making new file\n");
-        //     //     // make_and_rebase_audio_file(get_info_file_length()+1);
-        //     // }
-        // }
-        // else {
-        //      k_sleep(K_MSEC(50));
-        // }
-        // }
-        // k_yield();
-            // ring_buf_reset(&ring_buf);
-            // k_sleep(K_MSEC(10));
-        // If no valid mode exists - discard whole buffer
+        if (result)
+        {
+            // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
+            //     printk("Audio file size limit reached, making new file\n");
+            //     // make_and_rebase_audio_file(get_info_file_length()+1);
+            // }
+        }
+        else {
+             k_sleep(K_MSEC(50));
+        }
+        }
         // if (!valid)
         // {
         //     ring_buf_reset(&ring_buf);
         //     k_sleep(K_MSEC(10));
         // }
 
-     
-
- 
         // Handle GATT
-        // write_to_storage();
+
         if (use_gatt && valid)
         {
-            // printk("bt\n");
-            // bool sent =write_to_storage();
-             bool sent = push_to_gatt(conn);
+
+            bool sent = push_to_gatt(conn);
             if (!sent)
             {
                 k_sleep(K_MSEC(50));

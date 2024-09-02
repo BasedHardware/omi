@@ -8,7 +8,6 @@
 #include "audio.h"
 #include "codec.h"
 #include "sdcard.h"
-#include "tests.c"
 #include "storage.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
@@ -144,14 +143,12 @@ int main(void)
     err = mount_sd_card();
     printk("result of mount:%d\n",err);
 
-    
-    // perform_unit_test();
-    // write_entry_info(1,10);
+    k_msleep(500);
     storage_init();
 
 
 
-    k_msleep(100);
+    
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
@@ -189,7 +186,7 @@ int main(void)
     set_led_green(false);
 
     // Indicate successful initialization
-    printk("Omi firmware initialized successfully\n");
+    LOG_INF("Omi firmware initialized successfully\n");
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);

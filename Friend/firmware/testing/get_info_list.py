@@ -10,7 +10,7 @@ from bleak import BleakClient
 load_dotenv()
 
 device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
-storage_uuid = "00001542-1212-EFDE-1523-785FEABCD123" #dont change this
+storage_uuid = "30295782-4301-EABD-2904-2849ADFEAE43" #dont change this
 
 
 async def main():
@@ -21,7 +21,7 @@ async def main():
 
             while(True):
                  await asyncio.sleep(2.0)
-                 print(r)
+                 print(np.frombuffer(r,dtype=np.uint8))
 
         
 if __name__ == "__main__":
