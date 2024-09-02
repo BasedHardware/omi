@@ -16,7 +16,7 @@ This document outlines the process of storing memory objects in the Friend AI sy
 3. Data is organized into specific fields
 4. Memory is saved to Firestore
 
-   ![Backend Memory Storage](../../images/memorystore.png)
+   ![Backend Memory Storage](/images/memorystore.png)
 
 
 
