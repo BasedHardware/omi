@@ -1,6 +1,6 @@
 import io
 import wave
-from utils.pyogg import OpusDecoder
+from pyogg import OpusDecoder
 
 
 # frames is 2darray
