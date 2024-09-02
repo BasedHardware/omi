@@ -91,6 +91,7 @@ dependencies:
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
+  gleap_sdk: ^13.9.1
 
 dependency_overrides:
   http: ^1.2.1
