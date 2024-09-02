@@ -59,16 +59,11 @@ class ServerProcessingMemory {
   final String id;
   final DateTime createdAt;
   final DateTime? startedAt;
-  ServerMemory? memory;
-  List<ServerMessage> messages = [];
-
-  bool recording; // Move to model
 
   ServerProcessingMemory({
     required this.id,
     required this.createdAt,
     this.startedAt,
-    this.recording = false,
   });
 
   factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
@@ -97,6 +92,18 @@ class ServerProcessingMemory {
 
   Color getTagColor() {
     return Colors.grey.shade800;
+  }
+}
+
+class UpdateProcessingMemoryResponse {
+  final ServerProcessingMemory? result;
+
+  UpdateProcessingMemoryResponse({required this.result});
+
+  factory UpdateProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return UpdateProcessingMemoryResponse(
+      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
+    );
   }
 }
 

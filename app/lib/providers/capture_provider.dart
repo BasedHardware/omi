@@ -10,6 +10,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/processing_memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -81,6 +82,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   // -----------------------
 
+  String? processingMemoryId;
+
   bool resetStateAlreadyCalled = false;
 
   void setResetStateAlreadyCalled(bool value) {
@@ -100,6 +103,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   void setGeolocation(Geolocation? value) {
     geolocation = value;
+
+    // Update processing memory on geolocation
+    if (processingMemoryId != null) {
+      _updateProcessingMemory();
+    }
+
     notifyListeners();
   }
 
@@ -118,8 +127,26 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     setMemoryCreating(true);
   }
 
+  Future<void> _updateProcessingMemory() async {
+    if (processingMemoryId == null) {
+      return;
+    }
+
+    debugPrint("update processing memory");
+    // Update info likes geolocation
+    UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
+      id: processingMemoryId!,
+      geolocation: geolocation,
+      emotionalFeedback: SharedPreferencesUtil().optInEmotionalFeedback,
+    );
+    if (result?.result == null) {
+      print("Can not update processing memory, result null");
+    }
+  }
+
   Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
-    // TODO: thinh, update info likes geolocation to /processing-memories/:id
+    this.processingMemoryId = processingMemoryId;
+    _updateProcessingMemory();
   }
 
   Future<void> _onMemoryCreated(ServerMessageEvent event) async {
@@ -127,11 +154,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       print("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    _proessOnMemoryCreate(event.memory, event.messages ?? []);
+    _processOnMemoryCreate(event.memory, event.messages ?? []);
   }
 
   void _onMemoryCreateFailed() {
-    _proessOnMemoryCreate(null, []); // force failed
+    _processOnMemoryCreate(null, []); // force failed
   }
 
   Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
@@ -154,7 +181,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     memoryProvider?.updateMemory(memory);
   }
 
-  Future<bool?> _proessOnMemoryCreate(ServerMemory? memory, List<ServerMessage> messages) async {
+  Future<bool?> _processOnMemoryCreate(ServerMemory? memory, List<ServerMessage> messages) async {
     if (memory != null) {
       await processMemoryContent(
         memory: memory,
@@ -392,10 +419,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
 
         if (event.type == MessageEventType.newMemoryCreated) {
-          if (event.processingMemoryId == null) {
-            print("New memory created message event is invalid");
-            return;
-          }
           _onMemoryCreated(event);
           return;
         }
@@ -406,6 +429,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
 
         if (event.type == MessageEventType.newProcessingMemoryCreated) {
+            print("hey");
           if (event.processingMemoryId == null) {
             print("New processing memory created message event is invalid");
             return;
