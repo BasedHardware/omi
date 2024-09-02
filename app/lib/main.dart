@@ -194,11 +194,22 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
-                  ? const HomePageWrapper()
-                  : const OnboardingWrapper(),
+              home: AuthWrapper(),
             ),
           );
         });
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (SharedPreferencesUtil().onboardingCompleted && user != null) {
+      return const HomePageWrapper();
+    }
+    return const OnboardingWrapper();
   }
 }
