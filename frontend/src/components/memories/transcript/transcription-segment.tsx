@@ -22,16 +22,18 @@ export default function TranscriptionSegment({
   return (
     <li className="my-5 flex gap-2">
       {isUser ? (
-        <div className='min-w-7 h-7 bg-zinc-800 rounded-full grid place-items-center'>
+        <div className="grid h-7 min-w-7 place-items-center rounded-full bg-zinc-800">
           <UserStar className="text-xs" />
         </div>
       ) : (
-        <div className='min-w-7 h-7 rounded-full grid place-items-center'>
-        <UserCircle className="min-w-min" color={color} />
-</div>
+        <div className="grid h-7 min-w-7 place-items-center rounded-full">
+          <UserCircle className="min-w-min" color={color} />
+        </div>
       )}
       <div>
-        <p className="text-base font-semibold md:text-lg">{isUser ? `Owner` : `Speaker ${segment.speaker_id}`}</p>
+        <p className="text-base font-semibold md:text-lg">
+          {isUser ? `Owner` : `Speaker ${segment.speaker_id}`}
+        </p>
         <p className="text-base font-extralight leading-7 md:text-lg md:leading-9">
           {showMore
             ? textFormatted
