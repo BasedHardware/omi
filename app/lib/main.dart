@@ -13,6 +13,7 @@ import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
@@ -133,15 +134,16 @@ class _MyAppState extends State<MyApp> {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updatePluginProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProvider(create: (context) => WebSocketProvider()),
+          ChangeNotifierProxyProvider3<MemoryProvider, MessageProvider, WebSocketProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
+            update: (BuildContext context, memory, message, wsProvider, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(memory, message, wsProvider)) ?? CaptureProvider(),
           ),
-          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+          ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, value, DeviceProvider? previous) =>
-                (previous?..setProvider(value)) ?? DeviceProvider(),
+            update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
+                (previous?..setProviders(captureProvider, wsProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
@@ -149,10 +151,10 @@ class _MyAppState extends State<MyApp> {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider2<DeviceProvider, CaptureProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider3<DeviceProvider, CaptureProvider, WebSocketProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, capture, SpeechProfileProvider? previous) =>
-                (previous?..setProvider(device, capture)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
           ),
         ],
         builder: (context, child) {
@@ -192,11 +194,22 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
-                  ? const HomePageWrapper()
-                  : const OnboardingWrapper(),
+              home: AuthWrapper(),
             ),
           );
         });
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (SharedPreferencesUtil().onboardingCompleted && user != null) {
+      return const HomePageWrapper();
+    }
+    return const OnboardingWrapper();
   }
 }

@@ -26,8 +26,6 @@ nav_order: 2
 Welcome to the Omi backend! This document provides a comprehensive overview of Omi's architecture and code, guiding you through its key components, functionalities, and how it all works together to
 power a unique and intelligent AI assistant experience.
 
-![Backend Detailed Overview](../../images/backend.png)
-
 
 ## Understanding the Omi Ecosystem 🗺️
 
@@ -42,7 +40,7 @@ This deep dive will walk you through the **core elements** of Omi's backend, pro
 
 ## System Architecture
 
-![Backend Design](/images/backend_design.png)
+![Backend Detailed Overview](/images/backend.png)
 
 You can click on the image to view it in full size and zoom in for more detail.
 
