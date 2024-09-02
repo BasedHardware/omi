@@ -4,7 +4,7 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      disallow: ['/memories/'],
+      allow: ['/'],
     },
     sitemap: 'https://omi.me/sitemap.xml',
   };
