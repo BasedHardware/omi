@@ -6,6 +6,18 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/env/env.dart';
 
+Future<bool> deleteAccount() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/delete-account',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteAccount response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<bool> setRecordingPermission(bool value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/store-recording-permission?value=$value',

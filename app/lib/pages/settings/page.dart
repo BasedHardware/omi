@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
@@ -304,6 +307,34 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     );
                   }, icon: Icons.language_outlined, visibility: true),
+                  const SizedBox(height: 32),
+                  getItemAddOn('Delete Account', () {
+                    showDialog(
+                        context: context,
+                        builder: (ctx) {
+                          return getDialog(
+                            context,
+                            () {
+                              Navigator.of(context).pop();
+                            },
+                            () async {
+                              await deleteAccount();
+                              signOut();
+                              Navigator.of(context).pop();
+                              Navigator.pushAndRemoveUntil(context,
+                                  MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                            },
+                            'Delete Account',
+                            'Are you sure you want to delete your account? You will lose all of your data.\nOnce you clcik on delete, your data will be deleted in a few hours',
+                            singleButton: false,
+                          );
+                        });
+                  }, icon: Icons.warning, visibility: true),
+                  getItemAddOn('Sign Out', () {
+                    signOut();
+                    Navigator.pushAndRemoveUntil(
+                        context, MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                  }, icon: Icons.logout, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),
