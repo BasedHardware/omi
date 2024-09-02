@@ -450,7 +450,7 @@
     "id": "better-communicator",
     "name": "Better Communicator",
     "author": "Hitarth Sharma",
-    "description": "Analyzes conversations in real-time to provide feedback on speaking clarity, effectiveness, and overall communication skills.",
+    "description": "Analyzes conversations to provide feedback on speaking clarity, effectiveness, and overall communication skills.",
     "prompt": "Analyze the given conversation transcript for communication effectiveness. Evaluate factors such as clarity, conciseness, engagement, active listening, and overall impact. Provide specific feedback on strengths and areas for improvement, along with actionable suggestions for enhancing communication skills.",
     "image": "/plugins/logos/better-communicator.jpg",
     "memories": true,
@@ -460,7 +460,7 @@
       "chat"
     ],
     "memory_prompt": "Analyze the given conversation transcript for communication effectiveness. For each speaker, evaluate factors such as clarity, conciseness, engagement, active listening, and overall impact. Provide specific feedback on strengths and areas for improvement, along with actionable suggestions for enhancing communication skills. If analyzing multiple conversations over time, track improvements and persistent challenges.",
-    "chat_prompt": "I'm your Better Communicator assistant. I can provide real-time feedback on your communication style and offer suggestions for improvement. Feel free to ask me about specific aspects of your communication or for general tips on effective speaking.",
+    "chat_prompt": "I'm your Better Communicator assistant. I can provide feedback on your communication style and offer suggestions for improvement. Feel free to ask me about specific aspects of your communication or for general tips on effective speaking.",
     "deleted": false
   },
   {

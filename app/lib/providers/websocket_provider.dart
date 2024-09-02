@@ -9,7 +9,7 @@ import 'package:friend_private/utils/websockets.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
 
-mixin WebSocketMixin {
+class WebSocketProvider with ChangeNotifier {
   WebsocketConnectionStatus wsConnectionState = WebsocketConnectionStatus.notConnected;
   bool websocketReconnecting = false;
   IOWebSocketChannel? websocketChannel;
@@ -26,6 +26,8 @@ mixin WebSocketMixin {
   bool _internetListenerSetup = false;
   Timer? internetLostNotificationDelay;
 
+  get isConnecting => _isConnecting;
+
   Future<void> initWebSocket({
     required Function onConnectionSuccess,
     required Function(dynamic) onConnectionFailed,
@@ -36,10 +38,11 @@ mixin WebSocketMixin {
     required int sampleRate,
     required bool includeSpeechProfile,
   }) async {
+    print('isConnecting before even the func begins: $_isConnecting');
     if (_isConnecting) return;
     _isConnecting = true;
 
-    debugPrint('initWebSocket ${codec} ${sampleRate}');
+    debugPrint('initWebSocket with ${codec} ${sampleRate}');
     if (!_internetListenerSetup) {
       _setupInternetListener(
         onConnectionSuccess: onConnectionSuccess,
@@ -70,6 +73,7 @@ mixin WebSocketMixin {
           _isConnecting = false;
           onConnectionSuccess();
           NotificationService.instance.clearNotification(2);
+          notifyListeners();
         },
         onWebsocketConnectionFailed: (err) {
           debugPrint('WebSocket connection failed: $err');
@@ -87,6 +91,7 @@ mixin WebSocketMixin {
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
           );
+          notifyListeners();
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
           debugPrint('WebSocket connection closed: code ~ $closeCode, reason ~ $closeReason');
@@ -105,6 +110,7 @@ mixin WebSocketMixin {
               includeSpeechProfile: includeSpeechProfile,
             );
           }
+          notifyListeners();
         },
         onWebsocketConnectionError: (err) {
           debugPrint('WebSocket connection error: $err');
@@ -122,17 +128,18 @@ mixin WebSocketMixin {
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
           );
+          notifyListeners();
         },
         onMessageReceived: onMessageReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
-
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');
       _isConnecting = false;
       onConnectionFailed(e);
+      notifyListeners();
     }
   }
 
@@ -176,6 +183,7 @@ mixin WebSocketMixin {
           _reconnectionTimer?.cancel();
           wsConnectionState = WebsocketConnectionStatus.notConnected;
           onConnectionClosed(1000, 'Internet connection lost');
+          notifyListeners();
           break;
       }
     });
@@ -195,14 +203,6 @@ mixin WebSocketMixin {
 
     websocketReconnecting = true;
     _reconnectionAttempts++;
-
-    // if reconnection limits
-    // if (_reconnectionAttempts > _maxReconnectionAttempts) {
-    //   debugPrint('Max reconnection attempts reached');
-    //   _notifyReconnectionFailure();
-    //   websocketReconnecting = false;
-    //   return;
-    // }
 
     int delaySeconds = _calculateReconnectDelay();
     debugPrint('Scheduling reconnection attempt $_reconnectionAttempts in $delaySeconds seconds');
@@ -268,7 +268,7 @@ mixin WebSocketMixin {
       body: 'Unable to connect to the transcript service.'
           ' Please restart the app or contact support if the problem persists.',
     );
-  } // TODO: should trigger a connection restored? as with internet?
+  }
 
   void _notifyInternetLost() {
     NotificationService.instance.clearNotification(3);
@@ -284,6 +284,6 @@ mixin WebSocketMixin {
     _internetListener?.cancel();
     internetLostNotificationDelay?.cancel();
     websocketChannel?.sink.close(1000);
-    // TODO: once closed, it reconnects, at least happens on speaker_profile/page
+    notifyListeners();
   }
 }

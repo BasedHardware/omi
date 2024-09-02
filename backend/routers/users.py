@@ -14,6 +14,25 @@ from utils.other.storage import delete_all_memory_recordings, get_user_person_sp
 router = APIRouter()
 
 
+@router.delete('/v1/users/delete-account', tags=['v1'])
+def delete_account(uid: str = Depends(auth.get_current_user_uid)):
+    try:
+        # Set account as deleted in Firestore
+        update_user(uid, {"account_deleted": True})
+        # TODO: delete user data from the database
+        return {'status': 'ok', 'message': 'Account deleted successfully'}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+def update_user(uid: str, data: dict):
+    try:
+        user_ref = db.collection('users').document(uid)
+        user_ref.update(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
+
+
 # *************************************************
 # ************* RECORDING PERMISSION **************
 # *************************************************

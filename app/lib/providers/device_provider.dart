@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -12,8 +12,9 @@ import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-class DeviceProvider extends ChangeNotifier with WebSocketMixin {
+class DeviceProvider extends ChangeNotifier {
   CaptureProvider? captureProvider;
+  WebSocketProvider? webSocketProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
@@ -26,13 +27,15 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
 
   Timer? _disconnectNotificationTimer;
 
-  void setProvider(CaptureProvider provider) {
+  void setProviders(CaptureProvider provider, WebSocketProvider wsProvider) {
     captureProvider = provider;
+    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
   void setConnectedDevice(BTDeviceStruct? device) {
     connectedDevice = device;
+    print('setConnectedDevice: $device');
     captureProvider?.updateConnectedDevice(device);
     notifyListeners();
   }
@@ -107,14 +110,14 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (timer != null) return;
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       if (timer == null) return;
-      // print(printer);
-      // print('seconds: $connectionCheckSeconds');
-      // print('triggered timer at ${DateTime.now()}');
+      print(printer);
+      print('seconds: $connectionCheckSeconds');
+      print('triggered timer at ${DateTime.now()}');
 
       if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
         return;
       }
-      // print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
       if ((!isConnected && connectedDevice == null)) {
         if (isConnecting) {
           return;
@@ -157,7 +160,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (isConnected) {
       await initiateBleBatteryListener();
     }
-    captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     // if (captureProvider?.webSocketConnected == false) {
     //   restartWebSocket();
     // }
@@ -171,7 +174,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
   void restartWebSocket() {
     debugPrint('restartWebSocket');
 
-    closeWebSocket();
+    webSocketProvider?.closeWebSocket();
     if (connectedDevice == null) {
       return;
     }
