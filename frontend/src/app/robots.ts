@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       disallow: ['/memories/'],
     },
-    // sitemap: 'https://app.basehardhare.com/sitemap.xml',
+    sitemap: 'https://omi.me/sitemap.xml',
   };
 }
