@@ -2,6 +2,7 @@ import getSharedMemory from '@/src/actions/memories/get-shared-memory';
 import Memory from '@/src/components/memories/memory';
 import envConfig from '@/src/constants/envConfig';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
+import { Memory as MemoryType } from '@/src/types/memory.types';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 
@@ -18,7 +19,7 @@ export async function generateMetadata(
     await fetch(`${envConfig.API_URL}/v1/memories/${params.id}/shared`, {
       next: { revalidate: 86400 },
     })
-  ).json()) as any;
+  ).json()) as MemoryType;
 
   const prevData = (await parent) as Metadata;
 
@@ -35,10 +36,11 @@ export async function generateMetadata(
       index: true,
     },
     openGraph: {
+      ...prevData.openGraph,
       title: title,
-      url: `${prevData.metadataBase}/memories/${params.id}`,
       type: 'website',
-      description: prevData.openGraph?.description,
+      url: `${prevData.metadataBase}/memories/${params.id}`,
+      description: memory?.structured?.overview || prevData.openGraph?.description,
     },
   };
 }
