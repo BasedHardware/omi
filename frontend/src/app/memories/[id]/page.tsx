@@ -17,7 +17,7 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const memory = (await (
     await fetch(`${envConfig.API_URL}/v1/memories/${params.id}/shared`, {
-      next: { revalidate: 86400 },
+      cache: 'no-cache',
     })
   ).json()) as MemoryType;
 

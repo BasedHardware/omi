@@ -20,7 +20,7 @@ export default async function IndentifyPlugin({ pluginId }: IndentifyPluginProps
       />
       <div>
         <h3 className="text-base font-semibold md:text-base">{pluginCommunity.name}</h3>
-        <p className="line-clamp-1 text-sm text-gray-500 md:-mt-1 md:text-base">
+        <p className="line-clamp-1 text-sm text-gray-500 md:text-base">
           {pluginCommunity.description}
         </p>
       </div>
