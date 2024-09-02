@@ -18,7 +18,7 @@ import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -32,27 +32,26 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
-class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin, MessageNotifierMixin {
+class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
+  WebSocketProvider? webSocketProvider;
 
-  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
+  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p, WebSocketProvider? wsProvider) {
     memoryProvider = mp;
     messageProvider = p;
+    webSocketProvider = wsProvider;
+    notifyListeners();
   }
 
   BTDeviceStruct? connectedDevice;
   bool isGlasses = false;
-
-  bool restartAudioProcessing = false;
 
   List<TranscriptSegment> segments = [];
   Geolocation? geolocation;
 
   bool hasTranscripts = false;
   bool memoryCreating = false;
-  bool webSocketConnected = false;
-  bool webSocketConnecting = false;
   bool audioBytesConnected = false;
 
   static const quietSecondsForMemoryCreation = 120;
@@ -73,7 +72,6 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
-
   // -----------------------
 
   void setHasTranscripts(bool value) {
@@ -92,12 +90,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   }
 
   void setWebSocketConnected(bool value) {
-    webSocketConnected = value;
-    notifyListeners();
-  }
-
-  void setWebSocketConnecting(bool value) {
-    webSocketConnecting = value;
+    webSocketProvider?.wsConnectionState =
+        value ? WebsocketConnectionStatus.connected : WebsocketConnectionStatus.notConnected;
     notifyListeners();
   }
 
@@ -216,17 +210,17 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     BleAudioCodec? audioCodec,
     int? sampleRate,
   ]) async {
-    setWebSocketConnecting(true);
-    print('initiateWebsocket');
+    // setWebSocketConnecting(true);
+    print('initiateWebsocket in capture_provider');
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
-    await initWebSocket(
+    print('is ws null: ${webSocketProvider == null}');
+    await webSocketProvider?.initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: false,
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
-        setWebSocketConnecting(false);
         setWebSocketConnected(true);
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
@@ -236,6 +230,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
         notifyListeners();
       },
       onConnectionFailed: (err) {
+        print('inside onConnectionFailed');
+        print('err: $err');
         notifyListeners();
       },
       onConnectionClosed: (int? closeCode, String? closeReason) {
@@ -296,21 +292,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
-        // print(value);
         final trimmedValue = value.sublist(3);
         // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
-        if (wsConnectionState == WebsocketConnectionStatus.connected) {
-          websocketChannel?.sink.add(trimmedValue);
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+          webSocketProvider?.websocketChannel?.sink.add(trimmedValue);
         }
       },
     );
     setAudioBytesConnected(true);
-    notifyListeners();
-  }
-
-  void setRestartAudioProcessing(bool value) {
-    restartAudioProcessing = value;
     notifyListeners();
   }
 
@@ -337,25 +327,28 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       }
     }
     if (restartBytesProcessing) {
-      if (webSocketConnected) {
-        closeWebSocket();
+      print('socket connection status22: ${webSocketProvider?.wsConnectionState}');
+      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+        webSocketProvider?.closeWebSocket();
         await initiateWebsocket();
       } else {
+        print('here comes the initiateWebsocket');
         await initiateWebsocket();
       }
     } else {
-      closeWebSocket();
+      webSocketProvider?.closeWebSocket();
     }
     setAudioBytesConnected(false);
-    setRestartAudioProcessing(restartBytesProcessing);
     startOpenGlass();
     if (connectedDevice != null) {
       BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
       if (SharedPreferencesUtil().deviceCodec != codec) {
         debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec while resetting state');
         SharedPreferencesUtil().deviceCodec = codec;
-        if (webSocketConnected) {
-          closeWebSocket();
+        print('socket connection status: ${webSocketProvider?.wsConnectionState}');
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+          print('closing websocket');
+          webSocketProvider?.closeWebSocket();
           await initiateWebsocket();
         } else {
           await initiateWebsocket();
@@ -385,7 +378,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
     if (!isGlasses) return;
     await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
-    closeWebSocket();
+    webSocketProvider?.closeWebSocket();
     notifyListeners();
   }
 
@@ -436,8 +429,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     );
     updateRecordingState(RecordingState.record);
     stream.listen((data) async {
-      if (wsConnectionState == WebsocketConnectionStatus.connected) {
-        websocketChannel?.sink.add(data);
+      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+        webSocketProvider?.websocketChannel?.sink.add(data);
       }
     });
   }
@@ -454,7 +447,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     if (await FlutterBackgroundService().isRunning()) {
       FlutterBackgroundService().on('audioBytes').listen((event) {
         Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (wsConnectionState == WebsocketConnectionStatus.connected) websocketChannel?.sink.add(convertedList);
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
+          webSocketProvider?.websocketChannel?.sink.add(convertedList);
       });
       FlutterBackgroundService().on('stateUpdate').listen((event) {
         if (event!['state'] == 'recording') {
