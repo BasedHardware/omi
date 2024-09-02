@@ -8,6 +8,8 @@
 #include "audio.h"
 #include "codec.h"
 #include "sdcard.h"
+#include "tests.c"
+#include "storage.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -142,14 +144,11 @@ int main(void)
     err = mount_sd_card();
     printk("result of mount:%d\n",err);
 
+    
+    // perform_unit_test();
+    // write_entry_info(1,10);
+    storage_init();
 
-    write_entry_info(1,10);
-    write_entry_info(1,20);
-    write_entry_info(1,30);
-
-    int size = get_file_size();
-
-    printk("file size is %d\n", size);
 
 
     k_msleep(100);
