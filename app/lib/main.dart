@@ -194,7 +194,7 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: AuthWrapper(),
+              home: const AuthWrapper(),
             ),
           );
         });

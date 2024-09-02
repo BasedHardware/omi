@@ -535,7 +535,7 @@ _getShareOptions(
           String content = '''
               Here\'s my memory created with Omi. ${memory.structured.getEmoji()}
               
-              https://omitdotme.web.app/memories/${memory.id}
+              https://h.omi.me/memories/${memory.id}
               
               Get started using Omi today.
               '''
