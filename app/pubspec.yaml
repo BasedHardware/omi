@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.31+109
+version: 1.0.31+110
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -91,6 +91,7 @@ dependencies:
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
+  gleap_sdk: ^13.9.1
 
 dependency_overrides:
   http: ^1.2.1

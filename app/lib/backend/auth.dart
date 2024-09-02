@@ -189,7 +189,7 @@ Future<String?> getIdToken() async {
   }
 }
 
-Future<void> signOut(BuildContext context) async {
+Future<void> signOut() async {
   await FirebaseAuth.instance.signOut();
   try {
     await GoogleSignIn().signOut();
