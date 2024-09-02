@@ -23,9 +23,10 @@ import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:uuid/uuid.dart';
 
-class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, WebSocketMixin {
+class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
   DeviceProvider? deviceProvider;
   CaptureProvider? captureProvider;
+  WebSocketProvider? webSocketProvider;
   bool? permissionEnabled;
   bool loading = false;
   BTDeviceStruct? device;
@@ -57,9 +58,10 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     notifyListeners();
   }
 
-  void setProvider(DeviceProvider provider, CaptureProvider captureProvider) {
+  void setProviders(DeviceProvider provider, CaptureProvider captureProvider, WebSocketProvider wsProvider) {
     deviceProvider = provider;
     this.captureProvider = captureProvider;
+    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
@@ -99,7 +101,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
   }
 
   Future<void> initiateWebsocket(bool isFromOnboarding) async {
-    await initWebSocket(
+    await webSocketProvider?.initWebSocket(
       codec: BleAudioCodec.opus,
       sampleRate: 16000,
       includeSpeechProfile: false,
@@ -159,7 +161,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     }
     uploadingProfile = true;
     notifyListeners();
-    closeWebSocket();
+    webSocketProvider?.closeWebSocket();
     forceCompletionTimer?.cancel();
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
@@ -193,8 +195,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
         if (value.isEmpty) return;
         audioStorage.storeFramePacket(value);
         value.removeRange(0, 3);
-        if (wsConnectionState == WebsocketConnectionStatus.connected) {
-          websocketChannel?.sink.add(value);
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+          webSocketProvider?.websocketChannel?.sink.add(value);
         }
       },
     );
@@ -255,7 +257,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin, We
     forceCompletionTimer?.cancel();
     segments.clear();
     // captureProvider?.resetState(restartBytesProcessing: true);
-    closeWebSocket();
+    webSocketProvider?.closeWebSocket();
   }
 
   Future<bool?> createMemory({bool forcedCreation = false}) async {
