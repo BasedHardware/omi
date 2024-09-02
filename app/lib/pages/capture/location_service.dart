@@ -52,15 +52,12 @@ class LocationService {
   Future hasPermission() async => (await location.hasPermission()) == PermissionStatus.granted;
 
   Future<void> getDeviceLocation() async {
-    print("Getting location data");
     locationData = await location.getLocation();
-    print("Location data: $locationData");
   }
 
   Future<Geolocation?> getGeolocationDetails() async {
     try {
       if (await hasPermission()) {
-        print('background mode enabled: ${await location.isBackgroundModeEnabled()}');
         if (await location.isBackgroundModeEnabled()) {
           if (await location.serviceEnabled()) {
             await location.requestService();

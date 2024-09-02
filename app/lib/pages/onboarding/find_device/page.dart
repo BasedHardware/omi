@@ -71,7 +71,6 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             FoundDevices(
-              deviceList: provider.deviceList,
               goNext: widget.goNext,
               isFromOnboarding: widget.isFromOnboarding,
             ),
