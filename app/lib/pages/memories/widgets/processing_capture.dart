@@ -1,31 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memories/widgets/processing_memory_capture.dart';
+import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/utils/enums.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerProcessingMemory memory;
+class MemoryCaptureWidget extends StatefulWidget {
+  final ServerProcessingMemory? memory;
 
-  const ProcessingMemoryWidget({
+  const MemoryCaptureWidget({
     super.key,
     required this.memory,
   });
 
   @override
-  State<ProcessingMemoryWidget> createState() => _ProcessingMemoryWidgetState();
+  State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
 }
 
-class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
+class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return GestureDetector(
         child: Container(
-                    constraints: BoxConstraints(maxHeight: provider.hasTranscripts ? 350 : 90),
+          constraints: BoxConstraints(maxHeight: provider.hasTranscripts ? 350 : 90),
           margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
           width: double.maxFinite,
           decoration: const BoxDecoration(
@@ -48,7 +49,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
               mainAxisSize: MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _getMemoryHeader(),
+                _getMemoryHeader(context),
                 const SizedBox(height: 16),
                 const Expanded(
                   child: CustomScrollView(
@@ -68,7 +69,23 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
     });
   }
 
-  _getMemoryHeader() {
+  _getMemoryHeader(BuildContext context) {
+    // Connected device
+    var connectedDevice = context.read<DeviceProvider>().connectedDevice;
+    var connectedDeviceText = "";
+    if (connectedDevice != null) {
+      var deviceName = connectedDevice?.name ?? SharedPreferencesUtil().deviceName;
+      var deviceShortId = "${connectedDevice?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId()}";
+      connectedDeviceText = '$deviceName ($deviceShortId)';
+    }
+
+    // Recording
+    var captureProvider = context.read<CaptureProvider>();
+    var stateText = ((captureProvider.audioStorage?.frames ?? []).length > 0 ||
+            captureProvider.recordingState == RecordingState.record)
+        ? "Listening"
+        : "";
+
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
@@ -90,30 +107,35 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
               shape: BoxShape.rectangle,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              children: [
-                Image.asset(
-                  "assets/images/recording_green_circle_icon.png",
-                  width: 10,
-                  height: 10,
-                ),
-                const SizedBox(
-                  width: 4,
-                ),
-                Text(
-                  "Friend (A7AF24)", // TODO:
-                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                  maxLines: 1,
-                ),
-              ],
-            ),
+            child: connectedDevice != null
+                ? Row(
+                    children: [
+                      Image.asset(
+                        "assets/images/recording_green_circle_icon.png",
+                        width: 10,
+                        height: 10,
+                      ),
+                      const SizedBox(
+                        width: 4,
+                      ),
+                      Text(
+                        connectedDeviceText,
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                        maxLines: 1,
+                      )
+                    ],
+                  )
+                : Text(
+                    "Connecting",
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                  ),
           ),
           const SizedBox(
             width: 16,
           ),
           Expanded(
             child: Text(
-              "Recording • ${dateTimeFormat('h:mm a', widget.memory.startedAt ?? widget.memory.createdAt)}",
+              stateText,
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
               maxLines: 1,
               textAlign: TextAlign.end,
@@ -125,6 +147,6 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
   }
 }
 
-Widget getProcessingMemoryWidget(ServerProcessingMemory memory) {
-  return ProcessingMemoryWidget(memory: memory);
+Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
+  return MemoryCaptureWidget(memory: memory);
 }
