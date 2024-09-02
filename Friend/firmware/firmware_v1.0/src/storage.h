@@ -1,4 +1,4 @@
 #pragma once
-
-int register_storage_service();
-void update_info_buffer();
+#include <stdbool.h>
+bool storage_is_subscribed();
+int storage_init();

@@ -105,7 +105,6 @@ uint16_t speak(uint16_t len, const void *buf) {
             offset = offset + len;
             LOG_INF("offset: %u", offset);
             
-            
             i2s_write(speaker, rx_buffer,  MAX_BLOCK_SIZE);
             i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
 	        i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
