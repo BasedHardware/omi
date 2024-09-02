@@ -17,3 +17,11 @@ class ProcessingMemory(BaseModel):
 
     memory_id: Optional[str] = None
     message_ids: List[str] = []
+
+class UpdateProcessingMemory(BaseModel):
+    id: Optional[str] = None
+    geolocation: Optional[Geolocation] = None
+    emotional_feedback: Optional[bool] = False
+
+class UpdateProcessingMemoryResponse(BaseModel):
+    result: ProcessingMemory

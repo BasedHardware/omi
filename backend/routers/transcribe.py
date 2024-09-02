@@ -72,6 +72,31 @@ router = APIRouter()
 #       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
 #
 
+def _combine_segments(segments, new_segments):
+    if not new_segments:
+        return
+
+    joined_similar_segments = []
+    for new_segment in new_segments:
+        if (joined_similar_segments and
+            (joined_similar_segments[-1]["speaker"] == new_segment["speaker"] or
+             (joined_similar_segments[-1]["is_user"] and new_segment["is_user"]))):
+            joined_similar_segments[-1]["text"] += f' {new_segment["text"]}'
+            joined_similar_segments[-1]["end"] = new_segment["end"]
+        else:
+            joined_similar_segments.append(new_segment)
+
+    if (segments and
+        (segments[-1]["speaker"] == joined_similar_segments[0]["speaker"] or
+         (segments[-1]["is_user"] and joined_similar_segments[0]["is_user"])) and
+            (joined_similar_segments[0]["start"] - segments[-1]["end"] < 30)):
+        segments[-1]["text"] += f' {joined_similar_segments[0]["text"]}'
+        segments[-1]["end"] = joined_similar_segments[0]["end"]
+        joined_similar_segments.pop(0)
+
+    segments.extend(joined_similar_segments)
+
+    return segments
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
@@ -103,6 +128,7 @@ async def _websocket_util(
         nonlocal websocket
         nonlocal processing_memory
         nonlocal processing_memory_synced
+        nonlocal memory_transcript_segements
 
         print("Received transcript segments")
         print(segments)
@@ -112,13 +138,12 @@ async def _websocket_util(
 
         # memory segments
         if stream_id == memory_stream_id and new_memory_watch:
-            memory_transcript_segements.extend(segments)
+            memory_transcript_segements = _combine_segments(memory_transcript_segements, segments)
 
             # Sync processing transcript, periodly
             if processing_memory and len(memory_transcript_segements) % 3 == 0:
-                new_segments = memory_transcript_segements[len(processing_memory.transcript_segments):]
-                processing_memory_synced = processing_memory_synced + len(new_segments)
-                processing_memory.transcript_segments.extend(list(map(lambda m: TranscriptSegment(**m), new_segments)))
+                processing_memory_synced = len(memory_transcript_segements)
+                processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
     processing_audio_frames = []
