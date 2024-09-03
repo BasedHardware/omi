@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.0",
+    "gleap": "^13.9.2",
     "iconoir-react": "^7.8.0",
     "markdown-to-jsx": "^7.5.0",
     "moment": "^2.30.1",
