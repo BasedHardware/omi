@@ -1,6 +1,6 @@
 'use client';
 import { Fragment } from 'react';
-import { Drawer, DrawerContent } from '@/src/components/ui/drawer';
+import { Drawer, DrawerContent} from '@/src/components/ui/drawer';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 interface SidePanelWrapperProps {
@@ -30,8 +30,8 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
         direction="right"
         open={!!previewId}
         onOpenChange={handleOpen}
-      >
-        <DrawerContent className="ml-auto min-h-screen max-w-screen-md bg-zinc-900 text-white">
+      > 
+        <DrawerContent className="ml-auto h-screen max-h-screen max-w-screen-md bg-zinc-900 text-white overflow-y-auto overflow-x-hidden">
           {children}
         </DrawerContent>
       </Drawer>

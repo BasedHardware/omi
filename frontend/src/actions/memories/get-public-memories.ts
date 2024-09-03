@@ -14,6 +14,7 @@ export default async function getPublicMemories(
         headers: {
           'Content-Type': 'application/json',
         },
+        next: { revalidate: 60 * 60 }
       },
     );
     if (!response.ok) {
