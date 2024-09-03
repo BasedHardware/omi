@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -61,7 +62,25 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
                     child: MaterialButton(
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       onPressed: () {
-                        widget.goNext();
+                        if (provider.hasNotificationPermission) {
+                          widget.goNext();
+                        } else {
+                          showDialog(
+                            context: context,
+                            builder: (c) => getDialog(
+                              context,
+                              () {
+                                Navigator.of(context).pop();
+                              },
+                              () {
+                                Navigator.of(context).pop();
+                              },
+                              'Allow Notifications',
+                              'This app needs notification permissions to improve your experience.',
+                              singleButton: true,
+                            ),
+                          );
+                        }
                       },
                       child: const Text(
                         'Continue',
