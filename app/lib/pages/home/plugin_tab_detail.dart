@@ -4,6 +4,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 class PluginTabDetailPage extends StatefulWidget {
   final Plugin plugin;
@@ -44,7 +45,6 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
               SizedBox(
                 width: MediaQuery.of(context).size.width,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,7 +90,8 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.only(bottom: 5, top: 5,right: 5),
+                            padding: const EdgeInsets.only(
+                                bottom: 5, top: 5, right: 5),
                             child: ExpandableTextWidget(
                               onTap: () {
                                 widget.onTap();
@@ -121,15 +122,54 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                         ),
                       ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: Text(
-                       dateTimeFormat(
-                            'MMM d, h:mm a',
-                            DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-                                .parse(widget.plugin.content![index].date ?? "")),
-                        style: const TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
+                    Row(
+                      children: [
+                        const SizedBox(width: 38),
+                        GestureDetector(
+                          onTap: () {
+                            widget.plugin.content![index].isFavourite =
+                                !widget.plugin.content![index].isFavourite;
+                            setState(() {});
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(5, 9, 5, 5),
+                            child: Icon(
+                              widget.plugin.content![index].isFavourite
+                                  ? Icons.bookmark_outlined
+                                  : Icons.bookmark_outline,
+                              size: 17,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () async {
+                            await Share.share(
+                                widget.plugin.content![index].content ?? '');
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            child: const Icon(
+                              Icons.ios_share,
+                              size: 17,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.only(right: 10),
+                          child: Text(
+                            dateTimeFormat(
+                                'MMM d, h:mm a',
+                                DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                                    .parse(widget.plugin.content![index].date ??
+                                        "")),
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
                     if (index != 0)
                       Container(

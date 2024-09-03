@@ -193,6 +193,7 @@ class Content {
   String? content;
   String? date;
   bool isExpanded = false;
+  bool isFavourite = false;
 
   Content({
     this.pluginId,

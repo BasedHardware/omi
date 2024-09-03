@@ -52,7 +52,8 @@ class HomePageWrapper extends StatefulWidget {
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
-class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingObserver, TickerProviderStateMixin {
+class _HomePageWrapperState extends State<HomePageWrapper>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
   TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox()];
@@ -86,7 +87,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
       startedAt: memory.startedAt,
       finishedAt: memory.finishedAt,
       geolocation: memory.geolocation,
-      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
+      photos: memory.photos
+          .map((photo) => Tuple2(photo.base64, photo.description))
+          .toList(),
       triggerIntegrations: false,
       language: memory.language,
     );
@@ -94,7 +97,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _retryFailedMemories() async {
     if (SharedPreferencesUtil().failedMemories.isEmpty) return;
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    debugPrint(
+        'SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     // retry failed memories
     List<Future<ServerMemory?>> asyncEvents = [];
     for (var item in SharedPreferencesUtil().failedMemories) {
@@ -104,7 +108,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     // TODO: should trigger integrations? probably yes, but notifications?
 
     List<ServerMemory?> results = await Future.wait(asyncEvents);
-    var failedCopy = List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
+    var failedCopy =
+        List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
 
     for (var i = 0; i < results.length; i++) {
       ServerMemory? newCreatedMemory = results[i];
@@ -114,21 +119,30 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
         memories.insert(0, newCreatedMemory);
       } else {
         var prefsMemory = SharedPreferencesUtil().failedMemories[i];
-        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
+        if (prefsMemory.transcriptSegments.isEmpty &&
+            prefsMemory.photos.isEmpty) {
           SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
           continue;
         }
         if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
-          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
-              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
+          CrashReporting.reportHandledCrash(
+              Exception('Retry memory limits reached'), StackTrace.current,
+              userAttributes: {
+                'memory': jsonEncode(
+                    SharedPreferencesUtil().failedMemories[i].toJson())
+              });
           SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
           continue;
         }
-        memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
+        memories.insert(
+            0,
+            SharedPreferencesUtil()
+                .failedMemories[i]); // TODO: sort them or something?
         SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
       }
     }
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+    debugPrint(
+        'SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     setState(() {});
   }
 
@@ -161,8 +175,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
   _setupHasSpeakerProfile() async {
     SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
-    debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
-    MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    debugPrint(
+        '_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
+    MixpanelManager().setUserProperty(
+        'Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setState(() {});
   }
 
@@ -170,7 +186,8 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
     debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
     var plugin = plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
+    if (selectedChatPlugin != 'no_selected' &&
+        (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }
   }
@@ -253,11 +270,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
 
     _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
-      final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
+      final subPageRoute =
+          SharedPreferencesUtil().subPageToShowFromNotification;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         MyApp.navigatorKey.currentState?.push(
           MaterialPageRoute(
-            builder: (context) => screensWithRespectToPath[subPageRoute] as Widget,
+            builder: (context) =>
+                screensWithRespectToPath[subPageRoute] as Widget,
           ),
         );
       });
@@ -346,7 +365,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
     return WithForegroundTask(
         child: MyUpgradeAlert(
       upgrader: _upgrader,
-      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
+      dialogStyle: Platform.isIOS
+          ? UpgradeDialogStyle.cupertino
+          : UpgradeDialogStyle.material,
       child: ValueListenableBuilder(
           valueListenable: connectivityController.isConnected,
           builder: (context, isConnected, child) {
@@ -387,8 +408,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                           child: const Text('Dismiss'),
                         ),
                       ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                      onVisible: () =>
+                          Future.delayed(const Duration(seconds: 3), () {
+                        ScaffoldMessenger.of(context)
+                            .hideCurrentMaterialBanner();
                       }),
                     ),
                   );
@@ -425,6 +448,88 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                   child: (_controller != null)
                       ? Stack(
                           children: [
+                            /*IndexedStack(
+                              index: _controller!.index,
+                              children: [
+                                MemoriesPage(
+                                  memories: memories,
+                                  updateMemory:
+                                      (ServerMemory memory, int index) {
+                                    var memoriesCopy =
+                                    List<ServerMemory>.from(memories);
+                                    memoriesCopy[index] = memory;
+                                    setState(() => memories = memoriesCopy);
+                                  },
+                                  deleteMemory:
+                                      (ServerMemory memory, int index) {
+                                    var memoriesCopy =
+                                    List<ServerMemory>.from(memories);
+                                    memoriesCopy.removeAt(index);
+                                    setState(() => memories = memoriesCopy);
+                                  },
+                                  loadMoreMemories: () async {
+                                    if (memories.length % 50 != 0) return;
+                                    if (loadingNewMemories) return;
+                                    setState(() => loadingNewMemories = true);
+                                    var newMemories = await getMemories(
+                                        offset: memories.length);
+                                    memories.addAll(newMemories);
+                                    loadingNewMemories = false;
+                                    setState(() {});
+                                  },
+                                  loadingNewMemories: loadingNewMemories,
+                                  textFieldFocusNode:
+                                  memoriesTextFieldFocusNode,
+                                ),
+                                RefreshIndicator(
+                                    color: Colors.white,
+                                    backgroundColor: Colors.deepPurple,
+                                    onRefresh: _initiatePlugins,
+                                    child: (!isPluginLoading)
+                                        ? const PluginsTabPage()
+                                        : const Center(
+                                        child:
+                                        CupertinoActivityIndicator())),
+                                CapturePage(
+                                    key: capturePageKey,
+                                    device: _device,
+                                    addMemory: (ServerMemory memory) {
+                                      var memoriesCopy =
+                                          List<ServerMemory>.from(memories);
+                                      memoriesCopy.insert(0, memory);
+                                      setState(() => memories = memoriesCopy);
+                                    },
+                                    addMessage: (ServerMessage message) {
+                                      var messagesCopy =
+                                          List<ServerMessage>.from(messages);
+                                      messagesCopy.insert(0, message);
+                                      setState(() => messages = messagesCopy);
+                                    },
+                                  ),
+                                ChatPage(
+                                  key: chatPageKey,
+                                  textFieldFocusNode: chatTextFieldFocusNode,
+                                  messages: messages,
+                                  isLoadingMessages: loadingNewMessages,
+                                  addMessage: (ServerMessage message) {
+                                    var messagesCopy =
+                                    List<ServerMessage>.from(messages);
+                                    messagesCopy.insert(0, message);
+                                    setState(() => messages = messagesCopy);
+                                  },
+                                  updateMemory: (ServerMemory memory) {
+                                    var memoriesCopy =
+                                    List<ServerMemory>.from(memories);
+                                    var index = memoriesCopy
+                                        .indexWhere((m) => m.id == memory.id);
+                                    if (index != -1) {
+                                      memoriesCopy[index] = memory;
+                                      setState(() => memories = memoriesCopy);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),*/
                             Center(
                               child: TabBarView(
                                 controller: _controller,
@@ -469,22 +574,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                           : const Center(
                                               child:
                                                   CupertinoActivityIndicator())),
-                                  /*CapturePage(
-                                    key: capturePageKey,
-                                    device: _device,
-                                    addMemory: (ServerMemory memory) {
-                                      var memoriesCopy =
-                                          List<ServerMemory>.from(memories);
-                                      memoriesCopy.insert(0, memory);
-                                      setState(() => memories = memoriesCopy);
-                                    },
-                                    addMessage: (ServerMessage message) {
-                                      var messagesCopy =
-                                          List<ServerMessage>.from(messages);
-                                      messagesCopy.insert(0, message);
-                                      setState(() => messages = messagesCopy);
-                                    },
-                                  ),*/
                                   ChatPage(
                                     key: chatPageKey,
                                     textFieldFocusNode: chatTextFieldFocusNode,
@@ -547,9 +636,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                                 textAlign: TextAlign.center,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                    color: _controller!.index == 0
-                                                        ? Colors.white
-                                                        : Colors.grey,
+                                                    color:
+                                                        _controller!.index == 0
+                                                            ? Colors.white
+                                                            : Colors.grey,
                                                     fontSize: 16)),
                                           ),
                                         ),
@@ -567,9 +657,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                                 textAlign: TextAlign.center,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                    color: _controller!.index == 1
-                                                        ? Colors.white
-                                                        : Colors.grey,
+                                                    color:
+                                                        _controller!.index == 1
+                                                            ? Colors.white
+                                                            : Colors.grey,
                                                     fontSize: 16)),
                                           ),
                                         ),
@@ -602,9 +693,10 @@ class _HomePageWrapperState extends State<HomePageWrapper> with WidgetsBindingOb
                                                 textAlign: TextAlign.center,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                    color: _controller!.index == 2
-                                                        ? Colors.white
-                                                        : Colors.grey,
+                                                    color:
+                                                        _controller!.index == 2
+                                                            ? Colors.white
+                                                            : Colors.grey,
                                                     fontSize: 16)),
                                           ),
                                         ),
