@@ -5,7 +5,7 @@ import { Memory } from '@/src/types/memory.types';
 
 export default async function getPublicMemories(
   offset = 0,
-  limit = 500,
+  limit = 20,
 ): Promise<Memory[]> {
   try {
     const response = await fetch(
