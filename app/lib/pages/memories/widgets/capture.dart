@@ -5,23 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
-import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
-
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 
 class CaptureWidget extends StatefulWidget {
   const CaptureWidget({
@@ -32,8 +32,7 @@ class CaptureWidget extends StatefulWidget {
   State<CaptureWidget> createState() => CaptureWidgetState();
 }
 
-class CaptureWidgetState extends State<CaptureWidget>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, WebSocketMixin, OpenGlassMixin {
+class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -71,11 +70,6 @@ class CaptureWidgetState extends State<CaptureWidget>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await context.read<CaptureProvider>().processCachedTranscript();
-      // Should we start the websocket even if no device is connected? Websocket starts when a device is connected
-      // if (context.read<DeviceProvider>().connectedDevice != null) {
-      //   await context.read<CaptureProvider>().initiateWebsocket();
-      // }
-
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
@@ -90,15 +84,15 @@ class CaptureWidgetState extends State<CaptureWidget>
               await LocationService().requestBackgroundPermission();
               if (mounted) Navigator.of(context).pop();
             },
-            'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
+            'Enable Location?  🌍',
+            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
             singleButton: false,
             okButtonText: 'Continue',
           ),
         );
       }
     });
-    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
+    _internetListener = ConnectivityController().internetConnection.onStatusChange.listen((InternetStatus status) {
       switch (status) {
         case InternetStatus.connected:
           _internetStatus = InternetStatus.connected;
@@ -116,11 +110,8 @@ class CaptureWidgetState extends State<CaptureWidget>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // record.dispose();
     _internetListener.cancel();
-    // websocketChannel
-    closeWebSocket();
-
+    // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
 
@@ -141,6 +132,7 @@ class CaptureWidgetState extends State<CaptureWidget>
       }
     } else {
       PermissionStatus permissionGranted = await locationService.requestPermission();
+      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
@@ -165,6 +157,7 @@ class CaptureWidgetState extends State<CaptureWidget>
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
+          // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
           if (info == 'FIM_CHANGE') {
             showDialog(
               context: context,
@@ -172,12 +165,14 @@ class CaptureWidgetState extends State<CaptureWidget>
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<CaptureProvider>().closeWebSocket();
+                  context.read<WebSocketProvider>().closeWebSocket();
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
                   context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
                   context.read<CaptureProvider>().initiateWebsocket(codec);
-                  Navigator.pop(context);
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
                 },
                 () => {},
                 'Firmware change detected!',
@@ -227,7 +222,7 @@ class CaptureWidgetState extends State<CaptureWidget>
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            provider.closeWebSocket();
+            context.read<WebSocketProvider>().closeWebSocket();
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();
