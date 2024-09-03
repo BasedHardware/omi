@@ -13,7 +13,6 @@ import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
@@ -25,10 +24,13 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
@@ -44,7 +46,7 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-
+  Gleap.initialize(token: '3RdFPN92ZH2H6lf5UCL3jTcjnkx0bxWb');
   listenAuthTokenChanges();
   bool isAuth = false;
   try {
@@ -52,6 +54,7 @@ Future<bool> _init() async {
   } catch (e) {} // if no connect this will fail
 
   if (isAuth) MixpanelManager().identify();
+  if (isAuth) identifyGleap();
 
   initOpus(await opus_flutter.load());
 
@@ -77,7 +80,8 @@ void main() async {
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          // invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          invocationEvents: [],
         );
         if (isAuth) {
           Instabug.identifyUser(
