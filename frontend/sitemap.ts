@@ -16,7 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return urls.map((item) => {
     return {
-      url: `${envConfig.deploymentUrl}/${item.path}`,
+      url: `${envConfig.API_URL}/${item.path}`,
       priority: item.priority,
     };
   });
