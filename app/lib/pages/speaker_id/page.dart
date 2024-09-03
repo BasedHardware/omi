@@ -303,7 +303,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                     return;
                                   }
 
-                                  provider.initiateWebsocket(false);
+                                  // provider.initiateWebsocket(false);
                                   // 1.5 minutes seems reasonable
                                   provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
                                     provider.finalize(false);
