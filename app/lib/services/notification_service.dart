@@ -38,6 +38,9 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
+    // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
+    // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
+    await _firebaseMessaging.getAPNSToken();
     listenForMessages();
   }
 
