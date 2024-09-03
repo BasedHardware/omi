@@ -3,11 +3,11 @@ from typing import List
 from fastapi import APIRouter
 from langchain_community.tools.asknews import AskNewsSearch
 from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 
 from db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
 from models import RealtimePluginRequest, EndpointResponse, TranscriptSegment
-from langchain_groq import ChatGroq
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
@@ -15,7 +15,7 @@ chat = ChatOpenAI(model='gpt-4o', temperature=0)
 chat_groq_8b = ChatGroq(
     temperature=0,
     # model="llama-3.1-70b-versatile",
-    model="llama-3.1-8b-instant",
+    model="llama3-70b-8192",
     # model='llama3-groq-8b-8192-tool-use-preview',
 )
 
@@ -28,9 +28,10 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
     chat_with_parser = chat_groq_8b.with_structured_output(NewsCheck)
     conversation_str = TranscriptSegment.segments_as_string(conversation)
     result: NewsCheck = chat_with_parser.invoke(f'''
-    You will be given a segment of an ongoing conversation.
+    You will be given the last few transcript words of an ongoing conversation.
 
     Your task is to determine if the conversation specifically discusses facts that appear conspiratorial, unscientific, or super biased.
+    Historic events, that seem to contradict logic and common sense should also be considered.
     Only if the topic is of significant importance and urgency for the user to be aware of, provide a question to be asked to a news search engine, in order to debunk the conversation in process.
     Otherwise, output an empty question.
 
@@ -64,13 +65,14 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
 def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
     # return {'message': ''}
     print('news_checker_endpoint', uid)
-    clean_all_transcripts_except(uid, data.session_id)
-    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
+    session_id = 'news-checker-' + data.session_id
+    clean_all_transcripts_except(uid, session_id)
+    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, session_id, data.segments)
     message = news_checker(transcript)
 
     if message:
         # so that in the next call with already triggered stuff, it doesn't trigger again
-        remove_transcript(uid, data.session_id)
+        remove_transcript(uid, session_id)
 
     return {'message': message}
 
@@ -102,12 +104,13 @@ def emotional_support(segments: list[TranscriptSegment]) -> str:
 @router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
     # return {'message': ''}
-    clean_all_transcripts_except(uid, data.session_id)
-    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
+    session_id = 'emotional-support-' + data.session_id
+    clean_all_transcripts_except(uid, session_id)
+    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, session_id, data.segments)
     message = emotional_support(transcript)
 
     if message:
         # so that in the next call with already triggered stuff, it doesn't trigger again
-        remove_transcript(uid, data.session_id)
+        remove_transcript(uid, session_id)
 
     return {'message': message}
