@@ -1,5 +1,5 @@
 import getPublicMemories from '@/src/actions/memories/get-public-memories';
-import Link from 'next/link';
+import MemoryItem from './memory-item';
 
 export default async function MemoryList() {
   const memories = await getPublicMemories();
@@ -7,16 +7,7 @@ export default async function MemoryList() {
     <div className="text-white">
       <div className="flex flex-col gap-5">
         {memories.map((memory) => (
-          <Link key={memory.id} className="mb-4" href={`memories/${memory.id}`}>
-            <div className="text-2xl font-bold">
-              {!memory?.structured?.title ? 'Untitle memory' : memory.structured.title}
-            </div>
-            <div className="line-clamp-3 text-base font-extralight">
-              {!memory?.structured?.overview
-                ? "This memory doesn't have an overview"
-                : memory?.structured?.overview}
-            </div>
-          </Link>
+          <MemoryItem key={memory.id} memory={memory} />
         ))}
       </div>
     </div>
