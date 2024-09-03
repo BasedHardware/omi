@@ -797,18 +797,29 @@ showOptionsBottomSheet(
                   ...(displayDevTools
                       ? _getDevToolsOptions(
                           context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
-                      : _getSheetMainOptions(
-                          context,
-                          memory,
-                          changeLoadingReprocessMemory,
-                          loadingReprocessMemory,
-                          changeDisplayDevOptions,
-                          displayDevTools,
-                          changeDisplayShareOptions,
-                          displayShareOptions,
-                          reprocessMemory,
-                        )),
-                  SizedBox(height: 40),
+                      : displayShareOptions
+                          ? _getShareOptions(
+                              context,
+                              memory,
+                              loadingShareMemoryViaURL,
+                              changeLoadingShareMemoryViaURL,
+                              loadingShareMemoryTranscript,
+                              changeLoadingShareMemoryTranscript,
+                              loadingShareMemorySummary,
+                              changeLoadingShareMemorySummary,
+                            )
+                          : _getSheetMainOptions(
+                              context,
+                              memory,
+                              changeLoadingReprocessMemory,
+                              loadingReprocessMemory,
+                              changeDisplayDevOptions,
+                              displayDevTools,
+                              changeDisplayShareOptions,
+                              displayShareOptions,
+                              reprocessMemory,
+                            )),
+                  const SizedBox(height: 40),
                 ],
               ),
             );
