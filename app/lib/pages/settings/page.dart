@@ -297,16 +297,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     );
                   }, icon: Icons.privacy_tip_outlined, visibility: true),
-                  getItemAddOn('About omi', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://www.omi.me/',
-                          title: 'omi',
-                        ),
-                      ),
-                    );
-                  }, icon: Icons.language_outlined, visibility: true),
+                  // getItemAddOn('About omi', () {
+                  //   Navigator.of(context).push(
+                  //     MaterialPageRoute(
+                  //       builder: (c) => const PageWebView(
+                  //         url: 'https://www.omi.me/',
+                  //         title: 'omi',
+                  //       ),
+                  //     ),
+                  //   );
+                  // }, icon: Icons.language_outlined, visibility: true),
                   const SizedBox(height: 32),
                   getItemAddOn('Delete Account', () {
                     showDialog(
