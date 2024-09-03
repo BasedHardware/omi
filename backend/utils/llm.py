@@ -381,6 +381,8 @@ class SummaryOutput(BaseModel):
 
 
 def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
+    _chat = ChatOpenAI(model="gpt-4o-mini")
+
     content = TranscriptSegment.segments_as_string(segments)
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
@@ -394,7 +396,7 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
 
     Topics: {topics}
     '''
-    with_parser = llm.with_structured_output(SummaryOutput)
+    with_parser = _chat.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
