@@ -457,9 +457,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
-        debugPrint("Message received ${newSegments.length}");
-        newSegments.forEach((s) => debugPrint(s.text));
-
         if (newSegments.isEmpty) return;
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
