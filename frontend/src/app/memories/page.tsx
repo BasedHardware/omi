@@ -3,16 +3,12 @@ import SearchControls from '@/src/components/memories/memory-list/search-control
 import { Suspense } from 'react';
 
 export default function MemoriesPage() {
-  return(
-    <div className='text-white md:my-28 my-10 max-w-screen-md mx-auto'>
-      <SearchControls/>
-      <Suspense fallback={
-        <div className='text-white'>
-          Loading...
-        </div>
-      }>
+  return (
+    <div className="mx-auto my-10 max-w-screen-md text-white md:my-28">
+      <SearchControls />
+      <Suspense fallback={<div className="text-white">Loading...</div>}>
         <MemoryList />
       </Suspense>
     </div>
-  )
+  );
 }
