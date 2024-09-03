@@ -1,10 +1,13 @@
 'use client';
 import { FC, ReactNode, useEffect } from 'react';
 import Gleap from 'gleap';
+import envConfig from '@/src/constants/envConfig';
+
+
 
 export const GleapInit: FC<{ children?: ReactNode }> = ({ children }) => {
   useEffect(() => {
-    Gleap.initialize('TkYt8vtmccX6UBfSdo2I45lYYSEEC8Fn');
-  });
+    Gleap.initialize(envConfig.GLEAP_API_KEY ?? '');
+  }, []);
   return <>{children}</>;
 };
