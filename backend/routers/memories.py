@@ -14,7 +14,7 @@ from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
 
-@router.put("/v1/memories/{memory_id}/mark-created", response_model=Memory, tags=['memories'])
+@router.patch("/v1/memories/{memory_id}/events", response_model=Memory, tags=['memories'])
 def mark_memory_as_created(memory_id: str, event_index: int, uid: str = Depends(auth.get_current_user_uid)):
 
     memory = _get_memory_by_id(uid, memory_id)
