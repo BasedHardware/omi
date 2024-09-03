@@ -97,7 +97,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
-	print('set memory creating ${value}');
+    print('set memory creating ${value}');
     memoryCreating = value;
     notifyListeners();
   }
@@ -155,11 +155,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       print("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    _processOnMemoryCreate(event.memory, event.messages ?? []);
+    _processOnMemoryCreated(event.memory, event.messages ?? []);
   }
 
   void _onMemoryCreateFailed() {
-    _processOnMemoryCreate(null, []); // force failed
+    _processOnMemoryCreated(null, []); // force failed
   }
 
   Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
@@ -182,7 +182,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     memoryProvider?.updateMemory(memory);
   }
 
-  Future<bool?> _processOnMemoryCreate(ServerMemory? memory, List<ServerMessage> messages) async {
+  Future<bool?> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
     if (memory != null) {
       await processMemoryContent(
         memory: memory,
@@ -207,6 +207,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         failed: true,
         source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
 
@@ -240,17 +241,27 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
+    processingMemoryId = null;
     setMemoryCreating(false);
     notifyListeners();
     return true;
   }
 
   // Warn: Support OpenGlass
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
+  Future<bool?> _createMemoryTimer() async {
+    if (!isGlasses) {
+      return false;
+    }
+    return await _createMemory();
+  }
 
-    // Suport OpenGlass only
-    if (!isGlasses) return false;
+  // Warn: Split-brain memory
+  Future<bool?> forceCreateMemory() async {
+    return await _createMemory(forcedCreation: true);
+  }
+
+  Future<bool?> _createMemory({bool forcedCreation = false}) async {
+    debugPrint('_createMemory forcedCreation: $forcedCreation');
 
     if (memoryCreating) return null;
 
@@ -282,6 +293,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
       audioFile: file,
+      processingMemoryId: processingMemoryId,
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
@@ -298,6 +310,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         failed: true,
         source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
 
@@ -482,7 +495,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         SharedPreferencesUtil().transcriptSegments = segments;
         debugPrint('Memory creation timer restarted');
         _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => createMemory());
+        _memoryCreationTimer =
+            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemoryTimer());
         setHasTranscripts(true);
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
@@ -566,9 +580,10 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      bool? result = await createMemory(forcedCreation: true);
-      if (result != null && !result) {
-        notifyError('Memory creation failed. It\'s stored locally and will be retried soon.');
+      var res = await forceCreateMemory();
+      notifyListeners();
+      if (res != null && !res) {
+        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
       } else {
         notifyInfo('Memory created successfully 🚀');
       }

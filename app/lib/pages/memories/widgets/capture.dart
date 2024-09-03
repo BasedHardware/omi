@@ -200,42 +200,4 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
       );
     });
   }
-
-  _recordingToggled(CaptureProvider provider) async {
-    var recordingState = provider.recordingState;
-    if (recordingState == RecordingState.record) {
-      if (Platform.isAndroid) {
-        provider.stopStreamRecordingOnAndroid();
-      } else {
-        provider.stopStreamRecording();
-      }
-      provider.updateRecordingState(RecordingState.stop);
-      context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().createMemory();
-    } else if (recordingState == RecordingState.initialising) {
-      debugPrint('initialising, have to wait');
-    } else {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () async {
-            provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocket();
-            await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
-            if (Platform.isAndroid) {
-              await provider.streamRecordingOnAndroid();
-            } else {
-              await provider.startStreamRecording();
-            }
-            Navigator.pop(context);
-          },
-          'Limited Capabilities',
-          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-          okButtonText: 'Ok, I understand',
-        ),
-      );
-    }
-  }
 }
