@@ -4,6 +4,7 @@ import './globals.css';
 import AppHeader from '../components/shared/app-header';
 import Footer from '../components/shared/footer';
 import envConfig from '../constants/envConfig';
+import { GleapInit } from '@/src/components/shared/gleap';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({
         </main>
         <Footer />
       </body>
+      <GleapInit />
     </html>
   );
 }
