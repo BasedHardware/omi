@@ -29,6 +29,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -43,6 +44,14 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
+        SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
+        MixpanelManager().setUserProperty('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+      }
+      if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
+        SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
+        MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+      }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
     });
