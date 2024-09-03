@@ -7,7 +7,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const urls = [{ path: 'memories', priority: 0.7 }];
 
-  const memories = await getPublicMemoriesPrerender(75000);
+  const memories = await getPublicMemoriesPrerender(20000);
   const memoriesUrls = memories.map((memory) => ({
     path: 'memories/' + memory.id,
     priority: 0.9,
