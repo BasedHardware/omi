@@ -29,6 +29,6 @@
   /* Color del texto seleccionado */
 }
 body {
-  background: #0f0f0f;
+  background: #181818;
   color: rgba(var(--foreground-rgb), 1);
 }
