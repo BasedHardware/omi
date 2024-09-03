@@ -2,7 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -184,7 +184,7 @@ class _PluginsPageState extends State<PluginsPage> {
                         padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
                         child: Center(
                           child: Text(
-                            ConnectivityController().isConnected.value
+                            context.read<ConnectivityProvider>().isConnected
                                 ? 'No plugins found'
                                 : 'Unable to fetch plugins :(\n\nPlease check your internet connection and try again.',
                             style: const TextStyle(color: Colors.white, fontSize: 16),

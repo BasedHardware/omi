@@ -6,6 +6,7 @@ import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -15,7 +16,6 @@ import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
@@ -26,7 +26,6 @@ getConnectionStateWidgets(
   bool hasTranscripts,
   BTDeviceStruct? device,
   WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
 ) {
   if (hasTranscripts) return [];
   if (device == null) {
@@ -41,90 +40,91 @@ getConnectionStateWidgets(
     ];
   }
 
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
   bool isWebsocketError =
       wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
 
   return [
     const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
-    GestureDetector(
-      onTap: isWifiDisconnected || isWebsocketError
-          ? () {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
-                  isWifiDisconnected
-                      ? 'Your device is offline. Transcription is paused until connection is restored.'
-                      : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
-                  okButtonText: 'Ok',
-                  singleButton: true,
+    Consumer<ConnectivityProvider>(builder: (context, connectivityProvider, child) {
+      return GestureDetector(
+        onTap: !connectivityProvider.isConnected || isWebsocketError
+            ? () {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () => Navigator.pop(context),
+                    !connectivityProvider.isConnected ? 'Internet Connection Lost' : 'Connection Issue',
+                    !connectivityProvider.isConnected
+                        ? 'Your device is offline. Transcription is paused until connection is restored.'
+                        : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                );
+              }
+            : null,
+        child: Center(
+            child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(width: 24),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Text(
+                  !connectivityProvider.isConnected
+                      ? 'No Internet'
+                      : (connectivityProvider.isConnected && isWebsocketError)
+                          ? 'Server Issue'
+                          : 'Listening',
+                  style: TextStyle(
+                      fontFamily: 'SF Pro Display',
+                      color: Colors.white,
+                      fontSize: !connectivityProvider.isConnected
+                          ? 29
+                          : isWebsocketError
+                              ? 29
+                              : 29,
+                      letterSpacing: 0.0,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2),
+                  textAlign: TextAlign.center,
                 ),
-              );
-            }
-          : null,
-      child: Center(
-          child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(width: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Text(
-                isWifiDisconnected
-                    ? 'No Internet'
-                    : (!isWifiDisconnected && isWebsocketError)
-                        ? 'Server Issue'
-                        : 'Listening',
-                style: TextStyle(
-                    fontFamily: 'SF Pro Display',
+                Text(
+                  '${device.name} (${device.getShortId()})',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: isWifiDisconnected
-                        ? 29
-                        : isWebsocketError
-                            ? 29
-                            : 29,
-                    letterSpacing: 0.0,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                '${device.name} (${device.getShortId()})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              )
-            ],
-          ),
-          const SizedBox(width: 24),
-          isWifiDisconnected
-              ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-              : isWebsocketError
-                  // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
-                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-                  // TODO: find a better animation for server
-                  : Container(
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(
-                        color: Color.fromARGB(255, 0, 255, 9),
-                        shape: BoxShape.circle,
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w500,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                )
+              ],
+            ),
+            const SizedBox(width: 24),
+            !connectivityProvider.isConnected
+                ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+                : isWebsocketError
+                    // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
+                    ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+                    // TODO: find a better animation for server
+                    : Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Color.fromARGB(255, 0, 255, 9),
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-        ],
-      )),
-    ),
+          ],
+        )),
+      );
+    }),
     const SizedBox(height: 8),
     // const Row(
     //   crossAxisAlignment: CrossAxisAlignment.center,
@@ -287,11 +287,10 @@ connectionStatusWidgets(
   BuildContext context,
   List<TranscriptSegment> segments,
   WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
 ) {
   if (segments.isEmpty) return [];
 
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
+  bool isWifiDisconnected = !Provider.of<ConnectivityProvider>(context, listen: false).isConnected;
   bool isWebsocketError =
       wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
   if (!isWifiDisconnected && !isWebsocketError) return [];

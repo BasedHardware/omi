@@ -57,6 +57,26 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          elevation: 0,
+          actions: [
+            if (_controller!.index == 2 || _controller!.index == 3)
+              TextButton(
+                onPressed: () {
+                  if (_controller!.index == 2) {
+                    _controller!.animateTo(_controller!.index + 1);
+                  } else {
+                    routeToPage(context, const HomePageWrapper(), replace: true);
+                  }
+                },
+                child: Text(
+                  'Skip',
+                  style: TextStyle(color: Colors.grey.shade200),
+                ),
+              ),
+          ],
+        ),
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: ListView(
@@ -124,13 +144,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           _goNext();
                           MixpanelManager().onboardingStepICompleted('Welcome');
                         },
-                        skipDevice: () {
-                          routeToPage(context, const HomePageWrapper(), replace: true);
-                          MixpanelManager().onboardingStepICompleted('Welcome');
-                        },
                       ),
                       FindDevicesPage(
                         isFromOnboarding: true,
+                        onSkip: () {
+                          routeToPage(context, const HomePageWrapper(), replace: true);
+                        },
                         goNext: () async {
                           var provider = context.read<OnboardingProvider>();
                           if (SharedPreferencesUtil().hasSpeakerProfile) {

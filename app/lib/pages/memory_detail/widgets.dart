@@ -11,12 +11,13 @@ import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'maps_util.dart';
@@ -689,7 +690,8 @@ _getSheetMainOptions(
             onTap: loadingReprocessMemory
                 ? null
                 : () {
-                    if (ConnectivityController().isConnected.value) {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (connectivityProvider.isConnected) {
                       reprocessMemory(context, memory, () {
                         changeLoadingReprocessMemory(!loadingReprocessMemory);
                       });
@@ -717,7 +719,8 @@ _getSheetMainOptions(
             onTap: loadingReprocessMemory
                 ? null
                 : () {
-                    if (ConnectivityController().isConnected.value) {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (connectivityProvider.isConnected) {
                       showDialog(
                         context: context,
                         builder: (c) => getDialog(
