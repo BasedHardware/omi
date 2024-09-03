@@ -46,7 +46,7 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-  Gleap.initialize(token: '3RdFPN92ZH2H6lf5UCL3jTcjnkx0bxWb');
+  if (Env.gleapApiKey != null) Gleap.initialize(token: Env.gleapApiKey!);
   listenAuthTokenChanges();
   bool isAuth = false;
   try {

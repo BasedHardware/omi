@@ -23,6 +23,8 @@ abstract class Env {
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
   static String? get googleMapsApiKey => _instance.googleMapsApiKey;
+
+  static String? get gleapApiKey => _instance.gleapApiKey;
 }
 
 abstract class EnvFields {
@@ -37,4 +39,6 @@ abstract class EnvFields {
   String? get growthbookApiKey;
 
   String? get googleMapsApiKey;
+
+  String? get gleapApiKey;
 }
