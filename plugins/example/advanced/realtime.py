@@ -7,16 +7,17 @@ from langchain_openai import ChatOpenAI
 
 from db import clean_all_transcripts_except, append_segment_to_transcript, remove_transcript
 from models import RealtimePluginRequest, EndpointResponse, TranscriptSegment
+from langchain_groq import ChatGroq
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
-
-# chat = ChatGroq(
-#     temperature=0,
-#     model="llama-3.1-70b-versatile",
-#     # model='llama3-groq-8b-8192-tool-use-preview',
-# )
+chat_groq_8b = ChatGroq(
+    temperature=0,
+    # model="llama-3.1-70b-versatile",
+    model="llama-3.1-8b-instant",
+    # model='llama3-groq-8b-8192-tool-use-preview',
+)
 
 
 class NewsCheck(BaseModel):
@@ -24,7 +25,7 @@ class NewsCheck(BaseModel):
 
 
 def news_checker(conversation: List[TranscriptSegment]) -> str:
-    chat_with_parser = chat.with_structured_output(NewsCheck)
+    chat_with_parser = chat_groq_8b.with_structured_output(NewsCheck)
     conversation_str = TranscriptSegment.segments_as_string(conversation)
     result: NewsCheck = chat_with_parser.invoke(f'''
     You will be given a segment of an ongoing conversation.
@@ -42,7 +43,7 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
     print('news_checker query:', result.query)
     tool = AskNewsSearch(max_results=2)
     output = tool.invoke({"query": result.query})
-    result = chat.invoke(f'''
+    result = chat_groq_8b.invoke(f'''
     A user just asked a search engine news the following question:
     {result.query}
 
@@ -61,8 +62,8 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
 
 @router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
-    return {'message': ''}
-    # print('news_checker_endpoint', uid)
+    # return {'message': ''}
+    print('news_checker_endpoint', uid)
     clean_all_transcripts_except(uid, data.session_id)
     transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = news_checker(transcript)
@@ -79,7 +80,7 @@ class EmotionalSupport(BaseModel):
 
 
 def emotional_support(segments: list[TranscriptSegment]) -> str:
-    chat_with_parser = chat.with_structured_output(EmotionalSupport)
+    chat_with_parser = chat_groq_8b.with_structured_output(EmotionalSupport)
     result: EmotionalSupport = chat_with_parser.invoke(f'''
     You will be given a segment of an ongoing conversation.
     Your task is to detect if there are any accentuated emotions on the conversation and act if it's something unpleasant.
@@ -100,7 +101,7 @@ def emotional_support(segments: list[TranscriptSegment]) -> str:
 
 @router.post('/emotional-support', tags=['advanced', 'realtime'], response_model=EndpointResponse)
 def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
-    return {'message': ''}
+    # return {'message': ''}
     clean_all_transcripts_except(uid, data.session_id)
     transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, data.session_id, data.segments)
     message = emotional_support(transcript)
@@ -110,5 +111,3 @@ def emotional_support_plugin(uid: str, data: RealtimePluginRequest):
         remove_transcript(uid, data.session_id)
 
     return {'message': message}
-
-# https://camel-lucky-reliably.ngrok-free.app

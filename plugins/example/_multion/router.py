@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 import db
 from models import RealtimePluginRequest, TranscriptSegment
@@ -19,7 +19,6 @@ router = APIRouter()
 
 templates = Jinja2Templates(directory="templates")
 
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 MULTION_API_KEY = os.getenv('MULTION_API_KEY', '123')
 
 
@@ -28,7 +27,7 @@ class BooksToBuy(BaseModel):
 
 
 def retrieve_books_to_buy(transcript: str) -> List[str]:
-    chat = ChatOpenAI(model='gpt-4o', temperature=0).with_structured_output(BooksToBuy)
+    chat = ChatGroq(temperature=0, model="llama-3.1-8b-instant").with_structured_output(BooksToBuy)
 
     response: BooksToBuy = chat.invoke(f'''The following is the transcript of a conversation.
     {transcript}
@@ -158,7 +157,7 @@ async def check_setup_completion(uid: str = Query(...)):
 
 @router.post("/multion/process_transcript", tags=['multion'])
 async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Query(...)):
-    return {'message': ''}
+    # return {'message': ''}
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
