@@ -82,7 +82,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     // Recording
     var captureProvider = context.read<CaptureProvider>();
     var stateText = ((captureProvider.audioStorage?.frames ?? []).length > 0 ||
-            captureProvider.recordingState == RecordingState.record)
+                captureProvider.recordingState == RecordingState.record) &&
+            (connectedDevice != null)
         ? "Listening"
         : "";
 
@@ -125,10 +126,15 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                       )
                     ],
                   )
-                : Text(
-                    "Connecting",
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                  ),
+                : context.read<DeviceProvider>().isConnecting
+                    ? Text(
+                        "Connecting",
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                      )
+                    : Text(
+                        "No device found",
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                      ),
           ),
           const SizedBox(
             width: 16,
