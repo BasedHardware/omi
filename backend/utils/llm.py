@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,7 +11,7 @@ from models.chat import Message
 from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
-from models.transcript_segment import TranscriptSegment, ImprovedTranscript
+from models.transcript_segment import TranscriptSegment
 from utils.memories.facts import get_prompt_facts
 
 llm = ChatOpenAI(model='gpt-4o')
@@ -124,38 +123,6 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 # *******************************************
 # ************* POSTPROCESSING **************
 # *******************************************
-
-def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
-    prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = prev_transcript.count('User:')
-    if count_user_appears == 0:
-        return -1
-    elif prev_transcript_tokens > 10000:
-        # if count_user_appears == 1: # most likely matching was a mistake
-        #     return -1
-        first_user_appears = new_transcript.index('User:')
-        # trim first user appears
-        prev_transcript = prev_transcript[first_user_appears:min(first_user_appears + 10000, len(prev_transcript))]
-        # new_transcript = new_transcript[first_user_appears:min(first_user_appears + 10000, len(new_transcript))]
-        # further improvement
-
-    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
-    prompt = f'''
-    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
-    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
-    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
-
-    Previous Transcript:
-    {prev_transcript}
-
-    Improved Transcript:
-    {new_transcript}
-    '''
-    with_parser = llm.with_structured_output(SpeakerIdMatch)
-    response: SpeakerIdMatch = with_parser.invoke(prompt)
-    return response.speaker_id
-
-
 
 
 # **************************************
