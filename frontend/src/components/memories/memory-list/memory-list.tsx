@@ -4,8 +4,8 @@ import MemoryItem from './memory-item';
 export default async function MemoryList() {
   const memories = await getPublicMemories();
   return (
-    <div className="text-white">
-      <div className="flex flex-col gap-5">
+    <div className="text-white mt-20">
+      <div className="flex flex-col gap-10">
         {memories.map((memory) => (
           <MemoryItem key={memory.id} memory={memory} />
         ))}
