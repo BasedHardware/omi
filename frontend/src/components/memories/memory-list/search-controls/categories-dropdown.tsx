@@ -59,13 +59,11 @@ export default function CategoriesDropdown() {
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <button
-          className="flex flex-nowrap gap-2 rounded-md border border-solid border-zinc-600 bg-transparent px-5 py-2"
-        >
+        <button className="flex flex-nowrap gap-2 rounded-md border border-solid border-zinc-600 bg-transparent px-5 py-2">
           {currentCategory && (
             <span>{categories.find((c) => c.value === currentCategory)?.icon}</span>
           )}
-          <span className='whitespace-nowrap'>{currentCategory || 'All categories'}</span>
+          <span className="whitespace-nowrap">{currentCategory || 'All categories'}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>
