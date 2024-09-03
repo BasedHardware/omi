@@ -58,6 +58,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   StreamSubscription? _bleBytesStream;
 
+  get bleBytesStream => _bleBytesStream;
+
   var record = AudioRecorder();
   RecordingState recordingState = RecordingState.stop;
 
@@ -312,7 +314,15 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  Future resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
+  void resetForSpeechProfile() {
+    closeBleStream();
+    webSocketProvider?.closeWebSocket();
+    setAudioBytesConnected(false);
+    notifyListeners();
+  }
+
+  Future resetState(
+      {bool restartBytesProcessing = true, bool restartAudioStreaming = true, BTDeviceStruct? btDevice}) async {
     //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
     debugPrint('resetState: $restartBytesProcessing');
     closeBleStream();
@@ -356,7 +366,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
       }
     }
-    initiateFriendAudioStreaming();
+    if (restartAudioStreaming) {
+      initiateFriendAudioStreaming();
+    }
     notifyListeners();
   }
 
