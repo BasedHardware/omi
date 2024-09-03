@@ -4,7 +4,7 @@ import Link from "next/link";
 export default async function MemoryList(){
   const memories = await getPublicMemories();
   return(
-    <div className="text-white max-w-screen-md mx-auto md:my-28 my-10">
+    <div className="text-white">
       <div className="flex flex-col gap-5">
         {memories.map((memory) => (
           <Link key={memory.id} className="mb-4" href={`memories/${memory.id}`}>
