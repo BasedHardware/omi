@@ -12,19 +12,13 @@ interface MemoriesPageProps {
 export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const previewId = searchParams.previewId;
   return (
-    <div className="mx-auto my-10 max-w-screen-md text-white md:my-28 px-4">
+    <div className="mx-auto my-10 max-w-screen-md px-4 text-white md:my-28">
       <SearchControls />
       <Suspense fallback={<div className="text-white">Loading...</div>}>
         <MemoryList />
       </Suspense>
       <SidePanelWrapper previewId={previewId}>
-        <Suspense
-          fallback={
-            <div className="text-white">
-              Loading...
-            </div>
-          }
-        >
+        <Suspense fallback={<div className="text-white">Loading...</div>}>
           <SidePanel previewId={previewId} />
         </Suspense>
       </SidePanelWrapper>
