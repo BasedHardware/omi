@@ -1,10 +1,8 @@
 import { Memory as MemoryType } from '@/src/types/memory.types';
 import moment from 'moment';
-import Summary from './summary/sumary';
-import Tabs from './tabs';
-import Transcription from './transcript/transcription';
 import { SearchParamsTypes } from '@/src/types/params.types';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
+import MemoryWithTabs from './summary/memory-with-tabs';
 
 interface MemoryProps {
   memory: MemoryType;
@@ -30,17 +28,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
                 memory.structured.category.slice(1)}
             </span>
           </div>
-          <Tabs currentTab={currentTab} />
-          <div className="">
-            {currentTab === 'sum' ? (
-              <Summary memory={memory} />
-            ) : (
-              <Transcription
-                transcript={memory.transcript_segments}
-                externalData={memory.external_data}
-              />
-            )}
-          </div>
+          <MemoryWithTabs memory={memory} />
         </div>
         <div className="absolute top-0 z-10 h-full w-full  select-none blur-3xl">
           <div className="absolute right-[0rem] top-[-70px] h-[10rem] w-[100%] bg-[#1758e74f] opacity-30" />
