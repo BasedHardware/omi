@@ -18,9 +18,9 @@ import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -72,6 +72,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
+
   // -----------------------
 
   void setHasTranscripts(bool value) {
@@ -218,7 +219,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     await webSocketProvider?.initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
-      includeSpeechProfile: false,
+      includeSpeechProfile: true,
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
         setWebSocketConnected(true);
