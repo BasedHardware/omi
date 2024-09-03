@@ -1,3 +1,5 @@
+'use client';
+
 import { getCommunityPlugin } from '@/src/actions/plugins/get-community-plugins';
 import { CommunityPlugin } from '@/src/types/plugins/plugins.types';
 import Image from 'next/image';
