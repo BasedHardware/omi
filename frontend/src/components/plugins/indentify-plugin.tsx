@@ -1,7 +1,7 @@
 import { getCommunityPlugin } from '@/src/actions/plugins/get-community-plugins';
 import { CommunityPlugin } from '@/src/types/plugins/plugins.types';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import ErrorIdentifyPlugin from './error-identify-plugin';
 import IdentifyPluginLoader from './identify-plugin-loader';
 
@@ -26,14 +26,15 @@ export default function IndentifyPlugin({ pluginId }: IndentifyPluginProps) {
   if (loading) {
     return <IdentifyPluginLoader />;
   }
-  
+
   if (!pluginCommunity) {
     return <ErrorIdentifyPlugin />;
   }
 
 
   return (
-    <div className="sticky top-[4rem] z-[50] mb-3 flex items-center gap-2 border-b border-solid border-zinc-900 bg-[#0f0f0f] bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
+    <Fragment>
+      <div className="sticky top-[4rem] z-[50] mb-3 flex items-center gap-2 border-b border-solid border-zinc-900 bg-[#0f0f0f] bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
       <Image
         className="grid h-9 w-9 min-w-[36px] place-items-center rounded-full bg-zinc-700"
         src={`https://raw.githubusercontent.com/BasedHardware/Friend/main/${pluginCommunity?.image}`}
@@ -48,5 +49,7 @@ export default function IndentifyPlugin({ pluginId }: IndentifyPluginProps) {
         </p>
       </div>
     </div>
+    </Fragment>
+    
   );
 }
