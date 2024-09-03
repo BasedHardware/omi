@@ -150,6 +150,18 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   return null;
 }
 
+Future<bool> setEventCreatedServer(String memoryId, int eventIndex) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/mark-created?event_index=$eventIndex',
+    headers: {},
+    method: 'PUT',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setEventCreatedServer: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',

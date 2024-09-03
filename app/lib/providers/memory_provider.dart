@@ -127,6 +127,13 @@ class MemoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future setEventCreated(ServerMemory memory, int eventIndex) async {
+    await setEventCreatedServer(memory.id, eventIndex);
+    memory.structured.events[eventIndex].created = true;
+    updateMemory(memory);
+    notifyListeners();
+  }
+
   // TODO: Move this to somewhere more suitable
   Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
     if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;

@@ -10,6 +10,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -17,6 +18,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'maps_util.dart';
@@ -160,8 +162,7 @@ List<Widget> getSummaryWidgets(
                     ));
                     return;
                   }
-                  // TODO: calendar events in memory detail.
-                  // MemoryProvider().setEventCreated(event);
+                  context.read<MemoryProvider>().setEventCreated(memory, memory.structured.events.indexOf(event));
                   setState(() => event.created = true);
                   CalendarUtil().createEvent(
                     event.title,
