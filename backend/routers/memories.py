@@ -14,6 +14,21 @@ from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
 
+@router.put("/v1/memories/{memory_id}/mark-created", response_model=Memory, tags=['memories'])
+def mark_memory_as_created(memory_id: str, event_index: int, uid: str = Depends(auth.get_current_user_uid)):
+
+    memory = _get_memory_by_id(uid, memory_id)
+
+    structured = memory['structured'].copy()
+    
+    structured['events'][event_index]['created'] = True
+    
+    try:
+        memories_db.update_memory(uid, memory_id, {"structured": structured})
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update memory: {str(e)}")
+
 
 def _get_memory_by_id(uid: str, memory_id: str) -> dict:
     memory = memories_db.get_memory(uid, memory_id)
