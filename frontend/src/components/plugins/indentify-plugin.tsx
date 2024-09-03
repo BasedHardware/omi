@@ -23,13 +23,14 @@ export default function IndentifyPlugin({ pluginId }: IndentifyPluginProps) {
       .finally(() => setLoading(false));
   }, []);
 
+  if (loading) {
+    return <IdentifyPluginLoader />;
+  }
+  
   if (!pluginCommunity) {
     return <ErrorIdentifyPlugin />;
   }
 
-  if (loading) {
-    return <IdentifyPluginLoader />;
-  }
 
   return (
     <div className="sticky top-[4rem] z-[50] mb-3 flex items-center gap-2 border-b border-solid border-zinc-900 bg-[#0f0f0f] bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
