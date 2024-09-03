@@ -66,11 +66,14 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
   }
 
   initialise(bool isFromOnboarding) async {
+    changeLoadingState(true);
     device = deviceProvider?.connectedDevice;
     device ??= await deviceProvider?.scanAndConnectToDevice();
-    captureProvider?.resetState(restartBytesProcessing: false);
+    captureProvider?.resetForSpeechProfile();
     initiateWebsocket(isFromOnboarding);
+    // _bleBytesStream = captureProvider?.bleBytesStream;
     if (device != null) initiateFriendAudioStreaming();
+    changeLoadingState(false);
     // initiateConnectionListener();
     notifyListeners();
   }
@@ -80,8 +83,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  changeLoadingState() {
-    loading = !loading;
+  changeLoadingState(bool value) {
+    loading = value;
     notifyListeners();
   }
 
@@ -183,6 +186,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     captureProvider?.resetState(restartBytesProcessing: true);
     uploadingProfile = false;
     profileCompleted = true;
+    text = '';
     updateLoadingText("You're all set!");
     notifyListeners();
   }
@@ -250,13 +254,17 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
   }
 
   void close() {
-    print('Closing speech profile provider');
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
     segments.clear();
-    // captureProvider?.resetState(restartBytesProcessing: true);
-    webSocketProvider?.closeWebSocket();
+    text = '';
+    startedRecording = false;
+    percentageCompleted = 0;
+    uploadingProfile = false;
+    profileCompleted = false;
+    captureProvider?.resetState(restartBytesProcessing: true);
+    notifyListeners();
   }
 
   Future<bool?> createMemory({bool forcedCreation = false}) async {
