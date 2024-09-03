@@ -152,9 +152,9 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
 
 Future<bool> setEventCreatedServer(String memoryId, int eventIndex) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/mark-created?event_index=$eventIndex',
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/events?event_index=$eventIndex',
     headers: {},
-    method: 'PUT',
+    method: 'PATCH',
     body: '',
   );
   if (response == null) return false;
