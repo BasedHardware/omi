@@ -11,6 +11,7 @@
     "lint:format": "prettier  --loglevel warn --write \"./**/*.{js,jsx,ts,tsx,css,md,json}\" "
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.0",
     "iconoir-react": "^7.8.0",
     "markdown-to-jsx": "^7.5.0",
