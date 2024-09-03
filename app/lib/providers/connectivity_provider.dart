@@ -2,40 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
-class ConnectivityController {
-  ValueNotifier<bool> isConnected = ValueNotifier(true);
-  bool previousConnection = true;
-  InternetConnection internetConnection = InternetConnection();
+class ConnectivityProvider extends ChangeNotifier {
+  bool _isConnected = true;
+  bool _previousConnection = true;
+  final InternetConnection _internetConnection = InternetConnection();
 
-  factory ConnectivityController() {
-    return _singleton;
+  bool get isConnected => _isConnected;
+  bool get previousConnection => _previousConnection;
+
+  ConnectivityProvider() {
+    init();
   }
 
-  static final ConnectivityController _singleton = ConnectivityController._internal();
-
-  ConnectivityController._internal();
-
   Future<void> init() async {
-    bool result = await internetConnection.hasInternetAccess;
-    isConnected.value = result;
-    previousConnection = result;
-    internetConnection.onStatusChange.listen((InternetStatus result) {
-      previousConnection = isConnected.value;
+    bool result = await _internetConnection.hasInternetAccess;
+    _isConnected = result;
+    _previousConnection = result;
+    _internetConnection.onStatusChange.listen((InternetStatus result) {
+      _previousConnection = _isConnected;
       isInternetConnected(result);
     });
   }
 
   bool isInternetConnected(InternetStatus? result) {
     if (result == InternetStatus.disconnected) {
-      isConnected.value = false;
+      _isConnected = false;
+      notifyListeners();
       return false;
     } else {
-      isConnected.value = true;
+      _isConnected = true;
+      notifyListeners();
       return true;
     }
   }
 
-  static showNoInternetDialog(BuildContext context) {
+  static void showNoInternetDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (c) => getDialog(
