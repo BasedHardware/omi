@@ -4,8 +4,8 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      disallow: ['/memories/'],
+      allow: ['/'],
     },
-    // sitemap: 'https://app.basehardhare.com/sitemap.xml',
+    sitemap: 'https://h.omi.me/sitemap.xml',
   };
 }
