@@ -131,6 +131,7 @@ workflows:
         submit_to_testflight: true
         beta_groups:
           - Internal
+          - Discord Folks
         submit_to_app_store: false
 
   android-prod-internal:
@@ -148,6 +149,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         GOOGLE_PLAY_TRACK: "internal"
+        GOOGLE_PLAY_PROMOTION_TRACK: "alpha"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -289,6 +291,8 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: $GOOGLE_PLAY_TRACK
         submit_as_draft: false
+        release_promotion:
+          track: $GOOGLE_PLAY_PROMOTION_TRACK
 
   ios-prod-patch:
     name: Patch iOS to Production
