@@ -12,7 +12,7 @@ import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/memories/reprocess.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -20,6 +20,7 @@ import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
+import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryDetailPage extends StatefulWidget {
@@ -237,8 +238,9 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   }
 
   void editSegment(int segmentIdx) {
-    if (!ConnectivityController().isConnected.value) {
-      ConnectivityController.showNoInternetDialog(context);
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (!connectivityProvider.isConnected) {
+      ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
     List<Person> people = SharedPreferencesUtil().cachedPeople;
