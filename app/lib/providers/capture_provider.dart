@@ -255,7 +255,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     return await _createMemory();
   }
 
-  // Warn: Split-brain memory
+  // Warn: Split-brain in memory
   Future<bool?> forceCreateMemory() async {
     return await _createMemory(forcedCreation: true);
   }
@@ -360,6 +360,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
+    processingMemoryId = null;
     setMemoryCreating(false);
     notifyListeners();
     return true;
