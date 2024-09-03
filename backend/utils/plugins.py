@@ -108,7 +108,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
 
 def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_realtime() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return {}
 
