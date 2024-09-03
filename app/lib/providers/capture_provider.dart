@@ -97,6 +97,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
+	print('set memory creating ${value}');
     memoryCreating = value;
     notifyListeners();
   }

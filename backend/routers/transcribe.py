@@ -114,9 +114,11 @@ async def _websocket_util(
         return
 
     # Processing memory
+    memory_watching = new_memory_watch
     processing_memory: ProcessingMemory = None
     processing_memory_synced: int = 0
-    memory_watching = new_memory_watch
+    processing_audio_frames = []
+    processing_audio_frame_synced: int = 0
 
     # Stream transcript
     memory_stream_id = 1
@@ -145,9 +147,6 @@ async def _websocket_util(
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
-
-    processing_audio_frames = []
-    processing_audio_frame_synced: int = 0
 
     def stream_audio(audio_buffer):
         if not new_memory_watch:
@@ -249,6 +248,7 @@ async def _websocket_util(
             websocket_active = False
 
     async def _send_message_event(msg: MessageEvent):
+        print(f"Message: ${msg.to_json()}")
         try:
             await websocket.send_json(msg.to_json())
             return True
@@ -281,7 +281,7 @@ async def _websocket_util(
             processing_memory_id=processing_memory.id),
         )
         if not ok:
-            print("Can not send message event new_memory_creating")
+            print("Can not send message event new_processing_memory_created")
 
     async def _post_process_memory(memory: Memory):
         nonlocal processing_memory
