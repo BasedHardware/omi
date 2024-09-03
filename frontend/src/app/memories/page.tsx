@@ -15,7 +15,7 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
     <div className="mx-auto my-10 max-w-screen-md px-4 text-white md:my-28">
       <SearchControls />
       <Suspense fallback={<div className="text-white">Loading...</div>}>
-        <MemoryList />
+        <MemoryList searchParams={searchParams} />
       </Suspense>
       <SidePanelWrapper previewId={previewId}>
         <Suspense fallback={<div className="text-white">Loading...</div>}>

@@ -35,7 +35,10 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
         open={!!previewId}
         onOpenChange={handleOpen}
       >
-        <DrawerContent aria-describedby={undefined} className="ml-auto h-screen max-h-screen max-w-screen-md overflow-y-auto overflow-x-hidden bg-zinc-900 text-white">
+        <DrawerContent
+          aria-describedby={undefined}
+          className="ml-auto h-screen max-h-screen max-w-screen-md overflow-y-auto overflow-x-hidden bg-zinc-900 text-white"
+        >
           <header className="relative z-20 flex w-full gap-2 px-4 pt-4 md:px-12 md:pt-12">
             <button
               onClick={() => handleOpen(false)}
@@ -51,9 +54,7 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
             </Link>
           </header>
           <VisuallyHidden.Root>
-            <DialogTitle>
-              Memory Details
-            </DialogTitle>
+            <DialogTitle>Memory Details</DialogTitle>
           </VisuallyHidden.Root>
           {children}
         </DrawerContent>

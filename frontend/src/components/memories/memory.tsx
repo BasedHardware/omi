@@ -14,7 +14,7 @@ interface MemoryProps {
 export default function Memory({ memory, searchParams }: MemoryProps) {
   const currentTab = searchParams.tab ?? 'sum';
   return (
-    <div className="relative mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 bg-transparent pb-6 text-white shadow-md shadow-gray-900 backdrop-blur-lg md:mx-auto md:my-28 md:pb-12">
+    <div className="relative rounded-2xl border border-solid border-zinc-800 bg-transparent pb-6 text-white shadow-md shadow-gray-900 backdrop-blur-lg md:mx-auto md:pb-12">
       <div className="relative overflow-hidden py-6 md:pt-12">
         <div className="relative z-50">
           <div className="px-4 md:px-12">

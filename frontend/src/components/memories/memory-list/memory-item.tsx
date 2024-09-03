@@ -6,12 +6,12 @@ interface MemoryItemProps {
   memory: Memory;
 }
 
-export default function MemoryItem({ memory }: MemoryItemProps) {
+export default function MemoryItem({ memory, searchParams }: MemoryItemProps) {
+  const _searchParams = new URLSearchParams(searchParams);
   return (
     <Link
-      key={memory.id}
       className="mb-4 flex w-full items-start gap-4 border-b border-solid border-gray-700 pb-8 md:gap-7"
-      href={`/memories?previewId=${memory.id}`}
+      href={`/memories?${_searchParams.toString()}&previewId=${memory.id}`}
     >
       <div className="w-fith-fit rounded-md bg-zinc-800 p-2.5 text-sm md:p-4 md:text-base">
         11
