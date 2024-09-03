@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/providers/facts_provider.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -88,8 +88,9 @@ class _FactsPageState extends State<_FactsPage> {
   }
 
   Future<void> _showFactDialog(BuildContext context, FactsProvider provider, {Fact? fact}) async {
-    if (!ConnectivityController().isConnected.value) {
-      ConnectivityController.showNoInternetDialog(context);
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (!connectivityProvider.isConnected) {
+      ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
 

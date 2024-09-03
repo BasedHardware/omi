@@ -14,9 +14,11 @@ import 'found_devices.dart';
 class FindDevicesPage extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
+  final VoidCallback? onSkip;
   final bool includeSkip;
 
-  const FindDevicesPage({super.key, required this.goNext, this.includeSkip = true, this.isFromOnboarding = false});
+  const FindDevicesPage(
+      {super.key, required this.goNext, this.includeSkip = true, this.isFromOnboarding = false, this.onSkip});
 
   @override
   State<FindDevicesPage> createState() => _FindDevicesPageState();
@@ -96,7 +98,11 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
             if (widget.includeSkip && provider.deviceList.isEmpty)
               ElevatedButton(
                 onPressed: () {
-                  widget.goNext();
+                  if (widget.isFromOnboarding) {
+                    widget.onSkip!();
+                  } else {
+                    widget.goNext();
+                  }
                   MixpanelManager().useWithoutDeviceOnboardingFindDevices();
                 },
                 child: Container(
