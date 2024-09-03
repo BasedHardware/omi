@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -9,9 +8,8 @@ import 'package:provider/provider.dart';
 
 class WelcomePage extends StatefulWidget {
   final VoidCallback goNext;
-  final VoidCallback skipDevice;
 
-  const WelcomePage({super.key, required this.goNext, required this.skipDevice});
+  const WelcomePage({super.key, required this.goNext});
 
   @override
   State<WelcomePage> createState() => _WelcomePageState();
@@ -103,19 +101,6 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
             ),
           );
         }),
-        TextButton(
-            onPressed: () {
-              widget.skipDevice();
-              MixpanelManager().useWithoutDeviceOnboardingWelcome();
-            },
-            child: const Text(
-              'Skip for now',
-              style: TextStyle(
-                  color: Colors.white,
-                  // decoration: TextDecoration.underline,
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal),
-            )),
         const SizedBox(height: 16)
       ],
     );

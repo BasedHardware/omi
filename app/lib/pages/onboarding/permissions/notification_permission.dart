@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -22,16 +22,9 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            // Text(
-            //   'For a personalized experience, we need permissions to send you notifications and read your location information.',
-            //   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-            //   textAlign: TextAlign.center,
-            // ),
-            // const SizedBox(height: 80),
             CheckboxListTile(
               value: provider.hasNotificationPermission,
               onChanged: (s) async {
-                print('s: $s');
                 if (s != null) {
                   if (s) {
                     await provider.askForNotificationPermissions();
@@ -54,31 +47,45 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    decoration: provider.hasNotificationPermission
-                        ? BoxDecoration(
-                            border: const GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          )
-                        : null,
+                    decoration: BoxDecoration(
+                      border: const GradientBoxBorder(
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: MaterialButton(
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       onPressed: () {
-                        // TODO: if toggle not on, show ignore
-                        widget.goNext();
+                        if (provider.hasNotificationPermission) {
+                          widget.goNext();
+                        } else {
+                          showDialog(
+                            context: context,
+                            builder: (c) => getDialog(
+                              context,
+                              () {
+                                Navigator.of(context).pop();
+                              },
+                              () {
+                                Navigator.of(context).pop();
+                              },
+                              'Allow Notifications',
+                              'This app needs notification permissions to improve your experience.',
+                              singleButton: true,
+                            ),
+                          );
+                        }
                       },
-                      child: Text(
-                        provider.hasNotificationPermission ? 'Continue' : 'Skip',
+                      child: const Text(
+                        'Continue',
                         style: TextStyle(
-                          decoration:
-                              provider.hasNotificationPermission ? TextDecoration.none : TextDecoration.underline,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ),
