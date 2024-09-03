@@ -31,4 +31,8 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
+
+  @override
+  @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
+  final String? gleapApiKey = _DevEnv.gleapApiKey;
 }
