@@ -9,7 +9,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -68,8 +68,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<MessageProvider>(
-      builder: (context, provider, child) {
+    return Consumer2<MessageProvider, ConnectivityProvider>(
+      builder: (context, provider, connectivityProvider, child) {
         return Stack(
           children: [
             Center(
@@ -79,7 +79,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     )
                   : (provider.messages.isEmpty)
                       ? Text(
-                          ConnectivityController().isConnected.value
+                          connectivityProvider.isConnected
                               ? 'No messages yet!\nWhy don\'t you start a conversation?'
                               : 'Please check your internet connection and try again',
                           textAlign: TextAlign.center,
@@ -153,7 +153,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           : () async {
                               String message = textController.text;
                               if (message.isEmpty) return;
-                              if (ConnectivityController().isConnected.value) {
+                              if (connectivityProvider.isConnected) {
                                 _sendMessageUtil(message);
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
