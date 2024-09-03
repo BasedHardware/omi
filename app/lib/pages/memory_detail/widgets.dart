@@ -792,35 +792,35 @@ showOptionsBottomSheet(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: _getSheetTitle(context, memory) +
-                    (
-                      displayDevTools
-                          ? _getDevToolsOptions(
-                              context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
-                          : displayShareOptions
-                              ? _getShareOptions(
-                                  context,
-                                  memory,
-                                  loadingShareMemoryViaURL,
-                                  changeLoadingShareMemoryViaURL,
-                                  loadingShareMemoryTranscript,
-                                  changeLoadingShareMemoryTranscript,
-                                  loadingShareMemorySummary,
-                                  changeLoadingShareMemorySummary,
-                                )
-                              : _getSheetMainOptions(
-                                  context,
-                                  memory,
-                                  changeLoadingReprocessMemory,
-                                  loadingReprocessMemory,
-                                  changeDisplayDevOptions,
-                                  displayDevTools,
-                                  changeDisplayShareOptions,
-                                  displayShareOptions,
-                                  reprocessMemory,
-                                ),
-                    ) +
-                    <Widget>[const SizedBox(height: 40)],
+                children: [
+                  ..._getSheetTitle(context, memory),
+                  ...(displayDevTools
+                      ? _getDevToolsOptions(
+                          context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
+                      : displayShareOptions
+                          ? _getShareOptions(
+                              context,
+                              memory,
+                              loadingShareMemoryViaURL,
+                              changeLoadingShareMemoryViaURL,
+                              loadingShareMemoryTranscript,
+                              changeLoadingShareMemoryTranscript,
+                              loadingShareMemorySummary,
+                              changeLoadingShareMemorySummary,
+                            )
+                          : _getSheetMainOptions(
+                              context,
+                              memory,
+                              changeLoadingReprocessMemory,
+                              loadingReprocessMemory,
+                              changeDisplayDevOptions,
+                              displayDevTools,
+                              changeDisplayShareOptions,
+                              displayShareOptions,
+                              reprocessMemory,
+                            )),
+                  const SizedBox(height: 40),
+                ],
               ),
             );
           }));
