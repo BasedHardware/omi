@@ -10,7 +10,8 @@ export default async function getPublicMemoriesPrerender(maxCount = 40000) {
   for (let i = 0; i < totalRequests; i += concurrentRequests) {
     const promises = [];
     for (let j = 0; j < concurrentRequests && i + j < totalRequests; j++) {
-      promises.push(getPublicMemories());
+      const offset = (i + j) * limit;
+      promises.push(getPublicMemories(offset, limit));
     }
     const results = await Promise.all(promises);
     memories = memories.concat(results.flat());
