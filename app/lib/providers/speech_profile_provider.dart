@@ -179,9 +179,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     if (isFromOnboarding) {
       await createMemory();
       captureProvider?.clearTranscripts();
-      captureProvider?.resetState(restartBytesProcessing: true);
     }
-
+    captureProvider?.resetState(restartBytesProcessing: true);
     uploadingProfile = false;
     profileCompleted = true;
     updateLoadingText("You're all set!");
