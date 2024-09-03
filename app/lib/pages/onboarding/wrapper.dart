@@ -147,6 +147,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                       FindDevicesPage(
                         isFromOnboarding: true,
+                        onSkip: () {
+                          routeToPage(context, const HomePageWrapper(), replace: true);
+                        },
                         goNext: () async {
                           var provider = context.read<OnboardingProvider>();
                           if (SharedPreferencesUtil().hasSpeakerProfile) {
