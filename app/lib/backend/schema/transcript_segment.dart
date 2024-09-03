@@ -111,7 +111,7 @@ class TranscriptSegment {
         joinedSimilarSegments.add(newSegment);
       }
     }
-    print(joinedSimilarSegments);
+
     if (joinedSimilarSegments.isEmpty) return;
 
     bool isNotEmpty = segments.isNotEmpty;
