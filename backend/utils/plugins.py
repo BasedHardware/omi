@@ -56,7 +56,8 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return []
 
@@ -131,6 +132,8 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
                 return
 
             response_data = response.json()
+            if not response_data:
+                return
             message = response_data.get('message', '')
             print('Plugin', plugin.id, 'response:', message)
             if message and len(message) > 5:
