@@ -6,9 +6,6 @@ import Footer from '../components/shared/footer';
 import envConfig from '../constants/envConfig';
 import { GleapInit } from '@/src/components/shared/gleap';
 
-
-
-
 const inter = Mulish({
   subsets: ['latin'],
   weight: ['200', '400', '500', '600', '700'],
