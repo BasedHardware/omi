@@ -1,4 +1,14 @@
-import { notFound } from 'next/navigation';
+import MemoryList from '@/src/components/memories/memory-list/memory-list';
+import { Suspense } from 'react';
+
 export default function MemoriesPage() {
-  notFound();
+  return(
+    <Suspense fallback={
+      <div className='text-white'>
+        Loading...
+      </div>
+    }>
+      <MemoryList />
+    </Suspense>
+  )
 }
