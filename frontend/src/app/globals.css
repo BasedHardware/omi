@@ -32,3 +32,8 @@ body {
   background: #181818;
   color: rgba(var(--foreground-rgb), 1);
 }
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
+}
