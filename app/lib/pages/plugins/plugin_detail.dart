@@ -5,10 +5,11 @@ import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:provider/provider.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -124,7 +125,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         color: widget.plugin.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        if (!ConnectivityController().isConnected.value) {
+                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                        if (!connectivityProvider.isConnected) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text("Can't enable plugin without internet connection."),
                           ));
@@ -320,7 +322,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
                 maxRating: 5.0,
                 onRatingUpdate: (rating) {
-                  if (ConnectivityController().isConnected.value) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (connectivityProvider.isConnected) {
                     reviewPlugin(widget.plugin.id, rating);
                     bool hadReview = widget.plugin.userReview != null;
                     if (!hadReview) widget.plugin.ratingCount += 1;

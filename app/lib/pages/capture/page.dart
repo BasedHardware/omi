@@ -15,10 +15,9 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
@@ -76,10 +75,6 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   //         ))
   //     .toList();
 
-  InternetStatus? _internetStatus;
-
-  late StreamSubscription<InternetStatus> _internetListener;
-
   setHasTranscripts(bool hasTranscripts) {
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
   }
@@ -131,26 +126,18 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           ),
         );
       }
-    });
-    _internetListener = ConnectivityController().internetConnection.onStatusChange.listen((InternetStatus status) {
-      switch (status) {
-        case InternetStatus.connected:
-          _internetStatus = InternetStatus.connected;
-          break;
-        case InternetStatus.disconnected:
-          _internetStatus = InternetStatus.disconnected;
-          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
-          context.read<CaptureProvider>().cancelMemoryCreationTimer();
-          break;
+      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+      if (!connectivityProvider.isConnected) {
+        context.read<CaptureProvider>().cancelMemoryCreationTimer();
       }
     });
+
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _internetListener.cancel();
     // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
@@ -238,11 +225,11 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             ListView(children: [
               speechProfileWidget(context),
               ...getConnectionStateWidgets(context, provider.hasTranscripts, deviceProvider.connectedDevice,
-                  context.read<WebSocketProvider>().wsConnectionState, _internetStatus),
+                  context.read<WebSocketProvider>().wsConnectionState),
               getTranscriptWidget(
                   provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
               ...connectionStatusWidgets(
-                  context, provider.segments, context.read<WebSocketProvider>().wsConnectionState, _internetStatus),
+                  context, provider.segments, context.read<WebSocketProvider>().wsConnectionState),
               const SizedBox(height: 16)
             ]),
             getPhoneMicRecordingButton(() => _recordingToggled(provider), provider.recordingState),

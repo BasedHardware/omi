@@ -5,7 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/providers/people_provider.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
@@ -131,8 +131,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
   }
 
   Future<void> _showPersonDialog(BuildContext context, PeopleProvider provider, {Person? person}) async {
-    if (!ConnectivityController().isConnected.value) {
-      ConnectivityController.showNoInternetDialog(context);
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (!connectivityProvider.isConnected) {
+      ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
 
@@ -156,8 +157,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
   }
 
   Future<void> _confirmDeleteSample(int peopleIdx, Person person, String url, PeopleProvider provider) async {
-    if (!ConnectivityController().isConnected.value) {
-      ConnectivityController.showNoInternetDialog(context);
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (!connectivityProvider.isConnected) {
+      ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
     final confirmed = await showDialog<bool>(
