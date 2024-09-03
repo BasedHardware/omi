@@ -124,6 +124,7 @@ class ServerMemory {
 
   final MemoryExternalData? externalIntegration;
   MemoryPostProcessing? postprocessing;
+  String? processingMemoryId;
 
   bool discarded;
   final bool deleted;
@@ -150,6 +151,7 @@ class ServerMemory {
     this.language,
     this.externalIntegration,
     this.postprocessing,
+    this.processingMemoryId,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -174,6 +176,7 @@ class ServerMemory {
       retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
       postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
+      processingMemoryId: json['processing_memory_id'],
     );
   }
 
@@ -208,6 +211,7 @@ class ServerMemory {
       'retries': retries,
       'external_data': externalIntegration?.toJson(),
       'postprocessing': postprocessing?.toJson(),
+      'processing_memory_id': processingMemoryId,
     };
   }
 

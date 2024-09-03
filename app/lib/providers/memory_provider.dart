@@ -139,6 +139,7 @@ class MemoryProvider extends ChangeNotifier {
       photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
       triggerIntegrations: false,
       language: memory.language ?? 'en',
+      processingMemoryId: memory.processingMemoryId,
     );
   }
 

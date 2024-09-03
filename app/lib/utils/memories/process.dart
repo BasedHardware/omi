@@ -21,6 +21,7 @@ Future<ServerMemory?> processTranscriptContent({
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
   String? source,
+  String? processingMemoryId,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -34,6 +35,7 @@ Future<ServerMemory?> processTranscriptContent({
     language: language,
     audioFile: audioFile,
     source: source,
+    processingMemoryId: processingMemoryId,
   );
   if (result == null || result.memory == null) return null;
 
