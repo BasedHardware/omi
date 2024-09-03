@@ -430,7 +430,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         }
 
         if (event.type == MessageEventType.newProcessingMemoryCreated) {
-            print("hey");
           if (event.processingMemoryId == null) {
             print("New processing memory created message event is invalid");
             return;

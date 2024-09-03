@@ -9,6 +9,7 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -98,7 +99,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            provider.closeWebSocket();
+            context.read<WebSocketProvider>().closeWebSocket();
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();
