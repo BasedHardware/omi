@@ -4,6 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/src/components/ui/accordion';
+import TrendingItem from './tendencies/trending-item';
 
 export default function Tendencies() {
   return (
@@ -18,24 +19,12 @@ export default function Tendencies() {
         <AccordionContent className="p-3 md:p-5">
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <div className="fle-col flex h-20 w-1/2 flex-col justify-end rounded-lg bg-zinc-800/50 p-3">
-                <h3 className="text-sm md:text-base">Work</h3>
-                <p className="text-xs text-neutral-400 md:text-base">23 memories</p>
-              </div>
-              <div className="fle-col flex h-20 w-1/2 flex-col justify-end rounded-lg bg-zinc-800/50 p-3">
-                <h3 className="text-sm md:text-base">Business</h3>
-                <p className="text-xs text-neutral-400 md:text-base">6 memories</p>
-              </div>
+              <TrendingItem title='work' count={23} />
+              <TrendingItem title='Business' count={6} />
             </div>
             <div className="flex gap-2">
-              <div className="fle-col flex h-20 w-1/2 flex-col justify-end rounded-lg bg-zinc-800/50 p-3">
-                <h3 className="text-sm md:text-base">Inspiration</h3>
-                <p className="text-xs text-neutral-400 md:text-base">6 memories</p>
-              </div>
-              <div className="fle-col flex h-20 w-1/2 flex-col justify-end rounded-lg bg-zinc-800/50 p-3">
-                <h3 className="text-sm md:text-base">Social</h3>
-                <p className="text-xs text-neutral-400 md:text-base">6 memories</p>
-              </div>
+              <TrendingItem title='Inspiration' count={6} />
+              <TrendingItem title='Social' count={6} />
             </div>
           </div>
         </AccordionContent>
