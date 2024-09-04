@@ -391,18 +391,20 @@ async def _websocket_util(
             await _create_processing_memory()
 
         # Validate transcript
-        # Longer 15s
+        # Longer 60s
+        min_seconds_limit = 60
         segment_end = int(last_segment["end"])
         now = time.time()
-        should_create_memory_time = (timer_start + segment_end + 15 < now)
+        should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
-        # 15 words at least
-        should_create_memory_time_words = False
-        if should_create_memory_time:
+        # 0 words at least
+        min_words_limit = 0
+        should_create_memory_time_words = min_words_limit == 0
+        if min_words_limit > 0 and should_create_memory_time:
             wc = 0
             for segment in memory_transcript_segements:
                 wc = wc + len(segment["text"].split(" "))
-                if wc >= 15:
+                if wc >= min_words_limit:
                     should_create_memory_time_words = True
                     break
 
