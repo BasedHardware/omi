@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/facts/page.dart';
@@ -318,14 +317,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               Navigator.of(context).pop();
                             },
                             () async {
-                              await deleteAccount();
-                              signOut();
-                              Navigator.of(context).pop();
-                              Navigator.pushAndRemoveUntil(context,
-                                  MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                              // send email to team@basedhardware.com
+                              launchUrl(Uri.parse('mailto:team@basedhardware.com?subject=Delete%20My%20Account'));
                             },
-                            'Delete Account',
-                            'Are you sure you want to delete your account? You will lose all of your memories and data if you do so.\n\nOnce you click on delete, your data will be deleted in a few hours.',
+                            'Deleting Account?',
+                            'Please send us an email at team@basedhardware.com',
+                            okButtonText: 'Open Email',
                             singleButton: false,
                           );
                         });
