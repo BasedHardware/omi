@@ -11,9 +11,10 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:provider/provider.dart';
 
 class AIMessage extends StatefulWidget {
   final ServerMessage message;
@@ -124,7 +125,8 @@ class _AIMessageState extends State<AIMessage> {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        if (ConnectivityController().isConnected.value) {
+                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                        if (connectivityProvider.isConnected) {
                           if (memoryDetailLoading[data.$1]) return;
                           setState(() => memoryDetailLoading[data.$1] = true);
 

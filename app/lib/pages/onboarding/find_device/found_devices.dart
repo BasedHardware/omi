@@ -8,13 +8,13 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct> deviceList;
+  final bool isFromOnboarding;
   final VoidCallback goNext;
 
   const FoundDevices({
     super.key,
-    required this.deviceList,
     required this.goNext,
+    required this.isFromOnboarding,
   });
 
   @override
@@ -60,9 +60,9 @@ class _FoundDevicesState extends State<FoundDevices> {
           children: [
             !provider.isConnected
                 ? Text(
-                    widget.deviceList.isEmpty
+                    provider.deviceList.isEmpty
                         ? 'Searching for devices...'
-                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
@@ -77,7 +77,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: Color(0x66FFFFFF),
                     ),
                   ),
-            if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
+            if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
@@ -112,7 +112,7 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   _devicesList(OnboardingProvider provider) {
-    return (widget.deviceList.mapIndexed(
+    return (provider.deviceList.mapIndexed(
       (index, device) {
         bool isConnecting = provider.connectingToDeviceId == device.id;
 
@@ -121,6 +121,8 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? () async {
                   await provider.handleTap(
                     device: device,
+                    isFromOnboarding: widget.isFromOnboarding,
+                    goNext: widget.goNext,
                   );
                 }
               : null,

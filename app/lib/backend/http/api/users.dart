@@ -1,9 +1,22 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/env/env.dart';
+
+Future<bool> deleteAccount() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/delete-account',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteAccount response: ${response.body}');
+  return response.statusCode == 200;
+}
 
 Future<bool> setRecordingPermission(bool value) async {
   var response = await makeApiCall(
@@ -88,7 +101,10 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
   debugPrint('getAllPeople response: ${response.body}');
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
-    List<Person> people = peopleJson.map((json) => Person.fromJson(json)).toList();
+    List<Person> people = peopleJson.mapIndexed((idx, json) {
+      json['color_idx'] = idx % speakerColors.length;
+      return Person.fromJson(json);
+    }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
     return people;

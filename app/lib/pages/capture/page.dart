@@ -5,23 +5,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
-import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
-import 'logic/websocket_mixin.dart';
+import '../../providers/websocket_provider.dart';
 
 class CapturePage extends StatefulWidget {
   const CapturePage({
@@ -32,8 +33,7 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, WebSocketMixin, OpenGlassMixin {
+class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -76,10 +76,6 @@ class CapturePageState extends State<CapturePage>
   //         ))
   //     .toList();
 
-  InternetStatus? _internetStatus;
-
-  late StreamSubscription<InternetStatus> _internetListener;
-
   setHasTranscripts(bool hasTranscripts) {
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
   }
@@ -110,11 +106,6 @@ class CapturePageState extends State<CapturePage>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       await context.read<CaptureProvider>().processCachedTranscript();
-      // Should we start the websocket even if no device is connected? Websocket starts when a device is connected
-      // if (context.read<DeviceProvider>().connectedDevice != null) {
-      //   await context.read<CaptureProvider>().initiateWebsocket();
-      // }
-
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
@@ -129,37 +120,26 @@ class CapturePageState extends State<CapturePage>
               await LocationService().requestBackgroundPermission();
               if (mounted) Navigator.of(context).pop();
             },
-            'Enable Location Services?  🌍',
-            'We need your location permissions to add a location tag to your memories. This will help you remember where they happened.\n\nFor location to work in background, you\'ll have to set Location Permission to "Always Allow" in Settings',
+            'Enable Location?  🌍',
+            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
             singleButton: false,
             okButtonText: 'Continue',
           ),
         );
       }
-    });
-    _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
-      switch (status) {
-        case InternetStatus.connected:
-          _internetStatus = InternetStatus.connected;
-          break;
-        case InternetStatus.disconnected:
-          _internetStatus = InternetStatus.disconnected;
-          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
-          context.read<CaptureProvider>().cancelMemoryCreationTimer();
-          break;
+      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+      if (!connectivityProvider.isConnected) {
+        context.read<CaptureProvider>().cancelMemoryCreationTimer();
       }
     });
+
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // record.dispose();
-    _internetListener.cancel();
-    // websocketChannel
-    closeWebSocket();
-
+    // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
 
@@ -180,6 +160,8 @@ class CapturePageState extends State<CapturePage>
       }
     } else {
       PermissionStatus permissionGranted = await locationService.requestPermission();
+      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
+      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
@@ -204,6 +186,7 @@ class CapturePageState extends State<CapturePage>
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
+          // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
           if (info == 'FIM_CHANGE') {
             showDialog(
               context: context,
@@ -211,18 +194,14 @@ class CapturePageState extends State<CapturePage>
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<CaptureProvider>().closeWebSocket();
+                  context.read<WebSocketProvider>().closeWebSocket();
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
                   context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
                   context.read<CaptureProvider>().initiateWebsocket(codec);
-                  Navigator.pop(context);
-                  // We can just restart the socket and not the whole app
-                  // Navigator.pushAndRemoveUntil(
-                  //   context,
-                  //   MaterialPageRoute(builder: (context) => const HomePageWrapper()),
-                  //   (route) => false,
-                  // );
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
                 },
                 () => {},
                 'Firmware change detected!',
@@ -247,10 +226,12 @@ class CapturePageState extends State<CapturePage>
           children: [
             ListView(children: [
               speechProfileWidget(context),
-              ...getConnectionStateWidgets(
-                  context, provider.hasTranscripts, deviceProvider.connectedDevice, wsConnectionState, _internetStatus),
-              getTranscriptWidget(provider.memoryCreating, provider.segments, photos, deviceProvider.connectedDevice),
-              ...connectionStatusWidgets(context, provider.segments, wsConnectionState, _internetStatus),
+              ...getConnectionStateWidgets(context, provider.hasTranscripts, deviceProvider.connectedDevice,
+                  context.read<WebSocketProvider>().wsConnectionState),
+              getTranscriptWidget(
+                  provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
+              ...connectionStatusWidgets(
+                  context, provider.segments, context.read<WebSocketProvider>().wsConnectionState),
               const SizedBox(height: 16)
             ]),
             getPhoneMicRecordingButton(() => _recordingToggled(provider), provider.recordingState),
@@ -281,7 +262,7 @@ class CapturePageState extends State<CapturePage>
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            provider.closeWebSocket();
+            context.read<WebSocketProvider>().closeWebSocket();
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();

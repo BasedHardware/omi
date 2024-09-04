@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +38,9 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
+    // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
+    // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
+    await _firebaseMessaging.getAPNSToken();
     listenForMessages();
   }
 
@@ -87,12 +92,13 @@ class NotificationService {
     );
   }
 
-  Future<void> requestNotificationPermissions() async {
+  Future<bool> requestNotificationPermissions() async {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
-      _awesomeNotifications.requestPermissionToSendNotifications();
+      isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
       _register();
     }
+    return isAllowed;
   }
 
   Future<void> _register() async {
@@ -117,13 +123,22 @@ class NotificationService {
   Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
     String timeZone = await getTimeZone();
-    await saveFcmTokenServer(token: token, timeZone: timeZone);
+    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
+      await saveFcmTokenServer(token: token, timeZone: timeZone);
+    }
   }
 
   void saveNotificationToken() async {
+    if (Platform.isIOS) {
+      await _firebaseMessaging.getAPNSToken();
+    }
     String? token = await _firebaseMessaging.getToken();
     await saveFcmToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
+  }
+
+  Future<bool> hasNotificationPermissions() async {
+    return await _awesomeNotifications.isNotificationAllowed();
   }
 
   Future<void> createNotification({

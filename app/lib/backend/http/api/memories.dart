@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -34,9 +34,10 @@ Future<CreateMemoryResponse?> createMemoryServer({
   bool triggerIntegrations = true,
   String? language,
   File? audioFile,
+  String? source,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations',
+    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
     headers: {},
     method: 'POST',
     body: jsonEncode({
@@ -69,7 +70,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   return null;
 }
 
-Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
+Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
   var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
   var request = http.MultipartRequest(
     'POST',
@@ -81,17 +82,17 @@ Future<ServerMemory> memoryPostProcessing(File file, String memoryId) async {
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-
+    // TODO: catch here, and set postprocessing to failed
     if (response.statusCode == 200) {
       debugPrint('memoryPostProcessing Response body: ${jsonDecode(response.body)}');
       return ServerMemory.fromJson(jsonDecode(response.body));
     } else {
       debugPrint('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
-      throw Exception('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
+      return null;
     }
   } catch (e) {
     debugPrint('An error occurred memoryPostProcessing: $e');
-    throw Exception('An error occurred memoryPostProcessing: $e');
+    return null;
   }
 }
 
@@ -196,5 +197,17 @@ Future<bool> assignMemoryTranscriptSegment(
   );
   if (response == null) return false;
   debugPrint('assignMemoryTranscriptSegment: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/visibility?value=$visibility&visibility=$visibility',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryVisibility: ${response.body}');
   return response.statusCode == 200;
 }

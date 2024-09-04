@@ -12,12 +12,18 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
+
 #define MAX_BLOCK_SIZE   10000 //24000 * 2
+
 #define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
 #define NUMBER_OF_CHANNELS 2
 #define PACKET_SIZE 400
 #define WORD_SIZE 16
+#define NUM_CHANNELS 2
+
+#define PI 3.14159265358979323846
+
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 static void* rx_buffer;
 static void* buzz_buffer;
@@ -61,8 +67,6 @@ int speaker_init() {
 	}
       
         memset(rx_buffer, 0, MAX_BLOCK_SIZE);
-        int16_t *noise = (int16_t*)buzz_buffer;
-
         memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
         return 1;
 }
@@ -112,6 +116,7 @@ uint16_t speak(uint16_t len, const void *buf) {
 
             k_sleep(K_MSEC(4000));
             memset(clear_ptr, 0, MAX_BLOCK_SIZE);
+
         }
 
     }
@@ -119,9 +124,49 @@ uint16_t speak(uint16_t len, const void *buf) {
 }
 
 
-void buzz() {
-        i2s_write(speaker, buzz_buffer,  MAX_BLOCK_SIZE);
-        i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
-	    i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);  
-        k_msleep(4000);
-}
+static void generate_gentle_chime(int16_t *buffer, int num_samples)
+ {
+     float frequencies[] = {523.25, 659.25, 783.99, 1046.50}; // C5, E5, G5, C6
+     int num_freqs = sizeof(frequencies) / sizeof(frequencies[0]);
+
+     for (int i = 0; i < num_samples; i++) {
+         float t = (float)i / SAMPLE_FREQUENCY;
+         float sample = 0;
+         for (int j = 0; j < num_freqs; j++) {
+             sample += sinf(2 * PI * frequencies[j] * t) * (1.0 - t);
+         }
+         int16_t int_sample = (int16_t)(sample / num_freqs * 32767 * 0.5);
+         buffer[i * NUM_CHANNELS] = int_sample;
+         buffer[i * NUM_CHANNELS + 1] = int_sample;
+     }
+ }
+
+ int play_boot_sound(void)
+ {
+     int ret;
+     int16_t *buffer = (int16_t *) buzz_buffer;
+     int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
+
+     generate_gentle_chime(buffer, samples_per_block);
+
+     ret = i2s_write(speaker, buffer, MAX_BLOCK_SIZE);
+     if (ret < 0) {
+         LOG_ERR("Failed to write initial I2S data: %d", ret);
+         return ret;
+     }
+
+     ret = i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+     if (ret != 0) {
+         LOG_ERR("Failed to start I2S transmission: %d", ret);
+         return ret;
+     }  
+    k_sleep(K_MSEC(2000));  // Increased from 1000 to 2000 ms
+
+     ret = i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+     if (ret != 0) {
+         LOG_ERR("Failed to drain I2S transmission: %d", ret);
+         return ret;
+     }
+
+     return 0;
+ }

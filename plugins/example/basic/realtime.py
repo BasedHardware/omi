@@ -18,7 +18,7 @@ def cursing_checker(data: RealtimePluginRequest):
     Without understanding the whole conversation. Just the new segments obtained.
     """
     curse_words = ['shit', 'fuck', 'bitch', 'bastard']
-    transcript = TranscriptSegment.segments_as_string(data.get_segments())
+    transcript = TranscriptSegment.segments_as_string(data.segments)
     text_lower = transcript.lower()
     pattern = r'\b(?:' + '|'.join(map(re.escape, curse_words)) + r')\b'
     if bool(re.search(pattern, text_lower)):

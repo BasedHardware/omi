@@ -2,21 +2,23 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/memories/widgets/confirm_deletion_widget.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'maps_util.dart';
 
@@ -410,15 +412,361 @@ List<Widget> getGeolocationWidgets(ServerMemory memory, BuildContext context) {
         ];
 }
 
+///************************************************
+///************ SETTINGS BOTTOM SHEET *************
+///************************************************
+
+_getSheetTitle(context, memory) {
+  return <Widget>[
+    ListTile(
+      title: Text(
+        memory.discarded ? 'Discarded Memory' : memory.structured.title,
+        style: Theme.of(context).textTheme.labelLarge,
+      ),
+      leading: const Icon(Icons.description),
+      trailing: IconButton(
+        icon: const Icon(Icons.cancel_outlined),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+    ),
+    const SizedBox(height: 8),
+  ];
+}
+
+_getDevToolsOptions(
+  BuildContext context,
+  ServerMemory memory,
+  Function(bool) changeLoadingPluginIntegrationTest,
+  bool loadingPluginIntegrationTest,
+) {
+  return <Widget>[
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: ListTile(
+        title: const Text('Trigger Memory Created Integration'),
+        leading: loadingPluginIntegrationTest
+            ? const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.send_to_mobile_outlined),
+        onTap: () {
+          changeLoadingPluginIntegrationTest(true);
+          // TODO: if not set, show dialog to set URL or take them to settings.
+
+          webhookOnMemoryCreatedCall(memory, returnRawBody: true).then((response) {
+            showDialog(
+              context: context,
+              builder: (c) => getDialog(
+                context,
+                () => Navigator.pop(context),
+                () => Navigator.pop(context),
+                'Result:',
+                response,
+                okButtonText: 'Ok',
+                singleButton: true,
+              ),
+            );
+            changeLoadingPluginIntegrationTest(false);
+          });
+        },
+      ),
+    ),
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: ListTile(
+        title: const Text('Test a Memory Prompt'),
+        leading: const Icon(Icons.chat),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+        onTap: () {
+          routeToPage(context, TestPromptsPage(memory: memory));
+        },
+      ),
+    ),
+  ];
+}
+
+_copyContent(BuildContext context, String content) {
+  Clipboard.setData(ClipboardData(text: content));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Transcript copied to clipboard')),
+  );
+  HapticFeedback.lightImpact();
+  Navigator.pop(context);
+}
+
+_getLoadingIndicator() {
+  return const SizedBox(
+      width: 24,
+      height: 24,
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      ));
+}
+
+_getShareOptions(
+  BuildContext context,
+  ServerMemory memory,
+  bool loadingShareMemoryViaURL,
+  Function changeLoadingShareMemoryViaURL,
+  bool loadingShareTranscript,
+  Function changeLoadingShareTranscript,
+  bool loadingShareSummary,
+  Function changeLoadingShareSummary,
+) {
+  return <Widget>[
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: ListTile(
+        title: const Text('Send web url'),
+        leading: loadingShareMemoryViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
+        onTap: () async {
+          if (loadingShareMemoryViaURL) return;
+          changeLoadingShareMemoryViaURL(true);
+          bool shared = await setMemoryVisibility(memory.id);
+          if (!shared) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Memory URL could not be shared.')),
+            );
+            return;
+          }
+          String content = '''
+              Here\'s my memory created with Omi. ${memory.structured.getEmoji()}
+              
+              https://h.omi.me/memories/${memory.id}
+              
+              Get started using Omi today.
+              '''
+              .replaceAll('  ', '')
+              .trim();
+          print(content);
+          await Share.share(content);
+          changeLoadingShareMemoryViaURL(false);
+        },
+      ),
+    ),
+    const SizedBox(height: 4),
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: Column(
+        children: [
+          ListTile(
+            title: const Text('Send Transcript'),
+            leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
+            onTap: () async {
+              if (loadingShareTranscript) return;
+              changeLoadingShareTranscript(true);
+              // TODO: check web url open graph.
+              String content = '''
+              Here\'s my memory created with Omi.
+              
+              ${memory.structured.title}
+              
+              ${memory.getTranscript(generate: true)}
+              
+              Get started using Omi today (https://www.omi.me).
+              '''
+                  .replaceAll('  ', '')
+                  .trim();
+              // TODO: Deeplink that let people download the app.
+              await Share.share(content);
+              changeLoadingShareTranscript(false);
+            },
+          ),
+          memory.discarded
+              ? const SizedBox()
+              : ListTile(
+                  title: const Text('Send Summary'),
+                  leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
+                  onTap: () async {
+                    if (loadingShareSummary) return;
+                    changeLoadingShareSummary(true);
+                    String content = '''
+              Here\'s my memory created with Omi.
+              
+              ${memory.structured.toString()}
+              
+              Get started using Omi today (https://www.omi.me).
+              '''
+                        .replaceAll('  ', '')
+                        .trim();
+                    await Share.share(content);
+                    changeLoadingShareSummary(false);
+                  },
+                )
+        ],
+      ),
+    ),
+    const SizedBox(height: 4),
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: Column(
+        children: [
+          ListTile(
+            title: const Text('Copy Transcript'),
+            leading: const Icon(Icons.copy),
+            onTap: () => _copyContent(context, memory.getTranscript(generate: true)),
+          ),
+          memory.discarded
+              ? const SizedBox()
+              : ListTile(
+                  title: const Text('Copy Summary'),
+                  leading: const Icon(Icons.file_copy),
+                  onTap: () => _copyContent(context, memory.structured.toString()))
+        ],
+      ),
+    ),
+  ];
+}
+
+_getSheetMainOptions(
+  BuildContext context,
+  ServerMemory memory,
+  Function(bool) changeLoadingReprocessMemory,
+  loadingReprocessMemory,
+  Function(bool) changeDisplayDevTools,
+  displayDevTools,
+  Function(bool) changeDisplayShareOptions,
+  displayShareOptions,
+  Function reprocessMemory,
+) {
+  return [
+    Card(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      child: Column(
+        children: [
+          ListTile(
+            title: const Text('Share'),
+            leading: const Icon(Icons.share),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+            onTap: () {
+              changeDisplayShareOptions(!displayShareOptions);
+            },
+          )
+        ],
+      ),
+    ),
+    const SizedBox(height: 4),
+    Card(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        child: Column(
+          children: [
+            SharedPreferencesUtil().devModeEnabled
+                ? ListTile(
+                    onTap: () {
+                      changeDisplayDevTools(!displayDevTools);
+                    },
+                    title: const Text('Developer Tools'),
+                    leading: const Icon(
+                      Icons.developer_mode,
+                      color: Colors.white,
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                  )
+                : const SizedBox.shrink()
+          ],
+        )),
+    const SizedBox(height: 4),
+    Card(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            title: const Text('Re-summarize'),
+            leading: loadingReprocessMemory
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+            onTap: loadingReprocessMemory
+                ? null
+                : () {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (connectivityProvider.isConnected) {
+                      reprocessMemory(context, memory, () {
+                        changeLoadingReprocessMemory(!loadingReprocessMemory);
+                      });
+                    } else {
+                      showDialog(
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'Unable to Re-summarize Memory',
+                          'Please check your internet connection and try again.',
+                          singleButton: true,
+                          okButtonText: 'OK',
+                        ),
+                        context: context,
+                      );
+                    }
+                  },
+          ),
+          ListTile(
+            title: const Text('Delete'),
+            leading: const Icon(
+              Icons.delete,
+            ),
+            onTap: loadingReprocessMemory
+                ? null
+                : () {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (connectivityProvider.isConnected) {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            deleteMemoryServer(memory.id);
+                            Navigator.pop(context, true);
+                            Navigator.pop(context, true);
+                            Navigator.pop(context, {'deleted': true});
+                          },
+                          'Delete Memory?',
+                          'Are you sure you want to delete this memory? This action cannot be undone.',
+                          okButtonText: 'Confirm',
+                        ),
+                      );
+                    } else {
+                      showDialog(
+                        builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                            'Unable to Delete Memory', 'Please check your internet connection and try again.',
+                            singleButton: true, okButtonText: 'OK'),
+                        context: context,
+                      );
+                    }
+                  },
+          ),
+        ],
+      ),
+    ),
+  ];
+}
+
 showOptionsBottomSheet(
   BuildContext context,
   StateSetter setState,
   ServerMemory memory,
-  Function(BuildContext, StateSetter, ServerMemory, Function) reprocessMemory,
+  Function(BuildContext, ServerMemory, Function) reprocessMemory,
 ) async {
-  bool loadingReprocessMemory = false;
   bool displayDevTools = false;
+  bool displayShareOptions = false;
+
+  bool loadingReprocessMemory = false;
   bool loadingPluginIntegrationTest = false;
+  bool loadingShareMemoryTranscript = false;
+  bool loadingShareMemorySummary = false;
+  bool loadingShareMemoryViaURL = false;
 
   var result = await showModalBottomSheet(
       context: context,
@@ -429,152 +777,53 @@ showOptionsBottomSheet(
         ),
       ),
       builder: (context) => StatefulBuilder(builder: (context, setModalState) {
+            changeDisplayDevOptions(bool value) => setModalState(() => displayDevTools = value);
+            changeDisplayShareOptions(bool value) => setModalState(() => displayShareOptions = value);
+
+            changeLoadingReprocessMemory(bool value) => setModalState(() => loadingReprocessMemory = value);
+            changeLoadingPluginIntegrationTest(bool value) => setModalState(() => loadingPluginIntegrationTest = value);
+
+            changeLoadingShareMemoryTranscript(bool value) => setModalState(() => loadingShareMemoryTranscript = value);
+            changeLoadingShareMemorySummary(bool value) => setModalState(() => loadingShareMemorySummary = value);
+            changeLoadingShareMemoryViaURL(bool value) => setModalState(() => loadingShareMemoryViaURL = value);
+
             return Container(
-              height: SharedPreferencesUtil().devModeEnabled ? 280 : 216,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
-                children: displayDevTools
-                    ? [
-                        ListTile(
-                          title: const Text('Trigger Memory Created Integration'),
-                          leading: loadingPluginIntegrationTest
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Icon(Icons.send_to_mobile_outlined),
-                          onTap: () {
-                            setModalState(() => loadingPluginIntegrationTest = true);
-                            // TODO: if not set, show dialog to set URL or take them to settings.
-
-                            webhookOnMemoryCreatedCall(memory, returnRawBody: true).then((response) {
-                              showDialog(
-                                context: context,
-                                builder: (c) => getDialog(
-                                  context,
-                                  () => Navigator.pop(context),
-                                  () => Navigator.pop(context),
-                                  'Result:',
-                                  response,
-                                  okButtonText: 'Ok',
-                                  singleButton: true,
-                                ),
-                              );
-                              setModalState(() => loadingPluginIntegrationTest = false);
-                            });
-                          },
-                        ),
-                        ListTile(
-                          title: const Text('Test a Memory Prompt'),
-                          leading: const Icon(Icons.chat),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                          onTap: () {
-                            routeToPage(context, TestPromptsPage(memory: memory));
-                          },
-                        ),
-                      ]
-                    : [
-                        ListTile(
-                          title: const Text('Re-summarize'),
-                          leading: loadingReprocessMemory
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                  ))
-                              : const Icon(Icons.refresh, color: Colors.deepPurple),
-                          onTap: loadingReprocessMemory
-                              ? null
-                              : () {
-                                  if (ConnectivityController().isConnected.value) {
-                                    reprocessMemory(context, setModalState, memory, () {
-                                      setModalState(() {
-                                        loadingReprocessMemory = !loadingReprocessMemory;
-                                      });
-                                    });
-                                  } else {
-                                    showDialog(
-                                        builder: (c) => getDialog(
-                                            context,
-                                            () => Navigator.pop(context),
-                                            () => Navigator.pop(context),
-                                            'Unable to Re-summarize Memory',
-                                            'Please check your internet connection and try again.',
-                                            singleButton: true,
-                                            okButtonText: 'OK'),
-                                        context: context);
-                                  }
-                                },
-                        ),
-                        ListTile(
-                          title: const Text('Delete'),
-                          leading: const Icon(
-                            Icons.delete,
-                            color: Colors.red,
-                          ),
-                          onTap: loadingReprocessMemory
-                              ? null
-                              : () {
-                                  if (ConnectivityController().isConnected.value) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (dialogContext) {
-                                        return Dialog(
-                                          elevation: 0,
-                                          insetPadding: EdgeInsets.zero,
-                                          backgroundColor: Colors.transparent,
-                                          alignment:
-                                              const AlignmentDirectional(0.0, 0.0).resolve(Directionality.of(context)),
-                                          child: ConfirmDeletionWidget(
-                                              memory: memory,
-                                              onDelete: () {
-                                                Navigator.pop(context, true);
-                                                Navigator.pop(context, {'deleted': true});
-                                              }),
-                                        );
-                                      },
-                                    );
-                                  } else {
-                                    showDialog(
-                                        builder: (c) => getDialog(
-                                            context,
-                                            () => Navigator.pop(context),
-                                            () => Navigator.pop(context),
-                                            'Unable to Delete Memory',
-                                            'Please check your internet connection and try again.',
-                                            singleButton: true,
-                                            okButtonText: 'OK'),
-                                        context: context);
-                                  }
-                                },
-                        ),
-                        SharedPreferencesUtil().devModeEnabled
-                            ? ListTile(
-                                onTap: () {
-                                  setModalState(() {
-                                    displayDevTools = !displayDevTools;
-                                  });
-                                },
-                                title: const Text('Developer Tools'),
-                                leading: const Icon(
-                                  Icons.developer_mode,
-                                  color: Colors.white,
-                                ),
-                                trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                              )
-                            : const SizedBox.shrink(),
-                      ],
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ..._getSheetTitle(context, memory),
+                  ...(displayDevTools
+                      ? _getDevToolsOptions(
+                          context, memory, changeLoadingPluginIntegrationTest, loadingPluginIntegrationTest)
+                      : displayShareOptions
+                          ? _getShareOptions(
+                              context,
+                              memory,
+                              loadingShareMemoryViaURL,
+                              changeLoadingShareMemoryViaURL,
+                              loadingShareMemoryTranscript,
+                              changeLoadingShareMemoryTranscript,
+                              loadingShareMemorySummary,
+                              changeLoadingShareMemorySummary,
+                            )
+                          : _getSheetMainOptions(
+                              context,
+                              memory,
+                              changeLoadingReprocessMemory,
+                              loadingReprocessMemory,
+                              changeDisplayDevOptions,
+                              displayDevTools,
+                              changeDisplayShareOptions,
+                              displayShareOptions,
+                              reprocessMemory,
+                            )),
+                  const SizedBox(height: 40),
+                ],
               ),
             );
           }));
