@@ -9,7 +9,7 @@ on:
       - 'backend/modal/**'
 
 env:
-  SERVICE: backend
+  SERVICE: models
   REGION: us-central1
 
 jobs:
