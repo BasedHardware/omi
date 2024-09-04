@@ -74,7 +74,7 @@ router = APIRouter()
 
 def _combine_segments(segments, new_segments):
     if not new_segments:
-        return
+        return segments
 
     joined_similar_segments = []
     for new_segment in new_segments:
@@ -134,7 +134,7 @@ async def _websocket_util(
 
         print("Received transcript segments")
         print(segments)
-        if not segments:
+        if not segments or len(segments) == 0:
             return
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
