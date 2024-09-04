@@ -26,6 +26,8 @@ class WebSocketProvider with ChangeNotifier {
   bool _internetListenerSetup = false;
   Timer? internetLostNotificationDelay;
 
+  bool shouldReconnect = true;
+
   get isConnecting => _isConnecting;
 
   Future<void> initWebSocket({
@@ -71,6 +73,7 @@ class WebSocketProvider with ChangeNotifier {
           websocketReconnecting = false;
           _reconnectionAttempts = 0;
           _isConnecting = false;
+          shouldReconnect = true;
           onConnectionSuccess();
           NotificationService.instance.clearNotification(2);
           notifyListeners();
@@ -94,22 +97,25 @@ class WebSocketProvider with ChangeNotifier {
           notifyListeners();
         },
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
-          debugPrint('WebSocket connection closed: code ~ $closeCode, reason ~ $closeReason');
+          debugPrint('WebSocket connection closed2: code ~ $closeCode, reason ~ $closeReason');
           wsConnectionState = WebsocketConnectionStatus.closed;
           _isConnecting = false;
           onConnectionClosed(closeCode, closeReason);
-          if (closeCode != 1000 && !websocketReconnecting) {
-            _scheduleReconnection(
-              onConnectionSuccess: onConnectionSuccess,
-              onConnectionFailed: onConnectionFailed,
-              onConnectionClosed: onConnectionClosed,
-              onConnectionError: onConnectionError,
-              onMessageReceived: onMessageReceived,
-              codec: codec,
-              sampleRate: sampleRate,
-              includeSpeechProfile: includeSpeechProfile,
-            );
+          if (shouldReconnect) {
+            if (closeCode != 1000 && !websocketReconnecting) {
+              _scheduleReconnection(
+                onConnectionSuccess: onConnectionSuccess,
+                onConnectionFailed: onConnectionFailed,
+                onConnectionClosed: onConnectionClosed,
+                onConnectionError: onConnectionError,
+                onMessageReceived: onMessageReceived,
+                codec: codec,
+                sampleRate: sampleRate,
+                includeSpeechProfile: includeSpeechProfile,
+              );
+            }
           }
+
           notifyListeners();
         },
         onWebsocketConnectionError: (err) {
@@ -279,11 +285,16 @@ class WebSocketProvider with ChangeNotifier {
     );
   }
 
-  void closeWebSocket() {
+  Future closeWebSocketWithoutReconnect(String from) async {
+    print('Closing WebSocket from $from');
+    _isConnecting = false;
+    _internetListenerSetup = false;
     _reconnectionTimer?.cancel();
     _internetListener?.cancel();
     internetLostNotificationDelay?.cancel();
-    websocketChannel?.sink.close(1000);
+    shouldReconnect = false;
+    print('wschannel is null: ${websocketChannel == null}');
+    await websocketChannel?.sink.close(1000, 'User closed WebSocket');
     notifyListeners();
   }
 }
