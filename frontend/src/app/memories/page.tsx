@@ -4,6 +4,7 @@ import SidePanel from '@/src/components/memories/side-panel/side-panel';
 import SidePanelWrapper from '@/src/components/memories/side-panel/side-panel-wrapper';
 import { SearchParamsTypes } from '@/src/types/params.types';
 import { Suspense } from 'react';
+import LoadingPreview from '@/src/components/memories/side-panel/loading-preview';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
@@ -18,7 +19,7 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
         <MemoryList searchParams={searchParams} />
       </Suspense>
       <SidePanelWrapper previewId={previewId}>
-        <Suspense fallback={<div className="text-white">Loading...</div>}>
+        <Suspense fallback={<LoadingPreview />}>
           <SidePanel previewId={previewId} />
         </Suspense>
       </SidePanelWrapper>
