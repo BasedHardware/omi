@@ -45,6 +45,9 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
 
+  bool isInitialising = false;
+  bool isInitialised = false;
+
   String text = '';
   String message = '';
 
@@ -58,6 +61,16 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
+  void setInitialising(bool value) {
+    isInitialising = value;
+    notifyListeners();
+  }
+
+  void setInitialised(bool value) {
+    isInitialised = value;
+    notifyListeners();
+  }
+
   void setProviders(DeviceProvider provider, CaptureProvider captureProvider, WebSocketProvider wsProvider) {
     deviceProvider = provider;
     this.captureProvider = captureProvider;
@@ -65,15 +78,29 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  initialise(bool isFromOnboarding) async {
-    changeLoadingState(true);
+  Future<void> updateDevice() async {
+    if (device == null) {
+      await deviceProvider?.scanAndConnectToDevice();
+      device = deviceProvider?.connectedDevice;
+    }
+    notifyListeners();
+  }
+
+  Future<void> initialise(bool isFromOnboarding) async {
+    setInitialising(true);
     device = deviceProvider?.connectedDevice;
-    device ??= await deviceProvider?.scanAndConnectToDevice();
-    captureProvider?.resetForSpeechProfile();
-    initiateWebsocket(isFromOnboarding);
+    await captureProvider!.resetForSpeechProfile();
+    await initiateWebsocket(isFromOnboarding);
+
     // _bleBytesStream = captureProvider?.bleBytesStream;
-    if (device != null) initiateFriendAudioStreaming();
-    changeLoadingState(false);
+    if (device != null) await initiateFriendAudioStreaming();
+    if (webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
+      // wait for websocket to connect
+      await Future.delayed(Duration(seconds: 2));
+    }
+
+    setInitialising(false);
+    setInitialised(true);
     // initiateConnectionListener();
     notifyListeners();
   }
@@ -109,6 +136,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
       sampleRate: 16000,
       includeSpeechProfile: false,
       onConnectionSuccess: () {
+        print('Websocket connected in speech profile');
         notifyListeners();
       },
       onConnectionFailed: (err) {
@@ -145,11 +173,13 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     int wordsCount = text.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
-    if (percentageCompleted == 1) finalize(isFromOnboarding);
+    if (percentageCompleted == 1) {
+      await finalize(isFromOnboarding);
+    }
     notifyListeners();
   }
 
-  finalize(bool isFromOnboarding) async {
+  Future finalize(bool isFromOnboarding) async {
     if (uploadingProfile || profileCompleted) return;
 
     int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
@@ -164,7 +194,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     }
     uploadingProfile = true;
     notifyListeners();
-    webSocketProvider?.closeWebSocket();
+    await webSocketProvider?.closeWebSocketWithoutReconnect('finalizing');
     forceCompletionTimer?.cancel();
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
@@ -183,7 +213,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
       await createMemory();
       captureProvider?.clearTranscripts();
     }
-    captureProvider?.resetState(restartBytesProcessing: true);
+    await captureProvider?.resetState(restartBytesProcessing: true);
     uploadingProfile = false;
     profileCompleted = true;
     text = '';
@@ -253,7 +283,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void close() {
+  Future close() async {
+    await webSocketProvider?.closeWebSocketWithoutReconnect('closing');
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
@@ -263,7 +294,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     percentageCompleted = 0;
     uploadingProfile = false;
     profileCompleted = false;
-    captureProvider?.resetState(restartBytesProcessing: true);
+    await captureProvider?.resetState(restartBytesProcessing: true, isFromSpeechProfile: true);
     notifyListeners();
   }
 
