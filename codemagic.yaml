@@ -131,6 +131,7 @@ workflows:
         submit_to_testflight: true
         beta_groups:
           - Internal
+          - Discord Folks
         submit_to_app_store: false
 
   android-prod-internal:
@@ -147,7 +148,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -287,8 +287,10 @@ workflows:
           failure: false
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: $GOOGLE_PLAY_TRACK
+        track: "internal"
         submit_as_draft: false
+        release_promotion:
+          track: "alpha"
 
   ios-prod-patch:
     name: Patch iOS to Production
@@ -438,7 +440,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
