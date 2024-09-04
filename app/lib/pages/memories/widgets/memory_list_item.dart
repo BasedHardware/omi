@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
@@ -7,6 +7,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 class MemoryListItem extends StatefulWidget {
+  final bool isFromOnboarding;
   final int memoryIdx;
   final ServerMemory memory;
   final Function(ServerMemory, int) updateMemory;
@@ -18,6 +19,7 @@ class MemoryListItem extends StatefulWidget {
     required this.updateMemory,
     required this.memoryIdx,
     required this.deleteMemory,
+    this.isFromOnboarding = false,
   });
 
   @override
@@ -32,7 +34,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         var result = await Navigator.of(context).push(MaterialPageRoute(
-          builder: (c) => MemoryDetailPage(memory: widget.memory),
+          builder: (c) => MemoryDetailPage(
+            memory: widget.memory,
+            isFromOnboarding: widget.isFromOnboarding,
+          ),
         ));
         if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
         if (SharedPreferencesUtil().modifiedMemoryDetails?.id == widget.memory.id) {

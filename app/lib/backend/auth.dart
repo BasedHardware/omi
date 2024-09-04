@@ -23,52 +23,85 @@ String sha256ofString(String input) {
   return digest.toString();
 }
 
-Future<UserCredential> signInWithApple() async {
-  // To prevent replay attacks with the credential returned from Apple, we
-  // include a nonce in the credential request. When signing in with
-  // Firebase, the nonce in the id token returned by Apple, is expected to
-  // match the sha256 hash of `rawNonce`.
-  final rawNonce = generateNonce();
-  final nonce = sha256ofString(rawNonce);
-  // Request credential for the currently signed in Apple account.
-  final appleCredential = await SignInWithApple.getAppleIDCredential(
-    scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
-    nonce: nonce,
-  );
+Future<UserCredential?> signInWithApple() async {
+  try {
+    // Sign out the current user first
+    debugPrint('Signing out current user...');
+    await FirebaseAuth.instance.signOut();
+    debugPrint('User signed out successfully.');
 
-  // will be null if it's not first signIn
-  if (appleCredential.email != null) {
-    SharedPreferencesUtil().email = appleCredential.email!;
-  }
-  if (appleCredential.givenName != null) {
-    SharedPreferencesUtil().givenName = appleCredential.givenName!;
-    SharedPreferencesUtil().familyName = appleCredential.familyName ?? '';
-  }
+    final rawNonce = generateNonce();
+    final nonce = sha256ofString(rawNonce);
 
-  // Create an `OAuthCredential` from the credential returned by Apple.
-  final oauthCredential = OAuthProvider("apple.com").credential(
-    idToken: appleCredential.identityToken,
-    rawNonce: rawNonce,
-  );
+    debugPrint('Requesting Apple credential...');
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+      nonce: nonce,
+    );
 
-  // Sign in the user with Firebase. If the nonce we generated earlier does
-  // not match the nonce in `appleCredential.identityToken`, sign in will fail.
-  UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
-  var user = FirebaseAuth.instance.currentUser!;
-  if (appleCredential.givenName != null) {
-    user.updateProfile(displayName: SharedPreferencesUtil().fullName);
-  } else {
-    var nameParts = user.displayName?.split(' ');
-    SharedPreferencesUtil().givenName = nameParts?[0] ?? '';
-    SharedPreferencesUtil().familyName = nameParts?[nameParts.length - 1] ?? '';
-  }
-  if (SharedPreferencesUtil().email.isEmpty) {
-    SharedPreferencesUtil().email = user.email ?? '';
-  }
+    debugPrint('Apple credential received.');
+    debugPrint('Email: ${appleCredential.email ?? "null"}');
+    debugPrint('Given Name: ${appleCredential.givenName ?? "null"}');
+    debugPrint('Family Name: ${appleCredential.familyName ?? "null"}');
+    debugPrint('Identity Token: ${appleCredential.identityToken != null ? 'Present' : 'Null'}');
+    debugPrint('Authorization Code: ${appleCredential.authorizationCode.isNotEmpty ? 'Present' : 'Null'}');
 
-  debugPrint('signInWithApple Name: ${SharedPreferencesUtil().fullName}');
-  debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
-  return userCred;
+    if (appleCredential.identityToken == null) {
+      throw Exception('Apple Sign In failed - no identity token received.');
+    }
+
+    // Create an `OAuthCredential` from the credential returned by Apple.
+    final oauthCredential = OAuthProvider("apple.com").credential(
+      idToken: appleCredential.identityToken,
+      rawNonce: rawNonce,
+    );
+
+    debugPrint('OAuth Credential created.');
+    debugPrint('Provider ID: ${oauthCredential.providerId}');
+    debugPrint('Sign-in method: ${oauthCredential.signInMethod}');
+    debugPrint('Access Token: ${oauthCredential.accessToken ?? "null"}');
+    debugPrint('ID Token: ${oauthCredential.idToken ?? "null"}');
+
+    // Sign in the user with Firebase.
+    debugPrint('Attempting to sign in with Firebase...');
+    UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+    debugPrint('Firebase sign-in successful.');
+
+    // Update user profile and local storage
+    var user = FirebaseAuth.instance.currentUser!;
+    debugPrint('Firebase User ID: ${user.uid}');
+    debugPrint('Firebase User Email: ${user.email ?? "null"}');
+    debugPrint('Firebase User Display Name: ${user.displayName ?? "null"}');
+
+    if (appleCredential.email != null) {
+      SharedPreferencesUtil().email = appleCredential.email!;
+    }
+    if (appleCredential.givenName != null) {
+      SharedPreferencesUtil().givenName = appleCredential.givenName!;
+      SharedPreferencesUtil().familyName = appleCredential.familyName ?? '';
+      user.updateProfile(displayName: SharedPreferencesUtil().fullName);
+    } else {
+      var nameParts = user.displayName?.split(' ');
+      SharedPreferencesUtil().givenName = nameParts?[0] ?? '';
+      SharedPreferencesUtil().familyName = nameParts?[nameParts.length - 1] ?? '';
+    }
+    if (SharedPreferencesUtil().email.isEmpty) {
+      SharedPreferencesUtil().email = user.email ?? '';
+    }
+
+    debugPrint('signInWithApple Name: ${SharedPreferencesUtil().fullName}');
+    debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
+    return userCred;
+  } on FirebaseAuthException catch (e) {
+    debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
+    if (e.code == 'invalid-credential') {
+      debugPrint('Please check Firebase console configuration for Apple Sign In.');
+    }
+    return null;
+  } catch (e) {
+    debugPrint('Error during Apple Sign In: $e');
+    return null;
+  }
 }
 
 Future<UserCredential?> signInWithGoogle() async {
@@ -132,9 +165,22 @@ Future<String?> getIdToken() async {
   try {
     IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
     if (newToken?.token != null) {
-      SharedPreferencesUtil().uid = FirebaseAuth.instance.currentUser!.uid;
+      var user = FirebaseAuth.instance.currentUser!;
+      SharedPreferencesUtil().uid = user.uid;
       SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
       SharedPreferencesUtil().authToken = newToken?.token ?? '';
+      if (SharedPreferencesUtil().email.isEmpty) {
+        SharedPreferencesUtil().email = user.email ?? '';
+      }
+
+      if (SharedPreferencesUtil().givenName.isEmpty) {
+        SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
+        if ((user.displayName?.split(' ').length ?? 0) > 1) {
+          SharedPreferencesUtil().familyName = user.displayName?.split(' ')[1] ?? '';
+        } else {
+          SharedPreferencesUtil().familyName = '';
+        }
+      }
     }
     return newToken?.token;
   } catch (e) {
@@ -143,7 +189,7 @@ Future<String?> getIdToken() async {
   }
 }
 
-Future<void> signOut(BuildContext context) async {
+Future<void> signOut() async {
   await FirebaseAuth.instance.signOut();
   try {
     await GoogleSignIn().signOut();
@@ -154,3 +200,15 @@ Future<void> signOut(BuildContext context) async {
 }
 
 bool isSignedIn() => FirebaseAuth.instance.currentUser != null;
+
+getFirebaseUser() {
+  return FirebaseAuth.instance.currentUser;
+}
+
+// update user given name
+Future<void> updateGivenName(String fullName) async {
+  var user = FirebaseAuth.instance.currentUser;
+  if (user != null) {
+    await user.updateProfile(displayName: fullName);
+  }
+}

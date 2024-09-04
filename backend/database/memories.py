@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Tuple
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -110,6 +110,40 @@ def get_memory_photos(uid: str, memory_id: str):
     return [doc.to_dict() for doc in photos_ref.stream()]
 
 
+# VISBILITY
+
+def set_memory_visibility(uid: str, memory_id: str, visibility: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'visibility': visibility})
+
+
+# claude outputs
+import asyncio
+from google.cloud.firestore_v1.async_client import AsyncClient
+
+
+async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
+    memory_ref = db.collection('users').document(uid).collection('memories').document(memory_id)
+    memory_doc = await memory_ref.get()
+    if memory_doc.exists:
+        memory_data = memory_doc.to_dict()
+        if memory_data.get('visibility') in ['public'] and not memory_data.get('deleted'):
+            return memory_data
+    return None
+
+
+async def _get_public_memories(data: List[Tuple[str, str]]):
+    db = AsyncClient()
+    tasks = [_get_public_memory(db, uid, memory_id) for uid, memory_id in data]
+    memories = await asyncio.gather(*tasks)
+    return [memory for memory in memories if memory is not None]
+
+
+def run_get_public_memories(data: List[Tuple[str, str]]):
+    return asyncio.run(_get_public_memories(data))
+
+
 # POST PROCESSING
 
 def set_postprocessing_status(
@@ -166,6 +200,7 @@ def store_model_emotion_predictions_result(
             "end": prediction.time[1],
             "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
+        count = count + 1
         if count % 400 == 0:
             batch.commit()
             batch = db.batch()

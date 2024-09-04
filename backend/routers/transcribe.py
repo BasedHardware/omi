@@ -79,7 +79,7 @@ async def _websocket_util(
             duration = get_user_speech_profile_duration(uid)
             print('speech_profile', len(speech_profile), duration)
             if duration:
-                duration += 10
+                duration += 20
         else:
             speech_profile, duration = [], 0
 

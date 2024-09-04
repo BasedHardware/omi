@@ -10,16 +10,14 @@ import database.facts as facts_db
 import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
-from database.auth import get_user_name
 from database.vector_db import upsert_vector
-from models.facts import Fact, FactDB
+from models.facts import FactDB
 from models.memory import *
 from models.plugin import Plugin
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from utils.llm import obtain_emotional_message
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor
-from utils.memories.facts import get_prompt_data
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.plugins import get_plugins_data
@@ -116,19 +114,16 @@ def _trigger_plugins(uid: str, memory: Memory):
 def _extract_facts(uid: str, memory: Memory):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     facts_db.delete_facts_for_memory(uid, memory.id)
-    existing_facts = facts_db.get_facts(uid)
-    existing_facts = [Fact(**fact) for fact in existing_facts]
-    user_name = get_user_name(uid)
-    new_facts = new_facts_extractor(user_name, existing_facts, memory.transcript_segments)
+    new_facts = new_facts_extractor(uid, memory.transcript_segments)
     parsed_facts = []
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
-        print('fact:', fact.category.value.upper(), '~', fact.content)
+        print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
-                   force_process: bool = False):
+                   force_process: bool = False) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
 
@@ -287,8 +282,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     title = "Omi"
     context_str, _ = retrieve_rag_memory_context(uid, memory)
 
-    user_name, user_facts = get_prompt_data(uid)
-    response: str = obtain_emotional_message(user_name, user_facts, memory, context_str, emotion)
+    response: str = obtain_emotional_message(uid, memory, context_str, emotion)
     message = response
 
     print(title)

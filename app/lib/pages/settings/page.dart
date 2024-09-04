@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/personal_details.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/settings/webview.dart';
@@ -61,7 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
             elevation: 5.0,
             backgroundColor: Colors.black,
             child: Container(
-              padding: EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
                 border: const GradientBoxBorder(
                   gradient: LinearGradient(colors: [
@@ -77,13 +82,13 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _MockNotification(
+                  const _MockNotification(
                     path: 'assets/images/emotional_feedback_1.png',
                   ),
                   const SizedBox(
                     height: 25,
                   ),
-                  Text(
+                  const Text(
                     "Omi will send you feedback in real-time.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color.fromRGBO(255, 255, 255, .8)),
@@ -92,7 +97,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     height: 25,
                   ),
                   Container(
-                    padding: EdgeInsets.only(
+                    padding: const EdgeInsets.only(
                       left: 8,
                       right: 8,
                       top: 8,
@@ -101,11 +106,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: TextButton(
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        minimumSize: Size(50, 30),
+                        minimumSize: const Size(50, 30),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         alignment: Alignment.center,
                       ),
-                      child: Text(
+                      child: const Text(
                         "Ok, I understand",
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -217,11 +222,55 @@ class _SettingsPageState extends State<SettingsPage> {
                         await routeToPage(context, const RecordingsStoragePermission());
                         setState(() {});
                       }),
+                  const SizedBox(height: 32.0),
+                  getItemAddOn('Plugins', () {
+                    MixpanelManager().pluginsOpened();
+                    routeToPage(context, const PluginsPage());
+                  }, icon: Icons.integration_instructions),
+                  getItemAddOn('Calendar Integration', () {
+                    routeToPage(context, const CalendarPage());
+                  }, icon: Icons.calendar_month),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
+                  getItemAddOn('Speech Recognition', () {
+                    routeToPage(context, const SpeakerIdPage());
+                  }, icon: Icons.multitrack_audio),
+                  getItemAddOn('Identifying Others', () {
+                    routeToPage(context, const UserPeoplePage());
+                  }, icon: Icons.people),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
+                  getItemAddOn(
+                      SharedPreferencesUtil().givenName.isEmpty
+                          ? 'About YOU (by Omi)'
+                          : 'About ${SharedPreferencesUtil().givenName.toUpperCase()} (by Omi) ', () {
+                    routeToPage(context, const FactsPage());
+                  }, icon: Icons.self_improvement),
+                  getItemAddOn('How Omi should call you?', () {
+                    // routeToPage(context, const PersonalDetails());
+                    showModalBottomSheet(
+                        context: context,
+                        builder: (c) {
+                          return Container(
+                            child: const PersonalDetails(),
+                          );
+                        });
+                  }, icon: Icons.person),
+                  const Divider(
+                    color: Colors.transparent,
+                  ),
+                  getItemAddOn('Developer Mode', () async {
+                    MixpanelManager().devModePageOpened();
+                    await routeToPage(context, const DeveloperSettingsPage());
+                    setState(() {});
+                  }, icon: Icons.code, visibility: devModeEnabled),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),
                     subtitle: const Text('team@basedhardware.com'),
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                    contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
                     trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                     onTap: () {
                       launchUrl(Uri.parse('mailto:team@basedhardware.com'));
@@ -229,7 +278,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
                   ListTile(
-                    contentPadding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                    contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
                     title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
                     subtitle: const Text('2300+ members and counting.'),
                     trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
@@ -238,66 +287,54 @@ class _SettingsPageState extends State<SettingsPage> {
                       MixpanelManager().joinDiscordClicked();
                     },
                   ),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ADD ONS',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  getItemAddOn('Plugins', () {
-                    MixpanelManager().pluginsOpened();
-                    routeToPage(context, const PluginsPage());
-                  }, icon: Icons.integration_instructions),
-                  getItemAddOn('Speech Profile', () {
-                    routeToPage(context, const SpeakerIdPage());
-                  }, icon: Icons.multitrack_audio),
-                  getItemAddOn('Calendar Integration', () {
-                    routeToPage(context, const CalendarPage());
-                  }, icon: Icons.calendar_month),
-                  getItemAddOn('People', () {
-                    routeToPage(context, const UserPeoplePage());
-                  }, icon: Icons.people),
-                  getItemAddOn('Developer Mode', () async {
-                    MixpanelManager().devModePageOpened();
-                    await routeToPage(context, const DeveloperSettingsPage());
-                    setState(() {});
-                  }, icon: Icons.code, visibility: devModeEnabled),
-                  const SizedBox(height: 32.0),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'ABOUT US',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
                   getItemAddOn('Privacy Policy', () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/pages/privacy',
+                          url: 'https://www.omi.me/pages/privacy',
                           title: 'Privacy Policy',
                         ),
                       ),
                     );
                   }, icon: Icons.privacy_tip_outlined, visibility: true),
-                  getItemAddOn('Our Website', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => const PageWebView(
-                          url: 'https://basedhardware.com/',
-                          title: 'Based Hardware',
-                        ),
-                      ),
-                    );
-                  }, icon: Icons.language_outlined, visibility: true),
+                  // getItemAddOn('About omi', () {
+                  //   Navigator.of(context).push(
+                  //     MaterialPageRoute(
+                  //       builder: (c) => const PageWebView(
+                  //         url: 'https://www.omi.me/',
+                  //         title: 'omi',
+                  //       ),
+                  //     ),
+                  //   );
+                  // }, icon: Icons.language_outlined, visibility: true),
+                  const SizedBox(height: 32),
+                  getItemAddOn('Delete Account', () {
+                    showDialog(
+                        context: context,
+                        builder: (ctx) {
+                          return getDialog(
+                            context,
+                            () {
+                              Navigator.of(context).pop();
+                            },
+                            () async {
+                              await deleteAccount();
+                              signOut();
+                              Navigator.of(context).pop();
+                              Navigator.pushAndRemoveUntil(context,
+                                  MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                            },
+                            'Delete Account',
+                            'Are you sure you want to delete your account? You will lose all of your memories and data if you do so.\n\nOnce you click on delete, your data will be deleted in a few hours.',
+                            singleButton: false,
+                          );
+                        });
+                  }, icon: Icons.warning, visibility: true),
+                  getItemAddOn('Sign Out', () {
+                    signOut();
+                    Navigator.pushAndRemoveUntil(
+                        context, MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                  }, icon: Icons.logout, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),

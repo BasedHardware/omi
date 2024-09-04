@@ -132,7 +132,7 @@ async def process_audio_dg(
 
 
 def process_segments(uid: str, segments: list[dict]):
-    token = notification_db.get_token_only(uid)
+    token = notification_db.get_token_only(uid)  # TODO: don't retrieve token before knowing if to notify
     trigger_realtime_integrations(uid, token, segments)
 
 

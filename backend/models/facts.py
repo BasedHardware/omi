@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -23,9 +23,11 @@ class Fact(BaseModel):
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
 
     @staticmethod
-    def get_facts_as_str(facts):
-        existing_facts = [f"{f.content} ({f.category.value})" for f in facts]
-        return '' if not existing_facts else '\n- ' + '\n- '.join(existing_facts)
+    def get_facts_as_str(facts: List):
+        result = ''
+        for f in facts:
+            result += f"- {f.content} ({f.category.value})\n"
+        return result
 
 
 class FactDB(Fact):
@@ -34,8 +36,9 @@ class FactDB(Fact):
     created_at: datetime
     updated_at: datetime
 
-    memory_id: str
-    memory_category: CategoryEnum
+    # if manually added
+    memory_id: Optional[str] = None
+    memory_category: Optional[CategoryEnum] = None
 
     reviewed: bool = False
     user_review: Optional[bool] = None

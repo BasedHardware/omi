@@ -15,6 +15,8 @@ class UserSpeechSamplesProvider extends BaseProvider {
   }
 
   init() async {
+    loading = true;
+    notifyListeners();
     String? url = await getUserSpeechProfile();
     if (url == null) {
       // showDialog(
@@ -32,6 +34,7 @@ class UserSpeechSamplesProvider extends BaseProvider {
       //     singleButton: true,
       //   ),
       // );
+      loading = false;
       return;
     }
     samplesUrl.add(url);
