@@ -32,26 +32,14 @@ async def main():
 
                 async def on_notify(sender: bleak.BleakGATTCharacteristic, data: bytearray):
                         # Write bytes to file
-                        # binary_file.write(data)
+                        binary_file.write(data)
                         global count
                         global done
+                        print(len(data))
                         amount_to_append = data[3]
                         audio_frames.append(data[4:data[3]+4])
                         count +=1
-                        print(np.frombuffer(data[4:data[3]+4],dtype=np.uint8))
-                        if (count > 700) and not done:
-                             done=True
-                             for frame in audio_frames:
-                                try:
-                                    decoded_frame = decoder.decode(bytes(frame), 320)
-                                    pcm_data.extend(decoded_frame)
-                                except Exception as e:
-                                    print(f"Error decoding frame:{e} ")
-                                with wave.open('out.wav', "wb") as wf:
-                                    wf.setnchannels(1)
-                                    wf.setsampwidth(2)
-                                    wf.setframerate(16000)
-                                    wf.writeframes(pcm_data)     
+                        print(np.frombuffer(data,dtype=np.uint8))   
 
 
                 stuff = await client.start_notify(storage_uuid, on_notify)
