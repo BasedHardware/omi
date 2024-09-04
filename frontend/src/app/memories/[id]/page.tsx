@@ -52,7 +52,7 @@ export default async function MemoryPage({ params, searchParams }: MemoryPagePro
   if (!memory) throw new Error();
 
   return (
-    <section className="mx-3 md:mx-auto my-10 mt-10 max-w-screen-md md:my-28">
+    <section className="mx-3 my-10 mt-10 max-w-screen-md md:mx-auto md:my-28">
       <MemoryHeader />
       <Memory memory={memory} searchParams={searchParams} />
     </section>

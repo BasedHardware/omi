@@ -1,9 +1,7 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import moment from 'moment';
-import Tabs from '../tabs';
-import Summary from '../summary/sumary';
-import Transcription from '../transcript/transcription';
+import MemoryWithTabs from '../summary/memory-with-tabs';
 
 interface SidePanelProps {
   previewId: string | undefined;
@@ -11,8 +9,6 @@ interface SidePanelProps {
 
 export default async function SidePanel({ previewId }: SidePanelProps) {
   const memory = await getSharedMemory(previewId ?? '');
-
-  const currentTab = 'sum';
 
   if (!memory) {
     return null;
@@ -36,17 +32,7 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
                   memory.structured.category.slice(1)}
               </span>
             </div>
-            <Tabs currentTab={currentTab} />
-            <div className="">
-              {currentTab === 'sum' ? (
-                <Summary memory={memory} />
-              ) : (
-                <Transcription
-                  transcript={memory.transcript_segments}
-                  externalData={memory.external_data}
-                />
-              )}
-            </div>
+            <MemoryWithTabs memory={memory} />
           </div>
           <div className="absolute top-0 z-10 h-full w-full  select-none blur-3xl">
             <div className="absolute right-[0rem] top-[-70px] h-[10rem] w-[100%] bg-[#1758e74f] opacity-30" />
