@@ -5,6 +5,7 @@ import SidePanelWrapper from '@/src/components/memories/side-panel/side-panel-wr
 import { SearchParamsTypes } from '@/src/types/params.types';
 import { Suspense } from 'react';
 import LoadingPreview from '@/src/components/memories/side-panel/loading-preview';
+import Tendencies from '@/src/components/memories/tendencies';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
@@ -13,16 +14,21 @@ interface MemoriesPageProps {
 export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const previewId = searchParams.previewId;
   return (
-    <div className="mx-auto my-10 max-w-screen-md px-4 text-white md:my-28">
-      <SearchControls />
-      <Suspense fallback={<div className="text-white">Loading...</div>}>
-        <MemoryList searchParams={searchParams} />
-      </Suspense>
-      <SidePanelWrapper previewId={previewId}>
-        <Suspense fallback={<LoadingPreview />}>
-          <SidePanel previewId={previewId} />
-        </Suspense>
-      </SidePanelWrapper>
+    <div className="mx-auto my-10 max-w-screen-md px-4 md:my-28">
+      <div className="relative col-span-2 mx-auto flex max-w-screen-md text-white">
+        <div>
+          <SearchControls />
+          <Tendencies />
+          <Suspense fallback={<div className="text-white">Loading...</div>}>
+            <MemoryList searchParams={searchParams} />
+          </Suspense>
+          <SidePanelWrapper previewId={previewId}>
+            <Suspense fallback={<LoadingPreview />}>
+              <SidePanel previewId={previewId} />
+            </Suspense>
+          </SidePanelWrapper>
+        </div>
+      </div>
     </div>
   );
 }

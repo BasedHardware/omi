@@ -1,12 +1,15 @@
 import { Memory } from '@/src/types/memory.types';
+import { SearchParamsTypes } from '@/src/types/params.types';
 import moment from 'moment';
 import Link from 'next/link';
 
 interface MemoryItemProps {
   memory: Memory;
+  searchParams: SearchParamsTypes;
 }
 
 export default function MemoryItem({ memory, searchParams }: MemoryItemProps) {
+  // @ts-ignore
   const _searchParams = new URLSearchParams(searchParams);
   return (
     <Link
