@@ -255,6 +255,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<bool?> _createMemoryTimer() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      return false;
+    }
     return await _createMemory();
   }
 
