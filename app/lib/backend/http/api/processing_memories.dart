@@ -26,7 +26,7 @@ Future<UpdateProcessingMemoryResponse?> updateProcessingMemoryServer({
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/processing-memories/$id',
     headers: {},
-    method: 'PUT',
+    method: 'PATCH',
     body: jsonEncode(bodyData),
   );
   if (response == null) return null;

@@ -6,7 +6,7 @@ from utils.other import endpoints as auth
 
 router = APIRouter()
 
-@router.put("/v1/processing-memories/{processing_memory_id}", response_model=UpdateProcessingMemoryResponse, tags=['processing_memories'])
+@router.patch("/v1/processing-memories/{processing_memory_id}", response_model=UpdateProcessingMemoryResponse, tags=['processing_memories'])
 def update_processing_memory(
         processing_memory_id: str,
         update_processing_memory: UpdateProcessingMemory,
