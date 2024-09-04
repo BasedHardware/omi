@@ -131,7 +131,8 @@ def postprocess_memory(
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
     return result
 
-# TODO: move to util
+
+# TODO: Move to util
 def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_feedback: bool):
     """
     The objective of this endpoint, is to get the best possible transcript from the audio file.
@@ -216,7 +217,7 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
             memory.postprocessing = MemoryPostProcessing(
                 status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_memory, if any segment still matched to user or people
-            return memory
+            return (200, memory)
 
         # Reprocess memory with improved transcription
         result: Memory = process_memory(uid, memory.language, memory, force_process=True)
@@ -232,7 +233,9 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     result.postprocessing = MemoryPostProcessing(
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
-    return result
+
+    return (200, result)
+
 
 def _delete_postprocessing_audio(file_path):
     time.sleep(300)  # 5 min
