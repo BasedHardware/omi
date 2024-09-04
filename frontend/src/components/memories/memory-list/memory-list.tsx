@@ -1,7 +1,12 @@
 import getPublicMemories from '@/src/actions/memories/get-public-memories';
 import MemoryItem from './memory-item';
+import { SearchParamsTypes } from '@/src/types/params.types';
 
-export default async function MemoryList({ searchParams }) {
+interface MemoryListProps {
+  searchParams: SearchParamsTypes;
+}
+
+export default async function MemoryList({ searchParams }: MemoryListProps) {
   const memories = await getPublicMemories();
   return (
     <div className="mt-20 text-white">
