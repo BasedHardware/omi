@@ -70,6 +70,7 @@ def reprocess_memory(
     Whenever a user wants to reprocess a memory, or wants to force process a discarded one
     :return: The updated memory after reprocessing.
     """
+    print('')
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
