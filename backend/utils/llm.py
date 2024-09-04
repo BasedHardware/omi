@@ -171,11 +171,10 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
     You are advising {user_name} right now, {facts_str}
     
-    
-    The following are a list of ${user_name}'s conversations from today, with the transcripts and a slight summary of each, that ${user_name} had during his day.
+    The following are a list of {user_name}'s conversations from today, with the transcripts and a slight summary of each, that {user_name} had during his day.
     {user_name} wants to get a summary of the key action items {user_name} has to take based on today's conversations.
 
-    Remember ${user_name} is busy so this has to be very efficient and concise.
+    Remember {user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.
   
     Output your response in plain text, without markdown.
