@@ -598,8 +598,24 @@
     "name": "Advanced Fact Checker",
     "author": "Brady Anthony-Brumfield",
     "description": "Searches the web and provides additional reading for contentious statements",
-    "prompt": "You will be given a transcription. First, understand that the transcription is of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for statements that need more evidence. For each of these statements, search the web for supporting and contradicting science-based evidence, and concisely summarize and link the evidence.",
+    "prompt": "You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for statements that aren't common knowledge and would benefit from more evidence. For each of these statements, search the web for supporting and contradicting science-based evidence, and concisely summarize and link the evidence.",
+    "memory_prompt": "You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for statements that aren't common knowledge and would benefit from more evidence. For each of these statements, search the web for supporting and contradicting science-based evidence, and concisely summarize and link the evidence.",
     "image": "/plugins/logos/source.jpg",
+    "memories": true,
+    "chat": false,
+    "capabilities": [
+      "memories"
+    ],
+    "deleted": false
+  },
+  {
+    "id": "workout-buddy",
+    "name": "Workout Buddy",
+    "author": "Brady Anthony-Brumfield",
+    "description": "Extracts, summarizes, & gives feedback on workout notes from memories. You can also ",
+    "prompt": "you are a strength trainer and physiology expert. You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. parse this transcript for anything that sounds like verbal documentation of a workout, and if you find it then output a summary of the workout including each exercise, weight, and number of reps per set. then give an informed take on what kind of workout this constituted (which muscle groups, strength, hypertrophy, etc) and what kind results you can expect to see. then give feedback, if appropriate, based on other information about the workout, participant's goals, or the health of the participant given in the transcript. if you give feedback, quote the relevant information pulled from the transcript and give the feedback in a nested bullet point below it",
+    "memory_prompt": "you are a strength trainer and physiology expert. You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. parse this transcript for anything that sounds like verbal documentation of a workout, and if you find it then output a summary of the workout including each exercise, weight, and number of reps per set. then give an informed take on what kind of workout this constituted (which muscle groups, strength, hypertrophy, etc) and what kind results you can expect to see. then give feedback, if appropriate, based on other information about the workout, participant's goals, or the health of the participant given in the transcript. if you give feedback, quote the relevant information pulled from the transcript and give the feedback in a nested bullet point below it",
+    "image": "/plugins/logos/ronnie.jpg",
     "memories": true,
     "chat": false,
     "capabilities": [

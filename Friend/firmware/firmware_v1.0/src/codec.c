@@ -4,10 +4,11 @@
 #include "audio.h"
 #include "config.h"
 #include "utils.h"
+#include "sdcard.h"
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif
-
+// #include "sdcard.c"
 LOG_MODULE_REGISTER(codec, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
@@ -27,15 +28,18 @@ void set_codec_callback(codec_callback callback)
 
 uint8_t codec_ring_buffer_data[AUDIO_BUFFER_SAMPLES * 2]; // 2 bytes per sample
 struct ring_buf codec_ring_buf;
-
-int codec_receive_pcm(int16_t *data, size_t len)
-{
+int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic data is finished 
+{   
+   
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
     if (written != len * 2)
     {
-        printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
+
+        // printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
         return -1;
     }
+    
+
     return 0;
 }
 
@@ -63,6 +67,7 @@ static OpusEncoder *const m_opus_state = (OpusEncoder *)m_opus_encoder;
 
 void codec_entry()
 {
+
     uint16_t output_size;
     while (1)
     {
@@ -70,10 +75,10 @@ void codec_entry()
         // Check if we have enough data
         if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2)
         {
+            // printk("waiting on data....\n");
             k_sleep(K_MSEC(10));
             continue;
         }
-
         // Read package
         ring_buf_get(&codec_ring_buf, (uint8_t *)codec_input_samples, CODEC_PACKAGE_SAMPLES * 2);
 
