@@ -215,3 +215,8 @@ class WorkflowCreateMemory(BaseModel):
 class CreateMemoryResponse(BaseModel):
     memory: Memory
     messages: List[Message] = []
+
+
+class SetMemoryEventsStateRequest(BaseModel):
+    events_idx: List[int]
+    values: List[bool]

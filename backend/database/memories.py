@@ -110,6 +110,12 @@ def get_memory_photos(uid: str, memory_id: str):
     return [doc.to_dict() for doc in photos_ref.stream()]
 
 
+def update_memory_events(uid: str, memory_id: str, events: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'structured.events': events})
+
+
 # VISBILITY
 
 def set_memory_visibility(uid: str, memory_id: str, visibility: str):
