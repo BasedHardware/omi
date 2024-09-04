@@ -22,7 +22,7 @@ def get_facts_from_memory(memories: List[dict], uid: str) -> List[Tuple[str, Lis
         only_facts: List[Fact] = []
         for i, memory in enumerate(chunk):
             data = Memory(**memory)
-            new_facts = new_facts_extractor(user_name, only_facts, data.transcript_segments)
+            new_facts = new_facts_extractor(uid, data.transcript_segments)
             if not new_facts:
                 continue
             all_facts[memory['id']] = new_facts

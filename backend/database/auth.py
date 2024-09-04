@@ -24,8 +24,8 @@ def get_user_from_uid(uid: str):
 
 
 def get_user_name(uid: str, use_default: bool = True):
-    if cached_name := get_cached_user_name(uid):
-        return cached_name
+    # if cached_name := get_cached_user_name(uid):
+    #     return cached_name
     default_name = 'The User' if use_default else None
     user = get_user_from_uid(uid)
     if not user:
