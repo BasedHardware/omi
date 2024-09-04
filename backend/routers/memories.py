@@ -49,7 +49,7 @@ def create_memory(
     else:
         create_memory.language = language_code
 
-    memory = process_memory(uid, language_code, create_memory)
+    memory = process_memory(uid, language_code, create_memory, force_process=False)
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
@@ -111,6 +111,22 @@ def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_curre
     return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
 
 
+@router.patch("/v1/memories/{memory_id}/events", response_model=dict, tags=['memories'])
+def set_memory_events_state(
+        memory_id: str, data: SetMemoryEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+    events = memory.structured.events
+    for i, event_idx in enumerate(data.events_idx):
+        if event_idx >= len(events):
+            continue
+        events[event_idx].created = data.values[i]
+
+    memories_db.update_memory_events(uid, memory_id, [event.dict() for event in events])
+    return {"status": "Ok"}
+
+
 @router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory, tags=['memories'])
 def set_assignee_memory_segment(
         memory_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
@@ -167,6 +183,10 @@ def set_assignee_memory_segment(
 
     return memory
 
+
+# *********************************************
+# ************* SHARING MEMORIES **************
+# *********************************************
 
 @router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
 def set_memory_visibility(
