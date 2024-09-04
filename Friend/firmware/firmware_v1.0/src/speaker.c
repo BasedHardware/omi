@@ -12,7 +12,9 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_BLOCK_SIZE   12500 //24000 * 2
+
+#define MAX_BLOCK_SIZE   10000 //24000 * 2
+
 #define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
 #define NUMBER_OF_CHANNELS 2
@@ -31,10 +33,9 @@ static struct device *speaker;
 static uint16_t current_length;
 static uint16_t offset;
 int speaker_init() {
-        const struct device *mic = device_get_binding("I2S_0");
-        speaker = mic;
-	    if (!device_is_ready(mic)) {
-        LOG_ERR("Speaker device is not supported : %s", mic->name);
+        const struct device *speaker = device_get_binding("I2S_0");
+	    if (!device_is_ready(speaker)) {
+        LOG_ERR("Speaker device is not supported : %s", speaker->name);
         return 0;
     }
         struct i2s_config config = {
@@ -48,7 +49,7 @@ int speaker_init() {
         .block_size = MAX_BLOCK_SIZE,/* size of ONE memory block in bytes */
         .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or SYS_FOREVER_MS */
     };
-    int err = i2s_configure(mic, I2S_DIR_TX, &config);
+    int err = i2s_configure(speaker, I2S_DIR_TX, &config);
 	if (err < 0) {
 		LOG_INF("Failed to configure Microphone (%d)", err);
         return 0;
@@ -106,7 +107,6 @@ uint16_t speak(uint16_t len, const void *buf) {
             }
             offset = offset + len;
             LOG_INF("offset: %u", offset);
-            
             
             i2s_write(speaker, rx_buffer,  MAX_BLOCK_SIZE);
             i2s_trigger(speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
