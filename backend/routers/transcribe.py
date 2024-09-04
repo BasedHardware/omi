@@ -73,7 +73,7 @@ router = APIRouter()
 #
 
 def _combine_segments(segments, new_segments):
-    if not new_segments:
+    if not new_segments or len(new_segments) == 0:
         return segments
 
     joined_similar_segments = []
@@ -141,7 +141,8 @@ async def _websocket_util(
         threading.Thread(target=process_segments, args=(uid, segments)).start()
 
         # memory segments
-        if stream_id == memory_stream_id and new_memory_watch:
+        # Warn: need double check should we still seperate the memory and speech profile stream or not?
+        if (stream_id == memory_stream_id or stream_id == speech_profile_stream_id) and new_memory_watch:
             memory_transcript_segements = _combine_segments(memory_transcript_segements, segments)
 
             # Sync processing transcript, periodly
@@ -175,6 +176,7 @@ async def _websocket_util(
         transcript_socket = await process_audio_dg(stream_transcript, memory_stream_id,
                                                    language, sample_rate, codec, channels,
                                                    preseconds=duration)
+
         if duration:
             transcript_socket2 = await process_audio_dg(stream_transcript, speech_profile_stream_id,
                                                         language, sample_rate, codec, channels)
@@ -307,6 +309,7 @@ async def _websocket_util(
         nonlocal processing_memory_synced
         nonlocal processing_audio_frames
         nonlocal processing_audio_frame_synced
+        nonlocal memory_transcript_segements
 
         if not processing_memory:
             # Force create one
