@@ -299,7 +299,6 @@ async def _websocket_util(
         os.remove(file_path)
 
     # Create memory
-
     async def _create_memory():
         print("create memory")
         nonlocal processing_memory
@@ -351,7 +350,8 @@ async def _websocket_util(
     # New memory watch
     async def memory_transcript_segements_watch():
         nonlocal memory_watching
-        while memory_watching:
+        nonlocal websocket_active
+        while memory_watching and websocket_active:
             print("new memory watch")
             await asyncio.sleep(5)
 
@@ -432,6 +432,7 @@ async def _websocket_util(
         print(f"Error during WebSocket operation: {e}")
     finally:
         websocket_active = False
+        memory_watching = False
         large_audio_buffer = bytearray()
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
@@ -440,8 +441,7 @@ async def _websocket_util(
                 print(f"Error closing WebSocket: {e}")
 
         # Flush new memory watch
-        if memory_watching:
-            memory_watching = False
+        if new_memory_watch:
             await _try_flush_new_memory()
 
 
