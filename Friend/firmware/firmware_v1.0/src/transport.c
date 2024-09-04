@@ -23,12 +23,14 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
+extern uint32_t file_num_array[20];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
 //
 // Internal
 //
+
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -594,9 +596,13 @@ void pusher(void)
         if (!valid   && ( length < 100) && !storage_is_on) {
 
         bool result = write_to_storage();
+        file_num_array[file_count-1] = get_file_size(file_count);
+        printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
+        
     
         if (result)
         {
+            
             // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
             //     printk("Audio file size limit reached, making new file\n");
             //     // make_and_rebase_audio_file(get_info_file_length()+1);
