@@ -27,8 +27,6 @@ static char read_buffer[MAX_PATH_LENGTH];
 static char write_buffer[MAX_PATH_LENGTH];
 static const char *disk_mount_pt = "/SD:/";
 
-
-//hehe...
 uint32_t get_file_size(uint8_t num){
     char *ptr = generate_new_audio_header(num);
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
@@ -38,37 +36,11 @@ uint32_t get_file_size(uint8_t num){
     return (uint32_t)entry.size;
  }
 
-
-
-uint8_t get_directory_item_count(struct fs_dir_t *zdp, struct fs_dirent *entry) {
-    // struct fs_dir_t *zip;
-   uint8_t count = 0;
-   int rc = zdp->mp->fs->readdir(zdp, entry);
-    printk("%s %d ",entry->name,entry->size);
-    count++;
-		while (true) {
-			rc = zdp->mp->fs->readdir(zdp, entry);
-            count++;   
-			if (rc < 0) {
-				break;
-			}
-			if (entry->name[0] == 0) {
-				break;
-			}
-               printk("%s %d ",entry->name,entry->size);
-                 
-		}
-        		if (rc < 0) {
-			// LOG_ERR("directory read error (%d)", rc);
-		}
-        printk("\n");
-        return count;
-}
-
 int move_read_pointer(uint8_t num) {
    char *read_ptr = generate_new_audio_header(num);
    snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
-    struct fs_dirent entry; //check if the info file exists. if not, generate new info file
+//    free(read_ptr);
+    struct fs_dirent entry; 
     int res = fs_stat(&read_buffer,&entry);
     if (res) {
         printk("invalid file\n");
@@ -79,10 +51,20 @@ int move_read_pointer(uint8_t num) {
 }
 
 int move_write_pointer(uint8_t num) {
-     char *write_ptr = generate_new_audio_header(num);
-   snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
-  return 0;   
+    char *write_ptr = generate_new_audio_header(num);
+    snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
+    struct fs_dirent entry;
+    int res = fs_stat(&write_buffer,&entry);
+    if (res) {
+        printk("invalid file\n");
+        
+    return -1;  
+    }
+    k_free(write_ptr);
+    return 0;   
 }
+
+uint32_t file_num_array[20];
 
 int mount_sd_card(void)
 {
@@ -92,11 +74,13 @@ int mount_sd_card(void)
     static const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
     printk("disk_access_init: %d\n", err);
-    if (err == -116) {
+    if (err) {
         k_msleep(2000);
-        disk_access_init(disk_pdrv); 
+        err = disk_access_init(disk_pdrv); 
+        if (err) {
+            return -1;
+        }
     }
-
     mount_point.mnt_point = "/SD:";
     int res = fs_mount(&mount_point);
 
@@ -109,7 +93,6 @@ int mount_sd_card(void)
     res = fs_mkdir("/SD:/audio");
     if (res == FR_OK) {
         printk("audio directory created successfully\n");
-        initialize_audio_file(0);
     }
     else if (res == FR_EXIST) {
         printk("audio directory already exists\n");
@@ -120,27 +103,36 @@ int mount_sd_card(void)
 
     struct fs_dir_t zdp;
     fs_dir_t_init(&zdp);
-    res = fs_opendir(&zdp,"/SD:/audio");
-    printk("result of opendir: %d\n",res);
-
-    if (zdp.mp == NULL) {
-        printk("mp is null \n");
+    err = fs_opendir(&zdp,"/SD:/audio");
+    if (err) {
+        printk("error while opening directory \n",err);
+        return -1;
     }
+    printk("result of opendir: %d\n",err);
     
     struct fs_dirent entry_;
-    file_count = get_directory_item_count(&zdp,&entry_)-1;
+  
+    file_count =get_next_item(&zdp, &entry_);
+    if (file_count < 0) {
+        printk(" error getting file count\n");
+        return -1;
+    }
 
     fs_closedir(&zdp);
-
-
-
     printk("current num files: %d\n",file_count);
     file_count++;
+    printk("new num files: %d\n",file_count);
     initialize_audio_file(file_count);
-
-    move_write_pointer(file_count);
-    move_read_pointer(file_count-1);
-
+    err = move_write_pointer(file_count); 
+    if (err) {
+        printk("erro while moving the write pointer\n");
+        return -1;
+    }
+    move_read_pointer(file_count);
+    if (err) {
+        printk("error while moving the reader pointer\n");
+        return -1;
+    }
 
     struct fs_dirent entry; //check if the info file exists. if not, generate new info file
     const char *info_path = "/SD:/info.txt";
@@ -234,6 +226,7 @@ int initialize_audio_file(uint8_t num) {
     if (header == NULL) {
         return -1;
     }
+    k_free(header);
     create_file(header);
     return 0;
 }
@@ -280,4 +273,28 @@ char* generate_new_audio_header(uint8_t num) {
     ptr_[13] = '\0';
 
     return ptr_;
+}
+
+int get_next_item(struct fs_dir_t *zdp, struct fs_dirent *entry) {
+   if (zdp->mp->fs->readdir(zdp, entry) ) {
+    return -1;
+   }
+   if (entry->name[0] == 0) {
+    return 0;
+   }
+   int count = 0;  
+   file_num_array[count] = entry->size;
+   printk("file numarray %d %d \n",count,file_num_array[count]);
+   printk("file name is %s \n", entry->name);
+   count++;
+   while (zdp->mp->fs->readdir(zdp, entry) == 0 ) {
+      if (entry->name[0] ==  0 ) {
+        break;
+      }
+      file_num_array[count] = entry->size;
+      printk("file numarray %d %d \n",count,file_num_array[count]);
+      printk("file name is %s \n", entry->name);
+      count++;
+   }
+   return count;
 }

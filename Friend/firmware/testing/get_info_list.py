@@ -21,7 +21,7 @@ async def main():
 
             while(True):
                  await asyncio.sleep(2.0)
-                 print(np.frombuffer(r,dtype=np.uint8))
+                 print(np.frombuffer(r,dtype=np.uint32))
 
         
 if __name__ == "__main__":
