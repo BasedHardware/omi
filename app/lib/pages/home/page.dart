@@ -455,7 +455,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   }
                 }),
                 Consumer2<PluginProvider, HomeProvider>(builder: (context, provider, home, child) {
-                  if (home.selectedIndex != 2) {
+                  if (home.selectedIndex != 1) {
                     return SizedBox(
                       width: 16,
                     );
