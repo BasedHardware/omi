@@ -62,7 +62,7 @@ class DeviceProvider extends ChangeNotifier {
         setIsConnected(false);
         updateConnectingStatus(false);
         periodicConnect('coming from onDisconnect');
-        captureProvider?.resetState(restartBytesProcessing: false);
+        await captureProvider?.resetState(restartBytesProcessing: false);
         captureProvider?.setAudioBytesConnected(false);
         print('after resetState inside initiateConnectionListener');
 
@@ -76,20 +76,20 @@ class DeviceProvider extends ChangeNotifier {
         });
         MixpanelManager().deviceDisconnected();
       },
-      onConnected: ((device) {
+      onConnected: (device) async {
         debugPrint('_onConnected inside: $connectedDevice');
         _disconnectNotificationTimer?.cancel();
         NotificationService.instance.clearNotification(1);
         setConnectedDevice(device);
         setIsConnected(true);
         updateConnectingStatus(false);
-        captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+        await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
         //  initiateBleBatteryListener();
         MixpanelManager().deviceConnected();
         SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
         SharedPreferencesUtil().deviceName = connectedDevice!.name;
         notifyListeners();
-      }),
+      },
     );
     notifyListeners();
   }
@@ -171,15 +171,14 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void restartWebSocket() {
+  Future restartWebSocket() async {
     debugPrint('restartWebSocket');
 
-    webSocketProvider?.closeWebSocket();
+    await webSocketProvider?.closeWebSocketWithoutReconnect('Restarting WebSocket');
     if (connectedDevice == null) {
       return;
     }
-    captureProvider?.resetState(restartBytesProcessing: true);
-    captureProvider?.streamAudioToWs(connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
+    await captureProvider?.resetState(restartBytesProcessing: true);
     notifyListeners();
   }
 
