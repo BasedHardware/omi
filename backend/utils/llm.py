@@ -148,18 +148,6 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
 # ************* EXTERNAL INTEGRATIONS **************
 # **************************************************
 
-def summarize_screen_pipe(description: str) -> Structured:
-    prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
-
-      For the title, use the main topic of the scenes.
-      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
-      For the category, classify the scenes into one of the available categories.
-    
-      Screenshots: ```{description}```
-      '''.replace('    ', '').strip()
-    # return groq_llm_with_parser.invoke(prompt)
-    return llm_with_parser.invoke(prompt)
-
 
 def summarize_experience_text(text: str) -> Structured:
     prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
